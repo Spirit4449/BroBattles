@@ -62,7 +62,7 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
       }
 
       const room = gameHub.getGameRoom(matchId);
-      if ((room && data?.networkWireVersion !== NETWORK_WIRE_VERSION) || (room?.ninjaCombatVersion === 1 && data?.ninjaCombatVersion !== 1) || (room?.huntressCombatVersion === 2 && data?.huntressCombatVersion !== 2)) {
+      if ((room && data?.networkWireVersion !== NETWORK_WIRE_VERSION) || (room?.ninjaCombatVersion === 1 && data?.ninjaCombatVersion !== 1) || (room?.sparrowCombatVersion === 2 && data?.sparrowCombatVersion !== 2)) {
         cb?.({ ok: false, error: 'client_update_required' });
         socket.emit('game:error', { message: 'Please reload the game to join this match.', code: 'CLIENT_UPDATE_REQUIRED' });
         return;

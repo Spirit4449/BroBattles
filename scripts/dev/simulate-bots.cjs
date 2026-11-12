@@ -2,7 +2,7 @@
 // Seeded authoritative gameplay/performance smoke run; no SQL or browser needed.
 //
 //   node scripts/dev/simulate-bots.cjs [--map=4] [--players=6] [--seconds=30] [--seed=17]
-//     [--characters=ninja,huntress] [--trophies=2000] [--matrix] [--sudden-death=10]
+//     [--characters=ninja,sparrow] [--trophies=2000] [--matrix] [--sudden-death=10]
 //     [--json] [--top=8] [--deterministic]
 //
 // Prints one timing summary per run (tick and per-bot cost on this machine,
@@ -51,7 +51,7 @@ if (deterministic) {
     for (;;) if (plan.steps.next().done) { this.planning = null; break; }
   };
 }
-const kits = ['ninja', 'thorg', 'draven', 'wizard', 'huntress', 'gloop'];
+const kits = ['ninja', 'thorg', 'draven', 'ozzy', 'sparrow', 'gloop'];
 const originalNow = Date.now, originalLog = console.log;
 let clock = 1000000;
 

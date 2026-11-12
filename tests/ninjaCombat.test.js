@@ -3,7 +3,7 @@ const {makeRoom}=require('./helpers/botRoom');
 const combat=require('../src/shared/combat/runtime/ninjaCombat.js');
 const model=require('../src/shared/characters/ninjaProjectile');
 function fixture(t,isBot=false){
-  const f=makeRoom({characters:['ninja','wizard']});t.after(()=>f.room.cleanup());
+  const f=makeRoom({characters:['ninja','ozzy']});t.after(()=>f.room.cleanup());
   const [p,target]=f.players;Object.assign(p,{x:100,y:200,isBot,connected:true});
   Object.assign(target,{x:350,y:192,_bodyHalfWidth:20,_bodyHalfHeight:40,_bodyCenterOffsetX:0,_bodyCenterOffsetY:0,connected:true});
   f.room.geometry={...f.room.geometry,colliders:[]};f.room._tickId=0;f.room._simulationMono=0;
@@ -21,6 +21,24 @@ test('basic requests use canonical tuning and consume ammo once, for humans and 
     assert.equal(q.x,130);assert.equal(q.y,192);assert.equal(q.cfg.forwardDistance,500);
     assert.equal(f.room._ninja.active.size,1);
   }
+});
+test('a request flood is answered up to the per-second limit, then dropped silently',t=>{
+  const f=fixture(t),p=f.players[0];
+  const sent=Array.from({length:40},(_,i)=>f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:`flood-${i}`,angle:0}));
+  const answered=f.actions('ninja-result').length;
+  assert.ok(answered>1&&answered<sent.length);
+  assert.equal(sent.filter(Boolean).length,1);
+  assert.equal(f.actions('ninja-result').filter(a=>a.reason==='accepted').length,1);
+});
+test('shot targets are enemies and the enemy vault only while it holds coins',t=>{
+  const {enemyShotTargets}=require('../src/shared/combat/runtime/shotRequests.js');
+  const f=fixture(t),[p,target]=f.players;
+  const vaults={team1:{x:0,y:0,coins:500},team2:{x:250,y:192,width:80,height:80,coins:500}};
+  f.room.gameMode={getVaultState:team=>vaults[team]};
+  const names=()=>enemyShotTargets(f.room,p).map(e=>e.name);
+  assert.deepEqual(names(),[target.name,'vault:team2']);
+  vaults.team2.coins=0;
+  assert.deepEqual(names(),[target.name]);
 });
 test('client hit and map-return claims cannot create damage or change phase',t=>{
   const f=fixture(t),[p,target]=f.players,hp=target.health;

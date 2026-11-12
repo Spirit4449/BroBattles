@@ -34,6 +34,7 @@ const MOVING_SURFACE_LAG_S = 0.2;
 const movementPhysics = require("../../../shared/physics/movementPhysics.json");
 const effectManager = require("../../../shared/combat/runtime/effects/effectManager.js");
 const { stepBody } = require("../bots/physics");
+const { isGhost } = require("../../../shared/combat/targetable.js");
 const { notePlayoutSample, restartPlayout } = require("./humanPlayout");
 
 function updateBodyGeometry(player, room) {
@@ -439,9 +440,13 @@ function handlePlayerInput(room, socketId, inputData) {
 function stepIdleHumans(room, dtMs, now = Date.now()) {
   if (room.status !== "active" || !room.geometry?.colliders) return;
   for (const playerData of room.players.values()) {
-    if (playerData.isBot || !playerData.isAlive || !(playerData._lastPositionPacketAt > 0)) continue;
+    if (playerData.isBot || !playerData.isAlive) continue;
+    // A ghost (still loading, or never joined) has no client moving it, so it
+    // is stepped from the start: knockback carries it and it can fall out.
+    const ghost = isGhost(playerData);
+    if (!ghost && !(playerData._lastPositionPacketAt > 0)) continue;
     const lastHeard = Math.max(playerData._lastPositionPacketAt, Number(playerData.lastInput) || 0);
-    if (now - lastHeard < IDLE_FALLBACK_AFTER_MS ||
+    if ((!ghost && now - lastHeard < IDLE_FALLBACK_AFTER_MS) ||
         Number(playerData._controlLockUntil || 0) > now || isMovementSuppressed(playerData, now)) {
       playerData._idleFallback = false;
       continue;

@@ -21,7 +21,7 @@ export function showcaseRoster({ character, skinId = "", level = 1, mode, name =
   const entry = (id, key, team, x, self = false) => ({ id, character: key, skinId: self ? skinId : "", level, team, x, self, role: self ? 'featured' : 'sparring',
     name: self ? name : key.charAt(0).toUpperCase() + key.slice(1) });
   if (mode !== 'fight') return [entry('hero', character, 'team1', 0, true)];
-  if (character === 'wizard') return [entry('hero', character, 'team1', -65, true),
+  if (character === 'ozzy') return [entry('hero', character, 'team1', -65, true),
     { ...entry('ally', 'ninja', 'team1', -195), role: 'bystander' }, entry('enemy', 'thorg', 'team2', 125)];
   if (character === 'thorg') return [entry('hero', character, 'team1', -190, true),
     entry('enemy', dummyCharacterFor(character), 'team2', 10)];

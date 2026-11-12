@@ -5,7 +5,7 @@
 // `node scripts/dev/net-report.mjs <runId>`.
 //
 //   node scripts/dev/net-probe.mjs [--base https://brobattles.dev] [--clients 2]
-//     [--mode bank-bust] [--variant bank-bust-3v3] [--map 1] [--char ninja | --char huntress,thorg]
+//     [--mode bank-bust] [--variant bank-bust-3v3] [--map 1] [--char ninja | --char sparrow,thorg]
 //     [--duration 90] [--script mixed|strafe|dash|idle|attack|melee|special|fight]
 //     [--range 380] [--matches 1] [--baseline <runId>] [--no-report]
 //     [--headed] [--cpu-throttle 4] [--run <id>] [--token <token>]
@@ -60,7 +60,7 @@ const clients = Math.max(1, Math.min(6, Number(args.clients) || 2));
 const modeId = String(args.mode || "bank-bust");
 const variantId = String(args.variant || (modeId === "bank-bust" ? "bank-bust-3v3" : modeId === "duels" ? "duels-2v2" : ""));
 const mapId = args.map != null ? String(args.map) : null;
-// --char ninja or --char huntress,ninja (one per client, cycling).
+// --char ninja or --char sparrow,ninja (one per client, cycling).
 const characters = args.char ? String(args.char).split(",").map(x => x.trim()).filter(Boolean) : [];
 const characterFor = (i) => characters.length ? characters[i % characters.length] : null;
 const durationS = Number(args.duration) || 90;

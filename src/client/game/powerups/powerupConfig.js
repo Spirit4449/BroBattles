@@ -7,10 +7,10 @@ export { POWERUP_TYPES };
 export const POWERUP_ASSET_DIR = Object.fromEntries(
   POWERUP_TYPES.map(key => [key, POWERUP_CATALOG[key].assetDir]),
 );
-// Main tint per powerup (pickup glow, HUD ring, Wizard surge beam).
+// Main tint per powerup (pickup glow, HUD ring, Ozzy surge beam).
 export const POWERUP_COLORS = {
   ...Object.fromEntries(POWERUP_TYPES.map(key => [key, POWERUP_CATALOG[key].color])),
-  huntressBurn: 0xff7a1f, // Huntress burn status reuses the powerup tint system
+  sparrowBurn: 0xff7a1f, // Sparrow burn status reuses the powerup tint system
 };
 // Pale variant used for the HUD status-badge fill.
 export const POWERUP_LIGHT_COLORS = Object.fromEntries(

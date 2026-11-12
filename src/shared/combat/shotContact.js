@@ -3,7 +3,7 @@
 // on boxes and collision centres, or a predicted hit becomes a visible miss.
 const { characterBody } = require('../physics/characterBody');
 const { DUCK_HEIGHT_RATIO } = require('../physics/ducking');
-const { sweep, insetBounds } = require('../characters/huntressProjectile');
+const { sweep, insetBounds } = require('../characters/sparrowProjectile');
 
 // The same box the server derives from a player's position (updateBodyGeometry).
 function characterHitBounds(character, x, y, { flip = false, ducking = false } = {}) {
@@ -41,7 +41,7 @@ function attackCollisionCenter(attack, runtime = {}) {
 }
 
 // Earliest target a circle of `radius` touches moving from a to b. Targets are
-// { name, bounds, inset? }; `inset` applies Huntress's body inset to players
+// { name, bounds, inset? }; `inset` applies Sparrow's body inset to players
 // (objects such as vaults opt out with inset: false). Names break ties so every
 // client resolves the same target.
 function firstTargetContact(a, b, radius, targets, { inset = false, skip = null } = {}) {

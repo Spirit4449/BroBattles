@@ -30,7 +30,7 @@ test('landing pushes enemies outward, cancels swings and pending casts, keeps al
   room._activeAttacks=[{attackerParticipantId:'left',runtimeKind:'attached-rect'},
     {attackerParticipantId:'left',runtimeKind:'projectile-linear'},
     {attackerParticipantId:'ally',runtimeKind:'attached-rect'}];
-  room._huntress={pending:[{ownerId:'left'},{ownerId:'ally'}]};
+  room._sparrow={pending:[{ownerId:'left'},{ownerId:'ally'}]};
   room._ninja={pending:[{owner:'right'},{owner:'ally'}]};
   source.grounded=true;
   assert.equal(resolveStomp(room,source,1100),true);
@@ -44,7 +44,7 @@ test('landing pushes enemies outward, cancels swings and pending casts, keeps al
   assert.equal(left._controlLockUntil,undefined,'interrupt must preserve knockback movement');
   for(const p of [ally,far,dead]) assert.equal(p._attackInterruptSeq,undefined);
   assert.equal(room._activeAttacks.length,2);
-  assert.deepEqual(room._huntress.pending,[{ownerId:'ally'}]);
+  assert.deepEqual(room._sparrow.pending,[{ownerId:'ally'}]);
   assert.deepEqual(room._ninja.pending,[{owner:'ally'}]);
   assert.equal(events.filter(e=>e.event==='player:stomp').length,1);
 });
@@ -72,11 +72,11 @@ test('position packets require map support and trigger only once on landing', ()
 });
 test('interrupted windups never release later, even after the stun has expired', () => {
   const { handleCharacterAction } = require('../src/shared/combat/runtime/characterActionRegistry.js');
-  for (const character of ['wizard','gloop']) {
+  for (const character of ['ozzy','gloop']) {
     const {room,source,left}=fixture(); const callbacks=[];
     room.scheduleAction=fn=>callbacks.push(fn);
     left.char_class=character;
-    handleCharacterAction(room,left,{type:`${character}-${character==='wizard'?'fireball':'slimeball'}`,id:'cast',angle:0},1000);
+    handleCharacterAction(room,left,{type:`${character}-${character==='ozzy'?'fireball':'slimeball'}`,id:'cast',angle:0},1000);
     assert.equal(callbacks.length,1);
     source._stompPendingUntil=2000; source.grounded=true;
     resolveStomp(room,source,1100);

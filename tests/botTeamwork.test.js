@@ -6,7 +6,7 @@ const { standOn } = require('../src/server/core/bots/navigation');
 const { characterBody } = require('../src/shared/physics/duelGeometry');
 
 function setup(count = 3) {
-  const allies = ['thorg', 'wizard', 'huntress'].slice(0, count).map((char_class, i) => ({
+  const allies = ['thorg', 'ozzy', 'sparrow'].slice(0, count).map((char_class, i) => ({
     participantId: `ally${i}`, team: 'blue', isBot: true, isAlive: true, loaded: true,
     char_class, x: 500 + i * 100, y: 500, health: 1000, maxHealth: 1000,
     ammoState: { charges: 3 }, lastDamagedAt: 0,

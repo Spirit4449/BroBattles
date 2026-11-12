@@ -73,7 +73,7 @@ const PROFILES = {
         (distance <= 190 && (target.grounded || Math.sign(target.vx || 0) !== Math.sign(target.x - player.x)));
     },
   },
-  wizard: {
+  ozzy: {
     spacing: { fraction: 0.7, cap: 480, clearance: 225, height: 100 },
     aim: { ballistic: { coverCheck: false }, rangeFromRuntime: true },
     pressureShots: true,
@@ -88,7 +88,7 @@ const PROFILES = {
       return allyNeedsHelp || (!alreadyBuffed && (allies.length > 1 || heldMs > 3500));
     },
   },
-  huntress: {
+  sparrow: {
     spacing: { fraction: 0.65, cap: 370, clearance: 200, height: 85 },
     aim: { ballistic: { coverCheck: true, powerScaled: true, verticalPredictionSeconds: 0.15 }, errorScale: { factor: 1.45, add: 0.025, max: 0.22 } },
     clearShot: 'trajectory',
@@ -96,7 +96,7 @@ const PROFILES = {
     lobLimited: true,
     serverOwnsAmmo: () => true,
     decorateBasicAction(action) {
-      action.power = require('../characters/huntressProjectile').powerFromSpeed(action.angle, action.speed);
+      action.power = require('../characters/sparrowProjectile').powerFromSpeed(action.angle, action.speed);
     },
     // Her three-arrow spread is already forgiving, so give opponents a
     // readable punish window instead of chaining every available charge.

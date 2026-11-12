@@ -307,7 +307,7 @@ window.__BB_REMOTE_PLAYERS__ = () =>
     depth: w?.opponent?.depth ?? null,
     loaded: w?.presenceLoaded ?? w?.loaded,
     spawnPresented: w?._spawnPresented ?? null,
-    ghost: w?._loadingGhost ?? null,
+    ghost: w ? w.presenceLoaded === false : null,
     live: isLiveGame,
   }));
 
@@ -413,7 +413,7 @@ const gameOverScreenController = createGameOverScreenController({
 // reference helpers that appear later in the file.
 matchCoordinator = createMatchCoordinator({
   socket,
-  onHuntressAmmo: (ammoState) => applyAuthoritativeState({ ammoState }),
+  onSparrowAmmo: (ammoState) => applyAuthoritativeState({ ammoState }),
   getGameData: () => gameData,
   getUsername: () => username,
   getJoinPayload: () => __joinPayload,
@@ -436,9 +436,6 @@ matchCoordinator = createMatchCoordinator({
   setIsLiveGame: (v) => {
     isLiveGame = v;
     if (!v) return;
-    for (const wrapper of [...Object.values(opponentPlayers), ...Object.values(teamPlayers)]) {
-      wrapper?.setLoadingGhost?.(false);
-    }
     matchIntro.conclude();
     gameScene?._startMainBgm?.();
   },
@@ -1486,7 +1483,6 @@ class GameScene extends Phaser.Scene {
       opPlayer.opMaxSuperCharge = playerData.maxSuperCharge;
     }
     if (opPlayer.updateHealthBar) opPlayer.updateHealthBar();
-    opPlayer.setLoadingGhost?.(!isLiveGame);
     opPlayer.setPresenceState?.(
       playerData.connected !== false,
       playerData.loaded === true,

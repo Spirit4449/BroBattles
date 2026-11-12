@@ -314,7 +314,7 @@ test('bots inside a moving platform leave it like a wall, not over the top',()=>
 test('bots on a moving map keep their footing and step off moving platforms onto static ground',t=>{
  let now=1e6;t.mock.method(Date,'now',()=>now);t.mock.method(console,'log',()=>{});
  const {map,platform}=movingMap({axis:'x',distance:200,speed:90,ease:'sine',pauseMs:300,phase:0});
- const h=makeRoom({characters:['ninja','wizard'],trophies:0,seed:5,mapData:map});
+ const h=makeRoom({characters:['ninja','ozzy'],trophies:0,seed:5,mapData:map});
  t.after(()=>h.room.cleanup());
  const [bot,other]=h.players,brain=h.room.botControllers.get(bot.participantId);
  other.isAlive=false;

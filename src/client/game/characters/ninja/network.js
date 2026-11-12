@@ -4,12 +4,12 @@ import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileText
 import { createShurikenEffects } from './effects';
 import { beginThrow, claimThrow, handPoint, presentRelease } from './throwPresentation';
 import { playSpriteAnimation } from '../shared/animationState';
-import { aimFacesLeft, faceAttack } from '../shared/flipLock';
+import { aimAngle, aimFacesLeft, faceAttack } from '../shared/flipLock';
 import { serverClock as matchClock, ensureServerClockEpoch as ensureMatchEpoch } from '../../match/serverClock';
 import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/projectilePresentation';
 import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../../../shared/characters/ninjaProjectile';
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
-import { clampLead } from '../../../../shared/characters/huntressReplication';
+import { clampLead } from '../../../../shared/characters/sparrowReplication';
 import { createRuntimeId } from '../shared/runtimeId';
 import { isLocalShooter, predictShotContact, shotBlockersFor, notePredictedHit } from '../shared/shotPrediction';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
@@ -104,8 +104,7 @@ function predictNinja(scene,player,username,payload,special=false){
   if(!enabled)return payload;
   attachNinjaScene(scene,{localPlayer:player,localUsername:username});
   const id=payload.id||createRuntimeId('ninja');
-  const angle=Number(special?payload.aim?.angle:payload.angle);
-  const resolved=Number.isFinite(angle)?angle:player.flipX?Math.PI:0;
+  const resolved=aimAngle(special?payload.aim?.angle:payload.angle,player);
   // The owner turns toward the super on the press, not a round trip later.
   if(special){const c=swarmConfig();faceAttack(scene,player,aimFacesLeft({angle:resolved},player.flipX),c.count*c.releaseMs+(Number(c.lockPaddingMs)||0));}
   const now=performance.now();
@@ -146,7 +145,7 @@ function attachNinjaScene(scene,next={}){
       if(!e.sprite&&!inHand){
         if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,displayedOwner,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
         const team=o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88};
-        e.texture=ninjaProjectileTexture(scene,displayedOwner,team);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && e.texture==="shuriken")e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,team,true,e.texture.includes("-weapon")?"crown":null);
+        e.texture=ninjaProjectileTexture(scene,displayedOwner,team);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && e.texture==="shuriken")e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,team,e.texture.includes("-weapon")?"crown":null);
         const hand=e.thrown&&displayedOwner?handPoint(displayedOwner,e.thrown.hand):null;
         e.fx=createShurikenEffects(scene,e.sprite,{x:hand?hand.x:e.p.startX,y:hand?hand.y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:!!hand||e.p.elapsed<180});
         if(e.p.ownerName!==ctx.localUsername)e.correction=remoteLaunchCorrection(displayedOwner,e.p.returnTarget,e.p.elapsed,now);

@@ -9,21 +9,21 @@ previews=[]
 for job in manifest:
     name=job['name']; source=OUT/(name+'-source.png')
     if not source.exists(): shutil.copyfile(job['source'],source)
-    im=Image.open(source).convert('RGBA'); wizard=name.startswith('wizard'); explosion='explosion' in name
+    im=Image.open(source).convert('RGBA'); ozzy=name.startswith('ozzy'); explosion='explosion' in name
     rows=3 if explosion else 4
     cells=[]
     for n in range(rows*4):
         # Blue ignition frames extend below the nominal generated row division.
-        bounds=[0,350,660,957,1254] if name=='wizard-blue' else [round(i*im.height/rows) for i in range(rows+1)]
+        bounds=[0,350,660,957,1254] if name=='ozzy-blue' else [round(i*im.height/rows) for i in range(rows+1)]
         cell=im.crop((round(n%4*im.width/4),bounds[n//4],round((n%4+1)*im.width/4),bounds[n//4+1]))
         box=cell.getchannel('A').point(lambda a:255 if a>80 else 0).getbbox()
         assert box, (name,n)
         cells.append(cell.crop(box))
-    if wizard:
+    if ozzy:
         cw,ch=156,314; maxw,maxh=124,220
         indices=[min(3,n//4) if n<16 else 4+((n-16)*12//16) for n in range(32)]
         names=[f'fire{n:02}' for n in range(32)]
-        target='wizard/fireball-bb'+('-red' if name.endswith('red') else '')
+        target='ozzy/fireball-bb'+('-red' if name.endswith('red') else '')
     else:
         cw=ch=64 if explosion else 288; maxw=maxh=cw-(8 if explosion else 32)
         indices=list(range(len(cells))); names=[('explosion' if explosion else 'sprite')+str(n+1) for n in indices]
@@ -34,7 +34,7 @@ for job in manifest:
     for n,i in enumerate(indices):
         c=cells[i]; size=(max(1,round(c.width*scale)),max(1,round(c.height*scale)))
         c=c.resize(size,Image.Resampling.NEAREST)
-        left=(cw-c.width)//2; top=(ch-24-c.height) if wizard else (ch-c.height)//2
+        left=(cw-c.width)//2; top=(ch-24-c.height) if ozzy else (ch-c.height)//2
         assert left>=0 and top>=0
         x=n%8*cw;y=n//8*ch
         sheet.alpha_composite(c,(x+left,y+top))
@@ -43,7 +43,7 @@ for job in manifest:
     sheet.save(str(path)+'.webp',lossless=True,exact=True)
     Path(str(path)+'.json').write_text(json.dumps({'frames':frames,'meta':{'image':path.name+'.webp','size':{'w':sheet.width,'h':sheet.height}}},indent=2)+'\n')
     job['installed']=str(path.relative_to(ROOT))+'.webp'
-    preview=sheet.crop((0 if wizard else cw*5, ch*2 if wizard else 0, cw if wizard else cw*6,ch*3 if wizard else ch)).resize((156,314),Image.Resampling.NEAREST) if wizard else sheet.crop((cw*5,0,cw*6,ch)).resize((216,216),Image.Resampling.NEAREST)
+    preview=sheet.crop((0 if ozzy else cw*5, ch*2 if ozzy else 0, cw if ozzy else cw*6,ch*3 if ozzy else ch)).resize((156,314),Image.Resampling.NEAREST) if ozzy else sheet.crop((cw*5,0,cw*6,ch)).resize((216,216),Image.Resampling.NEAREST)
     previews.append((name,preview))
     print(name,sheet.size,len(frames))
 (OUT/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

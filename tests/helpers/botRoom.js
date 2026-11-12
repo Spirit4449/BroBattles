@@ -4,7 +4,7 @@ const { tickActiveAttacks } = require('../../src/shared/combat/runtime/attackRun
 const { standOn } = require('../../src/server/core/bots/navigation');
 const { tickMovingPlatforms } = require('../../src/server/core/gameRoom/movingPlatforms');
 
-function makeRoom({ characters = ['ninja', 'wizard'], map = 1, trophies = 1000, seed = 1, mapData = null } = {}) {
+function makeRoom({ characters = ['ninja', 'ozzy'], map = 1, trophies = 1000, seed = 1, mapData = null } = {}) {
   const events = [], queries = [];
   const io = { sockets: { sockets: new Map() }, to: (channel) => ({ emit: (type, payload) => events.push({ channel, type, payload }), compress() { return this; } }) };
   const db = { runQuery: async (sql, params) => { queries.push({ sql, params }); return []; } };

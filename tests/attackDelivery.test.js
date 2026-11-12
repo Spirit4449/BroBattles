@@ -102,7 +102,7 @@ describe("Attack contact and launch", () => {
     const { launchTravel, launchLagMs, launchDurationMs } = require('../src/shared/combat/launchRamp');
     const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');
 
-    const fireball = getResolvedCharacterAttackConfig('wizard', 'fireball');
+    const fireball = getResolvedCharacterAttackConfig('ozzy', 'fireball');
 
     test('an eased launch starts slow, speeds up without jumps, then holds full speed', () => {
       const cfg = { speed: 400, launchEaseMs: 200, launchStartSpeed: 0.25 };
@@ -135,14 +135,14 @@ describe("Attack contact and launch", () => {
     });
 
     test('the server moves the fireball along the same curve the client draws', () => {
-      assert.ok(fireball.launchEaseMs > 0 && fireball.launchStartSpeed < 1, 'wizard eases its launch');
+      assert.ok(fireball.launchEaseMs > 0 && fireball.launchStartSpeed < 1, 'ozzy eases its launch');
       const { createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
       const player = { name: 'A', socketId: 'a', x: 500, y: 300, isAlive: true, loaded: true, team: 'team1' };
       const room = { players: new Map([['a', player]]), FIXED_DT_MS: 1000 / 60,
         geometry: { world: { x: 0, y: 0, width: 4000, height: 1000 } } };
       const now = Date.now();
       const angle = -0.4;
-      const attack = createRuntimeAttack(player, { type: 'wizard-fireball-release', id: 'f', angle }, now);
+      const attack = createRuntimeAttack(player, { type: 'ozzy-fireball-release', id: 'f', angle }, now);
       const start = { x: attack.x, y: attack.y };
       let done = false, ticks = 0;
       while (!done && ticks < 400) {
@@ -159,7 +159,7 @@ describe("Attack contact and launch", () => {
 });
 
 describe("Arrow trajectory", () => {
-  const model = require('../src/shared/characters/huntressProjectile');
+  const model = require('../src/shared/characters/sparrowProjectile');
   const { muzzleOf } = require('../src/shared/characters/characterRig');
 
   // Exercise the shared model used by both prediction and authoritative collision.
@@ -169,9 +169,9 @@ describe("Arrow trajectory", () => {
       const shots = [false, true].map(special => model.createVolley(pose, model.resolveShot({ angle }, special), 'shot', 0));
       for (const volley of shots) {
         for (const p of volley) {
-          // Both leave the bow muzzle in her rig (huntress.json rig.points).
+          // Both leave the bow muzzle in her rig (sparrow.json rig.points).
           const direction = Math.atan2(p.vy, p.vx), cfg = model.attackConfig(p.special);
-          const { pivot, reach } = muzzleOf('huntress', cfg.muzzle, pose);
+          const { pivot, reach } = muzzleOf('sparrow', cfg.muzzle, pose);
           assert.ok(Math.abs(p.x - (pivot.x + Math.cos(direction) * reach)) < 1e-10);
           assert.ok(Math.abs(p.y - (pivot.y + Math.sin(direction) * reach)) < 1e-10);
         }

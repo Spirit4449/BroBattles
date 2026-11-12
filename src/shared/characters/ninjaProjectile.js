@@ -1,5 +1,5 @@
 const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getResolvedCharacterSpecialConfig } = require("./characterTuning.js");
-const { sweep } = require('./huntressProjectile');
+const { sweep } = require('./sparrowProjectile');
 // Replays step at the server tick so client predictions match the server.
 const { FIXED_DT_MS: STEP_MS } = require('../gameConstants');
 const VERSION = 1;

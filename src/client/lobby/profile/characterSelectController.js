@@ -4,6 +4,7 @@ import { renderCharacterStatus } from "./characterStatusView.js";
 import { createModalFocus } from "../../ui/modalFocus.js";
 import {
   getCharacterStats,
+  getCharacterDisplayName,
   getAllCharacters,
   getHealth,
   getDamage,
@@ -241,7 +242,7 @@ function updateSkinDetails(character, direction = 1) {
   const rarity = normalizeRarity(skin.rarity);
   switchSkinPreview(ui.previewStage, {
     src: resolveCharacterPreviewAsset(character, skin.id),
-    alt: `${character} ${skin.label}`,
+    alt: `${getCharacterDisplayName(character)} ${skin.label}`,
     direction,
   });
   updateCharacterShowcaseSkin(ui.previewStage, character, skin.id);
@@ -546,8 +547,8 @@ function renderCharacterDetails(character) {
   ui.selectedSkinByCharacter[character] = selectedSkin.id;
 
   ui.title.textContent = isUpgradePreview
-    ? `UPGRADE ${character.toUpperCase()}`
-    : character.toUpperCase();
+    ? `UPGRADE ${getCharacterDisplayName(character).toUpperCase()}`
+    : getCharacterDisplayName(character).toUpperCase();
   ui.subtitle.textContent = stats.description || "";
   ui.wallet.querySelector('[data-character-wallet="coins"]').textContent =
     Math.max(0, Number(_userDataRef?.coins) || 0).toLocaleString();
@@ -575,7 +576,7 @@ function renderCharacterDetails(character) {
   const previewImg = document.createElement("img");
   previewImg.className = "character-details-preview-image";
   previewImg.src = resolveCharacterPreviewAsset(character, selectedSkin.id);
-  previewImg.alt = `${character} ${selectedSkin.label}`;
+  previewImg.alt = `${getCharacterDisplayName(character)} ${selectedSkin.label}`;
 
   if (!cardState.isLocked && cardState.level > 0 && cardState.level <= LEVEL_CAP) {
     previewFrame.classList.add("has-character-level");
@@ -805,13 +806,13 @@ function renderCharacterDetails(character) {
   if (cardState.isLocked) {
     const buyButton = document.createElement("button");
     buyButton.type = "button";
-    buyButton.setAttribute("aria-label", `Unlock ${character} for ${stats.unlockPrice || 0} gems`);
+    buyButton.setAttribute("aria-label", `Unlock ${getCharacterDisplayName(character)} for ${stats.unlockPrice || 0} gems`);
     buyButton.className =
       `character-details-action buy-button pixel-menu-button${cardState.canUnlock ? " is-ready" : ""}`;
     buyButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon" src="/assets/icons/lock.webp" alt="" /><span>Buy</span></span><span class="button-price"><img class="cs-currency" src="/assets/icons/gem.webp" alt="" /><span>${escapeHtml(stats.unlockPrice || 0)}</span></span>`;
     if (stats.unlockMethod?.type === "trophyRoad") {
       buyButton.innerHTML = `<span class="character-details-action-label character-details-trophy-label"><img class="character-details-action-icon" src="/assets/icons/lock.webp" alt="" /><span>Trophy Reward</span></span><span class="button-price"><img class="cs-currency" src="/assets/icons/trophy.webp" alt="" /><span>${stats.unlockMethod.min.toLocaleString()}</span></span>`;
-      buyButton.setAttribute("aria-label", `Claim ${character} on Trophy Road at ${stats.unlockMethod.min} trophies`);
+      buyButton.setAttribute("aria-label", `Claim ${getCharacterDisplayName(character)} on Trophy Road at ${stats.unlockMethod.min} trophies`);
     }
     buyButton.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -838,7 +839,7 @@ function renderCharacterDetails(character) {
     if (!cardState.isMaxed) {
       const upgradeButton = document.createElement("button");
       upgradeButton.type = "button";
-      upgradeButton.setAttribute("aria-label", `Upgrade ${character} for ${cardState.price} coins`);
+      upgradeButton.setAttribute("aria-label", `Upgrade ${getCharacterDisplayName(character)} for ${cardState.price} coins`);
       upgradeButton.className = `character-details-action upgrade-button pixel-menu-button${cardState.canUpgrade ? " is-ready" : ""}`;
       upgradeButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon upgrade-icon" src="/assets/icons/upgrade.webp" alt="" /><span>Upgrade</span></span><span class="button-price"><img class="cs-currency" src="/assets/icons/coin.webp" alt="" /><span>${escapeHtml(cardState.price)}</span></span>`;
       if (!cardState.canUpgrade) {
@@ -867,7 +868,7 @@ function renderCharacterDetails(character) {
       if (isUpgradePreview) {
         upgradeButton.classList.add("is-confirming");
         upgradeButton.style.minWidth = `${_upgradePreview.minimumButtonWidth || 0}px`;
-        upgradeButton.setAttribute("aria-label", `Confirm upgrade ${character} for ${cardState.price} coins`);
+        upgradeButton.setAttribute("aria-label", `Confirm upgrade ${getCharacterDisplayName(character)} for ${cardState.price} coins`);
         upgradeButton.innerHTML = `<span class="character-details-action-label">Confirm</span><span class="button-price"><img class="cs-currency" src="/assets/icons/coin.webp" alt="coins"> ${cardState.price}</span>`;
 
       }
@@ -1245,7 +1246,7 @@ function createCharacterCard(character, userData) {
 
   const name = document.createElement("h3");
   name.className = "character-card-name";
-  name.textContent = character.toUpperCase();
+  name.textContent = getCharacterDisplayName(character).toUpperCase();
   nameRow.appendChild(name);
   nameSection.appendChild(nameRow);
 
@@ -1362,7 +1363,7 @@ async function selectCharacter(character, { closeAfterSelection = true } = {}) {
       const prevCharacter = String(yourSlot.dataset.character || "").trim();
       if (spriteEl) {
         spriteEl.src = selectedSkinAsset;
-        spriteEl.alt = charClass;
+        spriteEl.alt = getCharacterDisplayName(charClass);
         spriteEl.classList.remove("random");
       }
       yourSlot.dataset.character = charClass;
@@ -1469,7 +1470,7 @@ function showConfirmDialog(opts, onConfirm) {
   dialog.className = `cs-confirm cs-purchase-confirm${isUpgrade ? "" : " cs-unlock-confirm"}`;
   dialog.setAttribute("role", "dialog");
   dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-label", isUpgrade ? "Confirm upgrade" : `Unlock ${character}`);
+  dialog.setAttribute("aria-label", isUpgrade ? "Confirm upgrade" : `Unlock ${getCharacterDisplayName(character)}`);
   // prevent clicks inside dialog from closing parent
   dialog.addEventListener("click", (e) => e.stopPropagation());
   const title = document.createElement("div");
@@ -1493,7 +1494,7 @@ function showConfirmDialog(opts, onConfirm) {
     msg.appendChild(hero);
     const name = document.createElement("div");
     name.className = "cs-unlock-name";
-    name.textContent = character;
+    name.textContent = getCharacterDisplayName(character);
     msg.appendChild(name);
   }
   // Level line focus for upgrades
@@ -1529,7 +1530,7 @@ function showConfirmDialog(opts, onConfirm) {
   cancelBtn.textContent = "Cancel";
   const okBtn = document.createElement("button");
   okBtn.className = "cs-btn confirm pixel-menu-button";
-  okBtn.setAttribute("aria-label", `${isUpgrade ? "Upgrade" : "Unlock"} ${character} for ${price} ${isUpgrade ? "coins" : "gems"}`);
+  okBtn.setAttribute("aria-label", `${isUpgrade ? "Upgrade" : "Unlock"} ${getCharacterDisplayName(character)} for ${price} ${isUpgrade ? "coins" : "gems"}`);
   okBtn.innerHTML = `${isUpgrade ? "<span>Upgrade</span>" : ""}<img class="cs-currency" src="${
     isUpgrade ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp"
   }" alt=""/> <span>${escapeHtml(price)}</span>`;

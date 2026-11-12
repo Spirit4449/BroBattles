@@ -11,7 +11,7 @@ vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/c
 }).code, { exports:animation, performance:{now:()=>1000} });
 
 test('remote physical velocity overrides stale jumping, falling and wall-slide labels', () => {
-  for (const character of ['ninja','huntress','wizard','thorg','draven','gloop']) {
+  for (const character of ['ninja','sparrow','ozzy','thorg','draven','gloop']) {
     const select = state => animation.chooseRemoteAnimationState({character, animation:'jumping', currentPosition:state});
     assert.equal(select({grounded:false,vy:120}), 'falling');
     assert.equal(select({grounded:false,vy:-200,wallSliding:true}), 'sliding');

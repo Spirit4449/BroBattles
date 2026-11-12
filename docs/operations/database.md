@@ -76,3 +76,5 @@ Database backups alone do not cover `data/maps`, uploaded assets or the match-re
 Apply `highest-win-streak` before running the server code that stores profile
 records. The helper scans completed history once per account; reruns preserve
 higher stored records and safely resume a partially completed backfill.
+
+The Ozzy and Sparrow identifier rename requires `migrations/2026-11-12_ozzy_sparrow.sql` before deploying the corresponding code and assets. Stop game and matchmaking workers for the migration; back up the database first. Historical match summaries remain readable through legacy key aliases. The migration does not run automatically.

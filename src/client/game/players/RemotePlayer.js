@@ -3,7 +3,7 @@ import { presentRemoteDash } from '../scene/dash';
 import { presentRemoteKnockback } from '../scene/knockbackTrail';
 import { spritePresentation } from '../characters/shared/spritePresentation';
 import { bindPlayerOrigin, playerAnchor } from '../characters/shared/rig';
-import { applyTeamVisual, TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
+import { applyTeamVisual, ENEMY_BODY_OVERLAY_ALPHA, TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
 import { bindCanvasName } from "../../site/preferences";
 import { attachTeamFootRing } from "./teamFootRing";
 // opplayer.js
@@ -53,10 +53,8 @@ import { createRemoteMovementAudio } from "../audio/remoteMovementAudio";
 import { DUCK_HEIGHT_RATIO } from "../../../shared/physics/ducking.js";
 import { INVISIBLE_ALPHA, invisibleAttackAlpha } from "../powerups/invisibilityReveal.js";
 
-const ENEMY_RED_OVERLAY_ALPHA = 0.1; // experiment: enemy body red filter strength
-
 const OP_PLAYER_NAME_OFFSET_Y = 42;
-// A fighter still loading during the pregame stands at its spawn as a ghost.
+// A fighter still loading (or who never joined) is drawn as a ghost.
 const LOADING_GHOST_ALPHA = 0.6;
 
 export default class RemotePlayer {
@@ -90,7 +88,6 @@ export default class RemotePlayer {
     this.effects = null; // per-opponent effects (e.g., Draven fire)
     this.presenceConnected = true;
     this.presenceLoaded = false;
-    this._loadingGhost = false;
     this._worldUiHidden = false;
     this._powerupInvisible = false;
     this._powerupStatusIcons = [];
@@ -116,9 +113,10 @@ export default class RemotePlayer {
     this.opponent._bbSkinId = this.skinId;
     this.opponent._bbSkinTextureKey = textureKey;
     this.opponent._bbTeamColor = ["teammate", "ally", true].includes(this.team) ? TEAM_GREEN : TEAM_RED;
-    // Experiment: enemies get a slight red body filter (Canvas frame recolor).
+    // Enemies carry a slight red body filter: a frame recolor in Canvas, an
+    // overlay sprite in WebGL.
     const isEnemy = this.opponent._bbTeamColor === TEAM_RED;
-    applyTeamVisual(this.opponent, this.opponent, isEnemy, isEnemy ? "body" : null);
+    applyTeamVisual(this.opponent, this.opponent, isEnemy ? "body" : null);
     if (isEnemy) this._createEnemyRedOverlay();
     this.opponent.username = this.username; // Attach username for collision detection
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
@@ -302,7 +300,7 @@ export default class RemotePlayer {
     socket.on("player:special", this.specialListener);
   }
 
-  // Experiment: WebGL path for the enemy red filter. A tint multiplies, so it
+  // WebGL path for the enemy red filter. A tint multiplies, so it
   // can't redden black pixels; a red-filled copy at low alpha can. Canvas uses
   // the frame recolor in applyTeamVisual instead.
   _createEnemyRedOverlay() {
@@ -320,7 +318,7 @@ export default class RemotePlayer {
       if (o.texture !== b.texture || o.frame !== b.frame) o.setTexture(b.texture.key, b.frame.name);
       o.setPosition(b.x, b.y).setOrigin(b.originX, b.originY).setScale(b.scaleX, b.scaleY)
         .setFlip(b.flipX, b.flipY).setRotation(b.rotation).setScrollFactor(b.scrollFactorX, b.scrollFactorY)
-        .setAlpha(b.alpha * ENEMY_RED_OVERLAY_ALPHA).setDepth(b.depth + 0.001);
+        .setAlpha(b.alpha * ENEMY_BODY_OVERLAY_ALPHA).setDepth(b.depth + 0.001);
     };
     this.scene.events.on("prerender", this._syncEnemyRedOverlay);
   }
@@ -716,15 +714,8 @@ export default class RemotePlayer {
     if (shouldShow) this.updateUIPosition();
   }
 
-  /**
-   * Before FIGHT, show a fighter that has not finished loading as a faded
-   * ghost at its spawn instead of hiding it. It stays a ghost after FIGHT too.
-   */
-  setLoadingGhost(active) {
-    this._loadingGhost = active === true;
-    this.setPresenceState(this.presenceConnected, this.presenceLoaded);
-  }
-
+  // A fighter that has not finished loading is drawn as a faded ghost at its
+  // server position, with faded UI: the server can still hit it.
   setPresenceState(connected, loaded) {
     if (connected === false || loaded === false) this._movementAudio?.reset();
     this.presenceConnected = connected !== false;

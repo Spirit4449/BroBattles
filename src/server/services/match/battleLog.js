@@ -30,11 +30,10 @@ function resolvePlayerIconId(player) {
     player.profile_icon_id ||
     player.profileIconId;
   if (icon && typeof icon === "string" && icon.trim()) {
-    return icon.trim().toLowerCase();
+    const key = icon.trim().toLowerCase();
+    return key === "wizard" || key === "huntress" || key === "hunteress" ? resolveCharacterKey(key) : key;
   }
-  return String(player.char_class || player.charClass || DEFAULT_CHARACTER)
-    .trim()
-    .toLowerCase();
+  return resolveCharacterKey(player.char_class || player.charClass || DEFAULT_CHARACTER);
 }
 
 function nullableNumber(value) {

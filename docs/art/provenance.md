@@ -289,7 +289,7 @@ Historical source records consolidated on 2026-10-05. These quotations preserve 
 
 ## team-combat-art (historical)
 
-> Each WebP has a matching JSON atlas. Original source assets remain available. Generated RGBA masters and exact final prompts are saved in `output/team-combat-art/manifest.json` and the adjacent `*-source.png` files. `scripts/art/pack-team-combat-art.py` performs mechanical cell extraction and nearest-neighbor packing with Pillow, retaining genuine alpha. The wizard uses 32 named cells: four ignition drawings held across 16 startup cells, then 12 looping drawings sampled across 16 flight cells. Draven explosion has 12 frames and special has 16.
+> Each WebP has a matching JSON atlas. Original source assets remain available. Generated RGBA masters and exact final prompts are saved in `output/team-combat-art/manifest.json` and the adjacent `*-source.png` files. `scripts/art/pack-team-combat-art.py` performs mechanical cell extraction and nearest-neighbor packing with Pillow, retaining genuine alpha. The ozzy uses 32 named cells: four ignition drawings held across 16 startup cells, then 12 looping drawings sampled across 16 flight cells. Draven explosion has 12 frames and special has 16.
 
 ## thorg-art (historical)
 

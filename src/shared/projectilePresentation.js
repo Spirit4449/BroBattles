@@ -22,6 +22,10 @@ function teamPalette(owner) {
     ? { edge: 0xd92f46, mid: 0xff6253, light: 0xffc18a, core: 0xfff2d4 }
     : { edge: 0x179968, mid: 0x4ee59a, light: 0xb0ffd1, core: 0xf1fff6 };
 }
+// Strength of the enemy body filter in Canvas; WebGL draws a red overlay at
+// ENEMY_BODY_OVERLAY_ALPHA instead (see RemotePlayer).
+const ENEMY_BODY_RED = 0.18;
+const ENEMY_BODY_OVERLAY_ALPHA = 0.1;
 // Selective material edits only. Gold, silhouettes and neutral highlights stay intact.
 function materialPixel(value, color, style, x = 0, width = 1) {
   const r = value >> 16, g = (value >> 8) & 255, b = value & 255;
@@ -39,9 +43,9 @@ function materialPixel(value, color, style, x = 0, width = 1) {
     return [r,g,b].reduce((v,c,i)=>(v<<8)|Math.round(c*0.82+target[i]*0.18),0);
   }
   if (style === 'body' && color === TEAM_RED) {
-    // Experiment: slight red filter on enemy bodies.
-    // Blend toward red so dark/neutral pixels shift too, not just bright ones.
-    const k = 0.18;
+    // Enemy bodies carry a slight red filter. Blending toward red (rather than
+    // tinting) shifts dark and neutral pixels too, not just bright ones.
+    const k = ENEMY_BODY_RED;
     return (Math.round(r*(1-k)+255*k) << 16) | (Math.round(g*(1-k)+40*k) << 8) | Math.round(b*(1-k)+40*k);
   }
   return value;
@@ -79,12 +83,14 @@ function coloredFrame(frame, color, style) {
 
 // Team ownership is shared, but every material edit is explicitly opted into.
 // Generated attacks and procedural palettes never receive a global filter.
-function applyTeamVisual(sprite, owner, projectile = false, style = null) {
+// `style` names the material edit: 'arrow', 'crown', 'weapon', or 'body' for
+// an enemy fighter's own sprite. Without one, only the team colour is recorded.
+function applyTeamVisual(sprite, owner, style = null) {
   if (!sprite || sprite._bbTeamVisualApplied) return;
   sprite._bbTeamVisualApplied = true;
   const color = teamColor(owner);
   sprite._bbTeamColor = color;
-  if (!projectile || !style) return;
+  if (!style) return;
   if (sprite.renderCanvas) {
     const render = sprite.renderCanvas;
     sprite.renderCanvas = function(renderer, src, camera, parentMatrix) {
@@ -105,4 +111,4 @@ function reconcileFlight(from, to, now, speed) {
   const duration = Math.max(100, Math.min(1200, 2000 * Math.hypot(x, y) / Math.max(100, speed || 0)));
   return { x, y, at: now, duration };
 }
-module.exports = { remoteLaunchCorrection, reconcileFlight, TEAM_GREEN, TEAM_RED, teamColor, applyTeamVisual, materialPixel, teamPalette, attackColor };
+module.exports = { remoteLaunchCorrection, reconcileFlight, TEAM_GREEN, TEAM_RED, ENEMY_BODY_OVERLAY_ALPHA, teamColor, applyTeamVisual, materialPixel, teamPalette, attackColor };

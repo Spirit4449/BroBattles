@@ -53,3 +53,29 @@ for (const mode of ['development', 'production']) {
     }
   });
 }
+
+test('old hashed bundles are pruned only outside the retention window', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-prune-'));
+  try {
+    const day = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const names = [];
+    // Eight game versions, one per day back from today; a 30-day-old index
+    // version that the current HTML still references; an unhashed bundle.
+    for (let age = 0; age < 8; age++) names.push([`game.bundle.${String(age).repeat(16)}.js`, age * 30 * day]);
+    names.push([`index.bundle.${'a'.repeat(16)}.js`, 30 * day], ['game.bundle.js', 60 * day]);
+    for (const [name, age] of names) {
+      const file = path.join(directory, name);
+      await fs.writeFile(file, name);
+      await fs.utimes(file, (now - age) / 1000, (now - age) / 1000);
+    }
+    const removed = VersionHtmlAssetsPlugin.pruneOldVersions(directory, new Set([`index.bundle.${'a'.repeat(16)}.js`]), now);
+    const left = await fs.readdir(directory);
+    // The five newest game versions stay, and of the older three only the
+    // ones past the retention period are removed.
+    assert.equal(removed.length, 3);
+    for (let age = 0; age < 5; age++) assert.ok(left.includes(`game.bundle.${String(age).repeat(16)}.js`));
+    assert.ok(left.includes(`index.bundle.${'a'.repeat(16)}.js`));
+    assert.ok(left.includes('game.bundle.js'));
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});

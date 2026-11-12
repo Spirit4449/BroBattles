@@ -18,7 +18,7 @@ function resolveStomp(room, player, now = Date.now()) {
   const x = player.x + shape.offsetX, y = player.y + shape.offsetY + shape.halfHeight;
   const interrupted = [];
   for (const target of room.players.values()) {
-    if (target === player || !target.isAlive || target.connected === false || !isPlaced(target) ||
+    if (target === player || !target.isAlive || !isPlaced(target) ||
         (player.team && target.team === player.team)) continue;
     const body = characterBody(target.char_class, target.flip);
     const tx = target.x + body.offsetX, ty = target.y + body.offsetY;
@@ -40,7 +40,7 @@ function resolveStomp(room, player, now = Date.now()) {
     // Released projectiles continue; attached swings and unreleased casts are interrupted.
     room._activeAttacks = (room._activeAttacks || []).filter(a =>
       a.attackerParticipantId !== id || isDetachedProjectile(a));
-    if (room._huntress) room._huntress.pending = room._huntress.pending.filter(c => c.ownerId !== id);
+    if (room._sparrow) room._sparrow.pending = room._sparrow.pending.filter(c => c.ownerId !== id);
     if (room._ninja) room._ninja.pending = room._ninja.pending.filter(c => c.owner !== id);
     const strength = 1 - 0.35 * distance / STOMP_RADIUS;
     applyParticipantKnockback(room, target, { source: player.name, cause: 'stomp', radial: true,

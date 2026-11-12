@@ -10,9 +10,9 @@ const { DELIVERIES } = require('../src/shared/combat/attackDelivery');
 
 // Every human shot: the request a browser sends, and the room entry point.
 const SHOOTERS = {
-  huntress: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'huntress-arrow', id, angle: 0, power: 0.5 })),
+  sparrow: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'sparrow-arrow', id, angle: 0, power: 0.5 })),
   ninja: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'ninja-shuriken', id, angle: 0 })),
-  wizard: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'wizard-fireball', id, angle: 0, direction: 1 })),
+  ozzy: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'ozzy-fireball', id, angle: 0, direction: 1 })),
   gloop: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'gloop-slimeball', id, direction: 1,
     target: { x: p.x + 220, y: p.y } })),
   thorg: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'thorg-fall', id, direction: 1 })),
@@ -110,11 +110,11 @@ test('the server bounds claimed view age by observed latency and rejects malform
 
 test('bot shots use live target positions, and melee rewinds no further than the attached cap', t => {
   viewLagMs = 0;
-  const f = arena(t, 'wizard'), [p] = f.players;
+  const f = arena(t, 'ozzy'), [p] = f.players;
   p.isBot = true;
   f.leaveAfter(-1);
   // A bot's request never passes the transport, so even a forged field is ignored.
-  f.room.handlePlayerAction(p.participantId, { type: 'wizard-fireball', id: 'bot', angle: 0, direction: 1, viewRewindMs: 300 });
+  f.room.handlePlayerAction(p.participantId, { type: 'ozzy-fireball', id: 'bot', angle: 0, direction: 1, viewRewindMs: 300 });
   for (let i = 0; i < 120; i++) f.step();
   assert.equal(f.players[1].health, f.players[1].maxHealth);
   const melee = require('../src/shared/combat/runtime/attackRuntimes/attackIdentity.js')
@@ -122,14 +122,14 @@ test('bot shots use live target positions, and melee rewinds no further than the
   assert.equal(melee.viewRewindMs, DELIVERIES.attached.rewindCapMs);
 });
 
-test('a Huntress arrow attaches relative to where the shooter saw the target', t => {
+test('a Sparrow arrow attaches relative to where the shooter saw the target', t => {
   viewLagMs = 0;
-  const travelMs = arena(t, 'huntress').fire();
+  const travelMs = arena(t, 'sparrow').fire();
   viewLagMs = 200;
-  const f = arena(t, 'huntress'), target = f.players[1];
+  const f = arena(t, 'sparrow'), target = f.players[1];
   f.leaveAfter(travelMs - 100);
   assert.ok(f.fire() !== null);
-  const terminal = f.events.map(e => e.payload?.action).find(a => a?.type === 'huntress-terminal' && a.reason === 'target');
+  const terminal = f.events.map(e => e.payload?.action).find(a => a?.type === 'sparrow-terminal' && a.reason === 'target');
   // The live target is 5000 px away; the arrow sits in the body that was seen.
   assert.equal(target.y, -5000);
   assert.ok(Math.abs(terminal.targetOffset.x) <= 20, `x offset ${terminal.targetOffset.x}`);

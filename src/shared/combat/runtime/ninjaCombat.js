@@ -1,34 +1,23 @@
-const { isPlaced } = require('../targetable.js');
 const { combatNow } = require("./clock");
 const { shotBlockers } = require('./attackRuntimes/geometry.js');
 const { exposeDamageHitbox } = require('./damageHitboxes.js');
 const model=require('../../characters/ninjaProjectile');
-const {sweep}=require('../../characters/huntressProjectile');
-const {characterBody}=require('../../physics/characterBody');
+const {sweep}=require('../../characters/sparrowProjectile');
 const {participantId,getParticipant}=require('./participants');
-const {timing}=require('./huntressCombat.js');
-const {poseAt}=require('./lagCompensation.js');
+const {timing}=require('./sparrowCombat.js');
 const {clampDeliveryRewind}=require('../attackDelivery');
-const {getCenterCrateTarget}=require('./attackRuntimes/targets.js');
+const {requestIdentity,withinRequestRate,unavailableReason,isCharged,spendShot,rememberRequest,enemyShotTargets}=require('./shotRequests.js');
 function initialize(room){room.ninjaCombatVersion=model.VERSION;room._ninja={active:new Map(),pending:[],requests:new Map(),terminals:[]};}
 function emit(room,p,action){room.io.to(`game:${room.matchId}`).emit('game:action',{playerName:p.name,character:'ninja',action:{...action,ninjaCombatVersion:model.VERSION,ownerEcho:true,...timing(room)}});}
 function ammo(p){return {ammoState:{...p.ammoState},revision:p._ninjaRevision=(p._ninjaRevision||0)+1};}
 function request(room,p,data={},special=false){
-  const state=room._ninja,now=combatNow(room),id=typeof data.id==='string'?data.id.slice(0,128):'';
-  const key=`${participantId(p)}:${id}`;
+  const state=room._ninja,now=combatNow(room),{id,key}=requestIdentity(p,data);
   if(state.requests.has(key)){emit(room,p,state.requests.get(key));return state.requests.get(key).accepted;}
-  if(!p._ninjaWindow||now-p._ninjaWindow.at>=1000)p._ninjaWindow={at:now,count:0};
-  if(++p._ninjaWindow.count>20)return false;
+  if(!withinRequestRate(p,'_ninjaWindow',now))return false;
   const angle=Number(special?data.aim?.angle:data.angle);
-  let reason=null;
-  if(!id||!Number.isFinite(angle))reason='invalid-request';
-  else if(room.status!=='active'||!p.isAlive||!p.loaded||p.connected===false)reason='inactive';
-  else if(Math.max(p._controlLockUntil || 0, p._attackInterruptedUntil || 0) > now)reason='locked';
-  else if(special?p.superCharge<p.maxSuperCharge:!p.ammoState||p.ammoState.charges<=0||p.ammoState.nextFireInMs>0)reason='not-ready';
+  const reason=!id||!Number.isFinite(angle)?'invalid-request':unavailableReason(room,p,now)||(!isCharged(p,special)?'not-ready':null);
   if(!reason){
-    if(special){p.superCharge=0;room.io.to(`game:${room.matchId}`).emit('super-update',{username:p.name,charge:0,maxCharge:p.maxSuperCharge});}
-    else {p.ammoState.charges--;p.ammoState.nextFireInMs=p.ammoState.cooldownMs;}
-    p.lastCombatAt=now;
+    spendShot(room,p,special,now);
     p._visibleAttack={at:now,startupMs:0,angle};
     if(special)room.io.to(`game:${room.matchId}`).emit('player:special',{username:p.name,character:'ninja',aim:{angle}});
     const count=special?model.swarmConfig().count:1;
@@ -37,23 +26,8 @@ function request(room,p,data={},special=false){
       due:room._tickId+Math.ceil((special?i*model.swarmConfig().releaseMs:0)/model.STEP_MS)});
   }
   const result={type:'ninja-result',requestId:id,accepted:!reason,reason:reason||'accepted',...ammo(p)};
-  state.requests.set(key,result);while(state.requests.size>512)state.requests.delete(state.requests.keys().next().value);
+  rememberRequest(state.requests,key,result);
   emit(room,p,result);return !reason;
-}
-// Targets stand where the shooter saw them (see lagCompensation).
-function targets(room,p,viewRewindMs=0,now=combatNow(room)){
-  const list=[];
-  for(const t of room.players.values()){
-    if(t===p||t.team===p.team||!t.isAlive||!isPlaced(t))continue;
-    const at=poseAt(t,viewRewindMs,now);
-    const body=characterBody(t.char_class,t.flip),x=at.x+(at._bodyCenterOffsetX??body.offsetX),y=at.y+(at._bodyCenterOffsetY??body.offsetY),w=at._bodyHalfWidth??body.halfWidth,h=at._bodyHalfHeight??body.halfHeight;
-    list.push({name:t.name,movementReportAgeMs:!t.isBot&&t._lastPositionPacketAt>0?Math.max(0,combatNow(room)-t._lastPositionPacketAt):null,bounds:{left:x-w,right:x+w,top:y-h,bottom:y+h}});
-  }
-  const team=p.team==='team1'?'team2':'team1',v=room.gameMode?.getVaultState?.(team);
-  if(v?.coins>0)list.push({name:`vault:${team}`,bounds:{left:v.x-(v.width||150)/2,right:v.x+(v.width||150)/2,top:v.y-(v.height||180)/2,bottom:v.y+(v.height||180)/2}});
-  const crate=getCenterCrateTarget(room);
-  if(crate)list.push({name:crate.targetName,bounds:crate.bounds});
-  return list;
 }
 function finish(room,entry,p,reason){
   const state=room._ninja,projectile=entry.projectile;
@@ -89,7 +63,7 @@ function tick(room){
     for(const [index, segment] of segments.entries()){
       if(q.elapsed<60)continue;
       exposeDamageHitbox(room,q,{kind:'sweep',a:segment.a,b:segment.b,radius:q.cfg.collisionRadius},combatNow(room),String(index));
-      const contacts=targets(room,p,entry.viewRewindMs).map(t=>({...t,t:sweep(segment.a,segment.b,t.bounds,q.cfg.collisionRadius)}))
+      const contacts=enemyShotTargets(room,p,entry.viewRewindMs).map(t=>({...t,t:sweep(segment.a,segment.b,t.bounds,q.cfg.collisionRadius)}))
         .filter(t=>t.t!==null&&!(segment.terrain&&t.t>=1)).sort((a,b)=>a.t-b.t||a.name.localeCompare(b.name));
       for(const hit of contacts){
         const key=`${segment.phase}:${hit.name}`;if(entry.hits.has(key))continue;entry.hits.add(key);

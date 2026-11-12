@@ -50,7 +50,7 @@ function resolveCharacterAssetFolder(character) {
     .trim()
     .toLowerCase();
   if (!key) return DEFAULT_CHARACTER;
-  if (key === "huntress") return "huntress";
+  if (key === "sparrow") return "sparrow";
   return key;
 }
 

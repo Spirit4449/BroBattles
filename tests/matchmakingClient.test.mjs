@@ -187,7 +187,7 @@ test("returning from battle suppresses stale queue events until the user readies
 });
 
 test("progress for another selection is ignored and local humans hydrate server previews", () => {
-  const f = fixture({ players: [{ name: "Ann", char_class: "wizard", selected_skin_id: "x" }] });
+  const f = fixture({ players: [{ name: "Ann", char_class: "ozzy", selected_skin_id: "x" }] });
   f.handlers["queue:joined"]({ selection: duel });
   const rendered = f.view.renders.length;
   f.handlers["match:progress"]({ selection: { ...duel, mapId: 2 }, found: 1, total: 2 });

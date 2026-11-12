@@ -1,12 +1,12 @@
 const thorgRageAbility = require("./abilities/thorgRageAbility.js");
 const dravenInfernoAbility = require("./abilities/dravenInfernoAbility.js");
-const wizardArcaneSurgeAbility = require("./abilities/wizardArcaneSurgeAbility.js");
+const ozzyArcaneSurgeAbility = require("./abilities/ozzyArcaneSurgeAbility.js");
 const gloopHookAbility = require("./abilities/gloopHookAbility.js");
 
 const abilitiesByCharacter = {
   [thorgRageAbility.key]: thorgRageAbility,
   [dravenInfernoAbility.key]: dravenInfernoAbility,
-  [wizardArcaneSurgeAbility.key]: wizardArcaneSurgeAbility,
+  [ozzyArcaneSurgeAbility.key]: ozzyArcaneSurgeAbility,
   [gloopHookAbility.key]: gloopHookAbility,
 };
 

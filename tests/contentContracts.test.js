@@ -22,11 +22,11 @@ test('content validation rejects a missing action and wrong effect owner', () =>
 
 test('content validation rejects rig points that are malformed or outside the frame', () => {
   const characters = structuredClone(characterDefinitions);
-  characters.wizard.rig.feet = [999, 140];
-  characters.wizard.rig.points.staffTip.attack[2] = ['x', 1];
-  characters.wizard.rig.points.orb = 'top';
+  characters.ozzy.rig.feet = [999, 140];
+  characters.ozzy.rig.points.staffTip.attack[2] = ['x', 1];
+  characters.ozzy.rig.points.orb = 'top';
   const errors = validateContent({ characters });
-  assert.ok(errors.some(error => error.includes('wizard: rig feet is outside')));
+  assert.ok(errors.some(error => error.includes('ozzy: rig feet is outside')));
   assert.ok(errors.some(error => error.includes('staffTip.attack[2] must be [x, y]')));
   assert.ok(errors.some(error => error.includes('rig orb must be')));
 });
@@ -75,11 +75,22 @@ test('every registered character declares how bots play it', () => {
 
 test('character levels parse from rows without throwing on malformed data', () => {
   const { parseCharacterLevels, getCharacterLevel, canonicalCharacterKey } = require('../src/shared/characters/characterStats');
-  assert.deepEqual(parseCharacterLevels('{"wizard":3}'), { wizard: 3 });
+  assert.deepEqual(parseCharacterLevels('{"ozzy":3}'), { ozzy: 3 });
   assert.deepEqual(parseCharacterLevels({ ninja: 1 }), { ninja: 1 });
   assert.deepEqual(parseCharacterLevels('not json'), {});
   assert.deepEqual(parseCharacterLevels('7'), {});
   assert.equal(getCharacterLevel({ char_levels: '{"gloop":4}' }, 'gloop'), 4);
   assert.equal(getCharacterLevel(null, 'gloop'), 0);
-  assert.equal(canonicalCharacterKey(' Hunteress '), 'huntress');
+  assert.equal(canonicalCharacterKey(' Hunteress '), 'sparrow');
+});
+
+test("character display names and legacy character keys resolve correctly", () => {
+  const { getCharacterDisplayName, resolveCharacterKey } = require("../src/shared/characters/characterStats");
+  assert.equal(getCharacterDisplayName("ozzy"), "Ozzy");
+  assert.equal(getCharacterDisplayName("sparrow"), "Sparrow");
+  assert.equal(getCharacterDisplayName("ninja"), "Ninja");
+  assert.equal(getCharacterDisplayName("hunteress"), "Sparrow");
+  assert.equal(resolveCharacterKey("hunteress"), "sparrow");
+  assert.equal(resolveCharacterKey("huntress"), "sparrow");
+  assert.equal(resolveCharacterKey("wizard"), "ozzy");
 });

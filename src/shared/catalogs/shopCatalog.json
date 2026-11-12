@@ -78,7 +78,7 @@
         "card-radiant-emerald",
         "card-radiant-gold",
         "card-radiant-ruby",
-        "card-wizard-spell",
+        "card-ozzy-spell",
         "card-radiant-silver",
         "icon-ember-crown",
         "icon-crystal-slime",
@@ -571,13 +571,13 @@
       ]
     },
     {
-      "id": "card-wizard-spell",
+      "id": "card-ozzy-spell",
       "section": "profile",
       "kind": "item",
-      "name": "Wizard Spell",
+      "name": "Ozzy’s Spell",
       "description": "An animated rare battle card.",
       "rarity": "rare",
-      "banner": "/assets/shop/banners/wizard-spell-card.webp",
+      "banner": "/assets/shop/banners/ozzy-spell-card.webp",
       "price": {
         "type": "virtual",
         "currency": "gems",
@@ -587,7 +587,7 @@
       "grants": [
         {
           "kind": "card",
-          "id": "wizard-spell"
+          "id": "ozzy-spell"
         }
       ]
     },

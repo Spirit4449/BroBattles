@@ -373,15 +373,15 @@
       "animationAppleVersion": "bf4e76f9822d3a8f"
     },
     {
-      "id": "wizard-spell",
-      "name": "Wizard Spell",
+      "id": "ozzy-spell",
+      "name": "Ozzy’s Spell",
       "rarity": "rare",
       "cost": {
         "coins": 0,
         "gems": 79
       },
-      "assetUrl": "/assets/player-cards/wizard-spell/wizard-spell-poster.webp",
-      "animationUrl": "/assets/player-cards/wizard-spell/wizard-spell-animated.webm",
+      "assetUrl": "/assets/player-cards/ozzy-spell/ozzy-spell-poster.webp",
+      "animationUrl": "/assets/player-cards/ozzy-spell/ozzy-spell-animated.webm",
       "animationViewport": {
         "width": 488,
         "height": 900,
@@ -391,9 +391,9 @@
         "h": 627
       },
       "animationBytes": 50053,
-      "animationAppleUrl": "/assets/player-cards/wizard-spell/wizard-spell-animated.mov",
+      "animationAppleUrl": "/assets/player-cards/ozzy-spell/ozzy-spell-animated.mov",
       "animationAppleBytes": 132259,
-      "shopAssetUrl": "/assets/player-cards/wizard-spell/wizard-spell.webp",
+      "shopAssetUrl": "/assets/player-cards/ozzy-spell/ozzy-spell.webp",
       "battleViewport": {
         "width": 488,
         "height": 900,

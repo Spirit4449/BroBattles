@@ -47,7 +47,7 @@ class MapPlaytestService {
       const session=socket.data.editorSession,room=session.room;
       socket.on('game:join',async(data,cb)=>{try{
         if(Number(data?.matchId)!==room.matchId)throw Error('Wrong playtest room');
-        if((room.ninjaCombatVersion===1&&data.ninjaCombatVersion!==1)||(room.huntressCombatVersion===2&&data.huntressCombatVersion!==2))throw Object.assign(Error('Reload the game client'),{code:'CLIENT_UPDATE_REQUIRED'});
+        if((room.ninjaCombatVersion===1&&data.ninjaCombatVersion!==1)||(room.sparrowCombatVersion===2&&data.sparrowCombatVersion!==2))throw Object.assign(Error('Reload the game client'),{code:'CLIENT_UPDATE_REQUIRED'});
         await room.addPlayer(socket,socket.data.user);
         room.initializeSpawnPositions();
         room.sendGameStateToPlayer(socket);

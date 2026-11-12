@@ -1,6 +1,6 @@
 import { characterHitBounds, firstTargetContact } from "../../../../shared/combat/shotContact";
 import { DELIVERIES, shapeTouches } from "../../../../shared/combat/attackDelivery";
-import { sweep } from "../../../../shared/characters/huntressProjectile";
+import { sweep } from "../../../../shared/characters/sparrowProjectile";
 import { serverClock } from "../../match/serverClock";
 
 // One contract for every attack (see docs/development/networking.md, "Attack

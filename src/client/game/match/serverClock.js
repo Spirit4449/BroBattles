@@ -1,8 +1,8 @@
-import { CombatClock } from "../../../shared/characters/huntressReplication";
+import { CombatClock } from "../../../shared/characters/sparrowReplication";
 
 // The one client estimate of server time. Snapshots and combat packets keep it
 // tied to the room's epoch; game:clock pings refine the offset with the
-// lowest-RTT sample (NTP-style). Ninja/Huntress projectiles read it through
+// lowest-RTT sample (NTP-style). Ninja/Sparrow projectiles read it through
 // CombatClock.now(), and hit reports send serverNowMono() so the server can
 // rewind position history without trusting the client's wall clock.
 const BURST_PINGS = 5;

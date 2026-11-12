@@ -155,7 +155,7 @@ function aimTuning(character, room) {
 function basicRange(player, room) { return aimTuning(player.char_class, room).range; }
 
 function basicAim(player, target, profile, random, room) {
-  // Sprite origins can sit above the hitbox (especially Gloop and Huntress).
+  // Sprite origins can sit above the hitbox (especially Gloop and Sparrow).
   // Use standing body geometry so crouching remains a way to dodge bot shots.
   const profileAim = botProfile(player.char_class).aim || {};
   const ballistic = profileAim.ballistic;
@@ -171,12 +171,12 @@ function basicAim(player, target, profile, random, room) {
     target.vx || 0, target.vy || 0, runtime.speed || 800)) * (profile.prediction ?? 0.5);
   const dx = target.x + (target.vx || 0) * flight - player.x;
   const dy = target.y + (target.vy || 0) * flight - player.y;
-  // Match Huntress drag-distance power; aiming upward no longer reduces speed.
+  // Match Sparrow drag-distance power; aiming upward no longer reduces speed.
   const distanceRatio = Math.max(0, Math.min(1, (distance - (aim.minRange || 160)) /
     Math.max(1, (aim.maxRange || range) - (aim.minRange || 160))));
-  const huntressSpeed = (ratio) => (angle) => (runtime.speed || 560) *
+  const sparrowSpeed = (ratio) => (angle) => (runtime.speed || 560) *
     ((aim.minSpeedScale || 0.82) + ((aim.maxSpeedScale || 1.18) - (aim.minSpeedScale || 0.82)) * ratio);
-  let speedAtAngle = ballistic?.powerScaled ? huntressSpeed(distanceRatio) : null;
+  let speedAtAngle = ballistic?.powerScaled ? sparrowSpeed(distanceRatio) : null;
   let solution;
   if (ballistic) {
     const terrain = shotTerrain(room, player.team);

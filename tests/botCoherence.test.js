@@ -9,7 +9,7 @@ const { createBotParticipants, BOT_NAMES } = require('../src/server/core/bots/id
 const { chooseDecision, preferredRange } = require('../src/server/core/bots/tactics');
 const { observe } = require('../src/server/core/bots/perception');
 const effects = require('../src/shared/combat/runtime/effects/effectManager.js');
-const characters = ['ninja', 'thorg', 'draven', 'wizard', 'huntress', 'gloop'];
+const characters = ['ninja', 'thorg', 'draven', 'ozzy', 'sparrow', 'gloop'];
 
 function clock(t) {
   let now = 1000000;
@@ -48,7 +48,7 @@ test('route planning accounts for walking to takeoff and both sides of a solid b
 });
 
 test('tactical commitment withstands small target movements but yields to close pressure', (t) => {
-  const time = clock(t), h = makeRoom({ characters: ['wizard', 'thorg'], trophies: 4000 });
+  const time = clock(t), h = makeRoom({ characters: ['ozzy', 'thorg'], trophies: 4000 });
   t.after(() => h.room.cleanup());
   const [p, enemy] = h.players, brain = h.room.botControllers.get(p.participantId);
   const floor = { id: 'floor', x: 1250, left: 0, right: 2500, top: 800, bottom: 850,
@@ -70,8 +70,8 @@ test('tactical commitment withstands small target movements but yields to close 
   assert.ok(Math.abs(changed.goal.x - enemy.x) > Math.abs(p.x - enemy.x) + 150);
 });
 
-test('Wizard walks away from close pressure while retaining the ability to counterattack', (t) => {
-  const time = clock(t), h = makeRoom({ characters: ['wizard', 'thorg'], trophies: 4000 });
+test('Ozzy walks away from close pressure while retaining the ability to counterattack', (t) => {
+  const time = clock(t), h = makeRoom({ characters: ['ozzy', 'thorg'], trophies: 4000 });
   t.after(() => h.room.cleanup());
   const [p, enemy] = h.players, brain = h.room.botControllers.get(p.participantId);
   h.room.botControllers.delete(enemy.participantId);
@@ -86,7 +86,7 @@ test('Wizard walks away from close pressure while retaining the ability to count
 });
 
 test('injury interrupts a long movement commitment immediately', (t) => {
-  const time = clock(t), h = makeRoom({ characters: ['wizard', 'ninja'] });
+  const time = clock(t), h = makeRoom({ characters: ['ozzy', 'ninja'] });
   t.after(() => h.room.cleanup());
   const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
   h.place(p, 1100); h.place(h.players[1], 1300);
@@ -104,7 +104,7 @@ test('injury interrupts a long movement commitment immediately', (t) => {
 
 
 test('allied bots yield an ordinary pickup to the teammate already collecting it', (t) => {
-  const time = clock(t), h = makeRoom({ characters: ['wizard', 'ninja', 'wizard', 'ninja'], trophies: 4000 });
+  const time = clock(t), h = makeRoom({ characters: ['ozzy', 'ninja', 'ozzy', 'ninja'], trophies: 4000 });
   t.after(() => h.room.cleanup());
   const [p, enemy, ally] = h.players, brain = h.room.botControllers.get(p.participantId);
   h.place(p, 1050); h.place(ally, 1080); h.place(enemy, 1450);
@@ -121,8 +121,8 @@ test('allied bots yield an ordinary pickup to the teammate already collecting it
   assert.equal(chooseDecision(brain, context, enemy, [enemy], time.now()).pickupId, 42);
 });
 
-test('Wizard can use a defensive team buff during recovery without abandoning retreat', (t) => {
-  const time = clock(t), h = makeRoom({ characters: ['wizard', 'ninja'], trophies: 4000 });
+test('Ozzy can use a defensive team buff during recovery without abandoning retreat', (t) => {
+  const time = clock(t), h = makeRoom({ characters: ['ozzy', 'ninja'], trophies: 4000 });
   t.after(() => h.room.cleanup());
   const [p, enemy] = h.players, brain = h.room.botControllers.get(p.participantId);
   h.place(p, 1000); h.place(enemy, 1500);
@@ -138,7 +138,7 @@ test('Wizard can use a defensive team buff during recovery without abandoning re
   assert.equal(brain.retreating, true);
 });
 
-for (const character of ['thorg', 'wizard']) test(`${character} actually collects a high Lushy pickup instead of holding just outside its radius`, (t) => {
+for (const character of ['thorg', 'ozzy']) test(`${character} actually collects a high Lushy pickup instead of holding just outside its radius`, (t) => {
   const time = clock(t), h = makeRoom({ characters: [character, 'ninja'], trophies: 4000 });
   t.after(() => h.room.cleanup());
   const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
@@ -197,7 +197,7 @@ test('unreachable loot and an obstructed last-seen point cannot replace a valid 
 });
 
 test('a dying bot avoids crossing its pursuer even when the far side offers more space or healing', (t) => {
-  const time = clock(t), h = makeRoom({ characters: ['wizard', 'ninja'], trophies: 4000 });
+  const time = clock(t), h = makeRoom({ characters: ['ozzy', 'ninja'], trophies: 4000 });
   t.after(() => h.room.cleanup());
   const [p, enemy] = h.players, brain = h.room.botControllers.get(p.participantId);
   const floor = { id: 'escape-floor', x: 1200, left: 0, right: 2400, top: 800, bottom: 850,
@@ -219,7 +219,7 @@ test('a dying bot avoids crossing its pursuer even when the far side offers more
 });
 
 test('a pursued bot fires repeated counterattacks while continuing to escape', (t) => {
-  const time = clock(t), h = makeRoom({ characters: ['ninja', 'wizard'], trophies: 4000 });
+  const time = clock(t), h = makeRoom({ characters: ['ninja', 'ozzy'], trophies: 4000 });
   t.after(() => h.room.cleanup());
   const [p, enemy] = h.players, brain = h.room.botControllers.get(p.participantId);
   h.room.botControllers.delete(enemy.participantId);
@@ -267,7 +267,7 @@ test('routing prefers a dry detour but retains a submerged stepping stone when n
 });
 
 test('sudden-death tactics trade a hazardous retreat against a charging opponent and remaining health', (t) => {
-  const time = clock(t), h = makeRoom({ characters: ['wizard', 'ninja'], trophies: 4000 });
+  const time = clock(t), h = makeRoom({ characters: ['ozzy', 'ninja'], trophies: 4000 });
   t.after(() => h.room.cleanup());
   const [p, enemy] = h.players, brain = h.room.botControllers.get(p.participantId);
   const shelf = { id: 'shelf', x: 600, left: 520, right: 680, top: 600, bottom: 620, collision: { up: true } };

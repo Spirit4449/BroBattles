@@ -162,7 +162,7 @@ test("ordinary bot identities have no accounts, support troll/guest/real names, 
     {
       name: "Human",
       team: "team2",
-      char_class: "wizard",
+      char_class: "ozzy",
       level: 5,
       trophies: 1500,
     },
@@ -290,8 +290,8 @@ test("all six characters attack ducking opponents and use specials without a bro
       "ninja",
       "thorg",
       "draven",
-      "wizard",
-      "huntress",
+      "ozzy",
+      "sparrow",
       "gloop",
     ]) {
       const h = makeRoom({ characters: [character, "ninja"] });
@@ -352,7 +352,7 @@ test("all six characters attack ducking opponents and use specials without a bro
         clock += 17;
         h.tick(clock);
       }
-      if (["ninja", "draven", "huntress"].includes(character))
+      if (["ninja", "draven", "sparrow"].includes(character))
         assert.ok(target.health < before, `${character} special damage`);
       if (character === "thorg")
         assert.ok(effects.isActive(p, "thorgRage", clock));

@@ -6,19 +6,19 @@ function getRuntimeOverrides(actionType) {
   const key = String(actionType || "").toLowerCase();
   if (!key) return null;
 
-  if (key === "wizard-fireball-charge") {
-    const fireball = getResolvedCharacterAttackConfig("wizard", "fireball") || {};
+  if (key === "ozzy-fireball-charge") {
+    const fireball = getResolvedCharacterAttackConfig("ozzy", "fireball") || {};
     return {
       runtime: {
         splashRadius: Math.max(0, Number(fireball.splashRadius) || 0),
-        impactActionType: "wizard-fireball-impact",
+        impactActionType: "ozzy-fireball-impact",
       },
     };
   }
 
-  if (key === "wizard-fireball" || key === "wizard-fireball-release") {
+  if (key === "ozzy-fireball" || key === "ozzy-fireball-release") {
     const fireball =
-      getResolvedCharacterAttackConfig("wizard", "fireball") || {};
+      getResolvedCharacterAttackConfig("ozzy", "fireball") || {};
     const runtime = {
       collisionRadius: Number(fireball.collisionRadius),
       collisionForwardOffset: Number(fireball.collisionForwardOffset),
@@ -31,9 +31,9 @@ function getRuntimeOverrides(actionType) {
       launchEaseMs: Number(fireball.launchEaseMs) || 0,
       launchStartSpeed: Number(fireball.launchStartSpeed ?? 1),
       splashRadius: Math.max(0, Number(fireball.splashRadius) || 0),
-      impactActionType: "wizard-fireball-impact",
+      impactActionType: "ozzy-fireball-impact",
     };
-    if (key === "wizard-fireball") {
+    if (key === "ozzy-fireball") {
       return {
         actionFlow: {
           startupMs: Math.max(0, Number(fireball.castDelayMs)),
@@ -106,8 +106,8 @@ function getRuntimeOverrides(actionType) {
     };
   }
 
-  if (key === "huntress-arrow") {
-    const arrows = getResolvedCharacterAttackConfig("huntress", "arrowSpread");
+  if (key === "sparrow-arrow") {
+    const arrows = getResolvedCharacterAttackConfig("sparrow", "arrowSpread");
     return { actionFlow: { startupMs: arrows.castDelayMs } };
   }
 

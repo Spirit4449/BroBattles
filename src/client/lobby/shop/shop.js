@@ -1,3 +1,4 @@
+import { getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 import { applyWallet, subscribeWallet, walletRevision } from "../wallet.mjs";
 import { escapeHtml } from "../../../shared/site/html.cjs";
 import { playerCardImage, hydratePlayerCardMedia, disposePlayerCardMediaWithin } from "../../views/playerCardAnimation.cjs";
@@ -140,7 +141,7 @@ function getItemTypeLabel(item, grants) {
   }
   if (primary.kind === "skin") {
     return primary.character
-      ? `${primary.character.toUpperCase()} SKIN`
+      ? `${getCharacterDisplayName(primary.character).toUpperCase()} SKIN`
       : "FIGHTER SKIN";
   }
   if (primary.kind === "card") return "PLAYER CARD";
@@ -1259,13 +1260,14 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     });
   }
 
-  function flyWalletParticle({ sourceRect, targetRect, currency, index, count, onImpact, reveal }) {
+  function flyWalletParticle({ sourceRect, targetRect, currency, index, count, onImpact, onTiming, reveal }) {
     const icon = document.createElement("img");
     icon.className = `shop-flying-currency shop-flying-${currency}`;
     icon.src = currency === "gems" ? "/assets/icons/gem.webp" : "/assets/icons/coin.webp";
     icon.alt = "";
     document.body.appendChild(icon);
     const { keyframes, duration, delay: flightDelay } = currencyFlightPlan({ sourceRect, targetRect, index, count });
+    onTiming(duration + flightDelay);
     const animation = icon.animate(keyframes, {
       duration, delay: flightDelay, easing: "cubic-bezier(.2,.05,.55,1)", fill: "both",
     });
@@ -1297,7 +1299,7 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     await Promise.all(animations);
   }
 
-  async function flyRewardCurrency(grants, reveal, wallet) {
+  async function flyRewardCurrency(grants, reveal, wallet, onReady) {
     const grouped = new Map();
     for (const grant of grants || []) {
       if (grant.kind !== "currency") continue;
@@ -1308,6 +1310,7 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
       );
     }
     const flights = [];
+    let flightEnd = 0;
     for (const [currency, amount] of grouped) {
       const target =
         reveal?.querySelector(`[data-reveal-wallet-shell="${currency}"]`) ||
@@ -1348,10 +1351,12 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
             index,
             count,
             onImpact,
+            onTiming: end => { flightEnd = Math.max(flightEnd, end); },
           }),
         );
       }
     }
+    onReady(Math.max(0, flightEnd - 1000));
     await Promise.all(flights);
     for (const currency of grouped.keys()) {
       const finalValue =
@@ -1495,8 +1500,12 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
       playSound(rewardSound(grants, rarity), 0.46);
       const debitAnimation = reducedMotion ? Promise.resolve() : animateWalletDebits(result?.wallet, grantedCurrencies);
       await Promise.race([delay(reducedMotion ? 0 : Math.max(420, 220 + grants.length * 75)), dismissed]);
-      if (reveal.dataset.dismissed !== "1") await Promise.all([debitAnimation, flyRewardCurrency(result?.grants || [], reveal, result?.wallet)]);
-      updateWallet(result?.wallet, true, false);
+      let readyDelay = 0;
+      const animations = reveal.dataset.dismissed !== "1"
+        ? Promise.all([debitAnimation, flyRewardCurrency(result?.grants || [], reveal, result?.wallet, ms => { readyDelay = ms; })])
+        : Promise.resolve();
+      await Promise.race([delay(readyDelay), dismissed]);
+      if (reveal.dataset.dismissed === "1") return;
       onProfileInvalidate?.();
       reveal.dataset.ready = "1";
       continueButton.style.visibility = "";
@@ -1504,6 +1513,7 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
       continueButton.removeAttribute("tabindex");
       if (reveal.dataset.dismissed !== "1") continueButton.focus();
       await dismissed;
+      await animations;
     } finally {
       window.removeEventListener("keydown", handleKey, true);
       // An interrupted reveal must never leave the confirmed wallet stale.

@@ -47,7 +47,7 @@
           {
             "kind": "currency",
             "currency": "coins",
-            "amount": 70,
+            "amount": 80,
             "name": "Coins",
             "image": "/assets/icons/coin.webp"
           }
@@ -59,7 +59,7 @@
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 2,
+            "amount": 5,
             "name": "Gems",
             "image": "/assets/icons/gem.webp"
           }
@@ -105,14 +105,14 @@
           {
             "kind": "currency",
             "currency": "coins",
-            "amount": 540,
+            "amount": 650,
             "name": "Coins",
             "image": "/assets/icons/coin.webp"
           },
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 12,
+            "amount": 15,
             "name": "Gems",
             "image": "/assets/icons/gem.webp"
           }
@@ -144,14 +144,14 @@
           {
             "kind": "currency",
             "currency": "coins",
-            "amount": 800,
+            "amount": 960,
             "name": "Coins",
             "image": "/assets/icons/coin.webp"
           },
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 20,
+            "amount": 25,
             "name": "Gems",
             "image": "/assets/icons/gem.webp"
           }
@@ -244,14 +244,14 @@
           {
             "kind": "currency",
             "currency": "coins",
-            "amount": 2010,
+            "amount": 2410,
             "name": "Coins",
             "image": "/assets/icons/coin.webp"
           },
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 40,
+            "amount": 50,
             "name": "Gems",
             "image": "/assets/icons/gem.webp"
           }
@@ -271,14 +271,14 @@
           {
             "kind": "currency",
             "currency": "coins",
-            "amount": 2680,
+            "amount": 3220,
             "name": "Coins",
             "image": "/assets/icons/coin.webp"
           },
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 60,
+            "amount": 70,
             "name": "Gems",
             "image": "/assets/icons/gem.webp"
           }
@@ -298,14 +298,14 @@
           {
             "kind": "currency",
             "currency": "coins",
-            "amount": 4020,
+            "amount": 4820,
             "name": "Coins",
             "image": "/assets/icons/coin.webp"
           },
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 100,
+            "amount": 120,
             "name": "Gems",
             "image": "/assets/icons/gem.webp"
           },
@@ -330,63 +330,63 @@
     "currencyGrowthBands": [
       {
         "fromTrophies": 0,
-        "coins": 70,
-        "gems": 2
+        "coins": 80,
+        "gems": 5
       },
       {
         "fromTrophies": 250,
-        "coins": 100,
-        "gems": 2
+        "coins": 120,
+        "gems": 5
       },
       {
         "fromTrophies": 500,
-        "coins": 130,
-        "gems": 4
+        "coins": 160,
+        "gems": 5
       },
       {
         "fromTrophies": 1000,
-        "coins": 170,
-        "gems": 4
+        "coins": 200,
+        "gems": 5
       },
       {
         "fromTrophies": 1500,
-        "coins": 200,
-        "gems": 6
+        "coins": 240,
+        "gems": 5
       },
       {
         "fromTrophies": 2000,
-        "coins": 270,
-        "gems": 8
+        "coins": 320,
+        "gems": 10
       },
       {
         "fromTrophies": 3000,
-        "coins": 340,
+        "coins": 410,
         "gems": 10
       },
       {
         "fromTrophies": 4000,
-        "coins": 400,
-        "gems": 12
+        "coins": 480,
+        "gems": 15
       },
       {
         "fromTrophies": 5000,
-        "coins": 470,
-        "gems": 14
+        "coins": 560,
+        "gems": 15
       },
       {
         "fromTrophies": 6000,
-        "coins": 540,
-        "gems": 16
-      },
-      {
-        "fromTrophies": 7500,
-        "coins": 670,
+        "coins": 650,
         "gems": 20
       },
       {
-        "fromTrophies": 9000,
+        "fromTrophies": 7500,
         "coins": 800,
-        "gems": 24
+        "gems": 25
+      },
+      {
+        "fromTrophies": 9000,
+        "coins": 960,
+        "gems": 30
       }
     ]
   }

@@ -5,7 +5,7 @@
 // being interrupted). Effects describe what to draw; this owns when.
 //
 //   const fx = attachToPlayer(scene, sprite, {
-//     key: "wizard-super",            // a new attachment with this key replaces the old
+//     key: "ozzy-super",            // a new attachment with this key replaces the old
 //     layers: ["floor", "front"],     // graphics created at depths relative to the sprite
 //     lifetimeMs: 1800,
 //     update(ms, dt, { floor, front }) { ... return false to end early },

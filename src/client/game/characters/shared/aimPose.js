@@ -1,5 +1,5 @@
 // Picks the baked pose for an aimed attack. Characters with directional art
-// (ninja throws, huntress shots) list poses by elevation: degrees above level,
+// (ninja throws, sparrow shots) list poses by elevation: degrees above level,
 // whichever way the attack faces.
 
 // Aim above level in degrees for a screen angle (radians, +y down).
@@ -15,4 +15,10 @@ function nearestAimPose(angle, poses) {
     (Math.abs(pose.elevation - elevation) < Math.abs(best.elevation - elevation) ? pose : best));
 }
 
-module.exports = { aimElevation, nearestAimPose };
+// The animation variant (see playSpriteAnimation's `variant`) for an attack at
+// `angle`: the nearest pose's key, null for the level pose or no aim.
+function aimVariant(angle, poses) {
+  return nearestAimPose(angle, poses)?.key ?? null;
+}
+
+module.exports = { aimElevation, nearestAimPose, aimVariant };

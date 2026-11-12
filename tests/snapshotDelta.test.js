@@ -81,7 +81,7 @@ test('callers may mutate decoded players without corrupting later snapshots', ()
 });
 
 test('a live bot room publishes deltas that rebuild every full snapshot', (t) => {
-  const h = makeRoom({ characters: ['ninja', 'thorg', 'draven', 'wizard', 'huntress', 'gloop'], map: 1, seed: 17 });
+  const h = makeRoom({ characters: ['ninja', 'thorg', 'draven', 'ozzy', 'sparrow', 'gloop'], map: 1, seed: 17 });
   t.after(() => h.room.cleanup());
   delete h.room.broadcastSnapshot; // the helper stubs it out; use the real one
   const full = [], sent = [];

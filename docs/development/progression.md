@@ -15,7 +15,7 @@ Character levels, per-level HP/damage/special gains, the level cap and upgrade p
 
 Exact unlock milestones (including 750 and 1,250) are inserted between normal rewards. Milestones are evenly spaced visually; the player pin interpolates between the actual trophy thresholds. This prevents the early cards from overlapping.
 
-Ordinary rewards alternate 300 coins and 15 gems, increasing by 50% of that base for each 2,000 trophies. Milestone rewards replace the ordinary reward at that threshold. The current generated track grants 23,100 coins and 910 gems, plus cosmetics, Gloop and mode access. Definitions live in `src/shared/catalogs/trophySystem.catalog.json`; `buildTrophyRewardTrack()` in `src/server/services/trophies/trophySystem.js` derives the actual tiers and totals. Recalculate totals when editing the catalog.
+Ordinary rewards alternate coins and gems, with amounts increasing through trophy-based growth bands. Milestone rewards replace the ordinary reward at that threshold. The current generated track grants 18,570 coins and 450 gems, plus cosmetics, Gloop and mode access. Definitions live in `src/shared/catalogs/trophySystem.catalog.json`; `buildTrophyRewardTrack()` in `src/server/services/trophies/trophySystem.js` derives the actual tiers and totals. Recalculate totals when editing the catalog.
 
 ## Unlocks
 

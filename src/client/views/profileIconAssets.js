@@ -1,16 +1,16 @@
 import "../styles/broPortrait.css";
 import ICONS from "../../shared/catalogs/profileIconsCatalog.json";
 import { BRO_PORTRAIT_PALETTES, buildBroPortraitSvg } from "./broPortrait.mjs";
-import ninjaBody from "../../../public/assets/ninja/body.webp?portrait";
-import thorgBody from "../../../public/assets/thorg/body.webp?portrait";
-import dravenBody from "../../../public/assets/draven/body.webp?portrait";
-import wizardBody from "../../../public/assets/wizard/body.webp?portrait";
-import huntressBody from "../../../public/assets/huntress/body.webp?portrait";
-import gloopBody from "../../../public/assets/gloop/body.webp?portrait";
+import ninjaBody from "../../../public/assets/ninja/portrait.webp?portrait";
+import thorgBody from "../../../public/assets/thorg/portrait.webp?portrait";
+import dravenBody from "../../../public/assets/draven/portrait.webp?portrait";
+import ozzyBody from "../../../public/assets/ozzy/portrait.webp?portrait";
+import sparrowBody from "../../../public/assets/sparrow/portrait.webp?portrait";
+import gloopBody from "../../../public/assets/gloop/portrait.webp?portrait";
 import { DEFAULT_CHARACTER, canonicalCharacterKey } from "../../shared/characters/characterStats.js";
 
 const bodies = { ninja: ninjaBody, thorg: thorgBody, draven: dravenBody,
-  wizard: wizardBody, huntress: huntressBody, gloop: gloopBody };
+  ozzy: ozzyBody, sparrow: sparrowBody, gloop: gloopBody };
 const portraitUrls = new Map();
 
 function broPortraitUrl(character) {

@@ -35,7 +35,7 @@ These constants are used by the server, the client, bots, and the replicated pro
 | Constant | Meaning |
 | --- | --- |
 | `SERVER_TICK_HZ` | Server simulation rate (60). |
-| `FIXED_DT_MS` | Derived as `1000 / SERVER_TICK_HZ`. Used by the room loop, bots, Ninja/Huntress projectile replays, and client snapshot interpolation. |
+| `FIXED_DT_MS` | Derived as `1000 / SERVER_TICK_HZ`. Used by the room loop, bots, Ninja/Sparrow projectile replays, and client snapshot interpolation. |
 | `SNAPSHOT_EVERY_TICKS` | Ticks between player snapshots (2 → 30 Hz). The client's expected snapshot spacing is derived from it. |
 | `WORLD_STATE_EVERY_TICKS` | Ticks between world-state packets (8 → 7.5 Hz). |
 | `WORLD_MARGIN` | How far past the world edges players, hooks and projectiles may travel. Each mode's world rectangle lives in `src/shared/maps/arenas.json`. |
@@ -106,11 +106,11 @@ The local player, the server's movement validation, and the bot physics all read
 | `stats.spriteScale`, `stats.body` | Render scale and hitbox shrink and offset. Defaults are in `characterTuning.js` (`CHARACTER_BODY_DEFAULTS`). |
 | `stats.tuning.attack.aim`, `stats.tuning.special.aim` | Aim reticle shape and range. `reticleScale`, `radiusY`, and `reticleOffsetY` control a round reticle's drawn size and placement without changing range or damage. Draven's inferno also uses its `aim.radius` as its damage radius. |
 | `stats.tuning.attack.<name>` | Basic-attack projectile or melee numbers (speed, range, radius, timings). |
-| `stats.tuning.special.<name>` | Super numbers, for example `ninja.swarm`, `draven.inferno` (now includes `damageTickMs`, `damageScale`, `minDamagePerTick`, `firstDamageDelayMs`, `bobWaveMs`), `wizard.arcaneSurge` (`powerScale`, `durationScale`, `castMs`, `beamMs`, `powerups` (the helpful pool the caster and teammates roll from), `fallbackPowerup`), `gloop.hook`, and Thorg's `rageDurationMs` / `rageModifiers` / `knockback`. |
+| `stats.tuning.special.<name>` | Super numbers, for example `ninja.swarm`, `draven.inferno` (now includes `damageTickMs`, `damageScale`, `minDamagePerTick`, `firstDamageDelayMs`, `bobWaveMs`), `ozzy.arcaneSurge` (`powerScale`, `durationScale`, `castMs`, `beamMs`, `powerups` (the helpful pool the caster and teammates roll from), `fallbackPowerup`), `gloop.hook`, and Thorg's `rageDurationMs` / `rageModifiers` / `knockback`. |
 | `presentation` | Client-only visual settings (art scale, animation locks, dash poses). |
 | `attacks` | Network action descriptors and authoritative runtime selection. Update these when adding or changing an attack mechanism; keep action IDs and damage types aligned with emitters and validators. |
 
-Huntress's displayed basic damage is the full three-arrow volley; actual contacts use `stats.tuning.attack.arrowSpread.damagePerArrow`. Keep `stats.baseDamage` consistent with the arrow count and per-arrow damage when balancing her basic attack. Burning Volley uses its separate `damagePerArrow` field. Each attack's `aim.quickTargetOffsetY` sets its default target height relative to the aim anchor (positive points down); the basic and super defaults aim slightly below their anchors.
+Sparrow's displayed basic damage is the full three-arrow volley; actual contacts use `stats.tuning.attack.arrowSpread.damagePerArrow`. Keep `stats.baseDamage` consistent with the arrow count and per-arrow damage when balancing her basic attack. Burning Volley uses its separate `damagePerArrow` field. Each attack's `aim.quickTargetOffsetY` sets its default target height relative to the aim anchor (positive points down); the basic and super defaults aim slightly below their anchors.
 
 The Ninja swarm's per-shard fan (spawn offset, arc, speed) is computed once by `swarmShard()` in `src/shared/characters/ninjaProjectile.js`. The server, bots, and client renderer all call it.
 
@@ -118,7 +118,7 @@ The Ninja swarm's per-shard fan (spawn offset, arc, speed) is computed once by `
 
 Each powerup has these fields: `assetDir`, `color` (main tint), `lightColor` (HUD badge fill), `durationMs`, optional `tickVolume`/`touchVolume`, `modifiers` (`damageMult`, `damageTakenMult`, `speedMult`, `jumpMult`), and type-specific values (`healingPerSecond`, `damagePerSecond`, shockwave `radius`/`forceX`/`forceY`). The list of types comes from the catalog's keys. The catalog derives type/color/preload lists. A working new powerup also needs its server effect definition, assets, validation and applicable map configuration; see [contributing](contributing.md).
 
-Wizard's Arcane Surge reads `stats.tuning.special.arcaneSurge` in `wizard.json`. Duration scales by `durationScale`. For rage, shield and gravity boots, strength scales the modifier's distance from neutral: `1 + (baseModifier - 1) * powerScale`, clamped nonnegative. Health healing scales its per-second amount separately. This is not direct multiplication of every modifier.
+Ozzy's Arcane Surge reads `stats.tuning.special.arcaneSurge` in `ozzy.json`. Duration scales by `durationScale`. For rage, shield and gravity boots, strength scales the modifier's distance from neutral: `1 + (baseModifier - 1) * powerScale`, clamped nonnegative. Health healing scales its per-second amount separately. This is not direct multiplication of every modifier.
 
 ## Client-only feel and presentation
 

@@ -36,7 +36,7 @@ function registerAttackFromAction(
   now = combatNow(room),
 ) {
   // Dedicated combat protocols accept aim requests, never generic release packets.
-  if (playerData.char_class === 'huntress') return false;
+  if (playerData.char_class === 'sparrow') return false;
   if (!claimAttackInstance(room, playerData, actionData, now)) return false;
   const runtimeAttack = createRuntimeAttack(playerData, actionData, now);
   if (!runtimeAttack) return false;

@@ -88,7 +88,10 @@ async function applyMatchRewards(room, winnerTeam, q) {
       damage: 0,
       kills: 0,
     };
-    const reward = calculateRewards(room, bucket, winnerTeam, playerData.team);
+    // A human who never joined still stood in the match as a ghost: the result
+    // moves their trophies, but they earn no coins or gems.
+    const noShow = !playerData.isBot && playerData._neverJoined === true;
+    const reward = noShow ? { coins: 0, gems: 0 } : calculateRewards(room, bucket, winnerTeam, playerData.team);
     const currentTrophies =
       userIdToTrophies.get(Number(playerData?.user_id)) || 0;
     const trophyInfo = calculateTrophyDelta({
@@ -102,9 +105,10 @@ async function applyMatchRewards(room, winnerTeam, q) {
     const before = playerData.isBot ? 0 : await getCurrentWinStreak({ runQuery: q }, playerData.user_id);
     const isDraw = winnerTeam == null || winnerTeam === 'draw';
     const isWin = !isDraw && winnerTeam === playerData.team;
-    const after = playerData.isBot ? 0 : isDraw ? before : isWin ? before + 1 : 0;
+    // A no-show's win neither extends the streak nor earns its bonus; a loss still ends it.
+    const after = playerData.isBot ? 0 : isDraw ? before : isWin ? (noShow ? before : before + 1) : 0;
     const base = { coins: reward.coins, gems: reward.gems, trophies: Number(trophyInfo.trophiesDelta) || 0 };
-    const boosted = applyWinStreakRewards(base, isWin ? after : 0);
+    const boosted = applyWinStreakRewards(base, isWin && !noShow ? after : 0);
     const totals = boosted.totals;
     summary.push({
       username: bucket.username,
@@ -193,5 +197,6 @@ module.exports = {
   ensureRewardBucket,
   recordCombatStat,
   distributeMatchRewards,
+  applyMatchRewards,
   calculateRewards,
 };

@@ -2,7 +2,7 @@
 // socket handling live in matchmakingClient.mjs; this module only renders.
 import { getLobbyBgAsset, getLobbyPlatformAsset } from "../../game/maps/manifest";
 import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
-import { DEFAULT_CHARACTER } from "../../../shared/characters/characterStats.js";
+import { DEFAULT_CHARACTER, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 import { refreshPlatformGrounding } from "../party/platformGrounding.mjs";
 
 const MATCHMAKING_EXIT_MS = 190;
@@ -249,7 +249,7 @@ export function createMatchmakingOverlay() {
     img.src = isShuffleBot
       ? "/assets/shuffle/shuffle1.svg"
       : String(p.selected_skin_asset_url || "").trim() || buildCharacterSkinBodyUrl(cls, p.selected_skin_id);
-    img.alt = isShuffleBot ? "Shuffle bot" : cls;
+    img.alt = isShuffleBot ? "Shuffle bot" : getCharacterDisplayName(cls);
     img.className = `mm-character${isShuffleBot ? " bot-shuffle-icon mm-bot-shuffle-icon" : ""}`;
     const name = document.createElement("div");
     name.className = "mm-name";

@@ -11,7 +11,7 @@
     "test:shop": "node --test tests/shopCatalog.test.js tests/shopCommerce.test.js tests/shopPresentation.test.js",
     "test:bots": "node --test tests/adaptiveBots.test.js tests/gameRoomStartup.test.js tests/botBehavior.test.js tests/botDash.test.js tests/botDashNavigation.test.js tests/botAiming.test.js tests/botTeamwork.test.js tests/botObjectives.test.js tests/botCoherence.test.js tests/navigationService.test.js tests/slow/*.test.js",
     "test:battle-log": "node --test tests/battleLog.test.js",
-    "test:network": "node --test tests/networkTiming.test.mjs tests/netTrace.test.mjs tests/movementCorrection.test.js tests/serverClockAndHistory.test.js tests/dashNetworkContacts.test.js tests/ninjaCombat.test.js tests/ninjaRenderer.test.js tests/huntressCombat.test.js tests/huntressRenderer.test.js tests/attackDelivery.test.js",
+    "test:network": "node --test tests/networkTiming.test.mjs tests/netTrace.test.mjs tests/movementCorrection.test.js tests/serverClockAndHistory.test.js tests/dashNetworkContacts.test.js tests/ninjaCombat.test.js tests/ninjaRenderer.test.js tests/sparrowCombat.test.js tests/sparrowRenderer.test.js tests/attackDelivery.test.js",
     "test:slow": "node --test tests/slow/*.test.js",
     "simulate:bots": "node scripts/dev/simulate-bots.cjs",
     "net:probe": "node scripts/dev/net-probe.mjs",

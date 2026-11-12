@@ -3,8 +3,8 @@ const definitions = [
   require('./ninja.json'),
   require('./thorg.json'),
   require('./draven.json'),
-  require('./wizard.json'),
-  require('./huntress.json'),
+  require('./ozzy.json'),
+  require('./sparrow.json'),
   require('./gloop.json'),
 ];
 const characterDefinitions = Object.fromEntries(definitions.map(definition => [definition.key, definition]));

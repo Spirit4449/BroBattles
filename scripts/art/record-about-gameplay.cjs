@@ -23,8 +23,8 @@ const { snapshotEpoch } = require('../../src/shared/combat/runtime/clock');
 const root = path.resolve(__dirname, '../..');
 const output = path.join(root, 'output/about-gameplay');
 const setups = {
-  duel: { map: 2, seed: 41, characters: ['ninja', 'huntress'], seconds: 16 },
-  crossfire: { map: 3, seed: 73, characters: ['thorg', 'gloop', 'wizard', 'draven'], seconds: 20 },
+  duel: { map: 2, seed: 41, characters: ['ninja', 'sparrow'], seconds: 16 },
+  crossfire: { map: 3, seed: 73, characters: ['thorg', 'gloop', 'ozzy', 'draven'], seconds: 20 },
 };
 
 async function main() {

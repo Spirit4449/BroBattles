@@ -39,7 +39,7 @@ function assertNoGreenSpill(image, name) {
 
 window.htmlSmoke = {
   async runCardCleanup() {
-    for (const card of playerCards.cards.filter(card => ['astral-amethyst', 'mjolnirs-anvil', 'wizard-spell'].includes(card.id))) {
+    for (const card of playerCards.cards.filter(card => ['astral-amethyst', 'mjolnirs-anvil', 'ozzy-spell'].includes(card.id))) {
       const video = document.createElement('video');
       video.muted = true;
       video.src = card.animationUrl;
@@ -295,7 +295,7 @@ window.htmlSmoke = {
         Math.abs(canvasBounds.height - view.height * scale) < 1, 'animated card does not match its viewport scale');
       await still.decode();
       // These frames have no green artwork. Slime and emerald intentionally do.
-      const cleanGreen = ['shuriken-strike', 'astral-amethyst', 'mjolnirs-anvil', 'wizard-spell'].includes(card.id);
+      const cleanGreen = ['shuriken-strike', 'astral-amethyst', 'mjolnirs-anvil', 'ozzy-spell'].includes(card.id);
       if (cleanGreen) assertNoGreenSpill(still, `${card.id} poster`);
       let presented = 0;
       let sampling = true;

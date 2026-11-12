@@ -140,7 +140,6 @@ describe("Loading presence", () => {
       opPlayerName: displayObject(),
       opHealthBar: displayObject(),
       _spawnPresented: true,
-      _loadingGhost: false,
       _powerupStatusIcons: [],
     });
     return wrapper;
@@ -148,7 +147,6 @@ describe("Loading presence", () => {
 
   test('an unloaded fighter is a faded ghost with its UI, then solid once loaded', () => {
     const fighter = remoteFighter();
-    fighter.setLoadingGhost(true);
     fighter.setPresenceState(true, false);
     assert.equal(fighter.opponent.visible, true);
     assert.ok(fighter.opponent.alpha < 1, 'drawn faded');
@@ -162,11 +160,9 @@ describe("Loading presence", () => {
     assert.equal(fighter.opHealthBar.visible, true);
   });
 
-  test('once live, an unloaded fighter stays a ghost', () => {
+  test('a disconnected fighter that never loaded is still a ghost', () => {
     const fighter = remoteFighter();
-    fighter.setLoadingGhost(true);
-    fighter.setPresenceState(true, false);
-    fighter.setLoadingGhost(false);
+    fighter.setPresenceState(false, false);
     assert.equal(fighter.opponent.visible, true);
     assert.ok(fighter.opponent.alpha < 1);
   });

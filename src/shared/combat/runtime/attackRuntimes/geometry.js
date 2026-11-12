@@ -2,7 +2,7 @@ const DEFAULT_TARGET_HALF_HEIGHT = 60;
 const DEFAULT_TARGET_HALF_WIDTH = 28;
 const { WORLD_MARGIN } = require("../../matchConfig.js");
 const { circleAabbOverlap, attackCollisionCenter: getAttackCollisionCenter } = require("../../shotContact");
-const { sweep } = require("../../../characters/huntressProjectile");
+const { sweep } = require("../../../characters/sparrowProjectile");
 
 // `at` places the box at another position, such as a lag-compensated one.
 function getPlayerBounds(target, at = target) {

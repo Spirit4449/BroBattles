@@ -26,19 +26,19 @@ test('ducking does not change whether a bot considers the target attackable', ()
 
 // Independently step the same velocity-first integration used by live attacks.
 function missDistance(p, enemy, angle, speed) {
-  const huntress = p.char_class === 'huntress';
-  const cfg = require('../src/shared/characters/huntressProjectile').attackConfig();
-  const runtime = huntress ? cfg : getResolvedAttackDescriptor('wizard-fireball-release').runtime;
+  const sparrow = p.char_class === 'sparrow';
+  const cfg = require('../src/shared/characters/sparrowProjectile').attackConfig();
+  const runtime = sparrow ? cfg : getResolvedAttackDescriptor('ozzy-fireball-release').runtime;
   // Shots leave the character's rig muzzle, facing the enemy.
   const muzzle = muzzleOf(p.char_class, runtime.muzzle, { x: p.x, y: p.y, flip: enemy.x < p.x });
   speed ??= runtime.speed;
-  const startup = getResolvedAttackDescriptor(huntress ? 'huntress-arrow' : 'wizard-fireball').actionFlow.startupMs / 1000;
-  const dt = room.FIXED_DT_MS / 1000, g = huntress ? runtime.gravity : 0;
+  const startup = getResolvedAttackDescriptor(sparrow ? 'sparrow-arrow' : 'ozzy-fireball').actionFlow.startupMs / 1000;
+  const dt = room.FIXED_DT_MS / 1000, g = sparrow ? runtime.gravity : 0;
   let x = muzzle.pivot.x + Math.cos(angle) * muzzle.reach;
   let y = muzzle.pivot.y + Math.sin(angle) * muzzle.reach;
   let vy = Math.sin(angle) * speed, best = Infinity;
-  for (let t = dt; t <= (huntress ? runtime.maxLifetimeMs / 1000 : runtime.range / runtime.speed); t += dt) {
-    if (huntress) { vy += g * dt; x += Math.cos(angle) * speed * dt; y += vy * dt; }
+  for (let t = dt; t <= (sparrow ? runtime.maxLifetimeMs / 1000 : runtime.range / runtime.speed); t += dt) {
+    if (sparrow) { vy += g * dt; x += Math.cos(angle) * speed * dt; y += vy * dt; }
     else {
       // The fireball eases off the staff on the shared launch curve.
       const step = launchTravel(t * 1000, runtime) - launchTravel((t - dt) * 1000, runtime);
@@ -49,8 +49,8 @@ function missDistance(p, enemy, angle, speed) {
   return best;
 }
 
-test('wizard shoots through walls while leading both movement components', () => {
-  const p = player('wizard');
+test('ozzy shoots through walls while leading both movement components', () => {
+  const p = player('ozzy');
   const blocked = { ...room, geometry: { colliders: [{ left: 180, right: 220, top: 0, bottom: 1000 }] } };
   assert.equal(hasClearShot(blocked, p, target), true);
   for (const [vx, vy] of [[0, 160], [120, -90], [-160, 80]]) {
@@ -132,14 +132,14 @@ test('ninja can shoot a ducking human without mistaking their floor for cover', 
   assert.equal(actions[0].target.y, duckingHuman.y + characterBody('ninja').offsetY);
 });
 
-test('ninja aims into Gloop and Huntress bodies rather than their elevated sprite origins', () => {
+test('ninja aims into Gloop and Sparrow bodies rather than their elevated sprite origins', () => {
   const { characterBody } = require('../src/shared/physics/duelGeometry');
   const model = require('../src/shared/characters/ninjaProjectile');
-  const { sweep } = require('../src/shared/characters/huntressProjectile');
+  const { sweep } = require('../src/shared/characters/sparrowProjectile');
   const floor = 600;
   const ninjaBody = characterBody('ninja');
   const ninja = { ...player('ninja'), y: floor - ninjaBody.offsetY - ninjaBody.halfHeight };
-  for (const char_class of ['gloop', 'huntress']) {
+  for (const char_class of ['gloop', 'sparrow']) {
     for (const direction of [-1, 1]) {
       for (const distance of [160, 300, 400]) {
         const body = characterBody(char_class, direction < 0);
@@ -193,8 +193,8 @@ test('ninja can shoot a ducking Gloop despite its large sprite-to-body offset', 
   assert.ok(actions[0].target.y < 539.6 - 18, 'aim leaves the shuriken clear of the floor');
 });
 
-test('huntress selects a high arc over cover and rejects fully blocked trajectories', () => {
-  const p = player('huntress');
+test('sparrow selects a high arc over cover and rejects fully blocked trajectories', () => {
+  const p = player('sparrow');
   const cover = { ...room, geometry: { colliders: [{ left: 180, right: 220, top: 400, bottom: 1000 }] } };
   const low = basicAim(p, target, profile, () => 0.5, room);
   const high = basicAim(p, target, profile, () => 0.5, cover);
@@ -210,8 +210,8 @@ test('huntress selects a high arc over cover and rejects fully blocked trajector
 
 
 
-test('huntress intercepts horizontal movement more accurately than the previous gravity estimate', (t) => {
-  const p = player('huntress');
+test('sparrow intercepts horizontal movement more accurately than the previous gravity estimate', (t) => {
+  const p = player('sparrow');
   let oldTotal = 0, newTotal = 0;
   const velocities = [[0, 0], [120, 0], [-180, 0]];
   for (const [vx, vy] of velocities) {
@@ -230,16 +230,16 @@ test('huntress intercepts horizontal movement more accurately than the previous 
   t.diagnostic(`Mean closest approach: old ${(oldTotal / velocities.length).toFixed(1)}px; new ${(newTotal / velocities.length).toFixed(1)}px (perfect aim, constant velocity).`);
 });
 
-test('huntress keeps jump and fall prediction near the current target height', () => {
-  const p = player('huntress');
+test('sparrow keeps jump and fall prediction near the current target height', () => {
+  const p = player('sparrow');
   for (const x of [-450, -250, 250, 450]) {
     for (const vy of [-500, 500]) {
       const enemy = { ...target, x, vy };
       const aim = basicAim(p, enemy, profile, () => 0.5, room);
       assert.equal(aim.canHit, true);
       // Recover the aimed height when the arrow crosses the target's x.
-      const cfg = require('../src/shared/characters/huntressProjectile').attackConfig();
-      const { pivot, reach: forward } = muzzleOf('huntress', cfg.muzzle, { x: p.x, y: p.y, flip: enemy.x < p.x });
+      const cfg = require('../src/shared/characters/sparrowProjectile').attackConfig();
+      const { pivot, reach: forward } = muzzleOf('sparrow', cfg.muzzle, { x: p.x, y: p.y, flip: enemy.x < p.x });
       const time = ((x - (pivot.x - p.x)) / Math.cos(aim.angle) - forward) / aim.speed;
       const y = pivot.y + Math.sin(aim.angle) * (forward + aim.speed * time)
         + 0.5 * cfg.gravity * time * (time + room.FIXED_DT_MS / 1000);
@@ -256,7 +256,7 @@ test('huntress keeps jump and fall prediction near the current target height', (
 
 test('pressure shots threaten nearby space without wasting the last ammo charge', () => {
   const { pressureAim } = require('../src/shared/combat/combat.js');
-  const p = { ...player('huntress'), isAlive: true, participantId: 'pressure-bot', _botActionSeq: 0,
+  const p = { ...player('sparrow'), isAlive: true, participantId: 'pressure-bot', _botActionSeq: 0,
     ammoState: { charges: 3, nextFireInMs: 0, cooldownMs: 100 } };
   const enemy = { ...target, x: 580 };
   assert.equal(basicAim(p, enemy, profile, () => 0.5, room).canHit, false);
@@ -275,10 +275,10 @@ test('pressure shots threaten nearby space without wasting the last ammo charge'
   assert.equal(pressureAim(sealed, p, enemy, profile), null);
 });
 
-test('huntress rarely lobs at level targets but freely aims high at elevated targets', () => {
+test('sparrow rarely lobs at level targets but freely aims high at elevated targets', () => {
   const cover = { ...room, geometry: { colliders: [{ left: 180, right: 220, top: 400, bottom: 1000 }] },
     handlePlayerAction() {} };
-  const ready = () => ({ ...player('huntress'), isAlive: true, participantId: 'archer', _botActionSeq: 0,
+  const ready = () => ({ ...player('sparrow'), isAlive: true, participantId: 'archer', _botActionSeq: 0,
     ammoState: { charges: 3, nextFireInMs: 0, cooldownMs: 100 } });
   let fired = 0;
   for (let i = 0; i < 100; i++) {
@@ -296,9 +296,9 @@ test('huntress rarely lobs at level targets but freely aims high at elevated tar
   function roomWithActions() { return { ...room, handlePlayerAction() {} }; }
 });
 
-test('huntress varies power by distance without penalizing upward aim and sends it into every runtime arrow', () => {
-  const model = require('../src/shared/characters/huntressProjectile');
-  const p = { ...player('huntress'), participantId: 'adaptive-archer', name: 'Archer', isBot: true };
+test('sparrow varies power by distance without penalizing upward aim and sends it into every runtime arrow', () => {
+  const model = require('../src/shared/characters/sparrowProjectile');
+  const p = { ...player('sparrow'), participantId: 'adaptive-archer', name: 'Archer', isBot: true };
   const near = basicAim(p, { ...target, x: 160 }, profile, () => 0.5, room);
   const far = basicAim(p, { ...target, x: 500 }, profile, () => 0.5, room);
   assert.ok(far.speed > near.speed + 100, 'distant shots use more power');

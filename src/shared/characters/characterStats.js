@@ -37,12 +37,17 @@ const UPGRADE_PRICES = [
 const characterStats = definitions.characterStats;
 
 // Misspellings that older clients/rows may still send.
-const CHARACTER_KEY_ALIASES = { hunteress: "huntress" };
+const CHARACTER_KEY_ALIASES = { wizard: "ozzy", huntress: "sparrow", hunteress: "sparrow" };
 
 // Lowercased, trimmed key with legacy aliases applied ("" when empty).
 function canonicalCharacterKey(value) {
   const key = String(value || "").trim().toLowerCase();
   return CHARACTER_KEY_ALIASES[key] || key;
+}
+
+function getCharacterDisplayName(value) {
+  const key = canonicalCharacterKey(value);
+  return definitions.characterDefinitions[key]?.displayName || key.replace(/[_-]+/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
 // Normalizes a stored/received character key, falling back to the default.
@@ -165,6 +170,7 @@ if (typeof module !== "undefined" && module.exports) {
     STANDARD_LEVEL_CAP,
     canonicalCharacterKey,
     resolveCharacterKey,
+    getCharacterDisplayName,
     parseCharacterLevels,
     getCharacterLevel,
     characterStats,

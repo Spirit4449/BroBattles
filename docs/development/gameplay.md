@@ -93,7 +93,7 @@ second pool, and the HUD draws it as a mark on the same bar.
 
 When the clock expires, `onTimerExpired` compares the two teams' remaining
 coins. Code outside the mode that reads a vault — `damageResolver.js`,
-`dravenInfernoAbility.js`, `huntressCombat.js`, `ninjaCombat.js` — reads
+`dravenInfernoAbility.js`, `sparrowCombat.js`, `ninjaCombat.js` — reads
 `coins`, never `health`.
 
 A vault reaching zero does not end the match on that tick. `evaluateVictoryState`
@@ -147,7 +147,7 @@ The `src/server/core/bots/` directory owns perception, navigation workers, movem
 
 Sudden-death routing treats poison exposure as a cost, preserving necessary submerged routes. Ordinary combat positioning continues away from danger; near full coverage, bots stop treating gas as a routing constraint. Headless tests do not establish production balance or browser smoothness.
 
-Huntress bots limit vertical movement prediction to a short window configured in `characterProfiles.js`, so a jump does not make them extrapolate upward velocity over the arrow's entire flight. Horizontal interception, arrow-drop compensation, and cover checks still use the full flight path.
+Sparrow bots limit vertical movement prediction to a short window configured in `characterProfiles.js`, so a jump does not make them extrapolate upward velocity over the arrow's entire flight. Horizontal interception, arrow-drop compensation, and cover checks still use the full flight path.
 
 Run `npm run test:bots` and `npm run simulate:bots -- --matrix --seconds=30`. Add `--sudden-death=10` for poison scenarios. The simulator prints tick and per-bot cost on the machine it runs on, graph builds and the slowest bot ticks; run it on the Pi for real numbers, and under `node --cpu-prof` with `scripts/dev/cpuprofile-top.cjs` to find hot spots. `--deterministic` finishes every plan in the tick it starts, so its play fingerprint must match before and after a performance-only change. Test mixed human/bot matches, explicit slots, concurrent queue/cancel/ready requests, abandoned matches, and deployment capacity before expanding automatic fill.
 
@@ -167,16 +167,16 @@ For new attacks:
 
 - Prefer `hitCircleTargets` or `hitRectTargets`; both publish their exact input
   geometry before searching targets, including when no enemies are present.
-- Straight projectiles can declare `splashRadius` (Wizard's fireball does):
+- Straight projectiles can declare `splashRadius` (Ozzy's fireball does):
   the shot stops on the first target it touches, a wall, or the end of its
   range, bursts on the struck player's body centre (or the contact point for a
   wall, mode object or range end), damages every target within that radius of
   the burst once, and
   broadcasts `impactActionType` with the burst point so every client's drawn
   flight stops there.
-- A `windup-release` flow can declare `chargeActionType` (Wizard's fireball
+- A `windup-release` flow can declare `chargeActionType` (Ozzy's fireball
   does): while the caster winds up, an `attached-charge` capsule over his head
-  and behind his back (`src/shared/characters/wizardCharge.js`, tuned in
+  and behind his back (`src/shared/characters/ozzyCharge.js`, tuned in
   `attack.fireball.charge`) bursts on the first enemy touching it with the
   same damage and splash, and the release is cancelled. Its flow kind is
   `server-internal`, so a client cannot start it on its own. The caster's
@@ -203,7 +203,7 @@ For new attacks:
   Extend `tests/damageHitboxes.test.js` when adding a new collision protocol.
 
 Generic projectiles, splash rectangles, Thorg's hammer, returning projectiles,
-hooks, cones, Ninja shurikens, Huntress arrows, Inferno, turret shots, and sudden
+hooks, cones, Ninja shurikens, Sparrow arrows, Inferno, turret shots, and sudden
 death poison use this API. Attached burn/poison status effects have no separate
 spatial collision volume: their originating attack and affected player already
 have outlines.

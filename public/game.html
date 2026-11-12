@@ -13,14 +13,13 @@
     <title>Battle · Bro Battles</title>
     <meta name="robots" content="noindex, follow" />
     <link rel="shortcut icon" href="/assets/logos/logo-small.webp" type="image/webp" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap"
-      rel="stylesheet"
-    />
+    <!-- The boot script below runs these in order; preloading lets a direct
+         page load download both at once instead of one after the other. -->
+    <link rel="preload" href="/bundles/phaser-arcade-physics.min.js" as="script" />
+    <link rel="preload" href="/bundles/game.bundle.js" as="script" />
+    <link rel="stylesheet" href="/styles/lato.css" />
     <link rel="stylesheet" href="/bundles/game.css" />
-    <link rel="preload" href="/assets/LilitaOne-Regular.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/assets/LilitaOne-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/PressStart2P.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/styles/game.css" />
     <link rel="stylesheet" href="/styles/ui-system.css" />

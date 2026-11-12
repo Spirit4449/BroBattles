@@ -4,8 +4,8 @@ export const BRO_PORTRAIT_PALETTES = {
   ninja: { main: '#bb3349', highlight: '#ffd5cc', shadow: '#480f28' },
   thorg: { main: '#d29535', highlight: '#fff1b0', shadow: '#563019' },
   draven: { main: '#974adc', highlight: '#efd1ff', shadow: '#321747' },
-  wizard: { main: '#347de0', highlight: '#d0f5ff', shadow: '#102e66' },
-  huntress: { main: '#43aa77', highlight: '#dbffba', shadow: '#123f38' },
+  ozzy: { main: '#347de0', highlight: '#d0f5ff', shadow: '#102e66' },
+  sparrow: { main: '#43aa77', highlight: '#dbffba', shadow: '#123f38' },
   gloop: { main: '#38bfd1', highlight: '#d1ffff', shadow: '#125268' },
 };
 

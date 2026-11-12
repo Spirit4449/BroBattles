@@ -1,16 +1,16 @@
 import * as NinjaSpecial from "./ninja/special";
 import * as ThorgSpecial from "./thorg/special";
 import * as DravenSpecial from "./draven/special";
-import * as WizardSpecial from "./wizard/special";
-import * as HuntressSpecial from "./huntress/special";
+import * as OzzySpecial from "./ozzy/special";
+import * as SparrowSpecial from "./sparrow/special";
 import * as GloopSpecial from "./gloop/special";
 
 const specials = {
   ninja: NinjaSpecial,
   thorg: ThorgSpecial,
   draven: DravenSpecial,
-  wizard: WizardSpecial,
-  huntress: HuntressSpecial,
+  ozzy: OzzySpecial,
+  sparrow: SparrowSpecial,
   gloop: GloopSpecial,
 };
 

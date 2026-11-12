@@ -152,7 +152,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       (this.cfg.endYOffset || 0) * 0.45;
 
     // Unified subtle glow (blue if owner, red otherwise)
-    applyTeamVisual(this, ownerSprite, true, this.projectileTexture.includes("-weapon") ? "crown" : null);
+    applyTeamVisual(this, ownerSprite, this.projectileTexture.includes("-weapon") ? "crown" : null);
     const glowColor = attackColor(ownerSprite, 0x2e9bff);
     this.glow = scene.add.graphics();
     this.glow.setDepth(RENDER_LAYERS.ATTACKS - 1);
@@ -238,7 +238,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   spawnTrail() {
     if (!this.scene.textures.exists(this.projectileTexture)) return;
     const s = this.scene.add.image(this.x, this.y, this.projectileTexture, this.frame?.name);
-    applyTeamVisual(s, this.ownerSprite, true, this.projectileTexture.includes("-weapon") ? "crown" : null);
+    applyTeamVisual(s, this.ownerSprite, this.projectileTexture.includes("-weapon") ? "crown" : null);
     s.setScale(this.cfg.scale * 0.48);
     s.setDepth(RENDER_LAYERS.ATTACKS - 1);
     s.alpha = 0.35;

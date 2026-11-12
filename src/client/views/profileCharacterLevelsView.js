@@ -1,17 +1,9 @@
-import { getAllCharacters, canonicalCharacterKey } from "../../shared/characters/characterStats.js";
+import { getAllCharacters, canonicalCharacterKey, getCharacterDisplayName } from "../../shared/characters/characterStats.js";
 import { buildProfileIconUrl } from "./profileIconAssets.js";
 import {
   normalizeCharacterLevel,
   renderLevelBadge,
 } from "./levelBadgeView.js";
-
-function toDisplayName(id) {
-  return String(id || "")
-    .split(/[_-]+/g)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
 
 export function renderCharacterLevelGrid(grid, charLevels = {}) {
   if (!grid) return;
@@ -57,7 +49,7 @@ export function renderCharacterLevelGrid(grid, charLevels = {}) {
 
   entries.forEach(({ charId, level }) => {
     const iconLevel = normalizeCharacterLevel(level);
-    const displayName = toDisplayName(charId);
+    const displayName = getCharacterDisplayName(charId);
     const card = document.createElement("article");
     card.className = "profile-character-level-card";
     card.setAttribute("aria-label", `${displayName}, level ${iconLevel}`);

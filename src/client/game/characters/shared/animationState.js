@@ -143,7 +143,7 @@ export function animationPlayCount(sprite) {
 
 // Runs a remote action's character handler, then marks the action as remote
 // so the snapshot loop leaves the sprite alone for the animation the handler
-// presented. A follow-up packet that presents nothing (a wizard's release
+// presented. A follow-up packet that presents nothing (a ozzy's release
 // after its windup) keeps the existing action instead of restarting it.
 export function presentRemoteAction({ scene, wrapper, character, actionType }, present) {
   const sprite = wrapper?.opponent;

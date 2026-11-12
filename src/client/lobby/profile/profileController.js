@@ -17,7 +17,7 @@ import { renderCharacterLevelGrid } from "../../views/profileCharacterLevelsView
 import { sonner } from "../../ui/sonner.js";
 import { playSound } from "../../ui/uiSounds.js";
 import { escapeHtml, profileFetchJson } from '../ui';
-import { resolveCharacterKey } from "../../../shared/characters/characterStats.js";
+import { resolveCharacterKey, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 
 export function createProfileController({ getUserData, onProfileRendered }) {
   const lobbyProfileState = {
@@ -310,7 +310,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
         ["trophies", "trophyRoad"].includes(unlock.type)
           ? `Claim at ${(Number(unlock.min) || 0).toLocaleString()} trophies`
           : unlock.type === "character"
-            ? `Unlock ${String(unlock.character || icon.name).replace(/\b\w/g, (char) => char.toUpperCase())}`
+            ? `Unlock ${getCharacterDisplayName(unlock.character || icon.name)}`
             : "Progression reward";
 
       const tile = document.createElement("button");

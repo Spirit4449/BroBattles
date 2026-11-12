@@ -4,10 +4,10 @@ const { makeRoom } = require('./helpers/botRoom');
 const { registerAttackFromAction, tickActiveAttacks } = require('../src/shared/combat/runtime/attackRuntimeManager.js');
 const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');
 
-const FIREBALL = getResolvedCharacterAttackConfig('wizard', 'fireball');
+const FIREBALL = getResolvedCharacterAttackConfig('ozzy', 'fireball');
 
-// Wizard (team1), then alternating teams: enemies are Player1 and Player3.
-function arena(t, characters = ['wizard', 'ninja', 'ninja', 'ninja']) {
+// Ozzy (team1), then alternating teams: enemies are Player1 and Player3.
+function arena(t, characters = ['ozzy', 'ninja', 'ninja', 'ninja']) {
   const f = makeRoom({ characters });
   t.after(() => f.room.cleanup());
   f.room.geometry = { ...f.room.geometry, colliders: [] };
@@ -17,20 +17,20 @@ function arena(t, characters = ['wizard', 'ninja', 'ninja', 'ninja']) {
   for (const p of others) Object.assign(p, { x: 3000, y: 200, connected: true, _bodyHalfWidth: 20,
     _bodyHalfHeight: 40, _bodyCenterOffsetX: 0, _bodyCenterOffsetY: 0, _posHistory: [] });
   f.fire = () => {
-    registerAttackFromAction(f.room, owner, { type: 'wizard-fireball-release', id: 'boom', start: { x: 130, y: 200 }, angle: 0, direction: 1 });
+    registerAttackFromAction(f.room, owner, { type: 'ozzy-fireball-release', id: 'boom', start: { x: 130, y: 200 }, angle: 0, direction: 1 });
     return f.room._activeAttacks[0];
   };
   f.flyOut = () => {
     for (let i = 0; i < 400 && f.room._activeAttacks.length; i++) tickActiveAttacks(f.room, Date.now());
     assert.equal(f.room._activeAttacks.length, 0, 'the fireball ended');
   };
-  f.impacts = () => f.events.filter(e => e.payload?.action?.type === 'wizard-fireball-impact').map(e => e.payload.action);
+  f.impacts = () => f.events.filter(e => e.payload?.action?.type === 'ozzy-fireball-impact').map(e => e.payload.action);
   return f;
 }
 
 test('the fireball stops on the first enemy and splashes everyone near the burst once', t => {
   // Teams alternate: Player1, 3 and 5 are enemies; Player2 and 4 are allies.
-  const f = arena(t, ['wizard', 'ninja', 'ninja', 'ninja', 'ninja', 'ninja']);
+  const f = arena(t, ['ozzy', 'ninja', 'ninja', 'ninja', 'ninja', 'ninja']);
   const [owner, front, ally, behind, , far] = f.players;
   assert.ok(FIREBALL.splashRadius > FIREBALL.collisionRadius, 'the splash reaches past the contact');
   front.x = 600;
@@ -56,7 +56,7 @@ test('the fireball stops on the first enemy and splashes everyone near the burst
 });
 
 test('a fireball that touches nothing bursts at the end of its range', t => {
-  const f = arena(t, ['wizard', 'ninja']);
+  const f = arena(t, ['ozzy', 'ninja']);
   const [, enemy] = f.players;
   const hp = enemy.health;
   const shot = f.fire();
@@ -69,7 +69,7 @@ test('a fireball that touches nothing bursts at the end of its range', t => {
 });
 
 test('an enemy standing in the end-of-range burst is splashed', t => {
-  const f = arena(t, ['wizard', 'ninja']);
+  const f = arena(t, ['ozzy', 'ninja']);
   const [owner, enemy] = f.players;
   enemy.x = 130 + FIREBALL.range + FIREBALL.splashRadius - 10;
   const hp = enemy.health;
@@ -79,21 +79,21 @@ test('an enemy standing in the end-of-range burst is splashed', t => {
 });
 
 const { handleCharacterAction } = require('../src/shared/combat/runtime/characterActionRegistry.js');
-const { wizardChargeShapes, chargeConfig } = require('../src/shared/characters/wizardCharge');
+const { ozzyChargeShapes, chargeConfig } = require('../src/shared/characters/ozzyCharge');
 function castAt(f, now) {
   const [owner] = f.players;
-  handleCharacterAction(f.room, owner, { type: 'wizard-fireball', id: 'cast', angle: 0, direction: 1, damage: owner.baseDamage }, now);
+  handleCharacterAction(f.room, owner, { type: 'ozzy-fireball', id: 'cast', angle: 0, direction: 1, damage: owner.baseDamage }, now);
   const release = () => { for (const job of f.room._scheduledActions.splice(0)) job.callback(); };
   const tickTo = ms => { for (let t = 0; t <= ms; t += f.room.FIXED_DT_MS) tickActiveAttacks(f.room, now + t); };
-  const releases = () => f.events.filter(e => e.payload?.action?.type === 'wizard-fireball-release');
+  const releases = () => f.events.filter(e => e.payload?.action?.type === 'ozzy-fireball-release');
   return { owner, release, tickTo, releases };
 }
 
-test('the charging ball burns an enemy on top of or behind the wizard and replaces the release', t => {
-  const f = arena(t, ['wizard', 'ninja', 'ninja', 'ninja']);
+test('the charging ball burns an enemy on top of or behind the ozzy and replaces the release', t => {
+  const f = arena(t, ['ozzy', 'ninja', 'ninja', 'ninja']);
   const [, behind, , onTop] = f.players;
   const cfg = chargeConfig();
-  const [{ a, b }] = wizardChargeShapes({ x: 100, y: 200, flip: false }, cfg.startMs);
+  const [{ a, b }] = ozzyChargeShapes({ x: 100, y: 200, flip: false }, cfg.startMs);
   assert.ok(a.x < 100 && b.y < 200 - 30, 'the zone sits behind him and over his head');
   behind.x = 62; behind.y = 196;
   onTop.x = 108 + 20; onTop.y = 200 - 46 - 40 + 30; // standing on his head, just inside the splash
@@ -112,7 +112,7 @@ test('the charging ball burns an enemy on top of or behind the wizard and replac
 });
 
 test('with no one in the charge zone the fireball releases as normal', t => {
-  const f = arena(t, ['wizard', 'ninja']);
+  const f = arena(t, ['ozzy', 'ninja']);
   const [, enemy] = f.players;
   enemy.x = 160; enemy.y = 200; // right in front: the released ball's job
   const hp = enemy.health;
@@ -126,10 +126,10 @@ test('with no one in the charge zone the fireball releases as normal', t => {
 });
 
 test('a client cannot trigger the charge hitbox on its own', t => {
-  const f = arena(t, ['wizard', 'ninja']);
+  const f = arena(t, ['ozzy', 'ninja']);
   const [owner, enemy] = f.players;
   enemy.x = 62; enemy.y = 196;
-  const result = handleCharacterAction(f.room, owner, { type: 'wizard-fireball-charge', id: 'x' }, Date.now());
+  const result = handleCharacterAction(f.room, owner, { type: 'ozzy-fireball-charge', id: 'x' }, Date.now());
   assert.equal(result?.handled, true);
   assert.equal((f.room._activeAttacks || []).length, 0);
 });

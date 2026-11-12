@@ -12,7 +12,7 @@ function setup(inParty = true, options = {}) {
   const roster = (status = 'online') => ({ partyId: 7, ownerName: 'Owner', immediate: true,
     selection: { modeId: 'duels', modeVariantId: 'duels-1v1', mapId: 1 },
     members: [{ name: 'Owner', team: 'team1', slot_index: 0, char_class: 'ninja', status },
-      { name: 'Friend', team: 'team2', slot_index: 0, char_class: 'wizard', status: 'online' }] });
+      { name: 'Friend', team: 'team2', slot_index: 0, char_class: 'ozzy', status: 'online' }] });
   if (inParty) api.renderPartyMembers(roster());
   api.socketInit();
   api.initializeModeDropdown();

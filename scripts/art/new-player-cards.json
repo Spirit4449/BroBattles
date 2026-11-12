@@ -98,9 +98,9 @@
     "preserveGreen": true
   },
   {
-    "id": "wizard-spell",
+    "id": "ozzy-spell",
     "despillMix": 0,
-    "name": "Wizard Spell",
+    "name": "Ozzy Spell",
     "rarity": "rare",
     "gems": 50,
     "viewport": {

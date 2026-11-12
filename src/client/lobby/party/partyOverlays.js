@@ -1,3 +1,4 @@
+import { getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 // Lobby party overlays: public party discovery and owner party settings.
 import { escapeHtml, fetchLobbyJson, openOverlay, closeOverlay } from "../ui";
 import { checkIfInParty, getPartyInteractionContext } from "./party.js";
@@ -116,7 +117,7 @@ function renderPartyDiscoveryList(parties) {
       const profileIconId = String(member?.profile_icon_id || "") || null;
       const entry = document.createElement("div");
       entry.className = "party-discovery-member";
-      entry.title = `${name} · ${charClass}`;
+      entry.title = `${name} · ${getCharacterDisplayName(charClass)}`;
       entry.innerHTML = `
         <img src="${escapeHtml(buildProfileIconUrl(profileIconId, charClass))}" alt="${escapeHtml(
           buildProfileIconAlt(profileIconId, charClass),

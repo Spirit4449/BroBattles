@@ -177,7 +177,7 @@ export function spawnExplosion(scene, x, y, owner = null) {
     e.setScale(2.05);
     e.setAlpha(0.42);
     scene.tweens?.add({ targets: e, alpha: 0.92, duration: 70, ease: "Sine.easeOut" });
-    applyTeamVisual(e, owner, true);
+    applyTeamVisual(e, owner);
     if (scene.anims?.exists(texture)) {
       // Begin with visible contact rather than replaying the pre-impact buildup.
       e.anims.play({ key: texture, startFrame: 3, frameRate: 22 });

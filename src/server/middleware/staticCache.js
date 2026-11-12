@@ -2,6 +2,11 @@ const crypto = require('crypto');
 const fs = require('fs');
 
 const IMMUTABLE = 'public, max-age=31536000, immutable';
+// Unversioned art is reused for ten minutes without revalidating. Lobby
+// warming fills the HTTP cache shortly before a match, so Phaser's requests for
+// those files no longer each wait on a 304 round trip. Replaced art can show for
+// up to ten minutes after a deploy.
+const SHORT_LIVED = 'public, max-age=600';
 const contentHashes = new Map();
 
 // Hex prefix of the file's SHA-256, the same value catalogs put in `?v=`.
@@ -30,6 +35,11 @@ function setStaticCacheHeaders(res, filePath, stat) {
     || /[\\/]assets[\\/]map-revisions[\\/][a-f0-9]{64}\.(?:webp|png|jpg|jpeg|json)$/.test(filePath)
     || versionMatches(res, filePath, stat)) {
     res.setHeader('Cache-Control', IMMUTABLE);
+  } else if (/[\\/]assets[\\/]/.test(filePath)
+    && !/[\\/]assets[\\/]map-revisions[\\/]/.test(filePath)
+    && !/-animated\.(?:webm|mov)$/.test(filePath)) {
+    // Map revisions and card videos keep their own content-version rules.
+    res.setHeader('Cache-Control', SHORT_LIVED);
   } else {
     res.setHeader('Cache-Control', 'public, max-age=0');
   }

@@ -21,7 +21,7 @@ function load(file, require, globals = {}) {
 const packetDedupe = load('src/client/game/characters/shared/packetDedupe.js', () => ({}), { Date });
 
 // A scene with one enemy drawn standing so its body is centered on `centerY`.
-function arena({ enemyX = 330, centerY = 298, character = 'wizard', clock = { now: () => 0 }, othersX = [] } = {}) {
+function arena({ enemyX = 330, centerY = 298, character = 'ozzy', clock = { now: () => 0 }, othersX = [] } = {}) {
   const shots = loadShotPrediction({ serverClock: loadServerClock({ performance: { now: () => 0 } }), performance: clock });
   const box = characterHitBounds(character, 0, 0);
   const enemy = { active: true, visible: true, flipX: false, x: enemyX, y: centerY - (box.top + box.bottom) / 2,
@@ -68,7 +68,7 @@ const common = (f, extra = {}) => name =>
             : name.includes('flipLock') ? { lockPlayerFlip: () => () => {}, enforceLockedFlip() {} }
               : name.includes('attackDelivery') ? require('../src/shared/combat/attackDelivery')
               : name.includes('launchRamp') ? require('../src/shared/combat/launchRamp')
-              : name.includes('wizardCharge') ? require('../src/shared/characters/wizardCharge')
+              : name.includes('ozzyCharge') ? require('../src/shared/characters/ozzyCharge')
               : name.includes('thorgSweep') ? require('../src/shared/characters/thorgSweep')
               : name.includes('shared/characters/index') ? require('../src/shared/characters')
               : extra[Object.keys(extra).find(key => name.includes(key))] || { playSpriteAnimation() {}, playPlayerSound() {} };
@@ -97,29 +97,29 @@ test('displayed targets use the server hit box at the drawn position; dead or hi
   assert.equal(f.shots.predictShotContact({ x: 0, y: f.enemy.y }, { x: 1000, y: f.enemy.y }, 5).target.name, 'foe');
 });
 
-function wizard(f) {
-  return load('src/client/game/characters/wizard/attack.js', common(f, {
+function ozzy(f) {
+  return load('src/client/game/characters/ozzy/attack.js', common(f, {
     fireballParticles: { createFireballParticles: () => ({ stop() {}, destroy() {} }), spawnFireballBurst() {} },
-    fireballArt: { ensureFireballTextures() {}, FIREBALL_ORIGIN: { x: 0.5, y: 0.7 }, explosionTextureKey: team => `wizard-explosion-${team}` },
+    fireballArt: { ensureFireballTextures() {}, FIREBALL_ORIGIN: { x: 0.5, y: 0.7 }, explosionTextureKey: team => `ozzy-explosion-${team}` },
   }), { Phaser: { Math: { RadToDeg: r => r * 180 / Math.PI }, BlendModes: { ADD: 1 } } });
 }
-const FIREBALL = tuning.getResolvedCharacterAttackConfig('wizard', 'fireball');
+const FIREBALL = tuning.getResolvedCharacterAttackConfig('ozzy', 'fireball');
 const impacts = f => f.objects.filter(o => o.radius === FIREBALL.visualRadius && o.color === 0xffd9a0);
 
 // The fireball stops at the first enemy it touches and bursts there, splashing
 // everyone within its splash radius (previously it burst on each enemy it
 // passed through).
 test('the caster\'s fireball leaves on time, stops and bursts on the first enemy, and splashes those nearby', () => {
-  const box = characterHitBounds('wizard', 330, 0);
+  const box = characterHitBounds('ozzy', 330, 0);
   // The burst is centred on the enemy it strikes.
   const burstX = (box.left + box.right) / 2;
   const halfWidth = (box.right - box.left) / 2;
   // One enemy inside the splash just past the first, one far down the line.
-  const f = arena({ othersX: [burstX + FIREBALL.splashRadius + halfWidth - 6, 900] }), api = wizard(f);
-  const payload = api.performWizardFireball({ scene: f.scene, player: f.caster }, { angle: 0 });
+  const f = arena({ othersX: [burstX + FIREBALL.splashRadius + halfWidth - 6, 900] }), api = ozzy(f);
+  const payload = api.performOzzyFireball({ scene: f.scene, player: f.caster }, { angle: 0 });
   assert.equal(f.delayed.find(job => job.ms === FIREBALL.castDelayMs) !== undefined, true);
   f.runDelayed();
-  assert.equal(api.consumeWizardRelease(f.scene, payload.id), false, 'the server echo of this id is not drawn again');
+  assert.equal(api.consumeOzzyRelease(f.scene, payload.id), false, 'the server echo of this id is not drawn again');
   const flight = f.tweens.find(t => t.duration === Math.round(require('../src/shared/combat/launchRamp').launchDurationMs(FIREBALL.range, FIREBALL)));
   let stoppedAt = null;
   for (let progress = 0; progress <= 1; progress += 0.01) {
@@ -128,40 +128,40 @@ test('the caster\'s fireball leaves on time, stops and bursts on the first enemy
   }
   assert.equal(impacts(f).length, 1, 'one burst, at the first enemy');
   assert.ok(Math.abs(impacts(f)[0].x - burstX) < 1e-6, `burst at ${impacts(f)[0].x}`);
-  const struck = characterHitBounds('wizard', f.enemy.x, f.enemy.y);
+  const struck = characterHitBounds('ozzy', f.enemy.x, f.enemy.y);
   assert.ok(Math.abs(impacts(f)[0].y - (struck.top + struck.bottom) / 2) < 1e-6, 'at the centre of its body');
   assert.ok(stoppedAt < 0.5, 'the flight ends there instead of flying on');
   // The struck enemy and the one inside the splash are both predicted hits.
   assert.deepEqual(f.sounds.map(s => s.sprite), [f.enemy, f.others[0]]);
-  assert.equal(api.burstWizardFireball(f.scene, { id: payload.id, x: 0, y: 0 }), false,
+  assert.equal(api.burstOzzyFireball(f.scene, { id: payload.id, x: 0, y: 0 }), false,
     'the server burst arrives after the predicted one and draws nothing more');
 });
 
 test('a remote fireball flies on until the server says where it burst', () => {
-  const f = arena(), api = wizard(f);
-  api.spawnWizardFireballVisual(f.scene, { id: 'remote', angle: 0, direction: 1, start: { x: 134.5, y: 282 } }, f.caster);
+  const f = arena(), api = ozzy(f);
+  api.spawnOzzyFireballVisual(f.scene, { id: 'remote', angle: 0, direction: 1, start: { x: 134.5, y: 282 } }, f.caster);
   const flight = f.tweens.find(t => typeof t.onUpdate === 'function');
   for (let progress = 0; progress <= 0.4; progress += 0.01) flight.onUpdate({ targets: [{ t: progress }] });
   assert.equal(impacts(f).length, 0);
-  assert.equal(api.burstWizardFireball(f.scene, { id: 'remote', x: 290, y: 282 }), true);
+  assert.equal(api.burstOzzyFireball(f.scene, { id: 'remote', x: 290, y: 282 }), true);
   assert.equal(impacts(f).length, 1);
   assert.equal(impacts(f)[0].x, 290);
-  assert.equal(f.scene._wizardFlights.size, 0, 'the burst flight is forgotten');
+  assert.equal(f.scene._ozzyFlights.size, 0, 'the burst flight is forgotten');
   flight.onUpdate({ targets: [{ t: 0.6 }] });
   assert.equal(impacts(f).length, 1, 'and draws nothing further');
 });
 
-test('an interrupted wizard charge releases nothing, leaving the server echo to draw', () => {
-  const f = arena(), api = wizard(f);
-  const payload = api.performWizardFireball({ scene: f.scene, player: f.caster }, { angle: 0 });
+test('an interrupted ozzy charge releases nothing, leaving the server echo to draw', () => {
+  const f = arena(), api = ozzy(f);
+  const payload = api.performOzzyFireball({ scene: f.scene, player: f.caster }, { angle: 0 });
   f.caster.emit('attack:interrupted');
   f.runDelayed();
-  assert.equal(api.consumeWizardRelease(f.scene, payload.id), true);
+  assert.equal(api.consumeOzzyRelease(f.scene, payload.id), true);
 });
 
 test('other players\' fireballs never burst on this player\'s targets', () => {
-  const f = arena(), api = wizard(f);
-  api.spawnWizardFireballVisual(f.scene, { id: 'remote', angle: 0, direction: 1, start: { x: 134.5, y: 282 } }, f.caster);
+  const f = arena(), api = ozzy(f);
+  api.spawnOzzyFireballVisual(f.scene, { id: 'remote', angle: 0, direction: 1, start: { x: 134.5, y: 282 } }, f.caster);
   const flight = f.tweens.find(t => typeof t.onUpdate === 'function');
   for (let progress = 0; progress <= 1; progress += 0.01) flight.onUpdate({ targets: [{ t: progress }] });
   assert.equal(impacts(f).length, 0);
@@ -237,7 +237,7 @@ test('the shared hit feedback flashes a white copy over the fighter, bursts, and
   const clock = { t: 1000, now() { return this.t; } };
   const f = arena({ clock });
   const copies = [];
-  f.enemy.texture = { key: 'wizard-skin' };
+  f.enemy.texture = { key: 'ozzy-skin' };
   f.enemy.frame = { name: 'idle3' };
   f.enemy.tint = 0x50ce88;
   f.scene.add.sprite = (x, y, key, frame) => {
@@ -247,7 +247,7 @@ test('the shared hit feedback flashes a white copy over the fighter, bursts, and
   };
   assert.equal(f.feedback.playHitFeedback(f.scene, f.enemy, { hitstopMs: f.feedback.hitstopForDelivery('attached'), duckBlocked: true }), true);
   assert.equal(copies.length, 1);
-  assert.deepEqual([copies[0].key, copies[0].frame, copies[0].fill], ['wizard-skin', 'idle3', 0xffffff]);
+  assert.deepEqual([copies[0].key, copies[0].frame, copies[0].fill], ['ozzy-skin', 'idle3', 0xffffff]);
   assert.equal(f.enemy.tint, 0x50ce88, 'the fighter keeps its own tint');
   assert.deepEqual(f.impacts.map(i => !!i.guard), [false, true]);
   f.enemy.anims.update(0, 16);
@@ -295,28 +295,28 @@ test('a Thorg sweep strikes the enemy as drawn on the attack clock, after the wi
 });
 
 test('an enemy on top of or behind the caster is burned by the charging ball before the release', () => {
-  const { wizardChargeShapes, chargeConfig } = require('../src/shared/characters/wizardCharge');
+  const { ozzyChargeShapes, chargeConfig } = require('../src/shared/characters/ozzyCharge');
   const cfg = chargeConfig();
   // Behind the caster (at x 100, facing right), level with his shoulders.
-  const f = arena({ enemyX: 70, centerY: 285 }), api = wizard(f);
-  const [zone] = wizardChargeShapes({ x: f.caster.x, y: f.caster.y, flip: false }, cfg.startMs);
+  const f = arena({ enemyX: 70, centerY: 285 }), api = ozzy(f);
+  const [zone] = ozzyChargeShapes({ x: f.caster.x, y: f.caster.y, flip: false }, cfg.startMs);
   assert.ok(zone.a.x < f.caster.x, 'the zone reaches behind him');
-  const payload = api.performWizardFireball({ scene: f.scene, player: f.caster }, { angle: 0 });
+  const payload = api.performOzzyFireball({ scene: f.scene, player: f.caster }, { angle: 0 });
   f.scene.events.emit('postupdate', 0, cfg.startMs / 2);
   assert.equal(f.sounds.length, 0, 'not live in the first moment of the cast');
   for (let ms = 0; ms < 80; ms += 16) f.scene.events.emit('postupdate', 0, 16);
   assert.deepEqual(f.sounds.map(s => s.sprite), [f.enemy], 'predicted hit while still casting');
   assert.equal(impacts(f).length, 1, 'the charging ball bursts on him');
   f.runDelayed();
-  assert.equal(api.consumeWizardRelease(f.scene, payload.id), true, 'nothing is released after the burst');
-  assert.equal(api.burstWizardFireball(f.scene, { id: payload.id, x: 0, y: 0 }), false, 'the server burst draws nothing more');
+  assert.equal(api.consumeOzzyRelease(f.scene, payload.id), true, 'nothing is released after the burst');
+  assert.equal(api.burstOzzyFireball(f.scene, { id: payload.id, x: 0, y: 0 }), false, 'the server burst draws nothing more');
 });
 
 test('remote viewers burst a charging ball where the server says it hit', () => {
-  const f = arena({ enemyX: 900 }), api = wizard(f);
-  api.chargeWizardFireball(f.scene, f.caster, { id: 'remote-cast', angle: 0 });
-  assert.equal(api.burstWizardFireball(f.scene, { id: 'remote-cast', x: 80, y: 280 }), true);
+  const f = arena({ enemyX: 900 }), api = ozzy(f);
+  api.chargeOzzyFireball(f.scene, f.caster, { id: 'remote-cast', angle: 0 });
+  assert.equal(api.burstOzzyFireball(f.scene, { id: 'remote-cast', x: 80, y: 280 }), true);
   assert.equal(impacts(f).length, 1);
   assert.equal(impacts(f)[0].x, 80);
-  assert.equal(f.scene._wizardCharges.size, 0, 'the charge is gone, so no release is drawn from it');
+  assert.equal(f.scene._ozzyCharges.size, 0, 'the charge is gone, so no release is drawn from it');
 });

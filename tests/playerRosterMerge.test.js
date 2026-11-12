@@ -19,14 +19,14 @@ test("unavailable socket stats do not erase roster stats", () => {
   const rosterPlayer = {
     name: "Opponent",
     team: "team2",
-    char_class: "huntress",
+    char_class: "sparrow",
     level: 6,
     stats: { health: 6500, damage: 1400, specialDamage: 2200 },
   };
   const merged = api.mergeInitialRosterPlayer(rosterPlayer, {
     name: "Opponent",
     team: "team2",
-    char_class: "huntress",
+    char_class: "sparrow",
     connected: false,
     // The old room payload fabricated level 1 for a player not yet connected.
     level: 1,

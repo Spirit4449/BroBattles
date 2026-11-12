@@ -43,7 +43,7 @@ function renderAboutPage(modes) {
     </div>
   </section>
   <section class="about-crew" id="your-crew" aria-labelledby="crew-title">
-    <div class="about-crew-art" aria-hidden="true"><img src="/assets/thorg/body.webp" width="256" height="256" loading="lazy" alt=""/><img src="/assets/wizard/body.webp" width="256" height="256" loading="lazy" alt=""/><img src="/assets/gloop/body.webp" width="256" height="256" loading="lazy" alt=""/></div>
+    <div class="about-crew-art" aria-hidden="true"><img src="/assets/thorg/body.webp" width="256" height="256" loading="lazy" alt=""/><img src="/assets/ozzy/body.webp" width="256" height="256" loading="lazy" alt=""/><img src="/assets/gloop/body.webp" width="256" height="256" loading="lazy" alt=""/></div>
     <div><h2 id="crew-title">Bring your crew.</h2><p>Invite your friends to a party and head into battle together.</p><div class="about-actions"><a class="about-text-link" href="/help/parties">How to party up <span aria-hidden="true">→</span></a><a class="about-text-link" href="/help/getting-started">First match guide <span aria-hidden="true">→</span></a></div></div>
   </section>
 `;
@@ -51,7 +51,7 @@ function renderAboutPage(modes) {
 
 function renderFooter(config) {
   return `<footer class="arena-footer">
-    <div class="arena-footer-scene" aria-hidden="true"><img src="/assets/serenity/full-preview.webp" width="1920" height="937" loading="lazy" alt=""/><span>See you in the arena.</span><div><img src="/assets/ninja/body.webp" width="180" height="180" loading="lazy" alt=""/><img src="/assets/huntress/body.webp" width="180" height="180" loading="lazy" alt=""/></div></div>
+    <div class="arena-footer-scene" aria-hidden="true"><img src="/assets/serenity/full-preview.webp" width="1920" height="937" loading="lazy" alt=""/><span>See you in the arena.</span><div><img src="/assets/ninja/body.webp" width="180" height="180" loading="lazy" alt=""/><img src="/assets/sparrow/body.webp" width="180" height="180" loading="lazy" alt=""/></div></div>
     <div class="arena-footer-links"><div class="arena-footer-brand"><a href="/about"><img src="/assets/logos/wordmark.webp" width="240" height="80" loading="lazy" alt="Bro Battles"/></a></div>
     <nav aria-label="Explore"><h2>The game</h2><a href="/about#fighters">Meet the fighters</a><a href="/about#modes">Ways to play</a><a href="/news">News &amp; updates</a></nav>
     <nav aria-label="Player support"><h2>Need backup?</h2><a href="/help/getting-started">First match guide</a><a href="/help">Help Center</a><a href="/help/contact">Contact support</a><a href="/feedback">Send feedback</a></nav>

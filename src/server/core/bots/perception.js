@@ -20,7 +20,7 @@ function observe(room, player, now, samples) {
   const ninja = [...(room._ninja?.active.values() || [])].map(e => {
     const p=e.projectile; p.attackerParticipantId=e.owner; p.collisionRadius=p.cfg.collisionRadius; return p;
   });
-  for (const attack of [...ninja, ...(room._activeAttacks || []), ...(room._huntress?.active.values() || [])]) {
+  for (const attack of [...ninja, ...(room._activeAttacks || []), ...(room._sparrow?.active.values() || [])]) {
     const owner = getParticipant(room, attack.attackerParticipantId) ||
       [...room.players.values()].find((p) => p.name === attack.attackerName);
     if (!owner || owner.team === player.team || !Number.isFinite(attack.x) || !Number.isFinite(attack.y)) continue;

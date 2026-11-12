@@ -212,7 +212,7 @@ function handleCharacterAction(
     broadcastAction(room, playerData, actionData, actionNow);
     return { handled: true };
   }
-  // Started by the server inside another attack (a wizard's charge); a
+  // Started by the server inside another attack (a ozzy's charge); a
   // client may not trigger it on its own.
   if (flowKind === "server-internal") return { handled: true };
   if (flowKind === "server-runtime-only") {

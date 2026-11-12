@@ -320,14 +320,44 @@ class GameRoom {
       if (matchPlayer?.isBot || !Number.isFinite(userId) || userId <= 0) continue;
       const present = Array.from(this.players.values()).some((p) => !p.isBot && Number(p.user_id) === userId);
       if (present) continue;
-      const level = Number(matchPlayer.level) > 0 ? Number(matchPlayer.level) : 1;
+      const knownLevel = Number(matchPlayer.level) > 0 ? Number(matchPlayer.level) : null;
       const playerData = this._createHumanPlayerData(matchPlayer, {
-        userId, level, name: matchPlayer.name, connected: false,
+        userId, level: knownLevel || 1, name: matchPlayer.name, connected: false,
       });
+      // Cleared when the player joins; a no-show earns trophies but no rewards.
+      playerData._neverJoined = true;
       inputManager.updateBodyGeometry(playerData, this);
       inputManager.resetMovementBudget(playerData);
       this.players.set(`offline:${userId}`, playerData);
+      // Legacy rosters carry no level: look it up while the countdown runs,
+      // and let a join wait for it (see addPlayer).
+      if (!knownLevel) {
+        playerData._levelLookup = this._fetchLevelForUser(userId, matchPlayer.char_class)
+          .then((level) => this._applyLevel(playerData, level))
+          .finally(() => { playerData._levelLookup = null; });
+      }
     }
+  }
+
+  // Re-derives a fighter's stats for `level`, keeping the share of health it has left.
+  _applyLevel(playerData, level) {
+    if (this._disposed || !playerData || playerData.level === level) return;
+    const {
+      maxHealth, baseDamage, specialDamage, specialChargeHits,
+      ammoCapacity, ammoCooldownMs, ammoReloadMs,
+    } = this._computeStats(playerData.char_class, level);
+    const share = playerData.maxHealth > 0 ? playerData.health / playerData.maxHealth : 1;
+    Object.assign(playerData, {
+      level, maxHealth, baseDamage, specialDamage, maxSuperCharge: specialChargeHits,
+      health: playerData.isAlive ? Math.max(1, Math.round(maxHealth * share)) : 0,
+    });
+    Object.assign(playerData.ammoState, {
+      capacity: ammoCapacity,
+      charges: Math.min(playerData.ammoState.charges, ammoCapacity),
+      cooldownMs: ammoCooldownMs,
+      reloadMs: ammoReloadMs,
+    });
+    this._broadcastHealthUpdate(playerData, { cause: "level" });
   }
 
   async addPlayer(socket, user) {
@@ -348,6 +378,11 @@ class GameRoom {
       (p) => !p.isBot && Number(p.user_id) === userId,
     );
     let playerData = findExisting();
+    if (playerData?._levelLookup) {
+      // A ghost seeded without a level: join with its real stats.
+      await playerData._levelLookup;
+      return this.addPlayer(socket, user);
+    }
     if (!playerData) {
       const level = Number(matchPlayer.level) > 0
         ? Number(matchPlayer.level)
@@ -383,6 +418,7 @@ class GameRoom {
       }
       playerData.socketId = socket.id;
       playerData.connected = true;
+      playerData._neverJoined = false;
       playerData._lastPositionSeq = -1;
       playerData._lastPositionClientTs = 0;
       if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {

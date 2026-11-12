@@ -1359,7 +1359,7 @@ function fireSpecialAttack(context = null) {
       handlePlayerMovement,
     });
   } catch (_) {}
-  // Gameplay only: some casts (the wizard's) block dashing for a while. The
+  // Gameplay only: some casts (the ozzy's) block dashing for a while. The
   // pose is the special action below, which lasts as long as its animation.
   const castLockMs = characterPresentation(resolveCharacterKey(currentCharacter)).specialAnimationLockMs;
   if (castLockMs && player) {

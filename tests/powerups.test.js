@@ -264,7 +264,7 @@ describe("World pickups and timed effects", () => {
 });
 
 describe("Team powerup grants", () => {
-  const surge = require('../src/shared/combat/runtime/abilities/wizardArcaneSurgeAbility.js');
+  const surge = require('../src/shared/combat/runtime/abilities/ozzyArcaneSurgeAbility.js');
   const { POWERUP_CATALOG } = require('../src/shared/powerups');
 
   function cast(random) {

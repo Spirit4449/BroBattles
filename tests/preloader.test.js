@@ -131,12 +131,12 @@ test('visibility and connection restrictions pause warming, including during its
 test('failed assets retry and obsolete selections are removed from the queue', async () => {
   let attempts = 0;
   const env = setup(path => path === '/assets/ninja/spritesheet.webp' && ++attempts < 2 ? new Response('', { status: 503 }) : null);
-  env.preloader.enqueue(['/assets/wizard/spritesheet.webp']);
+  env.preloader.enqueue(['/assets/ozzy/spritesheet.webp']);
   env.preloader.enqueue(['/assets/ninja/spritesheet.webp']);
   env.preloader.start();
   await env.advance(4000);
   assert.equal(attempts, 2);
-  assert.ok(!env.calls.some(call => call.url.includes('wizard')));
+  assert.ok(!env.calls.some(call => call.url.includes('ozzy')));
 });
 
 test('budget exhaustion cancels a stream and stops further speculative requests', async () => {

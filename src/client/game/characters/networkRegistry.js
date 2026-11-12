@@ -1,6 +1,6 @@
 import { networkAdapter as ninja, createNinjaNetwork } from './ninja/network';
-import { networkAdapter as huntress, createHuntressNetwork } from './huntress/network';
-import { networkAdapter as wizard } from './wizard/network';
+import { networkAdapter as sparrow, createSparrowNetwork } from './sparrow/network';
+import { networkAdapter as ozzy } from './ozzy/network';
 import { trackShotTargets, resetShotPrediction } from './shared/shotPrediction';
 import { predictGloopHook } from './gloop/special';
 import { playCharacterSound } from './index';
@@ -9,8 +9,8 @@ import { playHitFeedback } from './shared/hitFeedback';
 // Explicit registration keeps client protocol code out of the shared catalog.
 const registrations = [
   { adapter: ninja, create: options => createNinjaNetwork(options).networkAdapter },
-  { adapter: huntress, create: options => createHuntressNetwork(options).networkAdapter },
-  { adapter: wizard, create: () => wizard },
+  { adapter: sparrow, create: options => createSparrowNetwork(options).networkAdapter },
+  { adapter: ozzy, create: () => ozzy },
 ];
 const adapters = registrations.map(entry => entry.adapter);
 // Embedded simulations use the same registrations with isolated state/clocks.

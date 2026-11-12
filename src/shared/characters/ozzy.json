@@ -1,0 +1,155 @@
+{
+  "key": "ozzy",
+  "displayName": "Ozzy",
+  "stats": {
+    "baseHealth": 830,
+    "attackDescription": "Releases a fireball that bursts on the first enemy it hits, splashing everyone nearby.",
+    "baseDamage": 500,
+    "ammoCooldownMs": 800,
+    "ammoReloadMs": 3000,
+    "ammoCapacity": 3,
+    "specialDescription": "Empowers the whole team with random powerups.",
+    "specialBaseDamage": 0,
+    "specialChargeHits": 5,
+    "specialChargePerHit": 0,
+    "spriteScale": 0.92,
+    "body": {
+      "widthShrink": 200,
+      "heightShrink": 115,
+      "offsetXFromHalf": 0,
+      "offsetY": 62,
+      "flipOffset": 0
+    },
+    "tuning": {
+      "attack": {
+        "aim": {
+          "kind": "line",
+          "attackKey": "fireball",
+          "defaultRange": 1050,
+          "anchorForwardOffset": 38,
+          "anchorOffsetY": -6,
+          "reticleThickness": 55,
+          "angleMode": "free",
+          "reticleFadeOnTurn": true
+        },
+        "fireball": {
+          "speed": 450,
+          "launchEaseMs": 280,
+          "launchStartSpeed": 0.28,
+          "range": 1050,
+          "visualRadius": 14,
+          "collisionRadius": 28,
+          "splashRadius": 60,
+          "collisionForwardOffset": 0,
+          "collisionOffsetY": 0,
+          "initialScale": 0.1,
+          "activeScale": 0.5,
+          "glowRadiusMultiplier": 1.35,
+          "bobAmplitude": 5,
+          "castDelayMs": 520,
+          "charge": {
+            "startMs": 60,
+            "radius": 24,
+            "behind": [-34, -10],
+            "above": [8, -46]
+          },
+          "flipLockMs": 650,
+          "bobTweenMs": 220,
+          "muzzle": "fireballMuzzle",
+          "bobFreqMs": 120,
+          "depth": 100,
+          "baseAngleDeg": -90
+        }
+      },
+      "special": {
+        "aim": {
+          "kind": "round",
+          "radius": 67,
+          "defaultRange": 55,
+          "anchorForwardOffset": 0,
+          "anchorOffsetY": 4,
+          "reticleFadeOnTurn": true
+        },
+        "arcaneSurge": {
+          "powerScale": 1.5,
+          "durationScale": 1.5,
+          "castMs": 2000,
+          "beamMs": 1000,
+          "powerups": [
+            "rage",
+            "health",
+            "shield",
+            "gravityBoots",
+            "invisibility"
+          ],
+          "fallbackPowerup": "shield"
+        }
+      }
+    },
+    "description": "Master of the fireball, wielder of the powerups.",
+    "unlockPrice": 299
+  },
+  "frame": {
+    "w": 231,
+    "h": 190
+  },
+  "duckFrame": [
+    3,
+    7
+  ],
+  "basicAction": "ozzy-fireball",
+  "basicHitTypes": [
+    "basic"
+  ],
+  "specialHitTypes": [
+    "special"
+  ],
+  "attacks": {
+    "ozzy-fireball": {
+      "character": "ozzy",
+      "actionFlow": {
+        "kind": "windup-release",
+        "broadcastType": "ozzy-fireball",
+        "releaseActionType": "ozzy-fireball-release",
+        "releaseOwnerEcho": true,
+        "chargeActionType": "ozzy-fireball-charge"
+      }
+    },
+    "ozzy-fireball-charge": {
+      "character": "ozzy",
+      "actionFlow": {
+        "kind": "server-internal"
+      },
+      "attackType": "basic",
+      "runtime": {
+        "kind": "attached-charge"
+      }
+    },
+    "ozzy-fireball-release": {
+      "character": "ozzy",
+      "actionFlow": {
+        "kind": "server-runtime-only"
+      },
+      "attackType": "basic",
+      "runtime": {
+        "kind": "projectile-linear"
+      }
+    }
+  },
+  "presentation": {
+    "specialAnimationLockMs": 2100
+  },
+  "rig": {
+    "feet": [103, 137],
+    "points": {
+      "chest": [109, 70],
+      "fireballMuzzle": { "pivot": [134, 74], "reach": 0 },
+      "orb": [165, 64],
+      "staffTip": {
+        "default": [88, 62],
+        "attack": [[142, 76], [140, 76], [142, 76], [142, 72], [134, 74], [144, 70], [138, 68], [140, 66]],
+        "special": [[60, 26], [49, 27], [59, 24], [165, 64], [165, 64], [165, 64]]
+      }
+    }
+  }
+}

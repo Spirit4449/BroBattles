@@ -124,6 +124,7 @@ if (!IS_PROD) {
   app.use(webpackHotMiddleware(compiler));
   app.use(express.static(PUBLIC_DIR));
 } else {
+  app.use(require('./middleware/precompressed').servePrecompressed(DIST_DIR));
   app.use(express.static(DIST_DIR, {
     setHeaders: require('./middleware/staticCache').setStaticCacheHeaders,
   }));

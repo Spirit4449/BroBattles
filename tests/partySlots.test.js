@@ -88,10 +88,10 @@ describe("Configured bot seats", () => {
   test("party bot slots support shuffle, a fighter, and returning to random", () => {
     clearPartyBotSlots(7001);
     setPartyBotSlot(7001, { team: "team1", index: 1, character: "shuffle" });
-    setPartyBotSlot(7001, { team: "team2", index: 0, character: "wizard" });
+    setPartyBotSlot(7001, { team: "team2", index: 0, character: "ozzy" });
     assert.deepEqual(getPartyBotSlots(7001), [
       { team: "team1", index: 1, character: "shuffle" },
-      { team: "team2", index: 0, character: "wizard" },
+      { team: "team2", index: 0, character: "ozzy" },
     ]);
     setPartyBotSlot(7001, { team: "team2", index: 0, character: "random" });
     assert.deepEqual(getPartyBotSlots(7001), [
@@ -176,13 +176,13 @@ describe("Configured bot seats", () => {
       [{
         ticket,
         flip: false,
-        botSlots: [{ team: "team2", index: 0, character: "wizard" }],
+        botSlots: [{ team: "team2", index: 0, character: "ozzy" }],
       }],
       { teamSize: 1, seed: 3 },
     );
     assert.equal(result.players.length, 2);
     assert.equal(result.players.find(player => !player.isBot).selected_card_id, "radiant-silver");
     assert.equal(botInserts.length, 1);
-    assert.equal(botInserts[0][4], "wizard");
+    assert.equal(botInserts[0][4], "ozzy");
   });
 });

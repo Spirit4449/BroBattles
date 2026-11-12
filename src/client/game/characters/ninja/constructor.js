@@ -7,7 +7,7 @@ import { resolveSessionDamage } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { createRuntimeId } from "../shared/runtimeId";
-import { faceAttack } from "../shared/flipLock";
+import { aimAngle, aimFacesLeft, faceAttack } from "../shared/flipLock";
 import { consumeOnce } from "../shared/packetDedupe";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { beginThrow } from "./throwPresentation";
@@ -133,16 +133,8 @@ class Ninja extends CharacterEntityBase {
   handlePointerDown(attackContext = null) {
     const context = attackContext || this.consumeAttackContext() || {};
     const p = this.player;
-    const angle = Number.isFinite(Number(context?.angle))
-      ? Number(context.angle)
-      : p.flipX
-        ? Math.PI
-        : 0;
-    const direction =
-      Number(context?.direction) === -1 ||
-      (Math.cos(angle) < -0.1 && Number(context?.direction) !== 1)
-        ? -1
-        : 1;
+    const angle = aimAngle(context?.angle, p);
+    const direction = aimFacesLeft({ direction: context?.direction, angle }, p.flipX) ? -1 : 1;
     const startX = Number.isFinite(Number(context?.anchorX))
       ? Number(context.anchorX)
       : p.x;

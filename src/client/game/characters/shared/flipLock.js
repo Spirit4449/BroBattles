@@ -26,6 +26,14 @@ export function enforceLockedFlip(player) {
   }
 }
 
+// An attack's aim angle (radians, +y down), or straight ahead the way `player`
+// faces when the attack carries no aim.
+export function aimAngle(angle, player) {
+  const n = Number(angle);
+  if (angle !== null && angle !== undefined && Number.isFinite(n)) return n;
+  return player?.flipX ? Math.PI : 0;
+}
+
 // Whether an attack aimed with `aim` ({ direction, angle }) faces left. A
 // mostly vertical aim keeps the current facing.
 export function aimFacesLeft(aim, currentlyLeft = false) {

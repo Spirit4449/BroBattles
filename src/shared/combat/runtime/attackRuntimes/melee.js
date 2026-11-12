@@ -5,7 +5,7 @@ const effectManager = require("../effects/effectManager.js");
 const { THORG_SWEEP } = require("../../../characters/thorgSweep");
 const { attachedRectShape, pathSweepShapes, pathSweepProgress, sectorShape, shapeTouches } = require("../../attackDelivery");
 const { resolvePlayerHeight } = require('./geometry.js');
-const { wizardChargeShapes, chargeConfig } = require('../../../characters/wizardCharge');
+const { ozzyChargeShapes, chargeConfig } = require('../../../characters/ozzyCharge');
 const CHARGE = chargeConfig();
 const { burstSplash } = require('./projectiles.js');
 const { hitRectTargets, hitCapsuleTargets, capsuleTouch, getObjectiveTargets, CENTER_CRATE_TARGET, emitServerHit, buildTargetList, emitHitAction, shotTargetBounds } = require('./targets.js');
@@ -66,7 +66,7 @@ function attackerPoseOf(attacker, extra = {}) {
     height: resolvePlayerHeight(attacker), ...extra };
 }
 
-// A charging fireball (wizard): live while the caster winds up, it bursts on the
+// A charging fireball (ozzy): live while the caster winds up, it bursts on the
 // first enemy touching it, splashing everyone around, and cancels the release.
 // `windup` is shared with the scheduled release (characterActionRegistry).
 function buildAttachedChargeAttack(playerData, actionData, descriptor, now) {
@@ -87,7 +87,7 @@ function tickAttachedCharge(room, attack, descriptor, now) {
   if ((attacker._attackInterruptSeq || 0) !== attack.interruptSeq) return true;
   const elapsed = now - attack.createdAt;
   if (elapsed >= CHARGE.endMs) return true; // the release takes over
-  const shapes = wizardChargeShapes(attackerPoseOf(attacker), elapsed, CHARGE);
+  const shapes = ozzyChargeShapes(attackerPoseOf(attacker), elapsed, CHARGE);
   if (!shapes.length) return false;
   const [{ a, b, radius }] = shapes;
   const touched = capsuleTouch(room, attack, a, b, radius, now);

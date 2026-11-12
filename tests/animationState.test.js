@@ -54,31 +54,31 @@ describe("Action playback and locks", () => {
   });
 
   test('a remote follow-up packet that plays nothing keeps the windup lock instead of restarting it', () => {
-    // Wizard: the windup plays the throw, the release 520 ms later plays nothing.
+    // Ozzy: the windup plays the throw, the release 520 ms later plays nothing.
     const throwAnim = { frameRate: 18, frames: Array.from({ length: 8 }, () => ({ duration: 58 })) };
-    const scene = { anims: { get: key => (key === 'wizard-throw' ? throwAnim : null) } };
+    const scene = { anims: { get: key => (key === 'ozzy-throw' ? throwAnim : null) } };
     const sprite = { anims: { play(key) { this.currentAnim = { key }; } } };
     const wrapper = { opponent: sprite };
-    const playThrow = () => { sprite.anims.play('wizard-throw'); animation.noteAnimationPlayed(sprite, 'throw'); return true; };
+    const playThrow = () => { sprite.anims.play('ozzy-throw'); animation.noteAnimationPlayed(sprite, 'throw'); return true; };
     const present = (actionType, handler) =>
-      animation.presentRemoteAction({ scene, wrapper, character: 'wizard', actionType }, handler);
+      animation.presentRemoteAction({ scene, wrapper, character: 'ozzy', actionType }, handler);
 
     const lockOf = target => animation.remoteAnimationLockUntil(target);
-    assert.equal(present('wizard-fireball', playThrow), true);
+    assert.equal(present('ozzy-fireball', playThrow), true);
     const lock = lockOf(sprite);
     assert.ok(lock > 0);
 
-    assert.equal(present('wizard-fireball-release', () => true), true);
+    assert.equal(present('ozzy-fireball-release', () => true), true);
     assert.equal(lockOf(sprite), lock, 'the release does not extend the lock');
 
     // A handler that replays the animation (the next attack) gets a fresh lock.
     const start = Date.now(); while (Date.now() - start < 5) {}
-    present('wizard-fireball', playThrow);
+    present('ozzy-fireball', playThrow);
     assert.ok(lockOf(sprite) > lock);
 
     // Unconsumed actions never lock.
     const idle = { opponent: { anims: {} } };
-    animation.presentRemoteAction({ scene, wrapper: idle, character: 'wizard', actionType: 'x' }, () => false);
+    animation.presentRemoteAction({ scene, wrapper: idle, character: 'ozzy', actionType: 'x' }, () => false);
     assert.equal(lockOf(idle.opponent), 0);
   });
 
@@ -89,44 +89,44 @@ describe("Action playback and locks", () => {
 
     loadClientModule(require.resolve('../src/client/game/characters/shared/animationState'), { exports, require: () => ({}), performance: { now: () => now }, Date: { now: () => now } });
     const clips = {
-      'wizard-special': { frameRate: 50, frames: Array.from({ length: 16 }, () => ({ duration: 90 })) },
-      'wizard-throw': { frameRate: 18, frames: Array.from({ length: 8 }, () => ({ duration: 58 })) },
+      'ozzy-special': { frameRate: 50, frames: Array.from({ length: 16 }, () => ({ duration: 90 })) },
+      'ozzy-throw': { frameRate: 18, frames: Array.from({ length: 8 }, () => ({ duration: 58 })) },
     };
-    for (const key of ['idle', 'running', 'jumping', 'dying', 'dashing']) clips[`wizard-${key}`] = { frameRate: 10, frames: [{}] };
+    for (const key of ['idle', 'running', 'jumping', 'dying', 'dashing']) clips[`ozzy-${key}`] = { frameRate: 10, frames: [{}] };
     const scene = { anims: { exists: key => !!clips[key], get: key => clips[key] } };
     const plays = [];
-    const sprite = { _bbCharacter: 'wizard', anims: { play(key, ignoreIfPlaying) {
+    const sprite = { _bbCharacter: 'ozzy', anims: { play(key, ignoreIfPlaying) {
       plays.push({ key, ignoreIfPlaying });
       if (!(ignoreIfPlaying && this.currentAnim?.key === key)) this.currentAnim = { key };
     } } };
     const api = exports;
-    const action = (logical, options = {}) => api.playSpriteAnimation({ scene, sprite, character: 'wizard', logical, fallback: 'idle', ...options });
-    const move = logical => api.playCharacterAnimation({ scene, sprite, character: 'wizard', logical,
+    const action = (logical, options = {}) => api.playSpriteAnimation({ scene, sprite, character: 'ozzy', logical, fallback: 'idle', ...options });
+    const move = logical => api.playCharacterAnimation({ scene, sprite, character: 'ozzy', logical,
       resolveAnimKey: (_scene, char, wanted) => `${char}-${wanted}` });
     return { api, sprite, plays, clips, action, move, duration: key => api.getAnimationDurationMs(scene, key), advance: ms => { now += ms; } };
   }
 
   test('an action plays its variant drawing when the art has one, and the plain clip otherwise', () => {
     const rig = actionRig();
-    rig.clips['wizard-special-up'] = { frameRate: 10, frames: [{}] };
-    assert.equal(rig.action('special', { variant: 'up' }), 'wizard-special-up');
-    assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-special-up');
+    rig.clips['ozzy-special-up'] = { frameRate: 10, frames: [{}] };
+    assert.equal(rig.action('special', { variant: 'up' }), 'ozzy-special-up');
+    assert.equal(rig.sprite.anims.currentAnim.key, 'ozzy-special-up');
     rig.move('running');
-    assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-special-up', 'a variant is still the action');
-    assert.equal(rig.action('special', { variant: 'sideways', restart: true }), 'wizard-special');
+    assert.equal(rig.sprite.anims.currentAnim.key, 'ozzy-special-up', 'a variant is still the action');
+    assert.equal(rig.action('special', { variant: 'sideways', restart: true }), 'ozzy-special');
   });
 
   test('a special shows for its whole animation and movement cannot cut it short', () => {
     const rig = actionRig();
     rig.action('special');
-    const length = rig.duration('wizard-special');
+    const length = rig.duration('ozzy-special');
     rig.advance(length - 50);
     for (const logical of ['running', 'jumping', 'idle']) rig.move(logical);
-    assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-special');
+    assert.equal(rig.sprite.anims.currentAnim.key, 'ozzy-special');
     assert.equal(rig.api.getPresentedAnimation(rig.sprite), 'special');
     rig.advance(60);
     rig.move('running');
-    assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-running');
+    assert.equal(rig.sprite.anims.currentAnim.key, 'ozzy-running');
   });
 
   test('a new attack id restarts the throw, the same id does not', () => {
@@ -146,14 +146,14 @@ describe("Action playback and locks", () => {
       const rig = actionRig();
       rig.action('special');
       rig.move(interrupt);
-      assert.equal(rig.sprite.anims.currentAnim.key, `wizard-${interrupt}`);
+      assert.equal(rig.sprite.anims.currentAnim.key, `ozzy-${interrupt}`);
       assert.equal(rig.api.activeAction(rig.sprite), null);
     }
     const rig = actionRig();
     rig.action('throw');
     rig.action('dying');
     assert.equal(rig.api.activeAction(rig.sprite), null);
-    assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-dying');
+    assert.equal(rig.sprite.anims.currentAnim.key, 'ozzy-dying');
   });
 });
 

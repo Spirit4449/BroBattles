@@ -161,9 +161,7 @@ const effectDefs = {
           !target ||
           target === player ||
           !target.isAlive ||
-          target.connected === false ||
-          !isPlaced(target) ||
-          (!target.socketId && !target.isBot)
+          !isPlaced(target)
         ) {
           continue;
         }
@@ -229,14 +227,14 @@ const effectDefs = {
     snapshotKey: "thorgRage",
   },
 
-  huntressBurn: {
-    durationMs: EFFECT_RULES.huntressBurn.durationMs,
+  sparrowBurn: {
+    durationMs: EFFECT_RULES.sparrowBurn.durationMs,
     tickIntervalMs: 1000,
     modifiers: {},
     onApply: null,
     onTick(player, room, now, params = {}) {
-      const totalDamage = Math.max(0, Number(params.totalDamage ?? EFFECT_RULES.huntressBurn.totalDamage));
-      const durationMs = Math.max(1, Number(params.durationMs ?? EFFECT_RULES.huntressBurn.durationMs));
+      const totalDamage = Math.max(0, Number(params.totalDamage ?? EFFECT_RULES.sparrowBurn.totalDamage));
+      const durationMs = Math.max(1, Number(params.durationMs ?? EFFECT_RULES.sparrowBurn.durationMs));
       const prev = Number(player.health || 0);
       const rawDamage = Math.max(1, Math.round((totalDamage * 1000) / durationMs));
       const duckBlocked = player.ducking === true;
@@ -259,7 +257,7 @@ const effectDefs = {
       if (player.health !== prev) {
         room._broadcastHealthUpdate(player, { cause: "burn", duckBlocked });
         room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
-          type: "huntressBurn",
+          type: "sparrowBurn",
           username: player.name,
         });
         if (player.health <= 0 && prev > 0) {
@@ -274,7 +272,7 @@ const effectDefs = {
         }
       }
     },
-    snapshotKey: "huntressBurn",
+    snapshotKey: "sparrowBurn",
   },
 
   // ── Available for future powerups / abilities ────────────────────────────────

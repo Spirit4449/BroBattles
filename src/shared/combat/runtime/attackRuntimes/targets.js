@@ -4,7 +4,7 @@ const { exposeDamageHitbox } = require('../damageHitboxes.js');
 const effectManager = require("../effects/effectManager.js");
 const { getParticipant } = require('../participants');
 const { circleAabbOverlap, getPlayerBounds } = require('./geometry.js');
-const { sweep } = require('../../../characters/huntressProjectile');
+const { sweep } = require('../../../characters/sparrowProjectile');
 const { isDetachedProjectile } = require('./projectileLifecycle.js');
 const { poseAt } = require('../lagCompensation.js');
 

@@ -1,5 +1,5 @@
 const { slimeLaunch, sampleSlimePath } = require("../../../../shared/characters/gloopProjectile");
-const { aimAtTarget } = require("../../../../shared/characters/huntressProjectile");
+const { aimAtTarget } = require("../../../../shared/characters/sparrowProjectile");
 const { resolveGloopHookSocket } = require("../../../../shared/characters/gloopHookGeometry");
 const {
   getResolvedCharacterAimConfig,

@@ -1,8 +1,8 @@
 const { isPlaced } = require('../targetable.js');
-const huntressModel = require('../../characters/huntressProjectile');
+const sparrowModel = require('../../characters/sparrowProjectile');
 const { EFFECT_RULES } = require('../../effectRules');
 const ninjaCombat = require('./ninjaCombat.js');
-const huntressCombat = require('./huntressCombat.js');
+const sparrowCombat = require('./sparrowCombat.js');
 const { isTrustedProjectileContact, isRuntimeContact } = require('./attackRuntimes/projectileLifecycle.js');
 const { deliveryOf } = require('../attackDelivery');
 const { positionAt } = require('./lagCompensation.js');
@@ -38,7 +38,7 @@ function resolveAttackTime(payload, { server = false, now = Date.now(), nowMono 
   return now;
 }
 
-function handleHit(room, socketId, payload, { server = false, huntressProjectile = null, ninjaProjectile = null, runtimeProjectile = null } = {}) {
+function handleHit(room, socketId, payload, { server = false, sparrowProjectile = null, ninjaProjectile = null, runtimeProjectile = null } = {}) {
   try {
     if (!payload || typeof payload !== "object") return;
     const attackerName = String(payload.attacker || "").trim();
@@ -60,13 +60,13 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     );
     const trustedNinja = server && ninjaCombat.trusted(room, ninjaProjectile, payload);
     if (attacker?.char_class === 'ninja' && attackerName !== targetName && !trustedNinja) return;
-    const trustedHuntress = server && huntressCombat.isTrustedContact(room, huntressProjectile, payload);
-    const trustedProjectile = trustedNinja || trustedHuntress ||
+    const trustedSparrow = server && sparrowCombat.isTrustedContact(room, sparrowProjectile, payload);
+    const trustedProjectile = trustedNinja || trustedSparrow ||
       (server && isTrustedProjectileContact(room, runtimeProjectile, payload));
     const attachedContact = server && deliveryOf(runtimeProjectile?.runtimeKind) === 'attached' &&
       isRuntimeContact(room, runtimeProjectile, payload);
-    if (attacker?.char_class === 'huntress' &&
-        attackerName !== targetName && !trustedHuntress) return;
+    if (attacker?.char_class === 'sparrow' &&
+        attackerName !== targetName && !trustedSparrow) return;
     if (!server && (getParticipant(room, socketId) !== attacker || attacker?.isBot)) return;
     const target = Array.from(room.players.values()).find(
       (p) => p.name === targetName,
@@ -141,10 +141,10 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     // Determine damage from server-side stats
     const attackType = String(payload.attackType || "basic").toLowerCase();
     const isNinjaSwarm = attackType === "ninja-special-swarm";
-    const isHuntressArrow = attackType === "huntress-arrow";
-    const isHuntressBurningArrow = attackType === "huntress-burning-arrow";
-    const base = (trustedHuntress || isHuntressArrow || isHuntressBurningArrow)
-      ? huntressModel.attackConfig(isHuntressBurningArrow).damagePerArrow
+    const isSparrowArrow = attackType === "sparrow-arrow";
+    const isSparrowBurningArrow = attackType === "sparrow-burning-arrow";
+    const base = (trustedSparrow || isSparrowArrow || isSparrowBurningArrow)
+      ? sparrowModel.attackConfig(isSparrowBurningArrow).damagePerArrow
       : isNinjaSwarm
         ? NINJA_SWARM_HIT_DAMAGE
         : attackType === "special"
@@ -201,7 +201,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       if (
         attackType === "special" ||
         isNinjaSwarm ||
-        isHuntressBurningArrow
+        isSparrowBurningArrow
       ) {
         // Super attacks can hit vaults from farther than basic melee/projectile ranges.
         maxDist = Math.max(maxDist, 2400);
@@ -302,7 +302,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
         attacker.lastCombatAt = now;
         room.broadcastSnapshot();
       }
-      if (room._netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, huntressProjectile || ninjaProjectile || runtimeProjectile);
+      if (room._netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, sparrowProjectile || ninjaProjectile || runtimeProjectile);
       return { accepted: true, appliedDamage };
     }
     if (!isSelf) room._recordCombatStat(attacker, { hits: 1 });
@@ -319,7 +319,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
         0,
         previousCoins - (Number(vaultState?.coins) || 0),
       );
-      if (room._netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, huntressProjectile || ninjaProjectile || runtimeProjectile);
+      if (room._netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, sparrowProjectile || ninjaProjectile || runtimeProjectile);
       if (appliedDamage > 0) {
         attacker.lastAttackAt = now;
         attacker.lastCombatAt = now;
@@ -337,7 +337,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     const old = target.health;
     target.health = Math.max(0, target.health - Math.round(dmg));
     const appliedDamage = Math.max(0, old - target.health);
-    if (room._netTrace && !isSelf) traceHit(room, attacker, targetName, target, attackType, appliedDamage, payload, huntressProjectile || ninjaProjectile || runtimeProjectile);
+    if (room._netTrace && !isSelf) traceHit(room, attacker, targetName, target, attackType, appliedDamage, payload, sparrowProjectile || ninjaProjectile || runtimeProjectile);
     if (room.DEBUG_HIT_EVENTS) {
       console.log(
         `[HitDebug ${room.matchId}] accept attacker=${attacker.name} target=${target.name} type=${attackType} dist=${dist.toFixed(0)}/${maxDist} dmgRaw=${Math.round(dmg)} applied=${appliedDamage} hp=${old}->${target.health}`,
@@ -348,15 +348,15 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     target._lastAttackerParticipantId = participantId(attacker);
     attacker.lastCombatAt = now;
     target.lastCombatAt = now;
-    if (!isSelf && isHuntressBurningArrow && target.health > 0) {
+    if (!isSelf && isSparrowBurningArrow && target.health > 0) {
       try {
         effectManager.apply(
           target,
-          "huntressBurn",
+          "sparrowBurn",
           now,
           {
-            durationMs: EFFECT_RULES.huntressBurn.durationMs,
-            totalDamage: EFFECT_RULES.huntressBurn.totalDamage,
+            durationMs: EFFECT_RULES.sparrowBurn.durationMs,
+            totalDamage: EFFECT_RULES.sparrowBurn.totalDamage,
             sourceSocketId: attacker?.socketId,
             sourceName: attacker?.name,
             sourceTeam: attacker?.team,
@@ -386,7 +386,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       if (scoredKill) {
         room._recordCombatStat(attacker, { kills: scoredKill });
       }
-      if (appliedDamage > 0 && !trustedHuntress && !trustedNinja) {
+      if (appliedDamage > 0 && !trustedSparrow && !trustedNinja) {
         room.io.to(`game:${room.matchId}`).emit("game:action", {
           playerId: attacker.user_id,
           playerName: attacker.name,
@@ -406,7 +406,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       }
       // Every viewer holds the struck fighter for the same delivery hitstop.
       const delivery = deliveryOf(runtimeProjectile?.runtimeKind) ||
-        (huntressProjectile || ninjaProjectile ? 'released' : null);
+        (sparrowProjectile || ninjaProjectile ? 'released' : null);
       room._broadcastHealthUpdate(target, { cause: "combat", duckBlocked, delivery });
       if (target.health === 0 && old > 0) {
         console.log(

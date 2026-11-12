@@ -4,7 +4,7 @@
 // delivery"). A character supplies data and, for attached attacks, a shape over
 // time; it never writes its own netcode.
 const { characterBody } = require('../physics/characterBody');
-const { sweep } = require('../characters/huntressProjectile');
+const { sweep } = require('../characters/sparrowProjectile');
 const { sampleThorgHitbox, THORG_SWEEP } = require('../characters/thorgSweep');
 
 const DELIVERIES = Object.freeze({

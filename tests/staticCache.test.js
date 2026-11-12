@@ -10,7 +10,9 @@ test('only content-addressed JS and CSS get immutable caching', () => {
     ['/dist/bundles/mode-bank-bust.js', 'public, max-age=0'],
     ['/dist/game.html', 'public, max-age=0'],
     ['/dist/battle-preload.json', 'public, max-age=0'],
-    ['/dist/assets/ninja/spritesheet.webp', 'public, max-age=0'],
+    ['/dist/assets/ninja/spritesheet.webp', 'public, max-age=600'],
+    ['/dist/assets/game-sounds/start.mp3', 'public, max-age=600'],
+    ['/dist/assets/player-cards/test/test-animated.webm', 'public, max-age=0'],
     [`/dist/assets/map-revisions/${'a'.repeat(64)}.webp`, 'public, max-age=31536000, immutable'],
     [`/dist/assets/map-revisions/${'b'.repeat(64)}.json`, 'public, max-age=31536000, immutable'],
     ['/dist/assets/map-revisions/current.webp', 'public, max-age=0'],
@@ -76,4 +78,48 @@ test('HTTP compresses text, negotiates identity and leaves event streams unbuffe
   assert.equal(identity.headers['content-encoding'], undefined);
   assert.equal(identity.body.toString(), body);
   assert.equal((await get('/events', 'gzip')).headers['content-encoding'], undefined);
+});
+
+test('hashed bundles are served from their build-time compressed copies', async t => {
+  const http = require('node:http'), express = require('express');
+  const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), zlib = require('node:zlib');
+  const { servePrecompressed } = require('../src/server/middleware/precompressed');
+  const { writeCompressedCopies } = require('../scripts/build/versionHtmlAssets.cjs');
+  const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-precompressed-'));
+  t.after(() => fs.rmSync(dist, { recursive: true, force: true }));
+  const name = `game.bundle.${'c'.repeat(16)}.js`;
+  const body = 'window.game = "ready";\n'.repeat(500);
+  fs.mkdirSync(path.join(dist, 'bundles'));
+  fs.writeFileSync(path.join(dist, 'bundles', name), body);
+  fs.writeFileSync(path.join(dist, 'bundles', 'game.bundle.js'), body);
+  writeCompressedCopies(path.join(dist, 'bundles'), [name]);
+  const app = express();
+  app.use(require('../src/server/middleware/httpCompression'));
+  app.use(servePrecompressed(dist));
+  app.use(express.static(dist));
+  const server = http.createServer(app);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const get = (url, encoding) => new Promise((resolve, reject) => {
+    http.get({ host: '127.0.0.1', port: server.address().port, path: url, headers: { 'Accept-Encoding': encoding } }, res => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve({ headers: res.headers, body: Buffer.concat(chunks) }));
+    }).on('error', reject);
+  });
+  const br = await get(`/bundles/${name}`, 'gzip, br');
+  assert.equal(br.headers['content-encoding'], 'br');
+  assert.match(br.headers['content-type'], /javascript/);
+  assert.match(br.headers['cache-control'], /immutable/);
+  assert.equal(zlib.brotliDecompressSync(br.body).toString(), body);
+  const gzip = await get(`/bundles/${name}`, 'gzip');
+  assert.equal(gzip.headers['content-encoding'], 'gzip');
+  assert.equal(zlib.gunzipSync(gzip.body).toString(), body);
+  const identity = await get(`/bundles/${name}`, 'identity');
+  assert.equal(identity.headers['content-encoding'], undefined);
+  assert.equal(identity.body.toString(), body);
+  // Unhashed bundles fall through to ordinary on-the-fly compression.
+  const plain = await get('/bundles/game.bundle.js', 'br');
+  assert.notEqual(plain.headers['cache-control'], 'public, max-age=31536000, immutable');
+  assert.equal(zlib.brotliDecompressSync(plain.body).toString(), body);
 });

@@ -52,7 +52,7 @@ describe("Rig anchors and projectile origins", () => {
   const close = (a, b, message, tolerance = 1e-6) => assert.ok(Math.abs(a - b) <= tolerance, `${message}: ${a} vs ${b}`);
 
   test('nothing but the rig moves a bound player sprite\'s horizontal origin', () => {
-    const sprite = setup('wizard', false);
+    const sprite = setup('ozzy', false);
     const { originX, flipOriginX } = sprite.presentation;
     sprite.setOrigin(0.5, 0.5);
     assert.equal(sprite.originX, originX);
@@ -77,20 +77,20 @@ describe("Rig anchors and projectile origins", () => {
     }
   });
 
-  test('the wizard\'s fireball spawns on his staff tip as drawn at the release frame', () => {
+  test('the ozzy\'s fireball spawns on his staff tip as drawn at the release frame', () => {
     const { launchPoint } = require('../src/shared/characters/characterRig');
     const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');
-    const fireball = getResolvedCharacterAttackConfig('wizard', 'fireball');
+    const fireball = getResolvedCharacterAttackConfig('ozzy', 'fireball');
     // The throw animation's frame at the release (anim.js timings).
     const msPerFrame = index => 1000 / 18 + (index >= 6 ? 80 : 58);
     let frame = 0;
     for (let t = msPerFrame(0); t <= fireball.castDelayMs; t += msPerFrame(++frame));
     for (const flip of [false, true]) {
-      const sprite = setup('wizard', flip);
+      const sprite = setup('ozzy', flip);
       sprite.frame.name = `attack${String(frame).padStart(2, '0')}`;
       const tip = rig.rigPoint(sprite, 'staffTip');
       for (const angle of [0, -0.6, flip ? Math.PI : 0.5]) {
-        const spawn = launchPoint('wizard', fireball.muzzle, { x: sprite.x, y: sprite.y, flip }, angle);
+        const spawn = launchPoint('ozzy', fireball.muzzle, { x: sprite.x, y: sprite.y, flip }, angle);
         close(spawn.x, tip.x, `spawn x (flip ${flip})`);
         close(spawn.y, tip.y, `spawn y (flip ${flip})`);
       }

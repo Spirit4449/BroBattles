@@ -4,14 +4,14 @@ const { getResolvedCharacterAttackConfig, getResolvedCharacterSpecialConfig } = 
 const slime = getResolvedCharacterAttackConfig('gloop', 'slimeball');
 const hook = getResolvedCharacterSpecialConfig('gloop', 'hook');
 const thorg = getResolvedCharacterSpecialConfig('thorg');
-const volley = getResolvedCharacterSpecialConfig('huntress', 'burningVolley');
+const volley = getResolvedCharacterSpecialConfig('sparrow', 'burningVolley');
 
 // Pure rules shared by authoritative effects and client movement. Ability-owned
 // values stay in the character definition; generic status effects live here.
 const EFFECT_RULES = {
   ...POWERUP_CATALOG,
   thorgRage: { durationMs: thorg.rageDurationMs, modifiers: thorg.rageModifiers },
-  huntressBurn: { durationMs: volley.burnDurationMs, totalDamage: volley.burnTotalDamage },
+  sparrowBurn: { durationMs: volley.burnDurationMs, totalDamage: volley.burnTotalDamage },
   gloopSlimeSlow: { durationMs: slime.slowDurationMs, modifiers: { speedMult: slime.slowSpeedMult, jumpMult: slime.slowJumpMult } },
   gloopHookSlow: { durationMs: hook.slowDurationMs, modifiers: { speedMult: hook.slowSpeedMult, jumpMult: hook.slowJumpMult } },
   slow: { durationMs: 3000, modifiers: { speedMult: 0.45, jumpMult: 0.7 } },
@@ -51,7 +51,7 @@ function combineModifiers(modifiers) {
 
 function resolveLocalEffectMovement(effects = {}, authoritative = null) {
   // Server-computed values include application-specific overrides (e.g. a
-  // stronger slow or Wizard's scaled powerups). Older snapshots use base rules.
+  // stronger slow or Ozzy's scaled powerups). Older snapshots use base rules.
   const fallback = combineModifiers(Object.keys(effects).filter(key => effects[key] > 0).map(key => getEffectModifiers(key)));
   const result = {};
   for (const key of ['speedMult', 'jumpMult']) {

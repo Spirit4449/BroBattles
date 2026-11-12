@@ -20,7 +20,7 @@ describe("Duck hitboxes", () => {
   test("duck art cells match the requested one-based sheet positions", () => {
     assert.deepEqual(DUCK_FRAME_CELLS, {
       draven: [1, 1], gloop: [9, 3], ninja: [1, 3],
-      huntress: [5, 2], wizard: [3, 7], thorg: [4, 4],
+      sparrow: [5, 2], ozzy: [3, 7], thorg: [4, 4],
     });
   });
 
@@ -146,7 +146,7 @@ describe("Platform corners", () => {
     World.prototype.separate.call(f.world, f.player, f.platform, callback, null, false);
   }
 
-  for (const character of ['thorg', 'ninja', 'wizard', 'draven', 'gloop', 'huntress']) {
+  for (const character of ['thorg', 'ninja', 'ozzy', 'draven', 'gloop', 'sparrow']) {
     for (const side of ['left', 'right']) {
       test(`${character} keeps moving after landing on the ${side} corner`, () => {
         const f = fixture(character, side);

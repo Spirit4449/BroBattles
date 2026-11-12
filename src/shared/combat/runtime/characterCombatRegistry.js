@@ -1,12 +1,12 @@
 const ninja = require('./ninjaCombat.js');
-const huntress = require('./huntressCombat.js');
+const sparrow = require('./sparrowCombat.js');
 const { characterDefinitions } = require('../../characters');
 
 const adapters = [
   { key: 'ninja', api: ninja, bootstrapKey: 'ninjaCombat',
     specialPayload: (player, payload) => player.isBot
       ? { ...payload, id: `swarm:${++player._botActionSeq}`, aim: { angle: player.flip ? Math.PI : 0, ...payload.aim } } : payload },
-  { key: 'huntress', api: huntress, bootstrapKey: 'huntressCombat',
+  { key: 'sparrow', api: sparrow, bootstrapKey: 'sparrowCombat',
     specialPayload: (player, payload) => player.isBot
       ? { ...payload, id: `special:${++player._botActionSeq}` } : payload },
 ];

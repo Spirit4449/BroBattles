@@ -343,7 +343,7 @@ test('a shorter winning streak preserves the stored historical record', async ()
 
 test('client hit reports cannot damage other players', t => {
   const { makeRoom } = require('./helpers/botRoom');
-  const f = makeRoom({ characters: ['thorg', 'wizard'] });
+  const f = makeRoom({ characters: ['thorg', 'ozzy'] });
   t.after(() => f.room.cleanup());
   const [p, target] = f.players;
   Object.assign(p, { x: 100, y: 200, isBot: false, connected: true, loaded: true });

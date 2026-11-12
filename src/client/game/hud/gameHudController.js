@@ -12,7 +12,7 @@ import {
   selectionToLegacyMode,
 } from "../../lib/gameSelectionCatalog.js";
 import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
-import { LEVEL_CAP, DEFAULT_CHARACTER } from "../../../shared/characters/characterStats.js";
+import { LEVEL_CAP, DEFAULT_CHARACTER, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 import { renderLevelBadge } from "../../views/levelBadgeView.js";
 import { pausePlayerCardPreparation, disposePlayerCardMedia, disposePlayerCardMediaWithin, layerPlayerCardMedia, createPlayerCardMedia, mirrorPlayerCardMedia, positionPlayerCardCanvas, warmEquippedPlayerCard } from "../../views/playerCardAnimation.cjs";
 import playerCardsCatalog from "../../../shared/catalogs/playerCardsCatalog.json";
@@ -178,7 +178,7 @@ export function createGameHudController({
 
     const charNameEl = document.createElement("div");
     charNameEl.className = "bs-card-character-name";
-    charNameEl.textContent = String(player?.char_class || "default");
+    charNameEl.textContent = getCharacterDisplayName(player?.char_class || "default");
 
     const spriteWrap = document.createElement("div");
     spriteWrap.className = "bs-card-sprite-wrap";
@@ -995,7 +995,7 @@ export function createGameHudController({
       img.src =
         String(p?.selected_skin_asset_url || "").trim() ||
         buildCharacterSkinBodyUrl(cls, "");
-      img.alt = `${cls} body`;
+      img.alt = `${getCharacterDisplayName(cls)} body`;
       img.onerror = () => {
         img.onerror = null;
         img.src = "/assets/ninja/body.webp";
@@ -1183,9 +1183,20 @@ export function createGameHudController({
    * rejoin mid-countdown). Each beat is scheduled from the start time so
    * timer drift cannot accumulate.
    */
+  let fightBurstTimer = null;
+  function hideFightBurst() {
+    clearTimeout(fightBurstTimer);
+    fightBurstTimer = null;
+    const fightBurst = document.getElementById("fight-burst");
+    fightBurst?.classList?.remove("is-on");
+    fightBurst?.classList?.add("hidden");
+  }
+
   function startCountdown(seconds = 5, { elapsedMs = 0 } = {}) {
     if (countdownRunning) return;
     countdownRunning = true;
+    // A burst left over from an earlier countdown must not cut this one short.
+    hideFightBurst();
 
     const countdownEl = document.getElementById("countdown-display");
     if (!countdownEl) {
@@ -1250,10 +1261,8 @@ export function createGameHudController({
       if (fightBurst) {
         fightBurst.classList.remove("hidden");
         replay(fightBurst, "is-on");
-        setTimeout(() => {
-          fightBurst.classList.remove("is-on");
-          fightBurst.classList.add("hidden");
-        }, 1100);
+        clearTimeout(fightBurstTimer);
+        fightBurstTimer = setTimeout(hideFightBurst, 1100);
       }
 
       try {

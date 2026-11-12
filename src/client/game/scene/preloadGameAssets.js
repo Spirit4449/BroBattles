@@ -40,7 +40,8 @@ export function preloadGameAssets({
     `${staticPath}/movement/duck-transition.mp3`,
   );
   scene.load.audio("sfx-duck-block", `${staticPath}/movement/duck-block.mp3`);
-  scene.load.audio("sfx-sudden-death", `${staticPath}/game-sounds/suddendeath.mp3`);
+  // Sudden-death music streams through HTMLAudio (audio/matchAudio.js); a
+  // Phaser copy of the 940 KB track would only be downloaded and decoded.
   scene.load.audio("sfx-death", `${staticPath}/game-sounds/death.mp3`);
   scene.load.audio("sfx-respawn", `${staticPath}/game-sounds/respawn.mp3`);
   scene.load.audio("sfx-you-death", `${staticPath}/game-sounds/you-death.mp3`);

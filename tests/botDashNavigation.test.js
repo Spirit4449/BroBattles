@@ -60,7 +60,7 @@ test('routing never promises two dashes on a single charge', () => {
   assert.equal(findRoute(graph, 'a', 'c', Infinity, { allowDash: true }).length, 2);
 });
 
-for (const kind of ['high', 'gap']) for (const character of ['ninja', 'thorg', 'draven', 'wizard', 'huntress', 'gloop']) {
+for (const kind of ['high', 'gap']) for (const character of ['ninja', 'thorg', 'draven', 'ozzy', 'sparrow', 'gloop']) {
   test(`${character} executes a live jump-and-dash route across ${kind} terrain`, t => {
     let now = 1000000;
     t.mock.method(Date, 'now', () => now);
@@ -95,9 +95,9 @@ for (const kind of ['high', 'gap']) for (const character of ['ninja', 'thorg', '
 test('all sampled dash routes on duel maps replay their advertised safe landings', () => {
   let replayed = 0;
   for (const map of [1, 2, 3]) {
-    const geometry = getDuelGeometry(map), graph = buildGraph(geometry, 'huntress');
+    const geometry = getDuelGeometry(map), graph = buildGraph(geometry, 'sparrow');
     for (const [from, edges] of graph.dashEdges) for (const edge of edges) {
-      const p = { ...standOn(graph.surfaces.find(s => s.id === from), 'huntress', edge.takeoffX), isAlive: true };
+      const p = { ...standOn(graph.surfaces.find(s => s.id === from), 'sparrow', edge.takeoffX), isAlive: true };
       edge.frames.forEach((input, i) => {
         p.flip = input.direction < 0;
         assert.equal(stepBody(p, input, geometry, DT, i * DT).fell, false);

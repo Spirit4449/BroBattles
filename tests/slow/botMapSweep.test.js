@@ -12,7 +12,7 @@ const { staticGeometry } = require('../../src/shared/maps/platformMotion');
 const { mapDefaults } = require('../../src/shared/maps');
 const { mapArena } = require('../../src/shared/maps/arenas');
 const duelMaps = mapDefaults.filter((map) => mapArena(map)?.modeId === 'duels').map((map) => map.id);
-const characters = ['ninja', 'thorg', 'draven', 'wizard', 'huntress', 'gloop'];
+const characters = ['ninja', 'thorg', 'draven', 'ozzy', 'sparrow', 'gloop'];
 
 // Surfaces the bot planner can route to from the ground floor.
 function plannedSurfaces(map, character) {
@@ -106,7 +106,7 @@ for (const map of duelMaps) for (const character of characters) {
 
 test('Bank Bust roles find reachable siege and lower-lane objectives on the live map', (t) => {
   const time = clock(t);
-  const h = makeRoom({ map: 4, characters: ['ninja', 'wizard'], seed: 17 });
+  const h = makeRoom({ map: 4, characters: ['ninja', 'ozzy'], seed: 17 });
   t.after(() => h.room.cleanup());
   const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
   const { bankDecisionSteps } = require('../../src/server/core/bots/bankBust');
@@ -134,7 +134,7 @@ test('Bank Bust roles find reachable siege and lower-lane objectives on the live
 
 test('an unopposed Bank Bust attacker commits across the map and damages the enemy vault', (t) => {
   const time = clock(t);
-  const h = makeRoom({ map: 4, characters: ['ninja', 'wizard'], trophies: 2000, seed: 17 });
+  const h = makeRoom({ map: 4, characters: ['ninja', 'ozzy'], trophies: 2000, seed: 17 });
   t.after(() => h.room.cleanup());
   const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
   const { standOn } = require('../../src/server/core/bots/navigation');

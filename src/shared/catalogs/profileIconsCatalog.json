@@ -48,9 +48,9 @@
       }
     },
     {
-      "id": "wizard",
-      "name": "Wizard",
-      "assetUrl": "/assets/profile-icons/wizard.webp",
+      "id": "ozzy",
+      "name": "Ozzy",
+      "assetUrl": "/assets/profile-icons/ozzy.webp",
       "rarity": "rare",
       "limited": true,
       "showInPicker": true,
@@ -59,13 +59,13 @@
       },
       "unlock": {
         "type": "character",
-        "character": "wizard"
+        "character": "ozzy"
       }
     },
     {
-      "id": "huntress",
-      "name": "Huntress",
-      "assetUrl": "/assets/profile-icons/huntress.webp",
+      "id": "sparrow",
+      "name": "Sparrow",
+      "assetUrl": "/assets/profile-icons/sparrow.webp",
       "rarity": "rare",
       "limited": true,
       "showInPicker": true,
@@ -74,7 +74,7 @@
       },
       "unlock": {
         "type": "character",
-        "character": "huntress"
+        "character": "sparrow"
       }
     },
     {

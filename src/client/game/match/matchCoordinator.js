@@ -268,7 +268,6 @@ export function createMatchCoordinator(config) {
       normalizeMapId(gameData?.map),
     );
     op._spawnVersion = getSpawnVersion();
-    op.setLoadingGhost?.(!getIsLiveGame());
     _positionOpPlayer(op, pd);
     container[pd.name] = op;
     return op;
@@ -903,7 +902,7 @@ export function createMatchCoordinator(config) {
       if (handleCharacterNetworkPacket(scene, packet, {
         localPlayer: getPlayer(), localUsername: getUsername(),
         opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers,
-        onAmmo: config.onHuntressAmmo,
+        onAmmo: config.onSparrowAmmo,
       })) return;
       const isSelfPacket = playerName === getUsername();
       if (isSelfPacket && !action?.ownerEcho) return;

@@ -29,7 +29,7 @@ const { mapDefaults } = require('../src/shared/maps');
 const { mapArena } = require('../src/shared/maps/arenas');
 const mapForTeamSize = (teamSize) => mapDefaults.find((map) => teamSize <= 2 ? mapArena(map).modeId === 'duels' : mapArena(map).playersPerTeam === teamSize);
 
-async function setup(t, teamSize = 1, { humans = 1 } = {}) {
+async function setup(t, teamSize = 1, { humans = 1, friendLevel = 3 } = {}) {
   const map = mapForTeamSize(teamSize), arena = mapArena(map);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000000 });
   t.mock.method(console, 'log', () => {});
@@ -47,14 +47,20 @@ async function setup(t, teamSize = 1, { humans = 1 } = {}) {
     user_id: 1712, name: 'RealPlayer', char_class: 'ninja', team: 'team1',
     level: 3, trophies: 500,
   });
-  const friends = Array.from({ length: humans - 1 }, (_, i) => decorateParticipant({
-    user_id: 1800 + i, name: `Friend${i}`, char_class: 'ninja', team: 'team1',
-    level: 3, trophies: 500,
-  }));
+  const friends = Array.from({ length: humans - 1 }, (_, i) => {
+    const friend = decorateParticipant({
+      user_id: 1800 + i, name: `Friend${i}`, char_class: 'ninja', team: 'team1',
+      level: friendLevel || 3, trophies: 500,
+    });
+    // A legacy roster entry without a level.
+    if (!friendLevel) delete friend.level;
+    return friend;
+  });
   const db = {
     async runQuery(sql) {
       if (sql.includes('FROM match_participants')) return [{ name: human.name, party_id: null }];
       if (sql.startsWith('UPDATE matches')) return [];
+      if (sql.includes('SELECT char_levels')) return [{ char_levels: JSON.stringify({ ninja: 7 }) }];
       throw new Error(`Unexpected startup query: ${sql}`);
     },
     async setUserStatus() {},
@@ -75,7 +81,7 @@ async function setup(t, teamSize = 1, { humans = 1 } = {}) {
   }
   async function join(client) {
     let ack;
-    await client.receive('game:join', { matchId: 1341, ninjaCombatVersion: 1, huntressCombatVersion: 2, networkWireVersion: 1 }, (value) => { ack = value; });
+    await client.receive('game:join', { matchId: 1341, ninjaCombatVersion: 1, sparrowCombatVersion: 2, networkWireVersion: 1 }, (value) => { ack = value; });
     return ack;
   }
   async function ready(client) {
@@ -225,6 +231,41 @@ test('a human who has not joined by the countdown is a hittable ghost at spawn, 
   assert.equal(h.room.players.get(late.id), ghost, 'joining takes over the ghost');
   assert.equal(ghost.connected, true);
   assert.ok(ghost.health < before, 'damage taken as a ghost is kept');
+  assert.equal(ghost._neverJoined, false, 'a late joiner earns match rewards');
+});
+
+test('a ghost is knocked back by the server, which steps it until its client loads', async (t) => {
+  const inputManager = require('../src/server/core/gameRoom/inputManager');
+  const h = await setup(t, 2, { humans: 2 });
+  const host = h.socket('host');
+  await h.join(host);
+  await h.ready(host);
+  t.mock.timers.tick(START_DEADLINE_MS + COUNTDOWN_MS);
+  const ghost = [...h.room.players.values()].find((p) => p.name === h.friends[0].name);
+  assert.equal(ghost._neverJoined, true);
+  t.mock.timers.tick(Math.max(0, ghost._controlLockUntil - Date.now()) + 1);
+  const startX = ghost.x;
+  h.room.applyKnockback(ghost, { source: 'x', cause: 'stomp', radial: true, amountX: 300, amountY: -180 });
+  for (let i = 0; i < 10; i++) {
+    t.mock.timers.tick(h.room.FIXED_DT_MS);
+    inputManager.stepIdleHumans(h.room, h.room.FIXED_DT_MS, Date.now());
+  }
+  assert.ok(ghost.x > startX + 10, 'the knockback carries the ghost');
+});
+
+test('a ghost seeded without a level looks it up, and a join waits for it', async (t) => {
+  const h = await setup(t, 2, { humans: 2, friendLevel: null });
+  const host = h.socket('host');
+  await h.join(host);
+  await h.ready(host);
+  t.mock.timers.tick(START_DEADLINE_MS);
+  const ghost = [...h.room.players.values()].find((p) => p.name === h.friends[0].name);
+  const late = h.socket('late', { ...h.friends[0] });
+  assert.equal((await h.join(late)).ok, true);
+  assert.equal(h.room.players.get(late.id), ghost);
+  assert.equal(ghost.level, 7, 'the stored character level, not level 1');
+  assert.equal(ghost.maxHealth, h.room._computeStats('ninja', 7).maxHealth);
+  assert.equal(ghost.health, ghost.maxHealth);
 });
 
 test('a socket cannot enter a match by claiming a bot name', async (t) => {

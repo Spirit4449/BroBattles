@@ -1,4 +1,5 @@
 const { participantId, getParticipant } = require("../../../shared/combat/runtime/participants");
+const { isGhost } = require("../../../shared/combat/targetable.js");
 function applyParticipantKnockback(room, player, impulse) {
   player._stompPendingUntil = 0;
   const speed = Math.hypot(Number(impulse.amountX) || 0, Number(impulse.amountY) || 0);
@@ -8,7 +9,11 @@ function applyParticipantKnockback(room, player, impulse) {
     player._movementBudget.x += speed * 0.1;
     player._movementBudget.y += speed * 0.1;
   }
-  if (player.isBot) require('../bots/physics').applyImpulse(player, impulse, room._botNow || Date.now());
-  else if (player.socketId) room.io.to(player.socketId).emit('player:knockback', impulse);
+  // The server moves bots, ghosts and silent humans (inputManager.stepIdleHumans);
+  // a human client applies its own knockback.
+  if (player.isBot || isGhost(player) || player._idleFallback) {
+    require('../bots/physics').applyImpulse(player, impulse, room._botNow || Date.now());
+  }
+  if (!player.isBot && player.socketId) room.io.to(player.socketId).emit('player:knockback', impulse);
 }
 module.exports = { participantId, getParticipant, applyParticipantKnockback };

@@ -17,7 +17,7 @@
 //   hit(a, b, radius, opt)  earliest target contact; opt.who is 'enemies'
 //                           (default), 'allies' or 'all'; opt.once skips
 //                           targets this shot already struck; opt.skip is any
-//                           other set of names; opt.inset uses Huntress insets
+//                           other set of names; opt.inset uses Sparrow insets
 //   targets(who)            [{ name, team, x, y, bounds }]
 //   owner()                 the shooter's position
 //   input(key)              latest steering input for this shot

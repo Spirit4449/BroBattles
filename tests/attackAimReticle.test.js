@@ -37,7 +37,7 @@ describe("Quick attack direction", () => {
   });
 
   test('quick attacks match the ordinary default trajectory facing the chosen side; aimed attacks ignore it', () => {
-    for (const character of ['huntress', 'gloop', 'wizard', 'ninja']) {
+    for (const character of ['sparrow', 'gloop', 'ozzy', 'ninja']) {
       for (const family of ['basic', 'special']) {
         const player = { x: 300, y: 300, width: 150, height: 150, flipX: false };
         const options = { character, family, player, quick: true };

@@ -45,14 +45,14 @@ describe("Selection warming", () => {
     }
     assert.ok(state.urls.includes('/assets/ninja/base.webp'));
     assert.ok(state.urls.includes('/assets/ninja/ninja-blue.webp'));
-    assert.ok(!state.urls.some(url => /wizard|shuffle|random/i.test(url)));
+    assert.ok(!state.urls.some(url => /ozzy|shuffle|random/i.test(url)));
   });
 
   test('a matched roster warms every player card before the battle loads', () => {
     const { state, warm } = setup();
     warm({ modeId: 'duels', modeVariantId: 'duels-2v2', mapId: 1 }, [
       { name: 'a', char_class: 'ninja', selected_card_id: 'arena-crown' },
-      { name: 'bot', char_class: 'wizard', selected_card_id: 'radiant-gold' },
+      { name: 'bot', char_class: 'ozzy', selected_card_id: 'radiant-gold' },
       { name: 'c', char_class: 'thorg' },
     ]);
     assert.deepEqual(state.roster, ['arena-crown', 'radiant-gold', null]);
@@ -63,10 +63,10 @@ describe("Selection warming", () => {
     window.__BRO_BATTLES_USERDATA__ = { name: 'self', char_class: 'ninja', selected_skin_id_by_char: { ninja: 'blue' } };
     warm({ modeId: 'duels', modeVariantId: 'duels-1v1', mapId: 1 }, [{ name: 'self', char_class: 'ninja', selected_skin_game_assets: { spritesheetUrl: '/assets/old-custom.webp' } }]);
     assert.ok(state.urls.includes('/assets/old-custom.webp'));
-    window.__BRO_BATTLES_USERDATA__.char_class = 'wizard';
-    window.__BRO_BATTLES_USERDATA__.selected_skin_id_by_char.wizard = 'gold';
+    window.__BRO_BATTLES_USERDATA__.char_class = 'ozzy';
+    window.__BRO_BATTLES_USERDATA__.selected_skin_id_by_char.ozzy = 'gold';
     warm();
-    assert.ok(state.urls.includes('/assets/wizard/gold.webp'));
+    assert.ok(state.urls.includes('/assets/ozzy/gold.webp'));
     assert.ok(!state.urls.some(url => /old-custom|ninja/.test(url)));
   });
 

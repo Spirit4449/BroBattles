@@ -109,7 +109,7 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
 }
 
 if (require.main === module) {
-  const errors = validateContent();
+  const errors = [...validateContent(), ...require('../art/build-portraits.cjs').portraitErrors()];
   if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }
   else console.log(`Content valid: ${Object.keys(characterDefinitions).length} characters, ${Object.keys(POWERUP_CATALOG).length} powerups, ${mapDefaults.length} built-in maps.`);
 }

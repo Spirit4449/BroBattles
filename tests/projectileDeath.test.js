@@ -5,7 +5,7 @@ const { registerAttackFromAction, tickActiveAttacks } = require('../src/shared/c
 const { getAttackCollisionCenter } = require('../src/shared/combat/runtime/attackRuntimes/geometry.js');
 
 function fixture(t, character) {
-  const f = makeRoom({ characters: [character, 'wizard'] });
+  const f = makeRoom({ characters: [character, 'ozzy'] });
   t.after(() => f.room.cleanup());
   const [owner, target] = f.players;
   Object.assign(owner, { x: 100, y: 200, connected: true, isBot: false });
@@ -18,7 +18,7 @@ function fixture(t, character) {
   };
   f.release = () => {
     registerAttackFromAction(f.room, owner, {
-      type: character === 'wizard' ? 'wizard-fireball-release' : 'gloop-slimeball-release',
+      type: character === 'ozzy' ? 'ozzy-fireball-release' : 'gloop-slimeball-release',
       id: 'released', start: { x: 130, y: 192 }, angle: 0, direction: 1,
     });
     return f.room._activeAttacks[0];
@@ -26,7 +26,7 @@ function fixture(t, character) {
   return f;
 }
 
-for (const character of ['wizard', 'gloop']) {
+for (const character of ['ozzy', 'gloop']) {
   test(`${character}: released projectile moves and damages after actual owner death`, t => {
     const f = fixture(t, character), [owner, target] = f.players;
     const shot = f.release(), hp = target.health;
@@ -46,7 +46,7 @@ for (const character of ['wizard', 'gloop']) {
     const callbacks = [];
     f.room.scheduleAction = fn => callbacks.push(fn);
     f.room.handlePlayerAction(owner.participantId, {
-      type: character === 'wizard' ? 'wizard-fireball' : 'gloop-slimeball', id: 'dead-cast', angle: 0,
+      type: character === 'ozzy' ? 'ozzy-fireball' : 'gloop-slimeball', id: 'dead-cast', angle: 0,
     });
     assert.equal(callbacks.length, 0, 'dead owners cannot start another cast');
   });
@@ -78,12 +78,12 @@ for (const character of ['wizard', 'gloop']) {
     const f = fixture(t, character), [owner] = f.players, callbacks = [];
     f.room.scheduleAction = fn => callbacks.push(fn);
     f.room.handlePlayerAction(owner.participantId, {
-      type: character === 'wizard' ? 'wizard-fireball' : 'gloop-slimeball', id: 'windup', angle: 0,
+      type: character === 'ozzy' ? 'ozzy-fireball' : 'gloop-slimeball', id: 'windup', angle: 0,
     });
     assert.ok(callbacks.length);
     f.room._handlePlayerDeath(owner);
     callbacks.forEach(fn => fn());
-    // One tick ends anything attached to the dead caster (the wizard's charge);
+    // One tick ends anything attached to the dead caster (the ozzy's charge);
     // a released shot would survive it.
     f.step();
     assert.equal(f.room._activeAttacks?.length || 0, 0);

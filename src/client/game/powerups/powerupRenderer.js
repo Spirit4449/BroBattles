@@ -441,7 +441,7 @@ export function createPowerupRenderer({
     const healthOn = (fx?.health || 0) > 0;
     const poisonOn = (fx?.poison || 0) > 0;
     const bootsOn = (fx?.gravityBoots || 0) > 0;
-    const burnOn = (fx?.huntressBurn || 0) > 0;
+    const burnOn = (fx?.sparrowBurn || 0) > 0;
     const invisibleOn = (fx?.invisibility || 0) > 0;
     const freezeOn = (fx?.freeze || 0) > 0;
     if (invisibleOn) {
@@ -543,7 +543,7 @@ export function createPowerupRenderer({
       }
     } else if (burnOn) {
       const burnPulse = 0.5 + 0.5 * Math.sin(nowSec * 12 + (spr.x || 0) * 0.01);
-      const burnColor = colors.huntressBurn || 0xff7a1f;
+      const burnColor = colors.sparrowBurn || 0xff7a1f;
       spr.setScale(baseX, baseY);
       spr.setTint(burnPulse > 0.5 ? 0xffb46d : 0xff6a1f);
       if (Math.random() < 0.72) {
@@ -1222,8 +1222,8 @@ export function createPowerupRenderer({
       } else {
         spawnShieldReflections.delete(spr);
       }
-      if ((fx.huntressBurn || 0) > 0) {
-        const burnColor = colors.huntressBurn || 0xff7a1f;
+      if ((fx.sparrowBurn || 0) > 0) {
+        const burnColor = colors.sparrowBurn || 0xff7a1f;
         drawPixelRing(g, x, y, Math.max(16, r + 4 + 3 * pulse), {
           fillColor: burnColor,
           fillAlpha: 0.12 + 0.06 * pulse,

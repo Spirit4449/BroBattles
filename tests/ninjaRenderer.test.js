@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {EventEmitter}=require('node:events');
 const loadServerClock=require('./helpers/serverClockModule');
 const loadShotPrediction=require('./helpers/shotPredictionModule');
-const model=require('../src/shared/characters/ninjaProjectile'),clock=require('../src/shared/characters/huntressReplication');
+const model=require('../src/shared/characters/ninjaProjectile'),clock=require('../src/shared/characters/sparrowReplication');
 const code=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/ninja/network'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
 const playerAudio={};
 vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/playerAudio.js'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:playerAudio});
@@ -15,7 +15,7 @@ function setup(initial={}){
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:animation,performance:{now:()=>now}});
   const serverClock=loadServerClock({performance:{now:()=>now}});
   const shots=loadShotPrediction({serverClock});
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./throwPresentation'?require('../src/client/game/characters/ninja/throwPresentation'):name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:name.includes('flipLock')?flipLock:{connected:false},
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./throwPresentation'?require('../src/client/game/characters/ninja/throwPresentation'):name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('sparrowReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:name.includes('flipLock')?flipLock:{connected:false},
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){}});
   const sprite=(x,y,texture)=>{const s={x,y,texture,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
   const flashes=[];
@@ -190,7 +190,7 @@ test('the thrower sees an impact on the enemy as drawn at once, once per leg; ot
     const f=setup();
     const enemy={active:true,visible:true,x:330,y:180,flipX:false};
     const felt=[];
-    f.shots.trackShotTargets({localUsername:'owner',opponentPlayersRef:{enemy:{opponent:enemy,character:'wizard'}},
+    f.shots.trackShotTargets({localUsername:'owner',opponentPlayersRef:{enemy:{opponent:enemy,character:'ozzy'}},
       playHitFeedback:sprite=>{felt.push(sprite);return true;}});
     const q=model.launch(f.owner,0,`${thrower}:shot:0`);q.ownerName=thrower;
     f.packet({type:'ninja-launch',projectile:q,requestId:'shot'},thrower);

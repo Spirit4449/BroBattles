@@ -44,7 +44,7 @@ Animation demonstrations use normal game speed and animation rate, grass
 footsteps, landing audio and shared dust.
 
 Fight participants use the panel's level for health and damage. Gloop spars with
-Ninja; higher-damage characters normally face Thorg. Wizard faces one opponent with a green teammate standing behind him as a
+Ninja; higher-damage characters normally face Thorg. Ozzy faces one opponent with a green teammate standing behind him as a
 bystander, so Arcane Surge visibly grants a real powerup to an ally. `showcaseRoster` returns
 participant IDs, teams and positions; simulation and presentation have no two-player
 assumption. Fights start with empty super bars. Charge is earned through hits and carried
@@ -69,11 +69,11 @@ The preview physics world uses the combat arena bounds, and simulation contact b
 
 `showcaseFight.js` renders events from `shared/combat/previewSession.js`, which hosts
 the same attack, damage, ability and effect modules as GameRoom. Ninja's return
-contacts, Huntress's burn ticks, Gloop's slows/pull and Wizard's team grants therefore
+contacts, Sparrow's burn ticks, Gloop's slows/pull and Ozzy's team grants therefore
 need no separate showcase implementation. Animation demonstrations use this host
 too. Projectile network adapters are instantiated with an isolated local clock;
 health feedback, character event handlers, powerup visuals and sounds reuse match
-presentation. Huntress's isolated renderer accepts compact arrow framing without
+presentation. Sparrow's isolated renderer accepts compact arrow framing without
 changing its collision or damage.
 
 Optional `game/characters/<key>/showcase.js` files contain art framing only. New
@@ -198,7 +198,7 @@ low-priority request with the same time limits. Failures keep posters without
 holding up gameplay or repeatedly retrying the same request.
 
 `node scripts/dev/test-generated-html.cjs` checks actual card playback, poster
-alignment, decoded green-spill pixels on Shuriken/Amethyst/Anvil/Wizard (including
+alignment, decoded green-spill pixels on Shuriken/Amethyst/Anvil/Ozzy (including
 later orb and particle effects), hover/visibility behavior,
 preview effect bounds and cleanup, and reward reveals. Use `--preview-layout`
 or `--reward-layout` for focused desktop/mobile layout checks. Playwright is
@@ -271,10 +271,22 @@ remain fully legible when disabled.
 During a foreground screen change, script preload hints start as soon as HTML
 arrives, alongside stylesheet loading and outgoing cleanup. Execution remains
 ordered and starts only after cleanup and styles complete. Hashed production
-JS/CSS and content-versioned card videos receive one-year immutable caching;
-HTML, manifests, unversioned assets,
-and development files continue revalidating. No service worker or hidden running
-lobby is used.
+JS/CSS and content-versioned card videos receive one-year immutable caching.
+The production build also writes Brotli and gzip copies of each hashed bundle,
+which `middleware/precompressed.js` serves instead of compressing on every
+request. Other `/assets/` files are cached for ten minutes, so assets warmed in
+the lobby are used without a revalidation round trip (replaced art can show for
+up to ten minutes after a deploy). HTML, manifests, map revisions, unversioned
+card videos and development files continue revalidating. The build removes
+hashed bundles that are outside the newest five versions and over a day old.
+No service worker or hidden running lobby is used.
+
+Character portraits are inlined into the lobby, game and profile bundles from
+small `portrait.webp` copies of each `body.webp`. After changing body art run
+`node scripts/art/build-portraits.cjs`; `npm run validate:content` reports
+missing or stale portraits. Pages load Lato from `/styles/lato.css` rather than
+Google Fonts. Lobby backgrounds are separate from the larger `gameBg` scenery
+layers and are kept at roughly 2.7K wide.
 
 Validation: navigation tests cover repeated party routes without remounting,
 superseded requests, and cancellation. Preloader tests exercise scheduling,
@@ -432,7 +444,7 @@ calls `sprite.anims.play` for its own pose.
   The snapshot loop reads `remoteAnimationLockUntil(sprite)` and does not
   take the sprite back until the action ends.
 - **Following a pose.** Effects tied to a pose read `actionElapsedMs(sprite)`
-  so they join at the pose's current frame (the wizard's super cast).
+  so they join at the pose's current frame (the ozzy's super cast).
 - **Gameplay locks are separate.** `_specialCastLockUntil` (from
   `presentation.specialAnimationLockMs`) only blocks dashing. It never changes
   which animation shows.
@@ -587,7 +599,7 @@ elapsed frame time independently of the rising surface, fading at their spawn
 and surface instead of recalculating their loop from the changing water depth.
 Surface interpolation is frame-rate independent; long resume gaps are capped.
 
-Huntress arrows use compact orange/gold pixel flame clusters on both basic and
+Sparrow arrows use compact orange/gold pixel flame clusters on both basic and
 super volleys. Flight flames trail backward; embedded flames rise until the arrow
 expires. Super flames are larger, with a brief bow-side spark cue and a held-draw
 release animation. These cosmetics do not change burn damage or projectile timing.

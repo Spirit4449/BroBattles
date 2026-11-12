@@ -107,48 +107,48 @@
         }
       ]
     },
-    "wizard": {
-      "defaultSkinId": "wizard-default",
+    "ozzy": {
+      "defaultSkinId": "ozzy-default",
       "skins": [
         {
-          "id": "wizard-default",
+          "id": "ozzy-default",
           "name": "Default",
-          "character": "wizard",
+          "character": "ozzy",
           "available": true,
-          "assetUrl": "/assets/wizard/body.webp",
+          "assetUrl": "/assets/ozzy/body.webp",
           "rarity": "common",
           "unlockMethod": {
             "type": "character",
-            "character": "wizard",
+            "character": "ozzy",
             "limited": true
           },
           "showInPicker": true,
           "gameAssets": {
-            "spritesheetUrl": "/assets/wizard/spritesheet.webp",
-            "animationsUrl": "/assets/wizard/animations.json"
+            "spritesheetUrl": "/assets/ozzy/spritesheet.webp",
+            "animationsUrl": "/assets/ozzy/animations.json"
           }
         }
       ]
     },
-    "huntress": {
-      "defaultSkinId": "huntress-default",
+    "sparrow": {
+      "defaultSkinId": "sparrow-default",
       "skins": [
         {
-          "id": "huntress-default",
+          "id": "sparrow-default",
           "name": "Default",
-          "character": "huntress",
+          "character": "sparrow",
           "available": true,
-          "assetUrl": "/assets/huntress/body.webp",
+          "assetUrl": "/assets/sparrow/body.webp",
           "rarity": "common",
           "unlockMethod": {
             "type": "character",
-            "character": "huntress",
+            "character": "sparrow",
             "limited": true
           },
           "showInPicker": true,
           "gameAssets": {
-            "spritesheetUrl": "/assets/huntress/spritesheet.webp",
-            "animationsUrl": "/assets/huntress/animations.json"
+            "spritesheetUrl": "/assets/sparrow/spritesheet.webp",
+            "animationsUrl": "/assets/sparrow/animations.json"
           }
         }
       ]

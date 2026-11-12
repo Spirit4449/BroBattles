@@ -25,7 +25,9 @@ export function wireWinStreakBenefits(badge, panel) {
     }
     const wasOpen = panel.classList.contains('is-open');
     panel.classList.toggle('is-open', open);
-    panel.classList.toggle('is-leaving', !open && wasOpen);
+    // Reduced motion has no exit animation, so no animationend would clear it.
+    const reducedMotion = panel.ownerDocument?.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    panel.classList.toggle('is-leaving', !open && wasOpen && !reducedMotion);
     panel.inert = !open;
     panel.setAttribute('aria-hidden', String(!open));
     badge.setAttribute('aria-expanded', String(open));

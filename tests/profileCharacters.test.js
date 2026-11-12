@@ -234,8 +234,8 @@ test('showcase uses real outgoing/return shuriken contacts, ammo refunds and all
   assert.equal(hero.ammoState.charges, hero.ammoState.capacity);
 });
 
-test('Wizard burst uses every ammo slot at legal cooldowns and real projectile contact after release', () => {
-  const { session, hero, enemy, events, advance } = preview('wizard');
+test('Ozzy burst uses every ammo slot at legal cooldowns and real projectile contact after release', () => {
+  const { session, hero, enemy, events, advance } = preview('ozzy');
   enemy.health = enemy.maxHealth = 10000;
   for (let shot = 0; shot < hero.ammoState.capacity; shot++) {
     assert.ok(requestBasic(session, hero, enemy, {}, () => 0.5, session.now));
@@ -243,7 +243,7 @@ test('Wizard burst uses every ammo slot at legal cooldowns and real projectile c
     advance(hero.ammoState.cooldownMs);
   }
   assert.equal(hero.ammoState.charges, 0);
-  const releases = events.filter(e => e.payload.action?.type === 'wizard-fireball-release');
+  const releases = events.filter(e => e.payload.action?.type === 'ozzy-fireball-release');
   assert.equal(releases.length, hero.ammoState.capacity);
   assert.ok(releases.every(e => e.payload.action.startup === 0));
   const firstHit = events.find(e => e.type === 'health-update');
@@ -253,15 +253,15 @@ test('Wizard burst uses every ammo slot at legal cooldowns and real projectile c
   assert.ok(hero.ammoState.charges > 0);
 });
 
-test('Wizard surge grants real expiring modifiers to living allies, excluding dead allies and enemies', () => {
-  const { session, hero, enemy, events, advance } = preview('wizard', 'thorg', [
+test('Ozzy surge grants real expiring modifiers to living allies, excluding dead allies and enemies', () => {
+  const { session, hero, enemy, events, advance } = preview('ozzy', 'thorg', [
     { id: 'ally', character: 'ninja', team: 'team1', x: -40 },
     { id: 'dead', character: 'ninja', team: 'team1', x: -50 },
   ]);
   session.players.get('dead').isAlive = false;
   hero.superCharge = hero.maxSuperCharge;
   assert.ok(session.requestSpecial(hero.name));
-  const surge = events.find(e => e.type === 'wizard:arcane-surge').payload;
+  const surge = events.find(e => e.type === 'ozzy:arcane-surge').payload;
   assert.deepEqual(surge.recipients.map(p => p.username), ['hero', 'ally']);
   for (const id of ['hero', 'ally']) {
     const p = session.players.get(id);
@@ -274,13 +274,13 @@ test('Wizard surge grants real expiring modifiers to living allies, excluding de
   assert.deepEqual(combatEffects.snapshotActive(hero, session.now), {});
 });
 
-test('Huntress super ignites targets and applies damage ticks after the arrows stop', () => {
-  const { session, hero, enemy, events, advance } = preview('huntress');
+test('Sparrow super ignites targets and applies damage ticks after the arrows stop', () => {
+  const { session, hero, enemy, events, advance } = preview('sparrow');
   enemy.health = enemy.maxHealth = 10000;
   hero.superCharge = hero.maxSuperCharge;
   assert.ok(session.requestSpecial(hero.name, { id: 'burn', aim: { angle: 0, power: 0.5 } }));
   advance(1000);
-  assert.ok(combatEffects.snapshotActive(enemy, session.now).huntressBurn > 0);
+  assert.ok(combatEffects.snapshotActive(enemy, session.now).sparrowBurn > 0);
   const hp = enemy.health;
   advance(1800);
   assert.ok(enemy.health < hp);
@@ -308,24 +308,24 @@ test('showcase rosters are equal-level, support teams, and select Thorg for Gloo
   const { showcaseRoster } = createClientModuleGraph().load('src/client/lobby/profile/showcaseKit.js');
   const gloop = showcaseRoster({ character: 'gloop', mode: 'fight', level: 8 });
   assert.equal(gloop[1].character, 'thorg');
-  const wizard = showcaseRoster({ character: 'wizard', mode: 'fight', level: 8 });
-  assert.equal(wizard.length, 3);
-  assert.equal(wizard.filter(p => p.team !== wizard[0].team).length, 1);
-  assert.equal(wizard.find(p => p.id === 'ally').role, 'bystander');
-  assert.equal(wizard.filter(p => p.team === wizard[0].team).length, 2);
-  assert.ok([...gloop, ...wizard].every(p => p.level === 8));
-  assert.equal(new Set(wizard.map(p => p.id)).size, wizard.length);
+  const ozzy = showcaseRoster({ character: 'ozzy', mode: 'fight', level: 8 });
+  assert.equal(ozzy.length, 3);
+  assert.equal(ozzy.filter(p => p.team !== ozzy[0].team).length, 1);
+  assert.equal(ozzy.find(p => p.id === 'ally').role, 'bystander');
+  assert.equal(ozzy.filter(p => p.team === ozzy[0].team).length, 2);
+  assert.ok([...gloop, ...ozzy].every(p => p.level === 8));
+  assert.equal(new Set(ozzy.map(p => p.id)).size, ozzy.length);
 });
 
 test('independent showcase fighters spend ammo without turns and keep a settled firing position', () => {
   const { createClientModuleGraph } = require('./helpers/clientModule');
   const { createShowcaseDirector } = createClientModuleGraph().load('src/client/lobby/profile/showcaseDirector.js');
-  const { session, hero, enemy, events } = preview('wizard', 'wizard');
+  const { session, hero, enemy, events } = preview('ozzy', 'ozzy');
   hero.health = hero.maxHealth = enemy.health = enemy.maxHealth = 10000;
   const initial = [hero.x, enemy.x];
   const direct = createShowcaseDirector(session);
   for (let i = 0; i < 150; i++) session.step(direct);
-  const casts = events.filter(e => e.payload.action?.type === 'wizard-fireball');
+  const casts = events.filter(e => e.payload.action?.type === 'ozzy-fireball');
   assert.ok(casts.filter(e => e.payload.playerName === hero.name).length >= 2);
   assert.ok(casts.filter(e => e.payload.playerName === enemy.name).length >= 2);
   assert.deepEqual([hero.x, enemy.x], initial, 'fighters in their distance band do not inch or walk home after casts');
@@ -420,7 +420,7 @@ test('showcase starts empty, respects attack cooldowns and gives the featured fi
       assert.equal(ally.x, allyX, 'support stays in the back');
       assert.ok(hero.x > ally.x, 'the featured fighter never retreats behind the bystander');
       assert.equal(ally.combatStats, undefined, 'support does not fight');
-      const surge = events.find(e => e.type === 'wizard:arcane-surge');
+      const surge = events.find(e => e.type === 'ozzy:arcane-surge');
       assert.ok(surge?.payload.recipients.some(p => p.username === ally.name), 'earned surge reaches the bystander');
       assert.ok(surge.at > casts[0].at, 'surge was earned through attacks');
     }
@@ -436,7 +436,7 @@ test('showcase presentation shares centered projectile bounds and displayed cont
     window: { Phaser: {} },
     require: name => {
       if (name.endsWith('/previewSession')) return { PreviewSession };
-      if (name.endsWith('/huntressReplication')) return require('../src/shared/characters/huntressReplication');
+      if (name.endsWith('/sparrowReplication')) return require('../src/shared/characters/sparrowReplication');
       if (name.endsWith('/networkRegistry')) return { createCharacterNetworkAdapters: () => [] };
       if (name.endsWith('/characters')) return { getCharacterSocketEvents: () => [], getCharacterEffectTickSounds: () => [] };
       if (name.endsWith('/powerupRenderer')) return { createPowerupRenderer: () => ({}) };

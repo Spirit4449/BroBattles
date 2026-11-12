@@ -60,13 +60,13 @@ test('every registered generic damage runtime publishes its collision geometry w
   assert.deepEqual([...covered].sort(), Object.keys(ATTACK_RUNTIMES).sort());
 });
 
-test('configured projectile offsets align Wizard and Gloop collision with their art', () => {
+test('configured projectile offsets align Ozzy and Gloop collision with their art', () => {
   const { createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
   const now = Date.now();
   const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');
-  const fireball = getResolvedCharacterAttackConfig('wizard', 'fireball');
+  const fireball = getResolvedCharacterAttackConfig('ozzy', 'fireball');
   for (const [type, expectedOffset, expectedOffsetY] of [
-    ['wizard-fireball-release', fireball.collisionForwardOffset, fireball.collisionOffsetY],
+    ['ozzy-fireball-release', fireball.collisionForwardOffset, fireball.collisionOffsetY],
     ['gloop-hook-release', 28, 50],
   ]) {
     const player = { name: 'A', socketId: 'a', x: 500, y: 300, isAlive: true, loaded: true, team: 'team1' };
@@ -78,7 +78,7 @@ test('configured projectile offsets align Wizard and Gloop collision with their 
     };
     const attack = createRuntimeAttack(player, { type, id: type, angle: 0 }, now);
     // Fly past the launch ease, where a rearward offset is still held at the muzzle.
-    const ticks = type.startsWith('wizard') ? 2 : 1;
+    const ticks = type.startsWith('ozzy') ? 2 : 1;
     for (let i = 1; i <= ticks; i++) tickRuntimeAttack(room, attack, now + 250 * i);
     const shape = damageHitboxSnapshot(room, now + 250 * ticks)[0];
     assert.equal(shape.kind, 'circle');
@@ -93,12 +93,12 @@ test('rearward projectile correction cannot damage behind its launch point', () 
   assert.deepEqual(getAttackCollisionCenter(attack), { x: 100, y: 50 });
 });
 
-test('dedicated Ninja and Huntress protocols expose each basic and special projectile', t => {
+test('dedicated Ninja and Sparrow protocols expose each basic and special projectile', t => {
   const { makeRoom } = require('./helpers/botRoom');
-  for (const character of ['ninja', 'huntress']) {
+  for (const character of ['ninja', 'sparrow']) {
     const combat = require(`../src/shared/combat/runtime/${character}Combat`);
     for (const special of [false, true]) {
-      const { room, players } = makeRoom({ characters: [character, 'wizard'] });
+      const { room, players } = makeRoom({ characters: [character, 'ozzy'] });
       t.after(() => room.cleanup());
       room.matchData.editorDebugHitboxes = true;
       room.geometry = { ...room.geometry, colliders: [] };

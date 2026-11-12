@@ -4,7 +4,7 @@ import { isMovementSuppressed } from "../../../shared/combat/runtime/abilityRunt
 import { remoteAnimationLockUntil } from "../../game/characters/shared/animationState";
 import { PreviewSession } from '../../../shared/combat/previewSession';
 import { snapshotActive } from '../../../shared/combat/runtime/effects/effectManager';
-import { CombatClock } from '../../../shared/characters/huntressReplication';
+import { CombatClock } from '../../../shared/characters/sparrowReplication';
 import { createCharacterNetworkAdapters } from "../../game/characters/networkRegistry";
 import { handleRemoteAttack, getCharacterSocketEvents, getCharacterEffectTickSounds,
   applyCharacterPowerupFx, drawCharacterPowerupAura, playCharacterSound } from '../../game/characters';

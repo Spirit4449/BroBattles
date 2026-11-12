@@ -1,5 +1,5 @@
 const { decodeWire } = require("../../../shared/networkWire");
-const huntressCombat = require('../../../shared/combat/runtime/huntressCombat.js');
+const sparrowCombat = require('../../../shared/combat/runtime/sparrowCombat.js');
 const inputManager = require("./inputManager");
 const characterCombat = require('../../../shared/combat/runtime/characterCombatRegistry.js');
 const { stampViewRewind, createLatencyProbe } = require('../../../shared/combat/runtime/lagCompensation.js');
@@ -22,7 +22,7 @@ function setupPlayerSocket(room, socket) {
     });
   }
   room.onSocket(socket, 'game:clock', (data, ack) => {
-    if (typeof ack === 'function') ack(huntressCombat.timing(room));
+    if (typeof ack === 'function') ack(sparrowCombat.timing(room));
     latency.probe();
   });
     // Handle player input

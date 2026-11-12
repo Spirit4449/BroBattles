@@ -13,7 +13,7 @@ module.exports = function loadServerClock({ performance, setTimeout = () => 0, c
   const exports = {};
   vm.runInNewContext(code, {
     exports,
-    require: name => (name.includes('huntressReplication') ? require('../../src/shared/characters/huntressReplication') : null),
+    require: name => (name.includes('sparrowReplication') ? require('../../src/shared/characters/sparrowReplication') : null),
     performance, setTimeout, clearTimeout, setInterval, clearInterval,
   });
   return exports;

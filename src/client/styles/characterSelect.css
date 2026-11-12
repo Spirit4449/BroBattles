@@ -821,13 +821,13 @@
   --character-chroma-shadow: 50, 23, 71;
 }
 
-.character-details-preview-frame[data-character="wizard"] {
+.character-details-preview-frame[data-character="ozzy"] {
   --character-chroma-main: 52, 125, 224;
   --character-chroma-light: 208, 245, 255;
   --character-chroma-shadow: 16, 46, 102;
 }
 
-.character-details-preview-frame[data-character="huntress"] {
+.character-details-preview-frame[data-character="sparrow"] {
   --character-chroma-main: 67, 170, 119;
   --character-chroma-light: 219, 255, 186;
   --character-chroma-shadow: 18, 63, 56;

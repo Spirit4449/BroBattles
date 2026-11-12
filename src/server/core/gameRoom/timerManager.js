@@ -1,4 +1,5 @@
 const { exposeDamageHitbox } = require('../../../shared/combat/runtime/damageHitboxes.js');
+const { isPlaced } = require('../../../shared/combat/targetable.js');
 const {
   GAME_DURATION_MS,
   SD_DAMAGE_PER_SEC,
@@ -110,7 +111,8 @@ function tickTimerAndSuddenDeath(room) {
     exposeDamageHitbox(room, { id: 'sudden-death-poison' }, { kind: 'rect', left: world.x, right: world.x + world.width, top: poisonY, bottom: Math.max(poisonY, world.y + world.height) }, now);
     const dmgPerTick = (SD_DAMAGE_PER_SEC * room.FIXED_DT_MS) / 1000;
     for (const p of room.players.values()) {
-      if (!p.isAlive || p.loaded !== true) continue;
+      // Ghosts too, or a fighter who never loaded would outlast the poison.
+      if (!p.isAlive || !isPlaced(p)) continue;
       if (typeof p.y !== "number" || p.y < poisonY) continue;
 
       p.lastCombatAt = now;

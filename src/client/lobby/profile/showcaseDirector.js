@@ -53,7 +53,7 @@ export function createShowcaseDirector(session, { halfWidth = 240, random = seed
         p.flip = direction < 0;
         if (p.superCharge >= p.maxSuperCharge) brain.chargedAt ??= now; else brain.chargedAt = null;
         const nearby = radius => enemies.filter(q => Math.hypot(q.x - p.x, q.y - p.y) <= radius);
-        // Buffs can be demonstrated after the finishing hit, including Wizard
+        // Buffs can be demonstrated after the finishing hit, including Ozzy
         // granting a bystander a powerup. Charge is earned; never topped up.
         const superTarget = target || (kit.buffSuper ? p : null);
         const wantsSuper = !sparring && superTarget && brain.chargedAt != null && now - brain.chargedAt >= 450 &&

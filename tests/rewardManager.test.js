@@ -102,3 +102,32 @@ test('streak tiers combine currency bonuses at their configured thresholds', () 
   assert.deepEqual(applyWinStreakRewards(base, 0).totals, base);
   assert.equal(applyWinStreakRewards({ trophies: -14, coins: 0, gems: 0 }, top.streak).totals.trophies, -14);
 });
+
+test('a human who never joined moves trophies but earns no coins, gems or streak', async () => {
+  const { applyMatchRewards } = require('../src/server/core/gameRoom/rewardManager');
+  const updates = new Map();
+  const q = async (sql, params) => {
+    if (sql.startsWith('SELECT user_id')) return params.map((user_id) => ({ user_id, trophies: 400 }));
+    // Both players won their last two matches on team1.
+    if (sql.includes('FROM match_participants')) return params.length > 2 ? [] :
+      [{ match_id: 2, winner_team: 'team1', team: 'team1' }, { match_id: 1, winner_team: 'team1', team: 'team1' }];
+    if (sql.startsWith('UPDATE users')) { updates.set(params.at(-1), params); return { affectedRows: 1 }; }
+    throw new Error(`unexpected query: ${sql}`);
+  };
+  const player = (user_id, name, extra = {}) => ({ user_id, name, team: 'team1', isBot: false, ...extra });
+  const room = { matchData: { mode: 1 }, players: new Map([
+    ['a', player(1, 'Played')],
+    ['offline:2', player(2, 'NoShow', { _neverJoined: true })],
+  ]) };
+  const summary = await applyMatchRewards(room, 'team1', q);
+  const played = summary.find((s) => s.username === 'Played');
+  const noShow = summary.find((s) => s.username === 'NoShow');
+  assert.ok(played.coinsAwarded > 0);
+  assert.equal(noShow.coinsAwarded, 0);
+  assert.equal(noShow.gemsAwarded, 0);
+  assert.ok(noShow.trophiesDelta > 0, 'the win still moves trophies');
+  assert.equal(noShow.trophiesDelta, noShow.winStreakBaseRewards.trophies, 'no streak bonus');
+  assert.equal(noShow.winStreakAfter, noShow.winStreakBefore, 'the streak does not grow');
+  assert.equal(played.winStreakAfter, played.winStreakBefore + 1);
+  assert.deepEqual(updates.get(2).slice(0, 2), [0, 0]);
+});
