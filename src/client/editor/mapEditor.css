@@ -136,7 +136,7 @@ kbd {
 }
 .tool-group { display: flex; align-items: center; gap: 8px; }
 .spacer { flex: 1; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--bb-text); text-decoration: none; }
+.brand { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--bb-text); text-decoration: none; }
 .brand img { display: block; height: 24px; width: auto; image-rendering: pixelated; }
 .brand span {
   padding: 4px 6px;
@@ -157,7 +157,7 @@ kbd {
   display: flex;
   align-items: stretch;
   height: 32px;
-  border: 2px solid var(--bb-ink);
+  border: 0;
   background: rgba(5, 12, 25, 0.9);
   box-shadow: 0 3px var(--bb-ink), inset 0 2px rgba(0, 0, 0, 0.35);
 }
@@ -319,9 +319,9 @@ kbd {
 
 /* ---- Inspector ---- */
 .inspector { border-left: 3px solid var(--bb-ink); }
-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 10px 10px 12px; border-bottom: 2px solid var(--studio-line); }
-nav button { min-height: 28px; padding: 4px 2px; color: var(--studio-muted); background: #0d1a2e; font-size: 7px; }
-nav button.active { color: #fff; background: var(--bb-primary-gradient); }
+:where(.inspector) > nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 10px 10px 12px; border-bottom: 2px solid var(--studio-line); }
+:where(.inspector) > nav button { min-height: 28px; padding: 4px 2px; color: var(--studio-muted); background: #0d1a2e; font-size: 7px; }
+:where(.inspector) > nav button.active { color: #fff; background: var(--bb-primary-gradient); }
 #inspector-content { flex: 1; padding: 16px 14px 24px; overflow: auto; }
 #inspector-content > p { font-size: 12px; }
 .inspector-subtitle { margin: -4px 0 14px; color: var(--studio-muted); font-size: 11px; overflow-wrap: anywhere; }
@@ -452,7 +452,7 @@ dialog textarea { width: 100%; height: 44vh; font: 12px/1.5 ui-monospace, monosp
 
 /* ---- Narrow windows ---- */
 @media (max-width: 1360px) {
-  .brand img { display: none; }
+
   .playtest-button kbd, .footer-keys { display: none; }
 }
 @media (max-width: 1100px) {
@@ -467,3 +467,49 @@ dialog textarea { width: 100%; height: 44vh; font: 12px/1.5 ui-monospace, monosp
   .brand span { display: none; }
   .spacer { display: none; }
 }
+
+/* Settings dropdowns in the Map Studio toolbar. */
+#studio .studio-native-select { display: none; }
+.studio-toolbar-select[hidden] { display: none; }
+.studio-toolbar-select .bb-pixel-select-trigger { min-width: 0; height: 32px; font-size: 8px; }
+.studio-map-select { width: 190px; }
+.studio-map-select .bb-pixel-select-trigger { width: 100%; }
+.studio-map-select .bb-pixel-select-value { overflow: hidden; text-overflow: ellipsis; }
+.studio-toolbar-select .bb-pixel-select-list {
+  max-height: min(360px, calc(100dvh - 110px));
+  overflow-y: auto;
+}
+.studio-map-select .bb-pixel-select-list { left: 0; right: auto; }
+.playtest-settings .studio-toolbar-select { border-left: 0; }
+@media (max-width: 1100px) {
+  .studio-map-select { width: 160px; }
+}
+
+/* Override the shared compact minimum without changing Settings typography/frame. */
+#studio .studio-toolbar-select .bb-pixel-select-trigger {
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  padding: 6px;
+  gap: 6px;
+  font-size: 8px;
+}
+.studio-map-select { flex: 0 0 190px; }
+#playtest-formation + .studio-toolbar-select { width: 64px; }
+#playtest-kind + .studio-toolbar-select { width: 102px; }
+#playtest-character + .studio-toolbar-select { width: 102px; }
+.playtest-settings .studio-toolbar-select { flex-shrink: 0; }
+.studio-toolbar-select .bb-pixel-select-value { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1100px) {
+  .studio-map-select { flex-basis: 160px; }
+}
+
+/* Toggle frames share the dropdowns' 32px outer height. */
+.playtest-settings .playtest-toggle {
+  height: 32px;
+  border: 3px solid var(--bb-ink);
+  box-shadow: 0 3px var(--bb-ink), inset 0 2px rgba(255, 255, 255, 0.12);
+}
+#add-kind + .studio-toolbar-select { flex: 1; min-width: 0; }
+#add-kind + .studio-toolbar-select .bb-pixel-select-list { left: 0; right: auto; }
+#grid + .studio-toolbar-select { width: 78px; }

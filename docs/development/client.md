@@ -22,6 +22,15 @@ Bank Bust's world coin bar and value sit above each vault's artwork.
 
 ## Lobby character showcase
 
+Changing skins in Animations or Fight restarts the current demonstration in place
+with the selected skin, without a canvas fade or portrait carousel. Body retains
+a 360 ms expanding column of soft light, a broad pixel dissolve, and four
+staggered block-edged square/diamond accents and brief pixel-star sparkles. The light has no moving head or scan line. Shapes remain translucent; a short
+original synthesized sweep/shimmer plays on skin selection through the UI sound
+system, respecting SFX volume and restarting rather than stacking on rapid clicks. One canvas stays pinned to the portrait’s
+layout box, with no scattered particles or layout shift. New skin choices interrupt the effect immediately rather than queuing. Browsing skins cancels the automatic switch
+to Animations, including when the stage is still loading.
+
 The expanded character panel previews all characters by default (reduced motion
 keeps the portrait). `lobby/profile/showcaseMotion.js` fits opaque idle
 width and height inside a common reference size, independent of atlas padding or
@@ -56,6 +65,8 @@ stand still, do not attack, and stay behind the featured fighter's movement boun
 Supers require earned charge and have a director pacing interval. Effect modifiers
 affect movement. The local ammo bar reuses `scene/ammoBarRenderer.js`, including
 its pixel frame, red segments and gradual refill, with super below it as in matches.
+The preview physics world uses the combat arena bounds, and simulation contact boxes follow the fitted stage bodies. Thorg’s starting pair is shifted left to reserve room for repeated knockback.
+
 `showcaseFight.js` renders events from `shared/combat/previewSession.js`, which hosts
 the same attack, damage, ability and effect modules as GameRoom. Ninja's return
 contacts, Huntress's burn ticks, Gloop's slows/pull and Wizard's team grants therefore
@@ -426,6 +437,11 @@ calls `sprite.anims.play` for its own pose.
   `presentation.specialAnimationLockMs`) only blocks dashing. It never changes
   which animation shows.
 
+Straight-down dash poses stay ducked through the subsequent fall until landing or
+another movement/action interrupts them. Stomp impacts use distance from dash
+activation to landing, with two to five cloud bursts for progressively higher drops;
+the server includes that distance for remote impacts.
+
 ## Gameplay camera
 
 Mouse aiming adds a fixed screen-pixel look-ahead with time-based easing after
@@ -467,6 +483,12 @@ The local player hears their own sounds at the requested volume. The watched fig
 
 Movement clouds (landing, jump, run, turn skid, wall slide, wall kick) come from a small simulation in `src/client/game/scene/clouds/`. A cloud is a set of soft blobs that puff out, break into smaller pieces along their path and wear away. `cloudRaster.js` merges overlapping blobs into one pixel-art silhouette and shades each lobe from the field, and `cloudLayer.js` draws them into two world-space canvases per scene (behind and in front of fighters) aligned to a fixed cloud pixel grid. `cloudEmitters.js` turns contacts into blobs from a contact point, surface normal, impact strength and momentum, so every floor and wall collision uses the same rules. `effects.js` calls these emitters; the simulation, rasterizer and emitters are plain modules tested in `tests/movementClouds.test.js`.
 
+Shockwave hits broadcast `shockwave:hit` for each affected fighter, including bots.
+`powerups/shockwaveHit.js` uses the shared cloud system to follow the fighter for
+650 ms, laying a tapering smoke trail along their actual flight path. Puffs are
+spaced by distance travelled, drawn behind the fighter on every client, and
+dissipate after emission stops.
+
 Opponent movement uses `src/client/game/audio/remoteMovementAudio.js`: terrain-specific footsteps and landings, jump and wall-jump cues, and wall-slide and falling-air loops. Event sequence IDs prevent repeated snapshots from replaying cues; older senders use movement transitions. Footsteps follow movement speed. Loops recalculate distance after each rendered frame and stop on landing, death, disconnect, respawn, presentation reset, or scene shutdown. Invisible fighters remain audible. The spawn intro suppresses movement audio.
 
 Falling wind uses `fallingAirVolume` in `movementAudio.js` for both local and remote fighters, at 45% of the original gain while retaining speed/time swell and playback fades.
@@ -501,7 +523,7 @@ Relevant checks: `node --test tests/lobbyAudio.test.mjs tests/musicEnvelope.test
 
 The battle countdown plays its beeps and the final `/assets/game-sounds/start.mp3` FIGHT cue. Both cues are preloaded when the countdown starts.
 
-The match results Exit button preloads and plays the UI click cue before returning to the lobby. The automatic countdown return is silent.
+On the match results screen, Escape, Enter, or Space activates Exit. The Exit button preloads and plays the UI click cue before returning to the lobby. The automatic countdown return is silent.
 
 ## Map terrain and footsteps
 
@@ -533,7 +555,11 @@ and battle HUDs. Reduced motion keeps a static glow.
 Successful character upgrades transition the details badge from the previous
 level to the new one alongside the stat count-up. Reduced motion shows the new
 badge immediately. Stat gain labels reserve their space before confirmation so
-revealing the plus amounts does not resize the panel.
+revealing the plus amounts does not resize the panel. Purchase confirmations use the shared pixel window styles. Server-confirmed
+purchase confirmations stay on Body. Successful unlocks shake and enlarge the
+existing lock icon, then split the existing crossed-chain artwork; upgrades use a gold halo behind the body and a simple Level Up label. Result labels stay brief. Stat headers always reserve
+gain space so confirmation does not change the panel height. Reduced motion skips the
+burst and stat count-up while retaining the result message.
 
 `src/client/ui/uiSounds.js` owns delegated click/hover sounds, lazy loading and manual cue suppression. [UI sound usage and credits](../../public/assets/ui-sound/README.md), [reward sound sources](../../public/assets/ui-sound/rewards/README.md), and [movement sound provenance](../../public/assets/movement/README.md) stay beside their assets.
 
@@ -566,3 +592,18 @@ super volleys. Flight flames trail backward; embedded flames rise until the arro
 expires. Super flames are larger, with a brief bow-side spark cue and a held-draw
 release animation. These cosmetics do not change burn damage or projectile timing.
 The renderer caps flame objects and clears them on presentation reset/shutdown.
+
+Gloop spars with Thorg, who retreats while hurt and slimed. Gloop prioritizes his earned hook over another basic attack once charged. Preview rounds clear packet deduplication and slime splat history because their action IDs restart.
+
+Showcase run animation, footstep cadence, and dust cadence follow simulated movement speed, including slime slows. Attack and super animations retain their normal timing.
+
+## Party settings
+
+Party settings reuse the main Settings `site-setting` cards and checkbox styling.
+Owners can enable Hide enemy Bros (off by default) to replace opposing human
+players' lobby and matchmaking-preview portraits with `/assets/ui/hidden-bro.png`.
+Teammates and configured bots stay visible; character levels are hidden with the
+portrait. This is a presentation setting, not network payload redaction; combat
+still uses the real selection. It follows team changes and roster updates.
+Apply `npm run migrate:apply -- party-hidden-bros` for the additive
+`parties.hide_enemy_bros` column. Older schemas disable the new control.

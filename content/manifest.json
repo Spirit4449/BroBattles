@@ -2,24 +2,27 @@
   "news": [
     {
       "slug": "welcome-to-beta",
-      "title": "Welcome to Bro Battles beta",
+      "title": "The beta is open. Get in here.",
       "date": "2026-09-12",
-      "summary": "Pick your fighter. Bring your friends. Help shape what comes next.",
-      "image": "/assets/site/welcome-news.webp"
+      "summary": "The Bro Battles beta is open in your browser. Pick a Bro, choose a mode, and hit Ready.",
+      "image": "/assets/site/welcome-news.webp",
+      "category": "Beta news"
     },
     {
       "slug": "make-your-next-duel-count",
-      "title": "Make your next duel count",
+      "title": "One life. Settle it in Duels.",
       "date": "2026-09-11",
-      "summary": "One rival or a whole squad. Find your rhythm in Duels.",
-      "image": "/assets/map-banners/duels.webp"
+      "summary": "One life each. No respawns. Duels is a 1v1 or 2v2 fight to knock out the other side.",
+      "image": "/assets/map-banners/duels.webp",
+      "category": "Duels"
     },
     {
       "slug": "bring-the-crew-bust-the-vault",
-      "title": "Bring the crew. Bust the vault.",
+      "title": "Your vault. Their problem.",
       "date": "2026-09-10",
-      "summary": "Push together, protect your vault, and turn the tide in Bank Bust.",
-      "image": "/assets/map-banners/bank-bust.webp"
+      "summary": "Three players on each side, one vault to protect. Empty theirs before they empty yours.",
+      "image": "/assets/map-banners/bank-bust.webp",
+      "category": "Bank Bust"
     }
   ],
   "help": [

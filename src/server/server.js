@@ -97,6 +97,7 @@ app.locals.stripeShopService = stripeShopService;
 registerStripeWebhookRoute({ app, stripeShopService });
 
 app.use(["/api/admin/maps", "/api/admin/map-playtests"], express.json({ limit: "12mb" }));
+app.use("/api/admin/shop/catalog", express.json({ limit: "1mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(COOKIE_SECRET));

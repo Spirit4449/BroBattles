@@ -12,7 +12,7 @@ function createLobbyFixture(options = {}) {
     [root + '/src/client/lib/socket.js']: { __esModule: true, default: fixture.socket, ensureSocketConnected() {}, waitForConnect: async () => {} },
     [root + '/src/client/site/shell']: { ensureLegalAcceptance: async () => {}, setNavigationGuard() {} },
     [root + '/src/client/site/shell.js']: { ensureLegalAcceptance: async () => {}, setNavigationGuard() {} },
-    [root + '/src/client/ui/uiSounds.js']: { initUISounds() {}, playSound() {} },
+    [root + '/src/client/ui/uiSounds.js']: { initUISounds() {}, playSound() {}, preloadSound() {} },
     [root + '/src/client/ui/sonner.js']: { sonner: (...args) => notices.push(args) },
     [root + '/src/client/lobby/party/buttonSpawnFx.js']: { playButtonSpawnFx() {}, playButtonSpawnFxOnChange() {} },
     [root + '/src/client/lobby/preloadBattle']: { warmBattleSelection() {} },

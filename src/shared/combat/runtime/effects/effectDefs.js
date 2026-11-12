@@ -179,12 +179,18 @@ const effectDefs = {
         const falloff = 0.8 + 0.8 * (1 - distance / POWERUP_SHOCKWAVE_RADIUS);
         centeredTargetIndex += 1;
 
-        room.applyKnockback(target, {
+        const impulse = {
           source: player.name,
           cause: "shockwave",
           radial: true,
           amountX: Math.round(nx * POWERUP_SHOCKWAVE_FORCE_X * falloff),
           amountY: Math.round((Math.abs(ny) < 0.45 ? -0.45 : ny) * POWERUP_SHOCKWAVE_FORCE_Y * falloff),
+        };
+        room.applyKnockback(target, impulse);
+        room.io.to(`game:${room.matchId}`).emit("shockwave:hit", {
+          username: target.name,
+          amountX: impulse.amountX,
+          amountY: impulse.amountY,
         });
       }
     },

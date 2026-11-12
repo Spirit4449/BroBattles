@@ -15,7 +15,7 @@ function setup(initial={}){
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:animation,performance:{now:()=>now}});
   const serverClock=loadServerClock({performance:{now:()=>now}});
   const shots=loadShotPrediction({serverClock});
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:name.includes('flipLock')?flipLock:{connected:false},
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./throwPresentation'?require('../src/client/game/characters/ninja/throwPresentation'):name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:name.includes('flipLock')?flipLock:{connected:false},
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){}});
   const sprite=(x,y,texture)=>{const s={x,y,texture,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
   const flashes=[];
@@ -227,4 +227,43 @@ test('a newer facing lock survives the older lock releasing, and aim maps to fac
   assert.equal(flipLock.aimFacesLeft({angle:Math.PI},false),true);
   assert.equal(flipLock.aimFacesLeft({angle:-Math.PI/2},true),true,'a vertical aim keeps facing');
   assert.equal(flipLock.aimFacesLeft({direction:1,angle:Math.PI},true),false,'an explicit direction wins');
+});
+
+test('a directional throw keeps the star in the hand until the release beat, then eases it onto the unchanged flight',()=>{
+  const throwing=require('../src/client/game/characters/ninja/throwPresentation');
+  const config={releaseMs:70,blendMs:90,startScale:0.5,directions:[
+    {key:'up',elevation:35,hand:[20,-18]},{key:'level',elevation:0,hand:[26,-2]},{key:'down',elevation:-35,hand:[22,12]}]};
+  assert.equal(throwing.throwPose(-0.5,config).key,'up','screen angles rise toward negative y');
+  assert.equal(throwing.throwPose(Math.PI+0.5,config).key,'up','a throw to the left picks the same pose');
+  assert.equal(throwing.throwPose(0.1,config).key,'level');
+  assert.equal(throwing.throwPose(Math.PI/2,config).key,'down','a steep shot takes the nearest pose');
+  assert.equal(throwing.throwPose(0,{}),null,'art without directional poses has none');
+
+  // The same shot twice: once presented the old way, once leaving the hand.
+  const plain=setup();plain.api.predictNinja(plain.scene,plain.owner,'owner',{id:'shot',angle:-0.5});
+  const held=setup();
+  assert.equal(throwing.beginThrow(held.owner,-0.5,0,config),'up');
+  held.api.predictNinja(held.scene,held.owner,'owner',{id:'shot',angle:-0.5});
+  for(const t of [0,30,60]){plain.frame(t);held.frame(t);}
+  assert.equal(held.images.length,0,'nothing is drawn while the pose still holds the star');
+  plain.frame(72);held.frame(72);
+  const star=held.images[0],hand=throwing.handPoint(held.owner,config.directions[0].hand);
+  assert.ok(Math.hypot(star.x-hand.x,star.y-hand.y)<1e-6,'the star appears at the fingertips');
+  let last=Math.hypot(star.x-plain.images[0].x,star.y-plain.images[0].y);
+  for(const t of [90,120,150]){
+    plain.frame(t);held.frame(t);
+    const gap=Math.hypot(star.x-plain.images[0].x,star.y-plain.images[0].y);
+    assert.ok(gap<last,'it closes on its true path');last=gap;
+  }
+  plain.frame(170);held.frame(170);
+  assert.ok(Math.hypot(star.x-plain.images[0].x,star.y-plain.images[0].y)<1e-6,'and then follows it exactly');
+  plain.api.resetNinjaNetwork();held.api.resetNinjaNetwork();
+
+  const mirrored={x:100,y:200,flipX:true};
+  assert.equal(throwing.handPoint(mirrored,[20,-18]).x,80,'the hand mirrors with the facing');
+  const player={x:0,y:0,_bbSkinTextureKey:'ninja',texture:{key:'ninja'}};
+  assert.equal(throwing.beginThrow(player,-0.5,0,config),'up','the default skin, as players carry it, throws directionally');
+  const skin={x:0,y:0,_bbSkinTextureKey:'ninja-king'};
+  assert.equal(throwing.beginThrow(skin,0,0,config),null,'skins keep their own throw');
+  assert.equal(skin._ninjaThrow,undefined);
 });

@@ -210,6 +210,7 @@ export function bindLocalSocketEvents({
     const amountY = Number(data?.amountY) || 0;
     // The server cancels a pending stomp when knocked back; match it locally.
     player._stompArmedUntil = 0;
+    if (player._bbAnimationState) player._bbAnimationState.stompPose = false;
     if (data?.cause === "stomp") {
       endDash(player, false);
       player._attackInterruptedUntil = Date.now() + 300;
@@ -301,7 +302,7 @@ export function bindLocalSocketEvents({
     const predicted = local && Date.now() - (scene._localStompPredictedAt || 0) < 1000;
     if (predicted) scene._localStompPredictedAt = 0;
     else {
-      spawnStompImpact(scene, data.x, data.y, { cameraShake: local });
+      spawnStompImpact(scene, data.x, data.y, { cameraShake: local, fallDistance: data.fallDistance });
       if (local) scene.sound?.play('sfx-stomp', { volume: 1 });
       else playPlayerSound(scene, { x: data.x, y: data.y }, 'sfx-stomp', { volume: 1 });
     }

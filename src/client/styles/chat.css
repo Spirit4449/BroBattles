@@ -217,8 +217,9 @@
 .bb-chat-messages {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   padding: 20px 12px 12px;
+  background: var(--bb-panel-bg);
   overflow: auto;
   align-content: flex-start;
   scrollbar-width: thin;
@@ -275,24 +276,36 @@
 }
 
 .bb-chat-message {
+  --bb-chat-message-accent: var(--bb-blue);
+  --bb-chat-message-fill: var(--bb-card-bg);
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
   align-items: start;
+  min-width: 0;
+  position: relative;
+}
+
+.bb-chat-message:hover,
+.bb-chat-message:focus-within {
+  z-index: 6;
 }
 
 .bb-chat-message.is-self {
-  grid-template-columns: minmax(0, 1fr) 32px;
+  --bb-chat-message-accent: var(--bb-gold);
+  --bb-chat-message-fill: var(--bb-surface-gradient);
+  grid-template-columns: minmax(0, 1fr) 36px;
 }
 
 .bb-chat-avatar {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
+  box-sizing: border-box;
   border-radius: var(--bb-radius-media);
   overflow: hidden;
-  border: 2px solid rgba(87, 132, 184, 0.62);
-  background: rgba(14, 24, 44, 0.8);
-  box-shadow: 0 2px 0 var(--bb-ink);
+  border: 2px solid var(--bb-chat-message-accent, var(--bb-border));
+  background: var(--bb-bg-deep);
+  box-shadow: 0 3px 0 var(--bb-ink);
 }
 
 .bb-chat-avatar img {
@@ -305,44 +318,55 @@
   position: relative;
   display: grid;
   width: fit-content;
-  min-width: min(210px, 100%);
+  min-width: min(190px, 100%);
   max-width: 100%;
-  gap: 4px;
-  padding: 7px 9px 6px;
+  box-sizing: border-box;
+  gap: 7px;
+  padding: 8px 10px;
   border-radius: var(--bb-radius-media);
-  border: 2px solid rgba(56, 84, 120, 0.9);
-  background: var(--bb-card-gradient);
+  border: 2px solid var(--bb-ink);
+  background: var(--bb-chat-message-fill);
   box-shadow:
     0 3px 0 var(--bb-ink),
-    inset 0 2px rgba(255, 255, 255, 0.05);
+    inset 0 2px rgba(255, 255, 255, 0.07);
 }
 
 .bb-chat-message.is-self .bb-chat-bubble {
   justify-self: end;
-  background: linear-gradient(180deg, #19345a, #10243f);
-  border-color: rgba(78, 130, 187, 0.92);
 }
 
 .bb-chat-message-header {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+  gap: 4px 8px;
+  align-items: baseline;
   justify-content: space-between;
+  padding-bottom: 5px;
   font-size: 10px;
-  color: #9bd1ff;
+  color: var(--bb-text-soft);
 }
 
 .bb-chat-author {
-  color: #f6fbff;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--bb-chat-message-accent);
   font-family: "Press Start 2P", system-ui;
   font-size: 8px;
   line-height: 1.3;
   letter-spacing: 0.1px;
 }
 
+.bb-chat-message-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .bb-chat-time {
-  color: #7fb7df;
+  flex-shrink: 0;
+  color: var(--bb-text-muted);
   font-family: "Press Start 2P", system-ui;
   font-size: 7px;
   line-height: 1.3;
@@ -350,14 +374,15 @@
 }
 
 .bb-chat-reply-preview {
-  padding: 7px 8px;
+  min-width: 0;
+  padding: 5px 7px;
   border-radius: 0;
-  border: 1px solid rgba(73, 119, 171, 0.52);
-  border-left-width: 3px;
-  background: rgba(12, 20, 34, 0.72);
-  font-size: 8px;
-  color: #b8ddf5;
-  line-height: 1.45;
+  border: 1px solid var(--bb-border-soft);
+  border-left: 3px solid var(--bb-chat-message-accent);
+  background: var(--bb-bg-deep);
+  font: 8px/1.8 var(--bb-font-display);
+  color: var(--bb-text-soft);
+  overflow-wrap: anywhere;
 }
 
 .bb-chat-reply-preview.is-link {
@@ -369,12 +394,13 @@
 }
 
 .bb-chat-body-text {
-  font-family: "Lato", sans-serif;
-  font-size: 14px;
-  line-height: 1.4;
-  color: #eff8ff;
+  min-width: 0;
+  font-family: var(--bb-font-display);
+  font-size: 9px;
+  line-height: 1.8;
+  color: var(--bb-text);
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .bb-chat-message-meta {
@@ -382,48 +408,60 @@
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  min-height: 18px;
-  margin-top: 2px;
+  flex-wrap: wrap;
+  margin-top: 0;
 }
 
-/* Floating toolbar on the bubble's top edge; never over the reaction chips. */
+/* Hug the card's lower edge, clear of its text and existing reaction chips. */
 .bb-chat-hover-actions {
   position: absolute;
-  top: -15px;
-  right: 8px;
+  top: calc(100% - 8px);
+  right: 4px;
+  z-index: 6;
   display: flex;
-  flex-wrap: nowrap;
-  gap: 3px;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  gap: 2px;
   align-items: center;
-  padding: 2px;
+  padding: 3px;
   border: 2px solid var(--bb-ink);
-  background: rgba(10, 20, 34, 0.98);
-  box-shadow: 0 3px 0 var(--bb-ink);
-  z-index: 3;
+  background: var(--bb-surface-gradient);
+  box-shadow: 0 3px 0 var(--bb-ink), inset 0 2px var(--bb-border);
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transform: translateY(3px);
+  transform: translateY(4px) scale(0.96);
+  transform-origin: top right;
   transition:
-    opacity 140ms ease,
-    transform 140ms ease;
+    opacity 130ms ease,
+    transform 170ms var(--bb-ease),
+    visibility 0s linear 170ms;
 }
 
-.bb-chat-message.is-self .bb-chat-hover-actions {
-  right: auto;
-  left: 8px;
+/* Keep the picker open while crossing the small gap below the card. */
+.bb-chat-hover-actions::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  right: -2px;
+  height: 6px;
 }
 
 .bb-chat-message:hover .bb-chat-hover-actions,
 .bb-chat-message:focus-within .bb-chat-hover-actions {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
+  transition-delay: 0s;
 }
 
 .bb-chat-hover-reactions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px;
   align-items: center;
 }
 
@@ -437,15 +475,34 @@
 
 .bb-chat-inline-reaction {
   position: relative;
-  min-height: 18px;
-  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 1px 5px;
+  margin: 0;
+  box-sizing: border-box;
   border-radius: 0;
-  border: 1px solid rgba(90, 137, 190, 0.62);
-  background: rgba(18, 38, 60, 0.9);
-  color: #eff8ff;
-  font-size: 9px;
+  border: 0;
+  background: var(--bb-surface-3);
+  color: var(--bb-text);
+  font: 700 11px/1.2 var(--bb-font-body);
   cursor: pointer;
-  box-shadow: 0 1px 0 var(--bb-ink);
+  box-shadow: none;
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.bb-chat-reaction-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.bb-chat-reaction-count {
+  font: 7px/1 var(--bb-font-display);
 }
 
 .bb-chat-inline-reaction.is-readonly {
@@ -456,8 +513,7 @@
 
 .bb-chat-inline-reaction:not(.is-readonly):hover,
 .bb-chat-inline-reaction:not(.is-readonly):focus-visible {
-  border-color: rgba(170, 227, 255, 0.95);
-  background: rgba(34, 82, 131, 0.95);
+  background: var(--bb-surface-raised);
 }
 
 /* Compact "who reacted" tag: one line, pixel border, anchored to the chip. */
@@ -472,9 +528,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   padding: 4px 6px;
-  border: 2px solid var(--bb-ink);
-  background: #0d1a2b;
-  color: #eaf6ff;
+  border: 0;
+  background: var(--bb-surface-raised);
+  color: var(--bb-text);
   font: 700 11px/1.2 "Lato", sans-serif;
   box-shadow: 0 3px 0 var(--bb-ink);
   z-index: 4;
@@ -495,8 +551,13 @@
 }
 
 .bb-chat-inline-reaction.is-active {
-  border-color: rgba(125, 211, 252, 0.95);
-  background: rgba(33, 76, 122, 0.95);
+  background: var(--bb-surface-raised);
+  box-shadow: none;
+}
+
+.bb-chat-inline-reaction:focus-visible {
+  outline: 2px solid var(--bb-border-highlight);
+  outline-offset: 2px;
 }
 
 .bb-chat-inline-reaction.is-pop {
@@ -519,27 +580,52 @@
 }
 
 .bb-chat-hover-btn {
-  min-height: 22px;
-  min-width: 24px;
-  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  min-width: 20px;
+  padding: 0 3px;
+  margin: 0;
+  box-sizing: border-box;
   border-radius: var(--bb-radius-tag);
-  border: 1px solid rgba(90, 137, 190, 0.58);
-  background: rgba(9, 18, 30, 0.88);
-  color: #eff8ff;
-  font-size: 9px;
+  border: 0;
+  background: transparent;
+  color: var(--bb-text);
+  font: 11px/1 var(--bb-font-body);
+  letter-spacing: normal;
+  text-transform: none;
   cursor: pointer;
-  box-shadow: 0 1px 0 var(--bb-ink);
+  box-shadow: none;
+  transition: background 100ms ease, box-shadow 100ms ease, transform 100ms var(--bb-ease);
+}
+
+.bb-chat-hover-actions > .bb-chat-hover-btn {
+  padding: 0 6px;
+  margin-right: 2px;
+  color: var(--bb-text-soft);
+  box-shadow: 1px 0 var(--bb-border-soft);
+  font: 6px/1 var(--bb-font-display);
 }
 
 .bb-chat-hover-btn:hover,
 .bb-chat-hover-btn:focus-visible {
-  border-color: rgba(170, 227, 255, 0.95);
-  background: rgba(34, 82, 131, 0.95);
+  background: var(--bb-surface-raised);
+}
+
+.bb-chat-hover-btn:focus-visible {
+  outline: 2px solid var(--bb-text);
+  outline-offset: 2px;
+}
+
+.bb-chat-hover-btn:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px rgba(0, 0, 0, 0.24);
 }
 
 .bb-chat-hover-btn.is-active {
-  border-color: rgba(125, 211, 252, 0.9);
-  background: rgba(28, 68, 111, 0.96);
+  background: var(--bb-surface-raised);
+  box-shadow: none;
 }
 
 .bb-chat-view-count {
@@ -547,12 +633,16 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 16px;
-  padding: 0 2px;
+  min-height: 12px;
+  padding: 0;
+  margin: 0;
   border: 0;
+  border-radius: 0;
+  box-shadow: none;
   background: transparent;
-  color: #86a8c4;
-  font-size: 9px;
+  color: var(--bb-text-muted);
+  font: 7px/1 var(--bb-font-display);
+  letter-spacing: normal;
   cursor: pointer;
 }
 
@@ -682,11 +772,11 @@
 .bb-chat-composer {
   position: relative;
   padding: 8px 10px 10px;
-  border-top: var(--bb-popup-divider);
+  border-top: 1px solid var(--bb-border-soft);
   display: grid;
   gap: 6px;
   background: var(--bb-surface-2);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .bb-chat-reply-banner {
@@ -705,8 +795,8 @@
 .bb-chat-input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
+  gap: 6px;
+  align-items: end;
 }
 
 .bb-chat-heading { flex: 1 1 0; min-width: 0; }
@@ -826,8 +916,9 @@
 .bb-chat-shell .bb-chat-composer .bb-chat-send {
   --bb-control-shadow: 0 3px 0 var(--bb-ink), inset 0 3px rgba(255, 255, 255, 0.16);
   --bb-control-shadow-pressed: 0 3px 0 var(--bb-ink), inset 0 3px rgba(0, 0, 0, 0.24);
-  min-width: 82px;
+  min-width: 66px;
   min-height: 38px;
+  padding: 0 10px;
   border-radius: 0;
   border: 2px solid var(--bb-ink);
   background: var(--bb-primary-gradient);
@@ -915,20 +1006,20 @@
   width: max-content;
   max-width: min(210px, 32vw);
   box-sizing: border-box;
-  padding: 9px 12px;
-  border: 2px solid #597793;
-  background: #112237;
+  padding: 5px 12px;
+  border: 2px solid var(--bb-ink);
+  background: var(--bb-card-bg);
   border-radius: 0;
-  box-shadow: 0 4px 0 #030a13, inset 0 2px #ffffff12;
-  color: #f3fbff;
-  font: 9px/1.7 "Press Start 2P", monospace;
+  box-shadow: 0 3px 0 var(--bb-ink);
+  color: var(--bb-text);
+  font: 9px/1.8 var(--bb-font-display);
   text-align: center;
   pointer-events: none;
   z-index: 58;
   opacity: 0;
-  transform: translateX(-50%) translateY(-6px) scale(.96);
+  transform: translateX(-50%) translateY(6px);
   transform-origin: 50% 100%;
-  transition: opacity 220ms ease, transform 220ms ease;
+  transition: opacity 120ms steps(3, end), transform 120ms steps(3, end);
 }
 
 .bb-lobby-chat-bubble-text {
@@ -944,30 +1035,31 @@
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -6px;
-  width: 10px;
-  height: 10px;
-  background: #112237;
-  border-right: 2px solid #597793;
-  border-bottom: 2px solid #597793;
-  transform: translateX(-50%) rotate(45deg);
+  bottom: -8px;
+  width: 12px;
+  height: 8px;
+  background: var(--bb-surface-1);
+  /* A stepped speech tail keeps every edge on the game's pixel grid. */
+  clip-path: polygon(0 0, 100% 0, 100% 4px, 8px 4px, 8px 8px, 4px 8px, 4px 4px, 0 4px);
+  box-shadow: inset 0 -2px var(--bb-ink);
+  transform: translateX(-50%);
 }
 
 .bb-lobby-chat-bubble.is-visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0) scale(1);
-  animation: bb-lobby-chat-arrive 320ms cubic-bezier(.2,.8,.25,1) both;
+  transform: translateX(-50%) translateY(0);
+  animation: bb-lobby-chat-arrive 160ms steps(4, end) both;
 }
 
 @keyframes bb-lobby-chat-arrive {
-  0% { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.86); }
-  65% { opacity: 1; transform: translateX(-50%) translateY(-2px) scale(1.025); }
-  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .bb-lobby-chat-bubble, .bb-lobby-chat-bubble.is-visible {
     animation: none;
+    transform: translateX(-50%);
     transition: opacity 100ms ease;
   }
 }
@@ -1162,7 +1254,7 @@
 }
 
 .bb-chat-game-panel .bb-chat-messages {
-  gap: 4px;
+  gap: 8px;
   padding: 8px;
   flex: 1 1 auto;
   min-height: 0;
@@ -1191,71 +1283,8 @@
   font-size: 8px;
 }
 
-.bb-chat-game-line {
-  display: grid;
-  grid-template-columns: minmax(82px, 30%) minmax(0, 1fr);
-  align-items: baseline;
-  gap: 9px;
-  width: 100%;
-  min-height: 30px;
-  padding: 7px 9px 6px;
-  border: 2px solid var(--bb-border-soft);
-  border-left: 4px solid var(--bb-blue);
-  border-radius: 0;
-  background: var(--bb-card-bg);
-  box-shadow: 0 2px 0 var(--bb-ink);
-  font-size: 8px;
-  line-height: 1.45;
-  color: var(--bb-text);
-}
-
-.bb-chat-game-line.is-team-blue {
-  border-left-color: var(--bb-blue);
-}
-
-.bb-chat-game-line.is-team-red {
-  border-left-color: var(--bb-red);
-}
-
-.bb-chat-game-line-name {
-  font-family: "Press Start 2P", system-ui;
-  font-size: 7px;
-  line-height: 1.55;
-  color: #c6e7ff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.bb-chat-game-line.is-team-red .bb-chat-game-line-name {
-  color: #ff8f9a;
-}
-
-.bb-chat-game-line.is-team-blue .bb-chat-game-line-name {
-  color: #83c3ff;
-}
-
-.bb-chat-game-line-body {
-  min-width: 0;
-  font-family: "Press Start 2P", system-ui;
-  font-size: 7px;
-  line-height: 1.55;
-  color: #eff8ff;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.bb-chat-game-line.is-team-red .bb-chat-game-line-body {
-  color: #ffd6dc;
-}
-
-.bb-chat-game-line.is-team-blue .bb-chat-game-line-body {
-  color: #e7f4ff;
-}
-
-.bb-chat-game-line.is-self .bb-chat-game-line-name {
-  color: #fff;
-  text-shadow: 0 1px #163c62;
+.bb-chat-game-panel .bb-chat-message.is-opponent {
+  --bb-chat-message-accent: var(--bb-red);
 }
 
 .bb-chat-game-panel .bb-chat-avatar {
@@ -1265,6 +1294,7 @@
 }
 
 .bb-chat-game-panel .bb-chat-bubble {
+  min-width: 0;
   padding: 7px 8px 6px;
   gap: 4px;
 }
@@ -1283,13 +1313,13 @@
 }
 
 .bb-chat-game-panel .bb-chat-body-text {
-  font-size: 11px;
-  line-height: 1.28;
+  font-size: 8px;
+  line-height: 1.7;
 }
 
 .bb-chat-game-panel .bb-chat-hover-btn,
 .bb-chat-game-panel .bb-chat-inline-reaction {
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .bb-chat-game-panel .bb-chat-reply-preview,
@@ -1331,7 +1361,7 @@
 
   .bb-lobby-chat-bubble {
     max-width: min(160px, 36vw);
-    padding: 7px 9px;
+    padding: 4px 9px;
     font-size: 8px;
   }
 
@@ -1447,25 +1477,29 @@
 }
 .bb-chat-jump-latest {
   position: absolute;
-  right: 16px;
-  bottom: calc(100% + 10px);
+  right: 12px;
+  bottom: calc(100% + 7px);
   z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 30px;
   height: 28px;
-  padding: 0 9px;
-  border: 1px solid #81c7e6;
+  padding: 0 8px;
+  border: 1px solid #639ac3;
   border-radius: 0;
-  background: #15334e;
-  color: #ecfaff;
-  box-shadow: 0 3px 0 #030a13;
-  font: 700 12px/1 "Lato", sans-serif;
+  background: #173854;
+  color: #effaff;
+  box-shadow: 0 0 0 2px #071322, 0 3px 0 #030a13;
+  font: 700 13px/1 "Lato", sans-serif;
   cursor: pointer;
 }
 .bb-chat-jump-latest[hidden] { display: none; }
-.bb-chat-jump-latest:hover { background: #245575; }
-.bb-chat-jump-latest:focus-visible { outline: 2px solid #d6f5ff; outline-offset: 2px; }
+.bb-chat-jump-latest:hover { background: #245575; border-color: #b1e4ff; }
+.bb-chat-jump-latest:active { transform: translateY(2px); box-shadow: 0 0 0 2px #071322, 0 1px 0 #030a13; }
+.bb-chat-jump-latest:focus-visible { outline: 2px solid #d6f5ff; outline-offset: 3px; }
 .bb-chat-messages { overflow-anchor: none; }
-.bb-chat-message, .bb-chat-game-line { flex-shrink: 0; }
+.bb-chat-message { flex-shrink: 0; }
 
 .bb-chat-profile-link { cursor: pointer; }
 .bb-chat-author.bb-chat-profile-link:hover,
@@ -1484,7 +1518,7 @@
 
 /* A permanent clear strip above the composer keeps typing off the messages.
    The indicator is positioned in that strip; idle/active never changes layout. */
-.bb-chat-lobby-panel .bb-chat-composer { margin-top: 28px; }
+.bb-chat-lobby-panel .bb-chat-composer { margin-top: 24px; }
 .bb-chat-lobby-panel .bb-chat-typing {
   position: absolute;
   left: 12px;
@@ -1495,9 +1529,9 @@
 }
 .bb-chat-game-panel .bb-chat-typing { display: none; }
 .bb-chat-lobby-panel .bb-chat-composer.has-messages-below::before {
-  bottom: calc(100% + 28px);
+  bottom: calc(100% + 24px);
 }
-.bb-chat-lobby-panel .bb-chat-jump-latest { bottom: calc(100% + 1px); }
+.bb-chat-lobby-panel .bb-chat-jump-latest { bottom: calc(100% + 2px); }
 
 .bb-chat-system-log {
   position: relative;
@@ -1569,4 +1603,30 @@
   height: 16px;
   flex-basis: 16px;
   image-rendering: pixelated;
+}
+
+/* Touch has no hover: keep message actions available below the content. */
+@media (hover: none) {
+  .bb-chat-hover-actions {
+    position: static;
+    justify-self: start;
+    display: flex;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    transition: none;
+  }
+
+  .bb-chat-hover-actions::before {
+    content: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bb-chat-hover-actions,
+  .bb-chat-hover-btn {
+    transform: none;
+    transition: none;
+  }
 }

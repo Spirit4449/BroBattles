@@ -106,7 +106,7 @@ export function createFriendsPanelController({
   panel.setAttribute("aria-label", "Friends");
   panel.innerHTML = `
     <div class="bb-chat-header">
-      <button type="button" data-sound="cancel" data-volume="0.3" class="bb-chat-mini-btn bb-friends-back" aria-label="Back to friends" title="Back" hidden>${pixelSprite("back", 2)}</button>
+      <button type="button" data-sound="cancel" data-volume="0.3" class="bb-chat-mini-btn bb-friends-back" aria-label="Back to friends" title="Back" hidden><span class="bb-friends-back-icon" aria-hidden="true"></span></button>
       <div class="bb-chat-heading">
         <h2 class="bb-chat-title">Friends</h2>
         <div class="bb-chat-header-status"><div class="bb-chat-subtitle"></div></div>

@@ -3,206 +3,159 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Control Center</title>
+    <title>Admin Control Center · Bro Battles</title>
+    <meta name="robots" content="noindex, follow" />
     <link rel="shortcut icon" href="/assets/logos/logo-small.webp" type="image/webp" />
-    <link rel="stylesheet" href="/bundles/admin.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles/ui-system.css" />
+    <link rel="stylesheet" href="/bundles/admin.css" />
   </head>
   <body class="admin-page">
-<header class="site-header"><div class="site-brand"><span class="site-menu-placeholder" aria-hidden="true"></span><a href="/" class="lobby-wordmark"><img src="/assets/logos/wordmark.webp" width="176" height="36" alt="Bro Battles"/></a></div><nav class="site-desktop-nav" aria-label="Main navigation"><div class="site-nav-group "><a href="/about" >About</a><button type="button" aria-label="Expand About" aria-expanded="false">⌄</button><div class="site-nav-sub" hidden><a href="/about">Discover the game</a><a href="/about#modes">Game modes</a><a href="/about#fighters">Meet the fighters</a></div></div><div class="site-nav-group "><a href="/news" >News</a><button type="button" aria-label="Expand News" aria-expanded="false">⌄</button><div class="site-nav-sub" hidden><a href="/news">Latest stories</a><a href="/news/welcome-to-beta">Welcome to beta</a></div></div><div class="site-nav-group "><a href="/help" >Help Center</a><button type="button" aria-label="Expand Help Center" aria-expanded="false">⌄</button><div class="site-nav-sub" hidden><a href="/help">Browse answers</a><a href="/help/contact">Contact us</a><a href="/help/requests">My requests</a></div></div><div class="site-nav-group "><a href="/feedback" >Feedback</a><button type="button" aria-label="Expand Feedback" aria-expanded="false">⌄</button><div class="site-nav-sub" hidden><a href="/feedback">Send an idea</a><a href="/feedback">Report a bug</a></div></div></nav><a class="pixel-menu-button site-play" href="/">Play now</a><div class="site-account"><a class="pixel-menu-button" href="/login">Log in</a></div></header>
-    <div class="admin-shell">
-      <header class="admin-header">
-        <div>
-          <p class="admin-kicker">
-            Administrator
-          </p>
-          <h1 id="adminName">Loading…</h1>
-        </div>
-        <button onclick="location.href = '/'" class="secondary">
-          Back to Lobby
-        </button>
-      </header>
+<div id="admin">
+  <header class="toolbar">
+    <span class="site-menu-host"><span class="site-menu-placeholder" aria-hidden="true"></span></span>
+    <a href="/" class="brand" title="Return to lobby"><img src="/assets/logos/wordmark.webp" width="118" height="24" alt="Bro Battles"><span>Admin</span></a>
+    <nav id="adminNav" class="tool-strip" aria-label="Admin sections"><button type="button" data-nav="overview" aria-pressed="false">Overview</button><button type="button" data-nav="players" aria-pressed="false">Players</button><button type="button" data-nav="store" aria-pressed="false">Store</button><button type="button" data-nav="runtime" aria-pressed="false">Runtime</button><button type="button" data-nav="feedback" aria-pressed="false">Feedback<span class="nav-badge" data-inbox-badge="feedback" hidden></span></button><button type="button" data-nav="support" aria-pressed="false">Support<span class="nav-badge" data-inbox-badge="support" hidden></span></button></nav>
+    <span class="spacer"></span>
+    <form id="jumpForm" class="jump" role="search" autocomplete="off"><input id="jumpSearch" type="search" placeholder="Find player…" aria-label="Find player by name or ID"><kbd>/</kbd></form>
+    <button id="openGrant" type="button" class="grant-button" title="Give coins or gems (G)"><img src="/assets/icons/coin.webp" alt="" width="16" height="16">Grant<kbd>G</kbd></button>
+    <span id="adminName" class="admin-chip" title="Signed in as">Loading…</span>
+  </header>
 
-      <div id="errorBanner" class="hidden"></div>
+  <main id="adminMain">
+    <div id="errorBanner" class="hidden"></div>
 
-      <nav id="adminNav" aria-label="Admin sections"><button type="button" data-nav="overview" aria-pressed="false">Overview</button><button type="button" data-nav="players" aria-pressed="false">Players</button><button type="button" data-nav="store" aria-pressed="false">Store</button><button type="button" data-nav="runtime" aria-pressed="false">Runtime</button><button type="button" data-nav="feedback" aria-pressed="false">Feedback</button><button type="button" data-nav="support" aria-pressed="false">Support</button></nav>
-<section id="statsGrid" data-view="overview">
-        <div class="stat-card">
-          <span>Total Users</span>
-          <strong data-stat="users">-</strong>
-        </div>
-        <div class="stat-card">
-          <span>Unexpired Guests</span>
-          <strong data-stat="guests">-</strong>
-        </div>
-        <div class="stat-card">
-          <span>Parties</span>
-          <strong data-stat="parties">-</strong>
-        </div>
-        <div class="stat-card">
-          <span>Live Matches</span>
-          <strong data-stat="live_matches">-</strong>
-        </div>
-      </section>
+    <!-- Overview -->
+    <section class="view view-overview" data-view="overview">
+      <div id="statsGrid">
+        <div class="stat-card"><span>Total users</span><strong data-stat="users">–</strong></div>
+        <div class="stat-card"><span>Active guests</span><strong data-stat="guests">–</strong></div>
+        <div class="stat-card"><span>Parties</span><strong data-stat="parties">–</strong></div>
+        <div class="stat-card is-live"><span>Live matches</span><strong data-stat="live_matches">–</strong></div>
+      </div>
+      <div class="overview-grid">
+        <article class="panel"><div class="panel-title">Recently active players</div><ul id="recentUsers" class="recent-list"></ul></article>
+        <article class="panel"><div class="panel-title">Recent admin grants <button type="button" id="refreshGrants" class="mini">Refresh</button></div><ul id="recentGrants" class="recent-list"></ul></article>
+        <article class="panel"><div class="panel-title">Recent matches</div><ul id="recentMatches" class="recent-list"></ul></article>
+      </div>
+    </section>
 
-      <section class="panel shop-admin-panel" data-view="store" hidden>
-        <div class="shop-admin-heading">
-          <div>
-            <p class="panel-kicker">Store Operations</p>
-            <h2>Shop Rotations & Payments</h2>
+    <!-- Players -->
+    <section class="view" data-view="players" hidden>
+      <div id="playerDirectory" class="directory">
+        <form id="userSearchForm" class="directory-search" autocomplete="off"><input id="userSearch" name="userSearch" type="search" placeholder="Search players by name or ID…" aria-label="Search players by name or ID"><span id="playerCount" class="count-chip"></span></form>
+        <div class="panel table-panel">
+          <div class="player-table-head"><span>Player</span><span>Type</span><span>Status</span><span>Trophies</span><span>Last active</span></div>
+          <div id="playerResults" aria-live="polite"></div>
+        </div>
+        <div id="playerPager"></div>
+      </div>
+
+      <div id="playerWorkspace" hidden>
+        <button type="button" id="backToPlayers" class="back-link">← All players</button>
+        <header class="player-heading">
+          <img id="playerAvatar" alt="" width="64" height="64">
+          <div class="player-title"><h1 id="userName"></h1><p id="playerSubtitle"></p></div>
+          <div class="balances">
+            <span class="balance coins"><img src="/assets/icons/coin.webp" alt="Coins" width="20" height="20"><strong id="balCoins">0</strong></span>
+            <span class="balance gems"><img src="/assets/icons/gem.webp" alt="Gems" width="20" height="20"><strong id="balGems">0</strong></span>
+            <span class="balance trophies"><img src="/assets/icons/trophy.webp" alt="Trophies" width="20" height="20"><strong id="balTrophies">0</strong></span>
           </div>
-          <span id="shopPaymentStatus" class="shop-payment-status">Checking Stripe…</span>
+        </header>
+        <nav id="playerNav" class="tabs" aria-label="Player sections"><button type="button" data-player-tab="currency">Currency</button><button type="button" data-player-tab="characters">Characters</button><button type="button" data-player-tab="account">Account</button><button type="button" data-player-tab="activity">Activity</button></nav>
+
+        <div data-player-panel="currency" class="player-panel two-col">
+          <article class="panel"><div class="panel-title">Give or remove currency</div><div id="inlineGrant"></div></article>
+          <div id="currencyHistory"></div>
         </div>
-        <div id="shopAdminError" class="shop-admin-error hidden"></div>
-        <div class="shop-cycle-grid">
-          <article class="shop-cycle-card">
-            <span>Daily Rewards</span>
-            <strong id="shopDailiesCycle">—</strong>
-            <small id="shopDailiesReset">Next reset: —</small>
-            <button type="button" data-shop-refresh="dailies">
-              Refresh Dailies
-            </button>
-          </article>
-          <article class="shop-cycle-card">
-            <span>Featured Sales</span>
-            <strong id="shopSalesCycle">—</strong>
-            <small id="shopSalesReset">Next reset: —</small>
-            <button type="button" data-shop-refresh="sales">
-              Refresh Sales
-            </button>
+
+        <div data-player-panel="characters" class="player-panel" hidden>
+          <article class="panel">
+            <div class="panel-title">Character levels
+              <span class="title-actions"><button type="button" class="mini" data-levels-all="max">Max all</button><button type="button" class="mini" data-levels-all="unlock">Unlock all</button><button type="button" class="mini" data-levels-all="lock">Lock all</button></span>
+            </div>
+            <p class="hint">Click a number to set the level. The lock removes the character. Levels 6–10 are mastery levels.</p>
+            <div id="levelFields" class="level-grid"></div>
           </article>
         </div>
-        <div class="shop-admin-meta">
-          <p id="shopTimezone">Reset timezone: —</p>
-          <p id="shopCatalogHealth">Catalog: checking…</p>
-        </div>
-        <h3>Recent Shop Orders</h3>
-        <ul id="recentShopOrders" class="recent-list"></ul>
-      </section>
 
-      <section class="panels">
-        <article class="panel" data-view="players">
-          <h2>Players</h2>
-          <div id="playerDirectory"><p class="muted">Find an account, then open it to view details or make changes.</p><form id="userSearchForm" class="flex-row" autocomplete="off">
-            <div>
-              <label for="userSearch">Username or ID</label>
-              <input
-                id="userSearch"
-                name="userSearch"
-                placeholder="Spirit4449 or 12"
-                required
-              />
+        <form id="userEditForm" data-player-panel="account" class="player-panel" hidden>
+          <article class="panel">
+            <div class="panel-title">Account</div>
+            <div class="field-grid">
+              <label>Username<input id="fieldName" type="text" required minlength="3" maxlength="50"></label>
+              <label>Trophies<input id="fieldTrophies" type="number" min="0"></label>
+              <label>Exact coins<input id="fieldCoins" type="number" min="0"></label>
+              <label>Exact gems<input id="fieldGems" type="number" min="0"></label>
+              <label>Selected character<select id="fieldClass"><option value="ninja">Ninja</option><option value="thorg">Thorg</option><option value="draven">Draven</option><option value="wizard">Wizard</option><option value="huntress">Huntress</option><option value="gloop">Gloop</option></select></label>
+              <label>Presence<select id="fieldStatus"><option value="online">online</option><option value="idle">idle</option><option value="ready">ready</option><option value="offline">offline</option></select></label>
             </div>
-            <div style="align-self: flex-end">
-              <button type="submit">Search</button>
-            </div>
-          </form>
-          <div id="playerBrowser"><div id="playerResults" aria-live="polite"></div><div id="playerPager"></div></div></div>
-          <div id="playerWorkspace" hidden>
-            <button id="backToPlayers" type="button" class="secondary">← Back to players</button>
-            <header class="player-heading"><div><p class="panel-kicker">Player account</p><h3 id="userName"></h3><p id="playerSubtitle" class="muted"></p></div></header>
-            <nav id="playerNav" aria-label="Player account sections"><button type="button" data-player-tab="overview">Overview</button><button type="button" data-player-tab="edit">Edit account</button><button type="button" data-player-tab="history">History</button></nav>
-            <div id="playerOverview" data-player-panel="overview"></div>
-          <form id="userEditForm" class="hidden" data-player-panel="edit" hidden>
-            <div id="userEditor" class="hidden">
-<h4>Account & balances</h4>
-              <label for="fieldName">Username</label><input id="fieldName" required minlength="3" maxlength="50" />
-              <div class="flex-row">
-                <div>
-                  <label for="fieldCoins">Coins</label>
-                  <input id="fieldCoins" type="number" min="0" />
-                </div>
-                <div>
-                  <label for="fieldGems">Gems</label>
-                  <input id="fieldGems" type="number" min="0" />
-                </div>
-              </div>
-              <div class="flex-row">
-                <div>
-                  <label for="fieldTrophies">Trophies</label>
-                  <input id="fieldTrophies" type="number" min="0" />
-                </div>
-                <div>
-                  <label for="fieldStatus">Presence</label>
-                  <select id="fieldStatus">
-                    <option value="online">online</option>
-                    <option value="idle">idle</option>
-                    <option value="ready">ready</option>
-                    <option value="offline">offline</option>
-                  </select>
-                </div>
-              </div>
-              <label for="fieldClass">Character Class</label>
-              <select id="fieldClass"><option value="ninja">Ninja</option><option value="thorg">Thorg</option><option value="draven">Draven</option><option value="wizard">Wizard</option><option value="huntress">Huntress</option><option value="gloop">Gloop</option></select>
-              <details class="player-detail"><summary>Edit character levels</summary><p>Level 0 locks a character. Levels 1–10 unlock and upgrade it.</p><div id="levelFields" class="level-fields"></div></details><button type="submit">Apply Changes</button>
-            </div>
-          </form>
-          <div id="playerDetails" data-player-panel="history" hidden></div></div>
+          </article>
+        </form>
+
+        <div data-player-panel="activity" class="player-panel" hidden><div id="playerDetails"></div><div id="playerOverview"></div></div>
+
+        <div id="playerSaveBar" class="save-bar" hidden><span id="playerSaveSummary"></span><button type="button" id="playerSave" class="primary">Save changes</button></div>
+      </div>
+    </section>
+
+    <!-- Store: built by src/client/admin/shop.js -->
+    <section class="view view-store" data-view="store" hidden><div id="storeRoot"></div></section>
+
+    <!-- Runtime -->
+    <section class="view" data-view="runtime" hidden>
+      <form id="runtimeForm" class="runtime-grid">
+        <article class="panel">
+          <div class="panel-title">Maintenance</div>
+          <label>Ends at (your local time)<input type="datetime-local" id="maintenanceUntil"></label>
+          <p id="maintenanceCountdown" role="timer"></p>
+          <p class="hint">A future end time pauses matchmaking until then. Existing matches and ready checks can finish. Admin access stays available.</p>
+          <button type="button" id="clearMaintenance">End maintenance now</button>
         </article>
-
-        <article class="panel" data-view="runtime" hidden>
-          <h2>Runtime Controls</h2>
-          <form id="runtimeForm">
-            <label for="maintenanceUntil">Maintenance ends at (your local time)</label>
-            <input type="datetime-local" id="maintenanceUntil" />
-            <p id="maintenanceCountdown" role="timer"></p>
-            <button type="button" id="clearMaintenance" class="secondary">Clear maintenance time</button>
-            <p class="muted">Set a future end time to pause matchmaking. Leave empty to keep matchmaking enabled. Maintenance ends automatically at that time. Existing matches and ready checks can finish. Admin access stays available.</p><label for="announcementField">Site announcement</label>
-            <textarea
-              id="announcementField"
-              placeholder="Announcement shown when players load into the game" maxlength="500"
-            ></textarea>
-            <p class="muted">Shown when players load into the game. Stays visible until they press Dismiss. Leave empty to disable.</p><div class="flex-row">
-              <div>
-                <label for="rewardCoinMultiplier">Coin Multiplier</label>
-                <input
-                  id="rewardCoinMultiplier"
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                />
-              </div>
-              <div>
-                <label for="rewardGemMultiplier">Gem Multiplier</label>
-                <input
-                  id="rewardGemMultiplier"
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                />
-              </div>
-            </div>
-            <div class="flex-row">
-              <div>
-                <label for="rewardFloor">Coin Floor</label>
-                <input id="rewardFloor" type="number" min="0" />
-              </div>
-              <div>
-                <label for="rewardCeiling">Coin Ceiling</label>
-                <input id="rewardCeiling" type="number" min="1" />
-              </div>
-            </div>
-            <button type="submit">Save Overrides</button>
-          </form>
+        <article class="panel">
+          <div class="panel-title">Announcement</div>
+          <label>Shown when players load into the game<textarea id="announcementField" placeholder="Leave empty to disable" maxlength="500"></textarea></label>
+          <p class="hint">Stays visible until the player presses Dismiss.</p>
         </article>
-      </section>
+        <article class="panel">
+          <div class="panel-title">Match rewards</div>
+          <div class="field-grid">
+            <label>Coin multiplier<input id="rewardCoinMultiplier" type="number" step="0.1" min="0.1"></label>
+            <label>Gem multiplier<input id="rewardGemMultiplier" type="number" step="0.1" min="0.1"></label>
+            <label>Coin floor<input id="rewardFloor" type="number" min="0"></label>
+            <label>Coin ceiling<input id="rewardCeiling" type="number" min="1"></label>
+          </div>
+        </article>
+        <div class="form-actions runtime-actions"><button type="submit" class="primary">Save runtime settings</button></div>
+      </form>
+    </section>
 
-      <section class="panel" data-view="overview">
-        <h2>Recent Users</h2>
-        <ul id="recentUsers" class="recent-list"></ul>
-      </section>
-      <section class="panel" data-view="overview">
-        <h2>Recent Matches</h2>
-        <ul id="recentMatches" class="recent-list"></ul>
-      </section>
+    <!-- Feedback and support: built by src/client/admin/inbox.js -->
+    <section class="view view-inbox" data-view="feedback" hidden><div class="inbox-root" data-inbox="feedback"></div></section>
+    <section class="view view-inbox" data-view="support" hidden><div class="inbox-root" data-inbox="support"></div></section>
+  </main>
+
+  <footer><span id="status" role="status" aria-live="polite">Loading dashboard…</span><span class="footer-keys"><kbd>/</kbd> find player <kbd>G</kbd> grant <kbd>1</kbd>–<kbd>6</kbd> sections <kbd>Esc</kbd> close</span></footer>
+</div>
+
+<dialog id="grantDialog" aria-labelledby="grantTitle">
+  <div class="dialog-frame">
+    <header><h2 id="grantTitle">Grant currency</h2><button type="button" class="dialog-close" aria-label="Close">×</button></header>
+    <div class="dialog-body">
+      <div class="recipient-wrap">
+        <label class="recipient-field">Players
+          <div class="recipient-box"><div id="recipientChips" class="chips"></div><input id="recipientSearch" type="search" placeholder="Type a name or ID…" autocomplete="off" aria-label="Add a player"></div>
+        </label>
+        <div id="recipientSuggestions" class="suggestions" role="listbox" hidden></div>
+      </div>
+      <div id="dialogGrant"></div>
     </div>
-    <div id="toast" role="status" class="hidden"></div>
-    <script src="/bundles/admin.bundle.js" defer></script>
+  </div>
+</dialog>
+
+<div id="toast" role="status" popover="manual"><span id="toastText"></span></div>
+<script src="/bundles/admin.bundle.js" defer></script>
   </body>
 </html>

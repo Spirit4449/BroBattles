@@ -85,7 +85,8 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 24px;
   min-height: 0;
-  padding: 20px 0 var(--bb-confirm-padding);
+  /* Keep the art's 5px outer frame inside the scrollable clipping area. */
+  padding: 20px 5px var(--bb-confirm-padding);
   overflow-y: auto;
   overscroll-behavior: contain;
 }

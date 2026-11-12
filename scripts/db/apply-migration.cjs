@@ -15,6 +15,15 @@ async function requireTables(conn, tables) {
 }
 
 const MIGRATIONS = {
+  'party-hidden-bros': {
+    describe: 'Owner-controlled hidden enemy Bro portraits in party lobbies.',
+    async run(conn) {
+      if (!(await hasColumn(conn, 'parties', 'hide_enemy_bros'))) {
+        await conn.query(readMigration('2026-11-11_party_hidden_bros.sql'));
+      }
+      if (!(await hasColumn(conn, 'parties', 'hide_enemy_bros'))) throw new Error('Missing parties.hide_enemy_bros');
+    },
+  },
   'name-changes': {
     describe: 'Persistent monthly name-change cooldown.',
     async run(conn) {

@@ -363,8 +363,9 @@ export function updateDash(scene, player, { pressed, left, right, up, down, bloc
     // local landing can show the stomp without waiting for the round trip.
     player._stompArmedUntil = direction.x === 0 && direction.y === 1 &&
       !(player.body.touching?.down || player.body.blocked?.down)
-      ? now + physics.dashDurationMs + physics.dashCoastMs
+      ? Number.MAX_SAFE_INTEGER
       : 0;
+    player._stompStartBottom = player._stompArmedUntil ? player.body.bottom : null;
     player._dashDirection = direction;
     player._jumpLaunch = null;
     player._duckRequested = false;

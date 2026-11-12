@@ -4,6 +4,34 @@ import { composerHeight } from './composerSize.mjs';
 import { buildProfileIconUrl } from "../views/profileIconAssets.js";
 import { sonner } from "../ui/sonner.js";
 import { DEFAULT_CHARACTER } from "../../shared/characters/characterStats.js";
+// Unicode values stay on the wire so existing party and direct reactions survive.
+const CHAT_REACTIONS = [
+  { value: "👍", label: "Like", icon: "like" },
+  { value: "👎", label: "Dislike", icon: "dislike" },
+  { value: "❤️", label: "Heart", icon: "heart" },
+  { value: "😂", label: "Laughing", icon: "laugh" },
+  { value: "😭", label: "Crying", icon: "cry" },
+  { value: "🔥", label: "Fire", icon: "fire" },
+];
+
+function appendReactionIcon(element, value) {
+  const reaction = CHAT_REACTIONS.find(item => item.value === value);
+  if (!reaction) {
+    // Preserve older or externally supplied reactions outside the picker set.
+    element.appendChild(document.createTextNode(value));
+    return value;
+  }
+  const icon = document.createElement("img");
+  icon.className = "bb-chat-reaction-icon";
+  icon.src = `/assets/chat-reactions/${reaction.icon}.svg`;
+  icon.alt = "";
+  icon.width = 16;
+  icon.height = 16;
+  icon.draggable = false;
+  element.appendChild(icon);
+  return reaction.label;
+}
+
 const GAME_CHAT_RECENT_LIMIT = 40;
 const LOBBY_TYPING_IDLE_STOP_MS = 1000;
 const LOBBY_TYPING_HEARTBEAT_MS = 850;
@@ -185,7 +213,7 @@ function makeChatShell({
   const reactionBadge = document.createElement("span");
   reactionBadge.className = "bb-chat-reaction-badge hidden";
   reactionBadge.title = "New reaction";
-  reactionBadge.innerHTML = `<img src="/assets/heart-filled.svg" alt="" width="14" height="14" draggable="false" />`;
+  reactionBadge.innerHTML = `<img src="/assets/chat-reactions/heart.svg" alt="" width="14" height="14" draggable="false" />`;
   launcher.appendChild(reactionBadge);
 
   const panel = document.createElement("section");
@@ -272,14 +300,14 @@ function renderPartyChatMessage(
     onOpenProfile,
     canReact = true,
     compact = false,
+    isSelf = String(message?.sender?.name || "") === String(currentUserName || ""),
+    authorLabel = message?.sender?.name || "Player",
     // Direct messages have reactions but no replies or "viewed by" counts.
     showReply = true,
     showViewCount = true,
   } = {},
 ) {
   const row = document.createElement("article");
-  const isSelf =
-    String(message?.sender?.name || "") === String(currentUserName || "");
   row.className = `bb-chat-message${isSelf ? " is-self" : ""}`;
   row.dataset.messageId = String(messageIdOf(message));
   row.dataset.messageMine = message?.isMine ? "true" : "false";
@@ -296,8 +324,10 @@ function renderPartyChatMessage(
   const header = document.createElement("div");
   header.className = "bb-chat-message-header";
   header.innerHTML = `
-    <div class="bb-chat-author">${escapeHtml(message?.sender?.name || "Player")}</div>
-    <div class="bb-chat-time">${escapeHtml(formatChatTime(message?.createdAt))}</div>
+    <div class="bb-chat-author">${escapeHtml(authorLabel)}</div>
+    <div class="bb-chat-message-status">
+      <div class="bb-chat-time">${escapeHtml(formatChatTime(message?.createdAt))}</div>
+    </div>
   `;
 
   bindChatProfile(header.querySelector(".bb-chat-author"), message?.sender?.name, onOpenProfile);
@@ -326,7 +356,6 @@ function renderPartyChatMessage(
   if (!compact) {
     // Players can't react to their own messages; existing chips stay readable.
     const canReactHere = canReact && !isSelf;
-    const presetReactions = ["👍", "❤️", "😂", "🔥"];
     const reactionCounts = new Map(
       (Array.isArray(message?.reactions) ? message.reactions : []).map(
         (item) => [String(item?.reaction || ""), Number(item?.count) || 0],
@@ -342,8 +371,7 @@ function renderPartyChatMessage(
       .filter(([, count]) => Number(count) > 0)
       .map(([reaction]) => reaction);
 
-    // Hover toolbar sits on the bubble's top edge so it never covers the
-    // reaction chips (or their "who reacted" tooltips) along the bottom.
+    // Actions follow the message and existing reactions so they cover no details.
     const actions = document.createElement("div");
     actions.className = "bb-chat-hover-actions";
     // Your own messages get no hover toolbar at all.
@@ -359,18 +387,19 @@ function renderPartyChatMessage(
     if (canReactHere) {
       const reactionRow = document.createElement("div");
       reactionRow.className = "bb-chat-hover-reactions";
-      for (const reaction of presetReactions) {
+      for (const { value: reaction, label } of CHAT_REACTIONS) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = `bb-chat-hover-btn${message?.myReaction === reaction ? " is-active" : ""}`;
-        button.textContent = reaction;
-        button.title = message?.myReaction === reaction ? "Remove reaction" : "React";
+        appendReactionIcon(button, reaction);
+        button.title = message?.myReaction === reaction ? `Remove ${label.toLowerCase()} reaction` : `React with ${label.toLowerCase()}`;
+        button.setAttribute("aria-label", button.title);
+        button.setAttribute("aria-pressed", String(message?.myReaction === reaction));
         button.addEventListener("click", () => onReact?.(message, reaction));
         reactionRow.appendChild(button);
       }
       actions.appendChild(reactionRow);
     }
-    if (actions.childElementCount) bubble.appendChild(actions);
 
     const meta = document.createElement("div");
     meta.className = "bb-chat-message-meta";
@@ -385,13 +414,19 @@ function renderPartyChatMessage(
       button.className = `bb-chat-inline-reaction${message?.myReaction === reaction ? " is-active" : ""}${
         message?._reactionPulse === reaction ? " is-pop" : ""
       }${canReactHere ? "" : " is-readonly"}`;
-      button.textContent = `${reaction} ${count}`;
+      const label = appendReactionIcon(button, reaction);
+      const countEl = document.createElement("span");
+      countEl.className = "bb-chat-reaction-count";
+      countEl.textContent = String(count);
+      button.appendChild(countEl);
+      button.setAttribute("aria-label", `${label}, ${count} ${count === 1 ? "reaction" : "reactions"}`);
+      if (canReactHere) button.setAttribute("aria-pressed", String(message?.myReaction === reaction));
       const reactors = Array.isArray(reactionUsers?.[reaction])
         ? reactionUsers[reaction]
         : [];
       if (reactors.length) {
         button.dataset.tooltip = formatReactorSummary(reactors, currentUserName);
-        button.setAttribute("aria-label", `${reaction} ${button.dataset.tooltip}`);
+        button.setAttribute("aria-label", `${label}: ${button.dataset.tooltip}`);
       }
       if (canReactHere) button.addEventListener("click", () => onReact?.(message, reaction));
       inlineReactions.appendChild(button);
@@ -407,9 +442,14 @@ function renderPartyChatMessage(
       viewButton.addEventListener("click", (event) =>
         onOpenViewers?.(message, event.currentTarget),
       );
-      meta.appendChild(viewButton);
+      header.querySelector(".bb-chat-message-status").appendChild(viewButton);
     }
     if (meta.childElementCount) bubble.appendChild(meta);
+    if (actions.childElementCount) {
+      // Focusing the message reveals its controls for keyboard users too.
+      row.setAttribute("tabindex", "0");
+      bubble.appendChild(actions);
+    }
   }
 
   if (isSelf) {
@@ -432,40 +472,19 @@ function normalizeGameTeam(team) {
   return raw;
 }
 function renderGameChatLineMessage(message, currentUserName, localTeam) {
-  const row = document.createElement("article");
-  row.dataset.messageId = String(message?.id || "");
   const senderName = String(message?.sender?.name || "Player");
-  const bodyText = String(message?.body || "").trim();
-  const scope =
-    String(message?.scope || "team").toLowerCase() === "all" ? "all" : "team";
-  const isSelf =
-    senderName.trim().toLowerCase() ===
-    String(currentUserName || "")
-      .trim()
-      .toLowerCase();
+  const isSelf = senderName.trim().toLowerCase() === String(currentUserName || "").trim().toLowerCase();
+  const row = renderPartyChatMessage(message, {
+    compact: true,
+    isSelf,
+    authorLabel: isSelf ? `${senderName} (You)` : senderName,
+  });
+  row.dataset.messageId = String(message?.id || "");
   const senderTeam = normalizeGameTeam(message?.sender?.team);
   const userTeam = normalizeGameTeam(localTeam || "team1") || "team1";
-  const teamClass =
-    scope === "all"
-      ? senderTeam && senderTeam === userTeam
-        ? " is-team-blue"
-        : isSelf
-          ? " is-team-blue"
-          : " is-team-red"
-      : " is-team-blue";
-  row.className = `bb-chat-game-line${isSelf ? " is-self" : ""}${teamClass}`;
-
-  const name = document.createElement("span");
-  name.className = "bb-chat-game-line-name";
-  name.textContent = isSelf ? `${senderName} (You):` : `${senderName}:`;
-  name.title = isSelf ? `${senderName} (You)` : senderName;
-
-  const body = document.createElement("span");
-  body.className = "bb-chat-game-line-body";
-  body.textContent = bodyText;
-
-  row.appendChild(name);
-  row.appendChild(body);
+  if (!isSelf && String(message?.scope).toLowerCase() === "all" && senderTeam !== userTeam) {
+    row.classList.add("is-opponent");
+  }
   return row;
 }
 export { formatReactorSummary, bindComposerAutosize, bindChatProfile, escapeHtml, formatChatTime, buildAvatarUrl, createAvatarEl, messageIdOf, formatNameWithYou, postJson, formatSuspensionTime, showChatRequestError, buildInlineCooldownMessage, makeChatShell, renderPartyChatMessage, normalizeGameTeam, renderGameChatLineMessage, GAME_CHAT_RECENT_LIMIT, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_STALE_MS, LOBBY_CHAT_BUBBLE_MS };

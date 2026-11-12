@@ -22,6 +22,8 @@ Admins can open Map Studio using the Edit map action inside the lobby map select
 
 Admin map cards place the Edit map action in the top-left corner of the preview. Hitbox debugging is controlled inside Map Studio; the lobby does not set or pass that preference to the editor.
 
+The toolbar’s map, formation, opponents and character selectors reuse the Settings pixel dropdowns, including keyboard navigation.
+
 ### Editing controls
 
 - Click to select without moving. Shift-click toggles objects in the selection; drag empty space to box-select. Drag a selected object to move the group.

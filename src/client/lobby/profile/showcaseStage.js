@@ -368,10 +368,10 @@ export function createShowcaseStage(host) {
 
   function movementStep(fighter, direction) {
     const point = feet(fighter);
-    const speedRatio = RUN_SPEED / movementPhysics.maxSpeed;
+    const speedRatio = fighter.movementSpeedRatio ?? RUN_SPEED / movementPhysics.maxSpeed;
     safely(() => spawnRunDust(scene, point.x - direction * 10, point.y - 2, { direction, intensity: speedRatio }));
     if (scene.time.now < fighter.nextStepAt) return;
-    fighter.nextStepAt = scene.time.now + 300;
+    fighter.nextStepAt = scene.time.now + 300 / Math.max(0.15, speedRatio);
     fighter.stepCursor = (fighter.stepCursor + 1) % TERRAIN_AUDIO.steps.length;
     safely(() => playPlayerSound(scene, fighter.sprite, TERRAIN_AUDIO.steps[fighter.stepCursor].key, {
       volume: footstepVolume(speedRatio, false, TERRAIN), rate: 0.94 + speedRatio * 0.14,

@@ -59,7 +59,7 @@ export function openSettings() {
     row.append(value,input);if(key==='sensitivity')form.append(row);else {row.firstChild.textContent=key==='sfx'?'SFX':'BG volume';volumes.append(row);}controls[key]={input,value};
   }
   form.append(volumes);
-  for(const [key,label,hint] of [['autoHideCursor','Auto-hide cursor','Hide on battle start. When off, click the arena to capture the cursor.'],['streamer','Streamer mode','Conceals username labels on this screen. Names typed into messages can still appear.']]) {
+  for(const [key,label,hint] of [['autoHideCursor','Auto-hide cursor','Hide your cursor when a battle starts.'],['streamer','Streamer mode','Hide usernames on screen. Names in messages may still appear.']]) {
     const row=element('label',null,'site-setting');const input=element('input');input.type='checkbox';input.setAttribute('aria-label',label);input.onchange=()=>saveSettings({[key]:input.checked});const title=element('span',label,'site-setting-title');const infoWrap=element('span',null,'site-setting-info-wrap');const info=element('button','i','site-setting-info');info.type='button';info.setAttribute('aria-label',hint);const tip=element('span',hint,'site-setting-tooltip');infoWrap.append(info,tip);title.append(infoWrap);row.append(title,input);form.append(row);controls[key]={input};
   }
   let resetting=false;
@@ -111,14 +111,15 @@ export function openSettings() {
 let navigationGuard = async () => true;
 export function setNavigationGuard(guard) { navigationGuard = guard; }
 function wireNavigation() {
-  const host=document.querySelector('#navbar > .flex, .site-brand');
+  const host=document.querySelector('#navbar > .flex, .site-brand, .site-menu-host');
   if(host && !document.querySelector('.site-waffle')) {
     const wrap=element('div',null,'site-nav-wrap');const button=element('button',null,'site-waffle pixel-menu-button');button.type='button';button.setAttribute('aria-label','Open site menu');button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','site-menu');
     for(let i=0;i<9;i++){const dot=element('i');dot.setAttribute('aria-hidden','true');button.append(dot);}const notification=element('span',null,'site-waffle-notification');notification.dataset.supportUnread='';notification.setAttribute('aria-hidden','true');button.append(notification);
     const menu=element('nav',null,'site-menu');menu.id='site-menu';menu.setAttribute('aria-label','Site navigation');menu.hidden=true;
-    for(const [label,url] of [['About','/about'],['News','/news'],['Help Center','/help'],['Feedback','/feedback']]) {const a=element('a',label);a.href=url;if(url==='/help'){const badge=element('span','NEW','site-support-badge');badge.dataset.supportUnread='';badge.setAttribute('aria-hidden','true');a.append(badge);}menu.append(a);}
-    const settings=element('button','Settings');settings.type='button';settings.onclick=()=>{toggle(false);openSettings();};menu.append(settings,element('hr'));
-    for(const [label,url] of [['Privacy Policy','/privacy'],['Terms of Service','/terms']]){const a=element('a',label,'site-menu-legal');a.href=url;menu.append(a);}
+    const withIcon=(node,icon)=>{const img=element('img',null,'site-menu-icon');img.src=`/assets/icons/menu/${icon}.webp`;img.alt='';img.width=img.height=24;node.prepend(img);return node;};
+    for(const [label,url,icon] of [['About','/about','about'],['News','/news','news'],['Help Center','/help','help'],['Feedback','/feedback','feedback']]) {const a=withIcon(element('a',label),icon);a.href=url;if(url==='/help'){const badge=element('span','NEW','site-support-badge');badge.dataset.supportUnread='';badge.setAttribute('aria-hidden','true');a.append(badge);}menu.append(a);}
+    const settings=withIcon(element('button','Settings'),'settings');settings.type='button';settings.onclick=()=>{toggle(false);openSettings();};menu.append(settings);for(const [label,url,icon] of [['Admin Panel','/admin','admin'],['Map Studio','/map-editor','map-studio']]){const a=withIcon(element('a',label),icon);a.href=url;a.dataset.adminLink='';a.hidden=true;menu.append(a);}menu.append(element('hr'));
+    for(const [label,url,icon] of [['Privacy Policy','/privacy','privacy'],['Terms of Service','/terms','terms']]){const a=withIcon(element('a',label,'site-menu-legal'),icon);a.href=url;menu.append(a);}
     const versionLabel=element('small',config.version);menu.append(versionLabel);
     const refreshVersion=async()=>{
       try {
@@ -173,7 +174,7 @@ function applyStreamer() {
   }
 }
 export async function refreshUnread() {
-  try{const data=await api('/api/site/session');renderSiteAccount(data);const hasUnread=data.unread>0;const unreadLabel=`${data.unread} unread ${data.unread===1?'message':'messages'}`;document.querySelectorAll('[data-support-unread]').forEach(node=>node.classList.toggle('is-visible',hasUnread));const waffle=document.querySelector('.site-waffle');if(waffle)waffle.setAttribute('aria-label',hasUnread?`Open site menu. ${unreadLabel}.`:'Open site menu');const helpLink=document.querySelector('.site-menu a[href="/help"]');if(helpLink)helpLink.setAttribute('aria-label',hasUnread?`Help Center. ${unreadLabel}.`:'Help Center');document.querySelectorAll('a[href="/help/requests"]').forEach(link=>link.setAttribute('aria-label',hasUnread?`My requests. ${unreadLabel}.`:'My requests'));return data;}catch(_){return null;}
+  try{const data=await api('/api/site/session');renderSiteAccount(data);document.querySelectorAll('[data-admin-link]').forEach(node=>{node.hidden=!data.admin;});const hasUnread=data.unread>0;const unreadLabel=`${data.unread} unread ${data.unread===1?'message':'messages'}`;document.querySelectorAll('[data-support-unread]').forEach(node=>node.classList.toggle('is-visible',hasUnread));const waffle=document.querySelector('.site-waffle');if(waffle)waffle.setAttribute('aria-label',hasUnread?`Open site menu. ${unreadLabel}.`:'Open site menu');const helpLink=document.querySelector('.site-menu a[href="/help"]');if(helpLink)helpLink.setAttribute('aria-label',hasUnread?`Help Center. ${unreadLabel}.`:'Help Center');document.querySelectorAll('a[href="/help/requests"]').forEach(link=>link.setAttribute('aria-label',hasUnread?`My requests. ${unreadLabel}.`:'My requests'));return data;}catch(_){return null;}
 }
 let acceptancePromise;
 export function ensureLegalAcceptance() {
@@ -233,12 +234,14 @@ function initializeRuntimeBanner() {
   window.addEventListener('pagehide', () => clearInterval(timer), { once: true });
 }
 function initialize() {
-  initUISounds();
-  initializeRuntimeBanner();
+  // Tool pages (admin, Map Studio) borrow only the waffle menu, not the lobby's sounds, banner or streamer masking.
+  const toolPage=!!document.querySelector('.site-menu-host');
+  if(!toolPage){initUISounds();initializeRuntimeBanner();}
   // Auth pages have no lobby header: supply a compact shared brand header.
-  if((['/signup','/login','/admin'].includes(location.pathname)) && !document.querySelector('.site-brand')){document.body.insertAdjacentHTML('afterbegin',renderHeader(location.pathname));}
-  wireNavigation();initializeDesktopNavigation();applyStreamer();subscribeSettings(applyStreamer);
-  let pending=false;new MutationObserver(records=>{
+  if((['/signup','/login'].includes(location.pathname)) && !document.querySelector('.site-brand')){document.body.insertAdjacentHTML('afterbegin',renderHeader(location.pathname));}
+  wireNavigation();initializeDesktopNavigation();
+  if(!toolPage){applyStreamer();subscribeSettings(applyStreamer);}
+  let pending=false;if(!toolPage)new MutationObserver(records=>{
     if(!getSettings().streamer || pending) return;
     const relevant=records.some(record=>record.type==='attributes' || Array.from(record.addedNodes).some(node=>node.nodeType===1) || (record.target.matches?.(privateSelector) && !record.target.classList.contains('bb-private-name')));
     if(relevant){pending=true;queueMicrotask(()=>{pending=false;applyStreamer();});}

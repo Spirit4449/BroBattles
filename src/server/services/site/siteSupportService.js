@@ -41,9 +41,13 @@ function createSiteSupportService(db) {
     const sender = admin ? 'player' : 'admin';
     const where = clauses.join(' AND ');
     const [{ total }] = await db.runQuery(`SELECT COUNT(*) AS total FROM site_requests r WHERE ${where}`, params);
+    // Admin inboxes also show who wrote in and the start of the latest message.
+    const adminColumns = admin ? `, r.user_id AS userId, u.name AS userName, u.selected_profile_icon_id AS userIcon,
+      (SELECT LEFT(m.body, 140) FROM site_request_messages m WHERE m.request_id=r.id ORDER BY m.id DESC LIMIT 1) AS preview,
+      (SELECT COUNT(*) FROM site_request_messages m WHERE m.request_id=r.id) AS messageCount` : '';
     const items = await db.runQuery(`SELECT r.id, r.kind, r.category, r.subject, r.status, r.created_at, r.updated_at, r.version,
-      EXISTS(SELECT 1 FROM site_request_messages m WHERE m.request_id=r.id AND m.sender=? AND (r.${reader} IS NULL OR m.created_at>r.${reader})) AS unread
-      FROM site_requests r WHERE ${where} ORDER BY r.updated_at DESC, r.id DESC LIMIT 20 OFFSET ?`, [sender, ...params, (page - 1) * 20]);
+      EXISTS(SELECT 1 FROM site_request_messages m WHERE m.request_id=r.id AND m.sender=? AND (r.${reader} IS NULL OR m.created_at>r.${reader})) AS unread${adminColumns}
+      FROM site_requests r ${admin ? 'LEFT JOIN users u ON u.user_id=r.user_id ' : ''}WHERE ${where} ORDER BY r.updated_at DESC, r.id DESC LIMIT 20 OFFSET ?`, [sender, ...params, (page - 1) * 20]);
     return { items, page, total: Number(total) };
   }
   async function detail(user, admin, id) {
@@ -53,7 +57,9 @@ function createSiteSupportService(db) {
       const messages = await q('SELECT id, sender, body, created_at FROM site_request_messages WHERE request_id=? ORDER BY id', [id]);
       await q(`UPDATE site_requests SET ${admin ? 'admin_read_at' : 'player_read_at'}=NOW(3) WHERE id=?`, [id]);
       const { submission_key, user_id, ...request } = rows[0];
-      return { request: admin ? { ...request, userId: user_id } : request, messages };
+      if (!admin) return { request, messages };
+      const [player] = await q('SELECT name, selected_profile_icon_id, char_class FROM users WHERE user_id=?', [user_id]);
+      return { request: { ...request, userId: user_id, userName: player?.name || null, userIcon: player?.selected_profile_icon_id || player?.char_class || null }, messages };
     });
   }
   async function reply(user, admin, id, body) {

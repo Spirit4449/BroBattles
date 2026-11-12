@@ -2624,8 +2624,10 @@ body.profile-page-body .profile-form[hidden] {
 #ready.battle-in-progress { --bb-ready-fill: linear-gradient(135deg, #2879df, #1856b8); }
 #ready.battle-in-progress:hover { --bb-ready-fill: linear-gradient(135deg, #398bf0, #2468ce); }
 
-/* One neutral blue on every map (unlike the bottom plate, it ignores the
-   page art), with the chroma mosaic and a pixel ink edge instead of a glow. */
+/* One neutral blue header on every page (unlike the bottom plate, it ignores
+   the page art), with the chroma mosaic and a pixel ink edge instead of a glow.
+   The lobby loads this sheet after site.css and other pages load it before,
+   so the look lives only here. */
 #navbar,
 .site-header {
   /* The first layer softens the mosaic so the texture stays in the background. */
@@ -2710,7 +2712,7 @@ img:is([src*="/gem.webp"], [src*="/currency/gems-"]) { --currency-light: 86, 219
 /* Chat views uses the compact tooltip surface, not a full dialog header. */
 .bb-chat-viewers-popup .bb-chat-viewers-card {
   box-sizing: border-box;
-  width: min(228px, calc(100vw - 16px));
+  width: min(196px, calc(100vw - 16px));
   max-height: min(200px, calc(100vh - 16px));
   transform: translateY(var(--chat-popover-offset, -3px));
   transition: opacity 120ms ease, transform 120ms ease;
@@ -2721,12 +2723,12 @@ img:is([src*="/gem.webp"], [src*="/currency/gems-"]) { --currency-light: 86, 219
 .bb-chat-viewers-popup .bb-chat-viewers-backdrop { background: transparent; }
 .bb-chat-viewers-popup .bb-chat-viewers-head {
   min-height: 0;
-  padding: 5px 8px;
-  background: none;
+  padding: 5px 7px;
+  background: rgba(255, 255, 255, 0.025);
   border-bottom: 1px solid #ffffff12;
 }
-.bb-chat-viewers-popup .bb-chat-viewers-title { font-size: 8px; }
-.bb-chat-viewers-popup .bb-chat-viewers-list { padding: 5px 8px; gap: 4px; }
+.bb-chat-viewers-popup .bb-chat-viewers-title { font-size: 7px; letter-spacing: 0; }
+.bb-chat-viewers-popup .bb-chat-viewers-list { padding: 5px 7px; gap: 2px; }
 .bb-chat-viewers-popup .bb-chat-viewer-row {
   grid-template-columns: 20px minmax(0, 1fr) auto;
   gap: 6px;
@@ -2735,7 +2737,7 @@ img:is([src*="/gem.webp"], [src*="/currency/gems-"]) { --currency-light: 86, 219
   background: none;
 }
 .bb-chat-viewers-popup .bb-chat-viewer-avatar { width: 20px; height: 20px; border-radius: 0; }
-.bb-chat-viewers-popup .bb-chat-viewer-name { font-size: 10px; overflow-wrap: anywhere; }
+.bb-chat-viewers-popup .bb-chat-viewer-name { min-width: 0; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bb-chat-viewers-popup .bb-chat-viewer-time { font-size: 9px; white-space: nowrap; }
 .bb-chat-viewers-popup .bb-chat-viewers-empty { padding: 5px 0; }
 .bb-chat-viewers-popup .bb-chat-viewers-head button[data-chat-viewers-close] {
@@ -3355,4 +3357,10 @@ body #navbar-right .currency-resource:is(:hover, :focus-visible) {
 
 body #navbar-right .currency-resource:is(:hover, :focus-visible) {
   filter: brightness(1.2);
+}
+
+/* The read receipt is an anchored popover, so give it a lighter frame than a full modal. */
+body .bb-chat-viewers-popup .bb-chat-viewers-card {
+  border-width: 2px;
+  box-shadow: 0 0 0 2px var(--bb-ink), 0 4px 0 rgba(0, 0, 0, 0.35);
 }

@@ -121,16 +121,22 @@
   },
   "presentation": {
     "hiResArt": {
-      "sourceSize": 256,
-      "scale": 0.32,
-      "groundY": 240,
+      "sourceSize": 384,
+      "scale": 0.2667,
+      "groundY": 339,
       "hudTopOffset": -35,
       "requiresFrame": "attack00",
-      "duckFrame": "jumping00"
+      "duckFrame": "duck00"
     }
   },
   "rig": {
-    "frame": [256, 256],
-    "feet": [127, 240]
+    "frame": [
+      384,
+      384
+    ],
+    "feet": [
+      194,
+      339
+    ]
   }
 }

@@ -13,6 +13,7 @@ import { getCharacterNetworkVersions, configureCharacterNetworks, resetCharacter
 import { normalizeMapId } from "../maps/manifest";
 import { resolveGameErrorAction } from "./gameErrorActions";
 import { spawnDeathTombstone } from "../scene/deathTombstone";
+import { spawnShockwaveHitSmoke } from "../powerups/shockwaveHit";
 import { applyActionToLocalPlayer, getCharacterSocketEvents, playCharacterSound } from "../characters";
 import { playPlayerSound } from "../audio/playerAudio";
 import { takePredictedHit } from "../characters/shared/shotPrediction";
@@ -1276,6 +1277,14 @@ export function createMatchCoordinator(config) {
     } catch (_) {}
   }
 
+  function _onShockwaveHit(payload) {
+    if (!payload?.username || presentationSuppressed()) return;
+    const sprite = payload.username === getUsername()
+      ? getPlayer()
+      : opponentPlayers[payload.username]?.opponent || teamPlayers[payload.username]?.opponent;
+    spawnShockwaveHitSmoke(getGameScene(), sprite, payload);
+  }
+
   function _onDeathDropCollected(payload) {
     if (!payload || typeof payload.id === "undefined") return;
     if (!presentationSuppressed()) deathdropCollectQueue.push(payload);
@@ -1338,6 +1347,7 @@ export function createMatchCoordinator(config) {
     socket.on("game:sudden-death:start", _onGameSuddenDeath);
     socket.on("powerup:collected", _onPowerupCollected);
     socket.on("powerup:tick", _onPowerupTick);
+    socket.on("shockwave:hit", _onShockwaveHit);
     for (const [event, handler] of characterSocketHandlers) socket.on(event, handler);
     socket.on("deathdrop:collected", _onDeathDropCollected);
 
@@ -1377,6 +1387,7 @@ export function createMatchCoordinator(config) {
     socket.off("game:sudden-death:start", _onGameSuddenDeath);
     socket.off("powerup:collected", _onPowerupCollected);
     socket.off("powerup:tick", _onPowerupTick);
+    socket.off("shockwave:hit", _onShockwaveHit);
     for (const [event, handler] of characterSocketHandlers) socket.off(event, handler);
     socket.off("deathdrop:collected", _onDeathDropCollected);
   }

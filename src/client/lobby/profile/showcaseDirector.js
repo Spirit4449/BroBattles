@@ -44,6 +44,12 @@ export function createShowcaseDirector(session, { halfWidth = 240, random = seed
           brain.until = now + 450 + random() * 400;
         }
         if (!target || (brain.move && ((brain.move === direction && distance <= desired) || (brain.move !== direction && distance >= desired)))) brain.move = 0;
+        // Let the slime visibly hamper a melee pursuer before the earned hook
+        // reels him back in. Use normal movement and the actual slow modifier.
+        const slimePartner = sparring && p.char_class === 'thorg' && target?.char_class === 'gloop';
+        if (slimePartner && p.health < p.maxHealth * 0.65 && modifiers.speedMult < 1) {
+          brain.move = -direction;
+        }
         p.flip = direction < 0;
         if (p.superCharge >= p.maxSuperCharge) brain.chargedAt ??= now; else brain.chargedAt = null;
         const nearby = radius => enemies.filter(q => Math.hypot(q.x - p.x, q.y - p.y) <= radius);
@@ -58,7 +64,7 @@ export function createShowcaseDirector(session, { halfWidth = 240, random = seed
           brain.superAfter = now + 6500;
           brain.attackAfter = now + 650;
           brain.burst = 0;
-        } else if (target && now >= brain.attackAfter && (!sparring || target.health > target.maxHealth * 0.45)) {
+        } else if (target && !(p.char_class === 'gloop' && !sparring && brain.chargedAt != null) && now >= brain.attackAfter && (!sparring || target.health > target.maxHealth * 0.45)) {
           if (requestBasic(session, p, target, { prediction: sparring ? 0.3 : 0.7, aimError: 0 }, random, now)) {
             brain.burst++;
             const burstSize = Math.min(p.ammoState.capacity, 2);

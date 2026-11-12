@@ -15,11 +15,11 @@ import {
 import { getSharedSelectionPopupShell } from "../../ui/selectionPopupShell.js";
 import socket from "../../lib/socket.js";
 import { warmBattleSelection } from '../preloadBattle';
-import { playSound } from "../../ui/uiSounds.js";
+import { playSound, preloadSound } from "../../ui/uiSounds.js";
 import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { dismissPopup } from "../../ui/popupMotion.js";
 import { disposeSkinCarousel, switchSkinPreview } from "./skinCarousel.mjs";
-import { hideCharacterShowcase, mountCharacterShowcase, updateCharacterShowcaseSkin } from "./characterShowcase.js";
+import { hideCharacterShowcase, showCharacterShowcaseBody, mountCharacterShowcase, updateCharacterShowcaseSkin } from "./characterShowcase.js";
 import { sonner } from "../../ui/sonner.js";
 import { resolveBodyPortrait, buildFramedBodyPortrait } from "../../views/bodyPortraitAssets.js";
 import { BRO_PORTRAIT_PALETTES, buildPortraitChromaTile } from "../../views/broPortrait.mjs";
@@ -214,6 +214,7 @@ async function setSelectedSkin(character, skinId, direction = 1) {
   const nextSkin =
     skins.find((skin) => skin.id === String(skinId || "")) || skins[0];
   const previousSkinId = getSelectedSkin(characterId)?.id;
+  if (previousSkinId !== nextSkin.id) playSound("skinSwitch", 0.75);
   _characterDetailsUi.selectedSkinByCharacter[characterId] = nextSkin.id;
   // Locked skins remain previewable, but only owned skins are equipped.
   const saving = nextSkin.locked ? null : selectCharacter(characterId, { closeAfterSelection: false });
@@ -619,6 +620,11 @@ function renderCharacterDetails(character) {
     name: String(_userDataRef?.name || "You"),
   });
 
+  if (isUpgradePreview) {
+    previewFrame.dataset.confirming = "true";
+    showCharacterShowcaseBody(previewFrame);
+  }
+
   // Three main stat boxes: Health (full width top), Attack and Special (side by side)
   const statsContainer = document.createElement("div");
   statsContainer.className = "character-details-stats-container";
@@ -747,10 +753,10 @@ function renderCharacterDetails(character) {
   prevButton.className = "character-details-skin-stepper";
   prevButton.textContent = "";
   prevButton.setAttribute("aria-label", "Previous skin");
+  prevButton.setAttribute("data-sound", "none");
   prevButton.disabled = skins.length <= 1 || !!_characterSelectionPromise;
   prevButton.addEventListener("click", () => {
     if (skins.length <= 1) return;
-    playSound("cursor4", 0.2);
     cycleSkin(character, -1);
   });
 
@@ -780,10 +786,10 @@ function renderCharacterDetails(character) {
   nextButton.className = "character-details-skin-stepper";
   nextButton.textContent = "";
   nextButton.setAttribute("aria-label", "Next skin");
+  nextButton.setAttribute("data-sound", "none");
   nextButton.disabled = skins.length <= 1 || !!_characterSelectionPromise;
   nextButton.addEventListener("click", () => {
     if (skins.length <= 1) return;
-    playSound("cursor4", 0.2);
     cycleSkin(character, 1);
   });
 
@@ -906,7 +912,7 @@ function renderCharacterDetails(character) {
 function animateCharacterDetailStats({ from }) {
   const ui = _characterDetailsUi;
   if (!ui?.popup) return;
-  const durationMs = 760;
+  const durationMs = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 900;
   const values = [...ui.popup.querySelectorAll("[data-stat-value]")];
   const fills = [...ui.popup.querySelectorAll("[data-stat-fill]")];
   const boxes = [...ui.popup.querySelectorAll(".character-details-stat-box")];
@@ -921,7 +927,7 @@ function animateCharacterDetailStats({ from }) {
 
   const startedAt = performance.now();
   const step = (now) => {
-    const progress = Math.min(1, (now - startedAt) / durationMs);
+    const progress = Math.min(1, durationMs === 0 ? 1 : (now - startedAt) / durationMs);
     const eased = 1 - (1 - progress) ** 3;
     values.forEach((value) => {
       const start = Number(from?.[value.dataset.statValue] ?? value.textContent);
@@ -946,22 +952,70 @@ function playCharacterDetailsSuccessAnimation(type) {
     _characterDetailsUi.currentCharacter,
   );
   if (!target) return;
+  showCharacterShowcaseBody(target);
 
   const overlay = document.createElement("div");
-  overlay.className = "character-details-success";
+  target.querySelectorAll(".character-details-success").forEach((previous) => previous.remove());
+  overlay.className = `character-details-success is-${type}`;
+  overlay.setAttribute("role", "status");
+  if (type === "unlock") {
+    const ring = document.createElement("div");
+    ring.className = "character-details-success-ring";
+    ring.setAttribute("aria-hidden", "true");
+    overlay.appendChild(ring);
+    for (let index = 0; index < 16; index += 1) {
+      const spark = document.createElement("i");
+      spark.className = "character-details-success-spark";
+      const angle = (index / 16) * Math.PI * 2;
+      const distance = 90 + (index % 3) * 24;
+      spark.style.setProperty("--spark-x", `${Math.cos(angle) * distance}px`);
+      spark.style.setProperty("--spark-y", `${Math.sin(angle) * distance}px`);
+      spark.style.setProperty("--spark-delay", `${index % 4 * 35}ms`);
+      spark.setAttribute("aria-hidden", "true");
+      overlay.appendChild(spark);
+    }
+  }
   const beams = document.createElement("div");
   beams.className = `character-details-success-beams ${type === "unlock" ? "gem" : "coin"}`;
   const label = document.createElement("div");
   label.className = "character-details-success-label";
-  label.textContent = type === "unlock" ? "Unlocked!" : "Upgraded!";
-  overlay.appendChild(beams);
+  const headline = document.createElement("strong");
+  headline.textContent = type === "unlock" ? "Unlocked!" : "Level Up";
+  label.appendChild(headline);
+  if (type === "unlock") {
+    const shackles = document.createElement("div");
+    shackles.className = "unlock-shackles";
+    shackles.setAttribute("aria-hidden", "true");
+    for (const corner of ["top-left", "top-right", "bottom-left", "bottom-right"]) {
+      const chain = document.createElement("div");
+      chain.className = `unlock-chain unlock-chain-${corner}`;
+      shackles.appendChild(chain);
+    }
+    const lock = document.createElement("img");
+    lock.className = "unlock-breaking-lock";
+    lock.src = "/assets/icons/lock.webp";
+    lock.alt = "";
+    shackles.appendChild(lock);
+    overlay.appendChild(shackles);
+  }
+  let halo = null;
+  if (type === "upgrade") {
+    target.querySelectorAll(".character-upgrade-halo").forEach((previous) => previous.remove());
+    halo = document.createElement("div");
+    halo.className = "character-upgrade-halo";
+    halo.setAttribute("aria-hidden", "true");
+    target.appendChild(halo);
+  } else {
+    overlay.appendChild(beams);
+  }
   overlay.appendChild(label);
   target.appendChild(overlay);
   playSound("success", 0.6);
   setTimeout(() => {
     overlay.classList.add("fade-out");
-    setTimeout(() => overlay.remove(), 350);
-  }, 900);
+    halo?.classList.add("fade-out");
+    setTimeout(() => { overlay.remove(); halo?.remove(); }, 350);
+  }, 1750);
 }
 
 function syncCurrentUserLobbyLevel(character, level) {
@@ -1219,6 +1273,7 @@ export function openCharacterSelect() {
 }
 
 function openCharacterDetails(character) {
+  preloadSound("skinSwitch");
   renderCharacterDetails(character);
   const ui = ensureCharacterDetailsUi();
   const wasDetached = !ui.overlay.isConnected;
@@ -1363,6 +1418,7 @@ async function selectCharacter(character, { closeAfterSelection = true } = {}) {
 function closeConfirmationBackdrop(backdrop) {
   if (!backdrop || backdrop.dataset.dismissPending === "true") return;
   backdrop.dataset.dismissPending = "true";
+  if (backdrop.__previewFrame) delete backdrop.__previewFrame.dataset.confirming;
   backdrop.__removePriorityEscape?.();
   dismissPopup(backdrop, () => backdrop.remove());
 }
@@ -1401,9 +1457,18 @@ function showConfirmDialog(opts, onConfirm) {
 
   const backdrop = document.createElement("div");
   backdrop.className = "cs-confirm-backdrop";
+  const previewFrame = _characterDetailsUi?.previewStage;
+  if (previewFrame) {
+    previewFrame.dataset.confirming = "true";
+    showCharacterShowcaseBody(previewFrame);
+    backdrop.__previewFrame = previewFrame;
+  }
 
   const dialog = document.createElement("div");
-  dialog.className = "cs-confirm";
+  dialog.className = `cs-confirm cs-purchase-confirm${isUpgrade ? "" : " cs-unlock-confirm"}`;
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", isUpgrade ? "Confirm upgrade" : `Unlock ${character}`);
   // prevent clicks inside dialog from closing parent
   dialog.addEventListener("click", (e) => e.stopPropagation());
   const title = document.createElement("div");
@@ -1420,11 +1485,15 @@ function showConfirmDialog(opts, onConfirm) {
     heroBeams.className = "cs-hero-beams gem"; // gem theme (bluish)
     const heroImg = document.createElement("img");
     heroImg.className = "cs-hero-img";
-    heroImg.src = resolveCharacterPreviewAsset(character, getSelectedSkin(character)?.id);
+    heroImg.src = resolveBodyPortrait(buildCharacterSkinBodyUrl(character, getSelectedSkin(character)?.id));
     heroImg.alt = character;
     hero.appendChild(heroBeams);
     hero.appendChild(heroImg);
     msg.appendChild(hero);
+    const name = document.createElement("div");
+    name.className = "cs-unlock-name";
+    name.textContent = character;
+    msg.appendChild(name);
   }
   // Level line focus for upgrades
   if (isUpgrade) {
@@ -1459,7 +1528,7 @@ function showConfirmDialog(opts, onConfirm) {
   remainingIcon.src = isUpgrade ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp";
   remainingIcon.alt = isUpgrade ? "Coins" : "Gems";
   const remainingText = document.createElement("span");
-  remainingText.textContent = `Remaining after purchase: ${Math.max(
+  remainingText.textContent = `Remaining: ${Math.max(
     remaining,
     0,
   )}`;
@@ -1474,7 +1543,8 @@ function showConfirmDialog(opts, onConfirm) {
   cancelBtn.textContent = "Cancel";
   const okBtn = document.createElement("button");
   okBtn.className = "cs-btn confirm pixel-menu-button";
-  okBtn.innerHTML = `<img class="cs-currency" src="${
+  okBtn.setAttribute("aria-label", `${isUpgrade ? "Upgrade" : "Unlock"} ${character} for ${price} ${isUpgrade ? "coins" : "gems"}`);
+  okBtn.innerHTML = `${isUpgrade ? "<span>Upgrade</span>" : ""}<img class="cs-currency" src="${
     isUpgrade ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp"
   }" alt=""/> <span>${escapeHtml(price)}</span>`;
 

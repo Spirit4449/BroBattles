@@ -167,19 +167,23 @@ export function spawnLandingImpact(scene, x, y, opts = {}) {
   }
 
   // Air squeezed out from under the feet rolls away both ways along the floor.
-  withClouds(scene, (sim) => emitSurfaceBurst(sim, {
-    x,
-    y,
-    nx: 0,
-    ny: -1,
-    strength: intensity * 0.75,
-    bias: Phaser.Math.Clamp((Number(opts.velocityX) || 0) / 400, -0.6, 0.6),
-    scale: heavy ? 1.2 : 0.85,
-    pop: true,
-    halfWidth: bodyWidth * 0.45,
-    // A stomp is the heaviest contact there is: fully solid cloud.
-    ...(heavy ? { opacity: 1 } : {}),
-  }));
+  const cloudBursts = Math.max(1, Math.min(5, Math.round(Number(opts.smokeMultiplier) || 1)));
+  for (let burst = 0; burst < cloudBursts; burst++) {
+    withClouds(scene, (sim) => emitSurfaceBurst(sim, {
+      x: x + (burst % 2 ? -1 : 1) * burst * 5,
+      y,
+      nx: 0,
+      ny: -1,
+      strength: intensity * 0.75,
+      bias: Phaser.Math.Clamp((Number(opts.velocityX) || 0) / 400, -0.6, 0.6),
+      scale: heavy ? 1.2 : 0.85,
+      pop: true,
+      halfWidth: bodyWidth * 0.45,
+      // A stomp is the heaviest contact there is: fully solid cloud.
+      ...(heavy ? { opacity: 1 } : {}),
+    }));
+
+  }
 
   const debrisCount = Math.round(2 + intensity * 4);
   for (let i = 0; i < debrisCount; i++) {
@@ -1205,8 +1209,9 @@ export function triggerDamageScreenPulse(scene, opts = {}) {
 
 /** Heavy dash-down impact: wider dust/debris and two bright pressure rings. */
 export function spawnStompImpact(scene, x, y, opts = {}) {
-  spawnLandingImpact(scene, x, y, { impactVelocity: 1200, fallDistance: 400,
-    bodyWidth: 73.333, smokeMultiplier: 3, cameraShake: false });
+  const fallDistance = Math.max(0, Number(opts.fallDistance) || 0);
+  spawnLandingImpact(scene, x, y, { impactVelocity: 1200, fallDistance,
+    bodyWidth: 73.333, smokeMultiplier: 2 + Math.min(3, fallDistance / 200), cameraShake: false });
   for (const [radius, delay] of [[60.133, 0], [44, 65]]) {
     const ring = scene.add.graphics().setPosition(x, y - 2).setDepth(31);
     ring.lineStyle(5, 0xb9edff, 0.95);

@@ -131,17 +131,32 @@ function resolveWallContact(player, mapObjects = [], input = {}, now = Date.now(
   }
   const wallSlideSuppressed =
     (player._wallSlideSuppressedUntil || 0) > nowWallTs;
-  return { wallSide, wallSlideContact, effectiveWallSide, bufferedJumpPressActive, wallSlideSuppressed, wallBrakeHeld };
+  // Held input toward the wall; collision zeroes velocity once in contact.
+  const drivingIntoWall =
+    (wallSide === "left" && !!input.left && !input.right) ||
+    (wallSide === "right" && !!input.right && !input.left);
+  return { wallSide, wallSlideContact, effectiveWallSide, bufferedJumpPressActive, wallSlideSuppressed, wallBrakeHeld, drivingIntoWall };
 }
 
-function applyWallSlide(player, { dead, movementLocked, wallSlideContact, wallSide, wallBrakeHeld }, now = Date.now()) {
+function applyWallSlide(player, { dead, movementLocked, wallSlideContact, wallSide, wallBrakeHeld, drivingIntoWall = false }, now = Date.now()) {
   const wallSlideMaxFallSpeed = MOVEMENT_PHYSICS.wallSlideMaxFallSpeed;
   const wallAttachNow = now;
+  // Rising straight up beside a wall never starts a slide. Moving into the wall
+  // (held input or momentum) still does, and an attach already under way holds.
+  const velocityX = Number(player.body.velocity?.x) || 0;
+  const headingIntoWall = drivingIntoWall ||
+    (wallSide === "right" && velocityX > 0) ||
+    (wallSide === "left" && velocityX < 0);
+  const risingPastWall =
+    (Number(player.body.velocity?.y) || 0) < 0 &&
+    !headingIntoWall &&
+    player._wallAttachSide !== wallSide;
   const wallAttachEligible =
     !dead &&
     !movementLocked &&
     !player.body.touching.down &&
     wallSlideContact &&
+    !risingPastWall &&
     (player._wallSlideSuppressedUntil || 0) <= wallAttachNow;
   if (!wallAttachEligible) {
     player._wallAttachSide = null;
@@ -155,11 +170,27 @@ function applyWallSlide(player, { dead, movementLocked, wallSlideContact, wallSi
   if (isWallSliding) {
     // Contact can brake descent, but must never pull the player into a wall
     // or replace the horizontal velocity/acceleration chosen by movement.
-    if (player.body.velocity.y >= 0) {
-      player.setVelocityY(Math.min(player.body.velocity.y,
-        wallBrakeHeld ? MOVEMENT_PHYSICS.wallSlideBrakeFallSpeed : wallSlideMaxFallSpeed));
+    const velocityY = Number(player.body.velocity.y) || 0;
+    const lastAt = player._wallRiseDragAt;
+    const dt = lastAt == null ? 0 : Math.min(0.05, Math.max(0, (wallAttachNow - lastAt) / 1000));
+    if (velocityY >= 0) {
+      let capped = Math.min(velocityY,
+        wallBrakeHeld ? MOVEMENT_PHYSICS.wallSlideBrakeFallSpeed : wallSlideMaxFallSpeed);
+      // After stalling on the wall, the slide picks up speed gently, so the
+      // turn at the apex hangs instead of snapping straight back down.
+      const prevVy = player._wallSlidePrevVy;
+      if (lastAt != null && Number.isFinite(prevVy)) {
+        capped = Math.min(capped, Math.max(0, prevVy) + MOVEMENT_PHYSICS.wallSlideFallAccel * dt);
+      }
+      player.setVelocityY(capped);
+    } else if (!player._jumpLaunch && lastAt != null) {
+      // Rising along a wall bleeds upward speed on top of gravity, so a jump
+      // into a wall stalls instead of carrying the player far up its face.
+      player.setVelocityY(Math.min(0, velocityY + MOVEMENT_PHYSICS.wallSlideRiseDrag * dt));
     }
   }
+  player._wallRiseDragAt = isWallSliding ? wallAttachNow : null;
+  player._wallSlidePrevVy = isWallSliding ? Number(player.body.velocity.y) || 0 : null;
   return isWallSliding;
 }
 

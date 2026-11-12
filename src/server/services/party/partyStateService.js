@@ -299,6 +299,7 @@ function createPartyStateService({ db, io }) {
     isPublic,
     publicName,
     allowMemberSelection,
+    hideEnemyBros,
   }) {
     if (!partyId || !actorName) {
       return { ok: false, error: "Missing party action data." };
@@ -333,17 +334,21 @@ function createPartyStateService({ db, io }) {
           typeof allowMemberSelection === "boolean"
             ? ", allow_member_selection = ?"
             : ""
-        } WHERE party_id = ?`,
+        }${typeof hideEnemyBros === "boolean" ? ", hide_enemy_bros = ?" : ""} WHERE party_id = ?`,
         [
           normalizedPublic ? 1 : 0,
           normalizedPublic ? normalizedName : null,
           ...(typeof allowMemberSelection === "boolean"
             ? [allowMemberSelection ? 1 : 0]
             : []),
+          ...(typeof hideEnemyBros === "boolean" ? [hideEnemyBros ? 1 : 0] : []),
           partyId,
         ],
       );
     } catch (error) {
+      if (error?.code === "ER_BAD_FIELD_ERROR" && /hide_enemy_bros/i.test(String(error.sqlMessage || error.message))) {
+        return { ok: false, statusCode: 503, error: "Apply the party hidden Bros migration before changing this setting." };
+      }
       if (
         error?.code === "ER_BAD_FIELD_ERROR" &&
         /allow_member_selection/i.test(String(error.sqlMessage || error.message))
@@ -376,6 +381,7 @@ function createPartyStateService({ db, io }) {
         isPublic: Number(rows?.[0]?.is_public || 0) === 1,
         publicName: String(rows?.[0]?.public_name || "").trim(),
         allowMemberSelection: Number(rows?.[0]?.allow_member_selection ?? 1) === 1,
+        hideEnemyBros: Number(rows?.[0]?.hide_enemy_bros ?? 0) === 1,
       },
     };
   }

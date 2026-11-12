@@ -267,6 +267,36 @@ describe("Local respawn", () => {
     assert.equal(sounds.length, 3, 'reverse notification order must also play once');
   });
 
+  test('shockwave hit playback resolves local, teammate and opponent sprites and respects suppression', () => {
+    const hits = [], handlers = {};
+    const noop = () => {};
+    const { createMatchCoordinator } = loadClientModule('src/client/game/match/matchCoordinator.js', {
+      require: () => ({
+        getCharacterSocketEvents: () => [], startServerClockSync: noop, stopServerClockSync: noop,
+        createSnapshotDecoder: require('../src/shared/snapshotDelta').createSnapshotDecoder,
+        spawnShockwaveHitSmoke: (scene, sprite, impulse) => hits.push({ scene, sprite, impulse }),
+      }), window: {},
+    });
+    const scene = {}, self = {}, ally = {}, enemy = {};
+    let suppressed = false;
+    const coordinator = createMatchCoordinator({
+      socket: { on: (name, fn) => { handlers[name] = fn; }, off: noop },
+      getGameScene: () => scene, getUsername: () => 'self', getPlayer: () => self,
+      opponentPlayers: { enemy: { opponent: enemy } }, teamPlayers: { ally: { opponent: ally } },
+      isPresentationSuppressed: () => suppressed,
+      getGameEnded: () => true, getIsLiveGame: () => true,
+    });
+    coordinator.register();
+    for (const username of ['self', 'ally', 'enemy']) {
+      handlers['shockwave:hit']({ username, amountX: 500, amountY: -300 });
+    }
+    assert.deepEqual(hits.map(hit => hit.sprite), [self, ally, enemy]);
+    assert.ok(hits.every(hit => hit.scene === scene && hit.impulse.amountX === 500));
+    suppressed = true;
+    handlers['shockwave:hit']({ username: 'self' });
+    assert.equal(hits.length, 3);
+  });
+
   test('match playback includes the freeze power-up tick', () => {
     const exports = {};
     const noop = () => {};

@@ -10,6 +10,7 @@ import { createRuntimeId } from "../shared/runtimeId";
 import { faceAttack } from "../shared/flipLock";
 import { consumeOnce } from "../shared/packetDedupe";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { beginThrow } from "./throwPresentation";
 
 // Single source of truth for this character's name/key
 const NAME = "ninja";
@@ -86,6 +87,7 @@ class Ninja extends CharacterEntityBase {
         logical: "throw",
         fallback: "idle",
         id: data.id || data.instanceId || null,
+        variant: beginThrow(ownerSprite, data.angle),
       });
       // Instantiate a non-owner returning shuriken so visuals match
       const shuriken = new ReturningShuriken(
@@ -169,6 +171,7 @@ class Ninja extends CharacterEntityBase {
         logical: "throw",
         fallback: "idle",
         id: attackId,
+        variant: beginThrow(p, angle),
       });
 
       const config = {

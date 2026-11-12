@@ -3,6 +3,58 @@ const assert = require('node:assert/strict');
 const { createBrowserFixture } = require('./helpers/browserFixture');
 
 describe('Chat integration', () => {
+  test('message receipts sit beside the time and only reactions add a footer', () => {
+    const f = createBrowserFixture();
+    const { renderPartyChatMessage } = f.load('src/client/chat/presentation.js');
+    const message = { id: 1, sender: { name: 'Alice' }, body: 'Ready?', createdAt: new Date().toISOString(), viewCount: 2 };
+    let opened;
+    const options = { currentUserName: 'Bob', onOpenViewers: (item, anchor) => opened = { item, anchor } };
+    const row = renderPartyChatMessage(message, options);
+    assert.equal(row.querySelector('.bb-chat-message-meta'), null);
+    const status = row.querySelector('.bb-chat-message-status');
+    assert.ok(status.querySelector('.bb-chat-time').textContent);
+    const receipt = status.querySelector('.bb-chat-view-count');
+    assert.equal(receipt.textContent, '2');
+    receipt.click();
+    assert.equal(opened.item, message);
+    assert.equal(opened.anchor, receipt);
+
+    const reacted = renderPartyChatMessage({ ...message, reactions: [{ reaction: '🔥', count: 1 }] }, options);
+    assert.equal(reacted.querySelector('.bb-chat-reaction-count').textContent, '1');
+    assert.equal(reacted.querySelector('.bb-chat-inline-reaction img').getAttribute('src'), '/assets/chat-reactions/fire.svg');
+    assert.equal(reacted.querySelector('.bb-chat-message-meta .bb-chat-view-count'), null);
+    assert.equal(reacted.querySelector('.bb-chat-bubble').lastElementChild.className, 'bb-chat-hover-actions');
+    assert.equal(reacted.getAttribute("tabindex"), "0");
+    const direct = renderPartyChatMessage(message, { ...options, showViewCount: false });
+    assert.equal(direct.querySelector('.bb-chat-view-count'), null);
+    assert.equal(direct.querySelector('.bb-chat-message-meta'), null);
+  });
+
+  test('all six pixel reactions send compatible values and describe their selection', () => {
+    const f = createBrowserFixture();
+    const { renderPartyChatMessage } = f.load('src/client/chat/presentation.js');
+    const message = { id: 9, sender: { name: 'Alice' }, body: 'Good game', myReaction: '😭',
+      reactions: [{ reaction: '😭', count: 2 }, { reaction: '👎', count: 1 }, { reaction: '⭐', count: 1 }] };
+    const sent = [];
+    const row = renderPartyChatMessage(message, { currentUserName: 'Bob', onReact: (item, reaction) => sent.push([item.id, reaction]) });
+    const buttons = [...row.querySelectorAll('.bb-chat-hover-reactions button')];
+    const values = ['👍', '👎', '❤️', '😂', '😭', '🔥'];
+    const names = ['Like', 'Dislike', 'Heart', 'Laughing', 'Crying', 'Fire'];
+    assert.equal(buttons.length, values.length);
+    buttons.forEach((button, i) => {
+      assert.ok(button.querySelector('img').getAttribute('src').startsWith('/assets/chat-reactions/'));
+      assert.ok(button.getAttribute('aria-label').toLowerCase().includes(names[i].toLowerCase()));
+      assert.equal(button.getAttribute('aria-pressed'), String(values[i] === message.myReaction));
+      button.click();
+    });
+    assert.deepEqual(sent, values.map(value => [9, value]));
+    const chips = [...row.querySelectorAll('.bb-chat-inline-reaction')];
+    assert.equal(chips[0].getAttribute('aria-label'), 'Crying, 2 reactions');
+    chips[0].click();
+    assert.deepEqual(sent.at(-1), [9, '😭']);
+    assert.ok(chips[2].textContent.includes('⭐'));
+  });
+
   const { registerChatEvents } = require('../src/server/core/socketEvents/chatEvents');
   test('typing cannot be broadcast into another party', () => {
     const handlers = {};
@@ -70,7 +122,7 @@ describe('Chat integration', () => {
     } });
     const active = [...f.document.querySelectorAll('.bb-chat-inline-reaction.is-active')];
     assert.equal(active.length, 1);
-    assert.ok(active[0].textContent.includes('❤️'));
+    assert.equal(active[0].querySelector('img').getAttribute('src'), '/assets/chat-reactions/heart.svg');
   });
 
   test('battle send prevents duplicate submissions and preserves the other channel draft', async t => {

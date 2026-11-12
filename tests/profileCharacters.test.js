@@ -51,6 +51,50 @@ test('skin picker saves owned choices once, previews locked choices and rolls ba
   assert.equal(popup.getAttribute('aria-hidden'), 'false');
 });
 
+test('browsing skins cancels showcase autoplay before and after stage preparation', async () => {
+  const { parseHTML } = require('linkedom');
+  const { loadClientModule } = require('./helpers/clientModule');
+  for (const readyFirst of [false, true]) {
+    const { document } = parseHTML('<html><body><div id="preview"></div></body></html>');
+    const timers = new Map();
+    let timerId = 0;
+    let finishPreparation;
+    const preparation = new Promise(resolve => { finishPreparation = resolve; });
+    const shown = [];
+    const api = loadClientModule('src/client/lobby/profile/characterShowcase.js', {
+      document, performance: { now: () => 0 }, console,
+      window: { Phaser: {}, matchMedia: () => ({ matches: false }) },
+      setTimeout: callback => { timers.set(++timerId, callback); return timerId; },
+      clearTimeout: id => timers.delete(id),
+      require: () => ({ createShowcaseStage: () => ({
+        prepare: () => preparation,
+        show: options => { shown.push(options); return true; },
+        hide() {},
+      }) }),
+    });
+    const settle = () => new Promise(resolve => setImmediate(resolve));
+    const frame = document.getElementById('preview');
+    api.mountCharacterShowcase(frame, { character: 'gloop', skinId: 'base' });
+    await settle();
+    if (readyFirst) {
+      finishPreparation();
+      await settle();
+      assert.equal(timers.size, 1);
+    }
+    api.updateCharacterShowcaseSkin(frame, 'gloop', 'selected');
+    finishPreparation();
+    await settle();
+    assert.equal(timers.size, 0);
+    assert.equal(frame.dataset.showcaseView, 'body');
+    assert.equal(shown.length, 0);
+    frame.querySelectorAll('button')[1].click();
+    await settle();
+    assert.equal(shown.length, 1, 'manual view selection still works');
+    assert.equal(shown[0].skinId, 'selected');
+    api.hideCharacterShowcase();
+  }
+});
+
 test('showcase is available without a character allowlist and respects reduced motion', () => {
   const { loadClientModule } = require('./helpers/clientModule');
   let reduced = false;
@@ -259,11 +303,11 @@ test('Gloop basic and hook apply real slowing modifiers, pull and expiry', () =>
   assert.ok(combatEffects.getModifiers(enemy, session.now).speedMult < 1);
 });
 
-test('showcase rosters are equal-level, support teams, and select Ninja for Gloop', () => {
+test('showcase rosters are equal-level, support teams, and select Thorg for Gloop', () => {
   const { createClientModuleGraph } = require('./helpers/clientModule');
   const { showcaseRoster } = createClientModuleGraph().load('src/client/lobby/profile/showcaseKit.js');
   const gloop = showcaseRoster({ character: 'gloop', mode: 'fight', level: 8 });
-  assert.equal(gloop[1].character, 'ninja');
+  assert.equal(gloop[1].character, 'thorg');
   const wizard = showcaseRoster({ character: 'wizard', mode: 'fight', level: 8 });
   assert.equal(wizard.length, 3);
   assert.equal(wizard.filter(p => p.team !== wizard[0].team).length, 1);
@@ -382,4 +426,90 @@ test('showcase starts empty, respects attack cooldowns and gives the featured fi
     }
     session.dispose();
   }
+});
+
+
+test('showcase presentation shares centered projectile bounds and displayed contact bodies', () => {
+  const { loadClientModule } = require('./helpers/clientModule');
+  const { EventEmitter } = require('node:events');
+  const { createShowcaseFight } = loadClientModule('src/client/lobby/profile/showcaseFight.js', {
+    window: { Phaser: {} },
+    require: name => {
+      if (name.endsWith('/previewSession')) return { PreviewSession };
+      if (name.endsWith('/huntressReplication')) return require('../src/shared/characters/huntressReplication');
+      if (name.endsWith('/networkRegistry')) return { createCharacterNetworkAdapters: () => [] };
+      if (name.endsWith('/characters')) return { getCharacterSocketEvents: () => [], getCharacterEffectTickSounds: () => [] };
+      if (name.endsWith('/powerupRenderer')) return { createPowerupRenderer: () => ({}) };
+      if (name.endsWith('/powerupConfig')) return { createPowerupTickSounds: () => ({}) };
+      if (name.endsWith('/showcaseDirector')) return { seededRandom: () => () => 0, createShowcaseDirector: () => () => {} };
+      return {};
+    },
+  });
+  let bounds;
+  const scene = { _bbSeenPackets: new Map([['gloop-release', new Map([['hero:1', Date.now()]])]]),
+    _gloopSplats: new Map([['hero:1', { id: 'hero:1' }]]), events: new EventEmitter(), add: { graphics: () => ({ setDepth() { return this; }, destroy() {} }) },
+    physics: { world: { setBounds(...values) { bounds = values; } } } };
+  const sprite = { x: -100, y: -36, displayWidth: 84, displayHeight: 90,
+    body: { width: 42, height: 60, center: { x: -97, y: -30 } } };
+  const fight = createShowcaseFight({ scene, fighters: [{ id: 'hero', character: 'gloop', team: 'team1',
+    homeX: sprite.x, standY: sprite.y, sprite }], halfWidth: 240 });
+  assert.equal(scene._bbSeenPackets.size, 0, 'a new round can render reused action IDs');
+  assert.equal(scene._gloopSplats.size, 0, 'the first projectile cannot inherit an old splat');
+  const world = fight.session.geometry.world, player = fight.session.players.get('hero');
+  assert.deepEqual(bounds, [world.x, world.y, world.width, world.height]);
+  assert.ok(bounds[0] < sprite.x, 'left-side launches remain inside the rendered arena');
+  assert.equal(player.y + player._bodyCenterOffsetY + player._bodyHalfHeight, 0);
+  assert.equal(player.x + player._bodyCenterOffsetX + player._bodyHalfWidth, sprite.body.center.x + sprite.body.width / 2);
+  fight.dispose();
+});
+
+
+test('Gloop earns his hook against a Thorg who approaches then retreats slowed', () => {
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const graph = createClientModuleGraph();
+  const { showcaseRoster } = graph.load('src/client/lobby/profile/showcaseKit.js');
+  const { createShowcaseDirector } = graph.load('src/client/lobby/profile/showcaseDirector.js');
+  let hookedAlive = false, approached = false, retreatedSlow = false;
+  const session = new PreviewSession(showcaseRoster({ character: 'gloop', mode: 'fight', level: 3 }), {
+    onEvent(type, packet) {
+      if (type === 'game:action' && packet.playerName === 'hero' && packet.action.type === 'gloop-hook-release') hookedAlive = session.players.get('enemy').isAlive;
+    }, random: () => 0,
+  });
+  const direct = createShowcaseDirector(session);
+  for (let i = 0; i < 1800 && !hookedAlive; i++) {
+    session.step(direct);
+    const enemy = session.players.get('enemy');
+    approached ||= enemy.vx < 0;
+    retreatedSlow ||= enemy.vx > 0 && enemy.health < enemy.maxHealth * 0.65 && combatEffects.getModifiers(enemy, session.now).speedMult < 1;
+  }
+  assert.ok(approached, 'Thorg walks toward Gloop');
+  assert.ok(retreatedSlow, 'hurt Thorg retreats under the real slime slow');
+  assert.ok(hookedAlive, 'Gloop uses earned super before Thorg dies');
+  session.dispose();
+});
+
+
+test('slime reduces showcase travel speed and expires back to normal', () => {
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { createShowcaseDirector } = createClientModuleGraph().load('src/client/lobby/profile/showcaseDirector.js');
+  const physics = require('../src/shared/physics/movementPhysics.json');
+  const measure = slimed => {
+    const { session, enemy } = preview('gloop', 'thorg');
+    session.players.get('hero').x = -10000;
+    enemy.x = 10000;
+    if (slimed) combatEffects.apply(enemy, 'gloopSlimeSlow', session.now);
+    const direct = createShowcaseDirector(session, { halfWidth: 20000, random: () => 0 });
+    for (let i = 0; i < 100; i++) session.step(direct);
+    const before = enemy.x;
+    for (let i = 0; i < 5; i++) session.step(direct);
+    const travel = before - enemy.x;
+    for (let i = 0; i < 100; i++) session.step(direct);
+    assert.ok(Math.abs(enemy.vx + physics.maxSpeed) < 0.001, 'normal speed returns after expiry');
+    session.dispose();
+    return travel;
+  };
+  const normal = measure(false), slowed = measure(true);
+  const multiplier = require('../src/shared/effectRules').getEffectModifiers('gloopSlimeSlow').speedMult;
+  assert.ok(normal > 0);
+  assert.ok(Math.abs(slowed / normal - multiplier) < 0.001, 'distance traveled reflects the actual slime multiplier');
 });

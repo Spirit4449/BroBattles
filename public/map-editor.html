@@ -14,6 +14,7 @@
 <body>
 <div id="studio">
   <header class="toolbar">
+    <span class="site-menu-host"><span class="site-menu-placeholder" aria-hidden="true"></span></span>
     <a href="/" class="brand" title="Return to lobby"><img src="/assets/logos/wordmark.webp" width="118" height="24" alt="Bro Battles"><span>Map Studio</span></a>
     <div class="tool-group map-group">
       <select id="map-select" aria-label="Map"></select>
@@ -25,7 +26,6 @@
     </div>
     <span class="spacer"></span>
     <div class="tool-group playtest-group" aria-label="Playtest">
-      <button id="preview" class="playtest-button" title="Playtest this draft (Esc)"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M7 4h3v2h3v2h3v2h2v4h-2v2h-3v2h-3v2H7z"/></svg>Playtest<kbd>Esc</kbd></button>
       <div class="playtest-settings" role="group" aria-label="Playtest settings">
         <select id="playtest-formation" class="playtest-inline" title="Duel formation" aria-label="Duel formation"><option value="duels-1v1">1v1</option><option value="duels-2v2">2v2</option></select>
         <select id="playtest-kind" class="playtest-inline" title="Opponents" aria-label="Opponents"><option value="solo">Solo</option><option value="bots">With bots</option></select>
@@ -33,6 +33,7 @@
         <label class="check playtest-toggle" title="Show map, player and attack collision shapes"><input type="checkbox" id="debug-hitboxes"><span>Hitboxes</span></label>
         <label class="check playtest-toggle" title="Infinite supers"><input type="checkbox" id="infinite-supers" checked><span>∞ Supers</span></label>
       </div>
+      <button id="preview" class="playtest-button" title="Playtest this draft (Esc)"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M7 4h3v2h3v2h3v2h2v4h-2v2h-3v2h-3v2H7z"/></svg>Playtest<kbd>Esc</kbd></button>
       <span id="playtest-summary" hidden></span>
     </div>
     <div class="tool-group file-group">
@@ -66,7 +67,7 @@
       <button id="zoom-in" class="icon-button" title="Zoom in (+)" aria-label="Zoom in"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M10 5h4v5h5v4h-5v5h-4v-5H5v-4h5z"/></svg></button>
       <span class="tool-divider"></span>
       <button id="camera-preview" title="Look through the match camera: real parallax, fog and zoom range (C)" aria-pressed="false">Game camera</button>
-      <label class="snap-label">Snap <select id="grid" aria-label="Snap grid"><option value="8">8 px</option><option value="16" selected>16 px</option><option value="32">32 px</option><option value="64">64 px</option><option value="0">Off</option></select></label>
+      <div class="snap-label">Snap <select id="grid" aria-label="Snap grid"><option value="8">8 px</option><option value="16" selected>16 px</option><option value="32">32 px</option><option value="64">64 px</option><option value="0">Off</option></select></div>
       <span class="tool-divider"></span>
       <button id="shortcuts" class="icon-button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
     </div>

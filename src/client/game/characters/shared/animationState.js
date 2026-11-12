@@ -110,6 +110,7 @@ export function markOneShotAnimation(
   { remote = false, id = null } = {},
 ) {
   if (!sprite) return;
+  if (sprite._bbAnimationState) sprite._bbAnimationState.stompPose = false;
   const ms = Math.max(80, Number(durationMs) || DEFAULT_ONE_SHOT_MS);
   const state = sprite._bbAnimationState || {};
   if (state.wallJumpAnimationKey && sprite.anims) sprite.anims.timeScale = 1;
@@ -256,16 +257,21 @@ export function playSpriteAnimation({
   id = null,
   holdMs = 0,
   remote = false,
+  variant = null,
 } = {}) {
   if (!sprite?.anims) return null;
-  const key = resolveSpriteAnimationKey({
+  if (sprite._bbAnimationState) sprite._bbAnimationState.stompPose = false;
+  const baseKey = resolveSpriteAnimationKey({
     scene,
     sprite,
     character,
     logical,
     fallback,
   });
-  if (!key) return null;
+  if (!baseKey) return null;
+  // A variant is another drawing of the same action (a throw aimed upward):
+  // `<key>-<variant>` plays in its place when the art has it.
+  const key = variant && scene.anims.exists?.(`${baseKey}-${variant}`) ? `${baseKey}-${variant}` : baseKey;
   const char = String(character || sprite?._bbCharacter || "").toLowerCase();
   const wanted = toLogicalAnimation(logical, char);
   try {
@@ -338,7 +344,7 @@ export function holdWallSlidePose(sprite, { sliding = false, grounded = false, n
 // Dash directions use screen coordinates (negative Y points upward).
 export function directionalDashAnimation(character, direction) {
   if (direction?.x === 0 && direction?.y > 0) return "ducking";
-  if (!["thorg", "gloop"].includes(String(character).toLowerCase()) ||
+  if (!["thorg", "gloop", "ninja"].includes(String(character).toLowerCase()) ||
       !Number.isFinite(direction?.x) || !Number.isFinite(direction?.y)) return "dashing";
   if (direction.y < 0) return direction.x ? "dashdiagonal" : "dashup";
   return direction.x ? "dashright" : "falling";
@@ -367,10 +373,19 @@ export function playCharacterAnimation({
     clearAction(sprite);
   }
   const direction = dashDirection || sprite._dash;
+  const poseState = sprite._bbAnimationState ||= {};
+  if (wanted === "dashing") poseState.stompPose = direction?.x === 0 && direction?.y > 0;
+  else if (wanted !== "falling") poseState.stompPose = false;
+  if (wanted === "falling" && poseState.stompPose) wanted = "ducking";
   if (wanted === "dashing") {
     wanted = directionalDashAnimation(character, direction);
   }
-  const key = resolveAnimKey(scene, character, wanted, fallback, skinId);
+  let key = resolveAnimKey(scene, character, wanted, fallback, skinId);
+  // Art drawn before a character had directional dashes (its skins) keeps the single dash.
+  if (DASH_ANIMATIONS.has(wanted) && wanted !== "dashing" && !key?.endsWith(`-${wanted}`)) {
+    wanted = "dashing";
+    key = resolveAnimKey(scene, character, wanted, fallback, skinId);
+  }
   if (!key) return null;
   try {
     const motion = scene.anims?.get?.(key)?.bbMotion;

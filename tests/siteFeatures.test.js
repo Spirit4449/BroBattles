@@ -76,9 +76,114 @@ describe("Public site and account workflows", () => {
   });
   test('public page routes register without authentication and return HTML without game engines',()=>{
     const routes=new Map();registerSitePages({get:(path,fn)=>routes.set(path,fn)});
-    let html='';routes.get('/about')({}, {send:value=>html=value});assert.match(html,/One more match/);assert.doesNotMatch(html,/phaser|socket.io|index.bundle.js/);
+    let html='';routes.get('/about')({}, {send:value=>html=value});assert.match(html,/2D arena game/);assert.doesNotMatch(html,/phaser|socket.io|index.bundle.js/);
     assert.match(frame('<script>','" test','body','/test'),/&lt;script&gt;/);
     let status;routes.get('/news/:slug')({params:{slug:'missing'},path:'/news/missing'},{status:code=>{status=code;return {send(){}};}});assert.equal(status,404);
+  });
+  test('About explains current fighters and modes and gives each exploration link a real destination',()=>{
+    const {parseHTML}=require('linkedom');
+    const routes=new Map();registerSitePages({get:(path,fn)=>routes.set(path,fn)});
+    let html='';routes.get('/about')({}, {send:value=>html=value});
+    const {document}=parseHTML(html);
+    const stats=require('../src/shared/characters').characterStats;
+    for(const [key,value] of Object.entries(stats)) {
+      const fighter=document.getElementById(`fighter-${key}`);
+      assert.equal(fighter.tagName,'DETAILS');
+      assert.ok(fighter.textContent.includes(value.attackDescription));
+      assert.ok(fighter.textContent.includes(value.specialDescription));
+    }
+    const modes=require('../src/shared/catalogs/gameModes.catalog.json').modes;
+    assert.deepEqual([...document.querySelectorAll('.about-mode')].map(node=>node.id),modes.filter(mode=>mode.implemented&&mode.queueable).map(mode=>`mode-${mode.id}`));
+    for(const link of document.querySelectorAll('main a[href^="#"]')) assert.ok(document.querySelector(link.getAttribute('href')));
+    const guide=parseHTML(article('help','modes-and-maps').html).document;
+    for(const link of document.querySelectorAll('.about-mode a')) assert.ok(guide.getElementById(link.getAttribute('href').split('#')[1]));
+    assert.equal(document.querySelectorAll('[data-reel-clip]').length,0);
+    assert.equal(document.querySelector('video').getAttribute('preload'),'none');
+    assert.equal(document.querySelector('video').hasAttribute('src'),false);
+    assert.equal(document.querySelectorAll('main a[href="/"]').length,1);
+    assert.equal(document.querySelectorAll('.about-crew a[href="/help/getting-started"]').length,1);
+    assert.equal(document.querySelectorAll('.arena-footer nav').length,3);
+  });
+  test('help topics expose every article and keep search status separate from the input label',()=>{
+    const {parseHTML}=require('linkedom');
+    const manifest=require('../content/manifest.json');
+    const routes=new Map();registerSitePages({get:(path,fn)=>routes.set(path,fn)});
+    let html='';routes.get('/help')({}, {send:value=>html=value});
+    const {document}=parseHTML(html);
+    const input=document.querySelector('#help-search');
+    assert.ok(document.querySelector(`label[for="${input.id}"]`));
+    const status=document.querySelector('#help-search-status');
+    assert.equal(status.getAttribute('role'),'status');
+    assert.equal(status.closest('label'),null);
+    assert.equal(document.querySelector('.site-help-hero p'),null);
+    const topics=[...document.querySelectorAll('[data-help-category]')];
+    assert.deepEqual(topics.map(topic=>topic.querySelector('h2').textContent),[...new Set(manifest.help.map(item=>item.category))]);
+    for(const item of manifest.help){
+      const link=document.querySelector(`[data-help-slug="${item.slug}"]`);
+      assert.equal(link.getAttribute('href'),`/help/${item.slug}`);
+      assert.equal(link.querySelector('strong').textContent,item.title);
+      assert.equal(link.querySelector('small').textContent,item.summary);
+      assert.equal(link.closest('[data-help-category]').querySelector('h2').textContent,item.category);
+    }
+    assert.equal(document.querySelectorAll('[data-help-slug]').length,manifest.help.length);
+    assert.equal(JSON.parse(document.querySelector('#help-search-documents').textContent).length,manifest.help.length);
+  });
+  test('news previews show one headline and an excerpt, and articles keep their headline and lobby action',()=>{
+    const {parseHTML}=require('linkedom');
+    const manifest=require('../content/manifest.json');
+    const routes=new Map();registerSitePages({get:(path,fn)=>routes.set(path,fn)});
+    const render=(route,request={})=>{
+      let html='';routes.get(route)(request,{send:value=>html=value});
+      return parseHTML(html).document;
+    };
+    const board=render('/news');
+    const links=[...board.querySelectorAll('main a[href^="/news/"]')];
+    const sorted=[...manifest.news].sort((a,b)=>b.date.localeCompare(a.date));
+    assert.deepEqual(links.map(link=>link.getAttribute('href')),sorted.map(item=>`/news/${item.slug}`));
+    assert.equal(board.querySelectorAll('main h1').length,1);
+    assert.equal(board.querySelector('main h1').textContent,'Bro Battles News');
+    assert.equal(board.querySelector('.site-news-heading').textContent,'Bro Battles News');
+    for(const link of links){
+      assert.equal(link.querySelectorAll('h2,h3').length,1);
+      assert.equal(link.querySelector('.site-eyebrow'),null);
+      assert.equal(link.querySelector('.site-news-read').textContent.trim(),'Read more');
+    }
+    assert.equal(links[0].querySelector('h2').textContent,sorted[0].title);
+    for(const item of manifest.news){
+      const document=render('/news/:slug',{params:{slug:item.slug},path:`/news/${item.slug}`});
+      const story=document.querySelector('main article');
+      assert.equal(story.querySelector('h1').textContent,item.title);
+      assert.equal(story.querySelector('header .site-eyebrow'),null);
+      assert.equal(story.querySelector('header .site-article-summary'),null);
+      assert.equal(story.querySelector('time').getAttribute('datetime'),item.date);
+      assert.equal(story.querySelector('.site-prose p').textContent,item.summary);
+      assert.equal(story.querySelector('.site-news-cta a').getAttribute('href'),'/');
+      assert.equal(story.querySelectorAll('.site-related a').length,manifest.news.length-1);
+    }
+    const help=render('/help/:slug',{params:{slug:'controls'},path:'/help/controls'});
+    assert.ok(help.querySelector('.site-article-support'));
+    assert.equal(help.querySelector('.site-news-cta'),null);
+  });
+  test('discovery metadata and sitemap use the configured public origin and published articles',()=>{
+    const old=process.env.PUBLIC_BASE_URL;
+    try {
+      process.env.PUBLIC_BASE_URL='https://example.test';
+      const routes=new Map();registerSitePages({get:(path,fn)=>routes.set(path,fn)});
+      let body='', type='';
+      const response={type(value){type=value;return this;},send(value){body=value;return this;},status(value){this.statusCode=value;return this;}};
+      routes.get('/sitemap.xml')({},response);
+      assert.equal(type,'application/xml');assert.match(body,/<loc>https:\/\/example\.test\/about<\/loc>/);
+      assert.match(body,/<loc>https:\/\/example\.test\/help\/matchmaking<\/loc>/);
+      assert.doesNotMatch(body,/help\/requests|party\//);
+      routes.get('/robots.txt')({},response);assert.match(body,/Sitemap: https:\/\/example\.test\/sitemap.xml/);
+      const html=frame('A & B','A "description"','', '/about');
+      assert.match(html,/property="og:title" content="A &amp; B · Bro Battles"/);
+      assert.match(html,/rel="canonical" href="https:\/\/example\.test\/about"/);
+      routes.get('/help/requests')({},response);assert.match(body,/name="robots" content="noindex, follow"/);
+      delete process.env.PUBLIC_BASE_URL;
+      routes.get('/sitemap.xml')({},response);assert.equal(response.statusCode,503);
+      routes.get('/robots.txt')({},response);assert.doesNotMatch(body,/Sitemap:/);
+    } finally {if(old===undefined)delete process.env.PUBLIC_BASE_URL;else process.env.PUBLIC_BASE_URL=old;}
   });
   test('browser settings clamp values and preserve defaults with malformed storage',async()=>{
     const {normalizeSettings,DEFAULT_SETTINGS,GRAPHICS_OPTIONS,graphicsRenderScale}=await import('../src/client/site/preferences.js');

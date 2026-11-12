@@ -1,45 +1,178 @@
 {
-  "version": 1,
-  "cellSize": 256,
+  "version": 2,
+  "cellSize": 384,
   "animations": [
     {
       "key": "idle",
-      "fps": 20,
+      "fps": 12.5,
       "loop": true,
+      "row": 0,
       "frames": [
         "idle00",
         "idle01",
         "idle02",
         "idle03",
-        "idle04"
+        "idle04",
+        "idle05",
+        "idle06",
+        "idle07",
+        "idle08",
+        "idle09",
+        "idle10",
+        "idle11",
+        "idle12",
+        "idle13",
+        "idle14",
+        "idle15"
       ],
-      "row": 0,
       "frameDurationsMs": [
-        1000,
-        400,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80,
+        80
+      ]
+    },
+    {
+      "key": "attack-high",
+      "fps": 16.67,
+      "loop": false,
+      "row": 1,
+      "frames": [
+        "attackHigh00",
+        "attackHigh01",
+        "attackHigh02",
+        "attackHigh03"
+      ],
+      "frameDurationsMs": [
         70,
-        90,
-        160
+        70,
+        80,
+        60
+      ]
+    },
+    {
+      "key": "attack-up",
+      "fps": 16.67,
+      "loop": false,
+      "row": 2,
+      "frames": [
+        "attackUp00",
+        "attackUp01",
+        "attackUp02",
+        "attackUp03"
+      ],
+      "frameDurationsMs": [
+        70,
+        70,
+        80,
+        60
+      ]
+    },
+    {
+      "key": "attack",
+      "fps": 16.67,
+      "loop": false,
+      "row": 3,
+      "frames": [
+        "attack00",
+        "attack01",
+        "attack02",
+        "attack03"
+      ],
+      "frameDurationsMs": [
+        70,
+        70,
+        80,
+        60
+      ]
+    },
+    {
+      "key": "attack-down",
+      "fps": 16.67,
+      "loop": false,
+      "row": 4,
+      "frames": [
+        "attackDown00",
+        "attackDown01",
+        "attackDown02",
+        "attackDown03"
+      ],
+      "frameDurationsMs": [
+        70,
+        70,
+        80,
+        60
+      ]
+    },
+    {
+      "key": "attack-low",
+      "fps": 16.67,
+      "loop": false,
+      "row": 5,
+      "frames": [
+        "attackLow00",
+        "attackLow01",
+        "attackLow02",
+        "attackLow03"
+      ],
+      "frameDurationsMs": [
+        70,
+        70,
+        80,
+        60
       ]
     },
     {
       "key": "running",
-      "fps": 14,
+      "fps": 35.71,
       "loop": true,
+      "row": 6,
       "frames": [
         "running00",
         "running01",
         "running02",
         "running03",
         "running04",
-        "running05"
+        "running05",
+        "running06",
+        "running07",
+        "running08",
+        "running09",
+        "running10",
+        "running11"
       ],
-      "row": 1
+      "frameDurationsMs": [
+        28,
+        28,
+        28,
+        28,
+        28,
+        28,
+        28,
+        28,
+        28,
+        28,
+        28,
+        28
+      ]
     },
     {
       "key": "jumping",
-      "fps": 24,
+      "fps": 45.45,
       "loop": false,
+      "row": 7,
       "frames": [
         "jumping00",
         "jumping01",
@@ -48,58 +181,178 @@
         "jumping04",
         "jumping05",
         "jumping06",
-        "jumping07"
+        "jumping07",
+        "jumping08",
+        "jumping09",
+        "jumping10",
+        "jumping11",
+        "jumping12",
+        "jumping13",
+        "jumping14",
+        "jumping15"
       ],
-      "row": 2
+      "frameDurationsMs": [
+        38,
+        38,
+        38,
+        22,
+        22,
+        22,
+        22,
+        22,
+        22,
+        22,
+        22,
+        22,
+        38,
+        38,
+        38,
+        38
+      ]
     },
     {
       "key": "falling",
-      "fps": 6,
-      "loop": false,
+      "fps": 12.05,
+      "loop": true,
+      "row": 8,
       "frames": [
         "falling00",
         "falling01",
-        "falling02"
+        "falling02",
+        "falling03",
+        "falling04",
+        "falling05",
+        "falling06",
+        "falling07"
       ],
-      "row": 3
-    },
-    {
-      "key": "attack",
-      "fps": 15,
-      "loop": false,
-      "frames": [
-        "attack00",
-        "attack01",
-        "attack02",
-        "attack03"
-      ],
-      "row": 4
-    },
-    {
-      "key": "dying",
-      "fps": 10,
-      "loop": false,
-      "frames": [
-        "dying00",
-        "dying01",
-        "dying02",
-        "dying03"
-      ],
-      "row": 5
+      "frameDurationsMs": [
+        83,
+        83,
+        83,
+        83,
+        83,
+        83,
+        83,
+        83
+      ]
     },
     {
       "key": "wall",
       "fps": 1,
       "loop": true,
+      "row": 9,
       "frames": [
         "wall00"
       ],
-      "row": 6
+      "frameDurationsMs": [
+        1000
+      ]
+    },
+    {
+      "key": "ducking",
+      "fps": 1,
+      "loop": true,
+      "row": 10,
+      "frames": [
+        "duck00"
+      ],
+      "frameDurationsMs": [
+        1000
+      ]
+    },
+    {
+      "key": "dashing",
+      "fps": 25,
+      "loop": false,
+      "row": 11,
+      "frames": [
+        "dash00",
+        "dash01",
+        "dash02",
+        "dash03"
+      ],
+      "frameDurationsMs": [
+        40,
+        40,
+        40,
+        40
+      ]
+    },
+    {
+      "key": "dashright",
+      "fps": 25,
+      "loop": false,
+      "row": 12,
+      "frames": [
+        "dashRight00",
+        "dashRight01",
+        "dashRight02",
+        "dashRight03"
+      ],
+      "frameDurationsMs": [
+        40,
+        40,
+        40,
+        40
+      ]
+    },
+    {
+      "key": "dashdiagonal",
+      "fps": 25,
+      "loop": false,
+      "row": 13,
+      "frames": [
+        "dashDiagonal00",
+        "dashDiagonal01",
+        "dashDiagonal02",
+        "dashDiagonal03"
+      ],
+      "frameDurationsMs": [
+        40,
+        40,
+        40,
+        40
+      ]
+    },
+    {
+      "key": "dashup",
+      "fps": 25,
+      "loop": false,
+      "row": 14,
+      "frames": [
+        "dashUp00",
+        "dashUp01",
+        "dashUp02",
+        "dashUp03"
+      ],
+      "frameDurationsMs": [
+        40,
+        40,
+        40,
+        40
+      ]
+    },
+    {
+      "key": "dying",
+      "fps": 10,
+      "loop": false,
+      "row": 15,
+      "frames": [
+        "dying00",
+        "dying01",
+        "dying02"
+      ],
+      "frameDurationsMs": [
+        100,
+        100,
+        100
+      ]
     },
     {
       "key": "special",
-      "fps": 30,
-      "loop": false,
+      "fps": 30.3,
+      "loop": true,
+      "row": 16,
       "frames": [
         "special00",
         "special01",
@@ -108,41 +361,91 @@
         "special04",
         "special05",
         "special06",
-        "special07"
+        "special07",
+        "special08",
+        "special09",
+        "special10",
+        "special11",
+        "special12",
+        "special13",
+        "special14",
+        "special15"
       ],
-      "row": 7
-    },
-    {
-      "key": "unused-original",
-      "fps": 12,
-      "loop": false,
-      "frames": [
-        "running06",
-        "jumping08",
-        "dying04"
-      ],
-      "row": 8
-    },
-    {
-      "key": "ducking",
-      "fps": 1,
-      "loop": true,
-      "frames": [
-        "duck00"
-      ],
-      "row": 9
-    },
-    {
-      "key": "dashing",
-      "fps": 25,
-      "loop": false,
-      "frames": [
-        "dash00",
-        "dash01",
-        "dash02",
-        "dash03"
-      ],
-      "row": 10
+      "frameDurationsMs": [
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33,
+        33
+      ]
     }
-  ]
+  ],
+  "throw": {
+    "releaseMs": 70,
+    "blendMs": 90,
+    "startScale": 0.5,
+    "directions": [
+      {
+        "key": "high",
+        "name": "high",
+        "elevation": 65,
+        "animation": "attack-high",
+        "hand": [
+          23.47,
+          -27.84
+        ]
+      },
+      {
+        "key": "up",
+        "name": "up",
+        "elevation": 35,
+        "animation": "attack-up",
+        "hand": [
+          28.8,
+          -13.97
+        ]
+      },
+      {
+        "key": null,
+        "name": "level",
+        "elevation": 0,
+        "animation": "attack",
+        "hand": [
+          27.73,
+          -2.24
+        ]
+      },
+      {
+        "key": "down",
+        "name": "down",
+        "elevation": -35,
+        "animation": "attack-down",
+        "hand": [
+          27.73,
+          20.16
+        ]
+      },
+      {
+        "key": "low",
+        "name": "low",
+        "elevation": -70,
+        "animation": "attack-low",
+        "hand": [
+          18.13,
+          21.23
+        ]
+      }
+    ]
+  }
 }

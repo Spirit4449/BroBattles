@@ -11,20 +11,33 @@ export const BRO_PORTRAIT_PALETTES = {
 
 // Fuller corner mosaics with individually shaded six-pixel cells. Adjacent
 // cells vary in opacity so the corner never becomes one solid color block.
-// Each corner has its own stable layout.
+// Each corner has its own stable layout, with visible trails reaching farther
+// along both edges while keeping the individual cells the same size.
 const CHROMA_CORNERS = [
   [[0, 0, .12], [6, 0, .24], [0, 6, .19], [6, 6, .08],
     [12, 0, .16], [24, 0, .1], [30, 0, .06], [6, 12, .14],
-    [18, 6, .08], [0, 24, .12], [0, 30, .07], [12, 24, .06], [42, 0, .05]],
+    [18, 6, .08], [0, 24, .12], [0, 30, .07], [12, 24, .06], [42, 0, .05],
+    [36, 6, .1], [24, 12, .09], [48, 0, .12], [54, 6, .1],
+    [66, 0, .08], [72, 6, .06], [78, 0, .04], [0, 42, .12],
+    [6, 48, .1], [0, 54, .09], [12, 36, .08], [0, 66, .07], [6, 72, .05], [0, 78, .04]],
   [[0, 0, .2], [6, 0, .09], [0, 6, .1], [6, 6, .17],
     [18, 0, .13], [24, 0, .07], [12, 12, .09], [0, 18, .15],
-    [6, 24, .08], [0, 36, .06], [30, 6, .05], [42, 0, .04]],
+    [6, 24, .08], [0, 36, .06], [30, 6, .05], [42, 0, .04],
+    [36, 0, .11], [24, 6, .1], [48, 6, .12], [54, 0, .1],
+    [60, 0, .08], [72, 6, .06], [78, 0, .04], [6, 42, .12],
+    [0, 48, .1], [6, 54, .09], [12, 30, .08], [0, 60, .08], [6, 72, .05], [0, 78, .04]],
   [[0, 0, .09], [6, 0, .18], [0, 6, .22], [6, 6, .11],
     [12, 6, .07], [0, 12, .13], [18, 0, .14], [24, 0, .08],
-    [0, 24, .1], [6, 30, .06], [24, 12, .05], [36, 0, .06], [0, 42, .04]],
+    [0, 24, .1], [6, 30, .06], [24, 12, .05], [36, 0, .06], [0, 42, .04],
+    [30, 6, .1], [18, 12, .09], [42, 6, .12], [48, 0, .11],
+    [54, 0, .1], [66, 6, .08], [72, 0, .06], [78, 6, .04],
+    [6, 48, .12], [0, 54, .1], [12, 36, .08], [0, 66, .07], [6, 72, .05], [0, 78, .04]],
   [[0, 0, .17], [6, 0, .08], [0, 6, .11], [6, 6, .23],
     [12, 0, .13], [6, 18, .1], [0, 24, .07], [24, 0, .12],
-    [30, 6, .06], [18, 12, .05], [0, 36, .06], [42, 0, .04]],
+    [30, 6, .06], [18, 12, .05], [0, 36, .06], [42, 0, .04],
+    [36, 0, .11], [24, 6, .1], [48, 0, .12], [54, 6, .1],
+    [60, 0, .08], [72, 0, .06], [78, 6, .04], [0, 42, .12],
+    [6, 48, .1], [0, 54, .09], [12, 30, .08], [6, 60, .08], [0, 72, .05], [6, 78, .04]],
 ];
 
 export function buildPortraitChromaCells(color, corner = 0) {
@@ -35,8 +48,8 @@ export function buildPortraitChromaCells(color, corner = 0) {
 }
 
 export function buildPortraitChromaTile(palette, corner = 0) {
-  const transforms = ['', 'translate(48 0) scale(-1 1)', 'translate(0 48) scale(1 -1)', 'translate(48 48) scale(-1 -1)'];
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><g transform="${transforms[corner]}">${buildPortraitChromaCells(palette.main, corner)}</g></svg>`;
+  const transforms = ['', 'translate(84 0) scale(-1 1)', 'translate(0 84) scale(1 -1)', 'translate(84 84) scale(-1 -1)'];
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="84" height="84" viewBox="0 0 84 84"><g transform="${transforms[corner]}">${buildPortraitChromaCells(palette.main, corner)}</g></svg>`;
 }
 
 export function buildBroPortraitSvg(bodyUrl, palette) {

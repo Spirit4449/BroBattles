@@ -164,3 +164,13 @@ test('a local downward air dash shows its stomp on landing, and the server echo 
   assert.deepEqual(shown, ['stomp', 'landing', 'stomp'], 'an unpredicted server stomp is still shown');
   dispose();
 });
+
+test('a high stomp stays armed until landing and reports its drop distance', () => {
+  const { room, source, events } = fixture();
+  acceptDash(source, { dashSeq: 1, dashX: 0, dashY: 1 }, 1000);
+  source.y += 900;
+  assert.equal(resolveStomp(room, source, 5000), false);
+  source.grounded = true;
+  assert.equal(resolveStomp(room, source, 5010), true);
+  assert.equal(events.find(e => e.event === 'player:stomp').data.fallDistance, 900);
+});

@@ -87,8 +87,19 @@ function adoptFrame(current, frame, { skinId, level, name }) {
 export function updateCharacterShowcaseSkin(frame, character, skinId) {
   if (!session || session.frame !== frame || session.character !== character) return;
   if (session.skinId === skinId) return;
+  // Browsing skins is an explicit choice to stay on the current view.
+  session.userChose = true;
+  clearTimeout(session.timer);
   session.skinId = skinId;
   if (session.view !== "body") void setView(session, session.view, { force: true });
+}
+
+// A purchase reveal must stay on the portrait, including during pending autoplay.
+export function showCharacterShowcaseBody(frame) {
+  if (!session || session.frame !== frame) return;
+  session.userChose = true;
+  clearTimeout(session.timer);
+  void setView(session, "body");
 }
 
 export function hideCharacterShowcase() {
@@ -116,6 +127,7 @@ function buildSwitcher(current) {
     button.setAttribute("aria-pressed", String(id === current.view));
     button.addEventListener("click", event => {
       event.stopPropagation();
+      if (current.frame.dataset.confirming === "true" && id !== "body") return;
       current.userChose = true;
       clearTimeout(current.timer);
       void setView(current, id);
@@ -128,6 +140,7 @@ function buildSwitcher(current) {
 
 async function setView(current, view, { force = false } = {}) {
   if (session !== current || (current.view === view && !force)) return;
+  if (current.frame.dataset.confirming === "true" && view !== "body") return;
   const request = ++current.request;
   const wasLive = current.frame.dataset.showcaseView !== "body";
   current.view = view;
@@ -141,8 +154,8 @@ async function setView(current, view, { force = false } = {}) {
     return;
   }
 
-  // Live to live: dip only the canvas (the backdrop stays), never the portrait.
-  if (wasLive && host) {
+  // View changes dip only the canvas. Skin refreshes restart in place.
+  if (wasLive && host && !force) {
     host.classList.add("is-swapping");
     await delay(FADE_MS);
     if (current.request !== request) return;

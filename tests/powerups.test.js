@@ -216,12 +216,23 @@ describe("World pickups and timed effects", () => {
 
     effectManager.apply(collector, "shockwave", 20_000, {}, room);
 
+    const launches = emitted.filter(entry => entry.event === "player:knockback");
+    const smokeHits = emitted.filter(entry => entry.event === "shockwave:hit");
+    assert.deepEqual(smokeHits.map(entry => entry.payload.username).sort(), ["enemy", "teammate"]);
+    assert.ok(smokeHits.every(entry => entry.socketId === `game:${room.matchId}`));
+    assert.equal(emitted.length, launches.length + smokeHits.length);
+    for (const hit of smokeHits) {
+      const target = [...room.players.values()].find(player => player.name === hit.payload.username);
+      const launch = launches.find(entry => entry.socketId === target.socketId).payload;
+      assert.equal(hit.payload.amountX, launch.amountX);
+      assert.equal(hit.payload.amountY, launch.amountY);
+    }
     assert.deepEqual(
-      emitted.map((entry) => entry.socketId).sort(),
+      launches.map((entry) => entry.socketId).sort(),
       ["enemy-socket", "teammate-socket"],
     );
-    assert.ok(emitted.every((entry) => entry.event === "player:knockback"));
-    assert.ok(emitted.every((entry) => entry.payload.radial === true));
+    assert.ok(launches.every((entry) => entry.event === "player:knockback"));
+    assert.ok(launches.every((entry) => entry.payload.radial === true));
     assert.ok(
       emitted.every(
         (entry) =>
@@ -240,7 +251,7 @@ describe("World pickups and timed effects", () => {
     const room = {
       applyKnockback(player, impulse) { require('../src/server/core/gameRoom/participants').applyParticipantKnockback(this, player, impulse); },
       players: new Map([['source', collector], ...targets.map(t => [t.socketId, t])]),
-      io: { to: () => ({ emit: (event, payload) => hits.push(payload) }) },
+      io: { to: () => ({ emit: (event, payload) => { if (event === "player:knockback") hits.push(payload); } }) },
     };
     effectManager.apply(collector, 'shockwave', 20_000, {}, room);
     assert.equal(hits.length, 3);

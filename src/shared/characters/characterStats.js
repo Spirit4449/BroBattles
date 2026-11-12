@@ -162,6 +162,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     DEFAULT_CHARACTER,
     LEVEL_CAP,
+    STANDARD_LEVEL_CAP,
     canonicalCharacterKey,
     resolveCharacterKey,
     parseCharacterLevels,

@@ -158,6 +158,7 @@ export function createLocalMovementFx({ audio, noteEvent }) {
   // Airborne -> grounded transition: terrain landing sound and impact.
   function updateLanding(scene, player, { dead, hidden }) {
     const onGround = player.body.touching.down;
+    if (dead || player.body.velocity.y < -20) player._stompArmedUntil = 0;
     const playSound = shouldPlayLandingSound(player, onGround);
     const currentBottom = bodyBottom(player);
     if (!onGround && !dead) {
@@ -185,7 +186,9 @@ export function createLocalMovementFx({ audio, noteEvent }) {
       if (stomp) {
         scene._localStompPredictedAt = Date.now();
         scene.sound?.play?.("sfx-stomp", { volume: 1 });
-        if (!hidden) spawnStompImpact(scene, impactX, bodyBottom(player) - 2, { cameraShake: true });
+        if (!hidden) spawnStompImpact(scene, impactX, bodyBottom(player) - 2, { cameraShake: true,
+          fallDistance: Number.isFinite(player._stompStartBottom)
+            ? Math.max(0, currentBottom - player._stompStartBottom) : fallDistance });
       } else if (!hidden) {
         spawnLandingImpact(scene, impactX, bodyBottom(player) - 2, {
           impactVelocity: lastAirborneVelocityY,

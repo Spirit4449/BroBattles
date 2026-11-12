@@ -49,6 +49,8 @@
 
 .bb-friends-panel .bb-chat-header {
   justify-content: flex-start;
+  gap: 16px;
+  padding: 12px 17px;
 }
 
 .bb-friends-panel .bb-chat-heading {
@@ -63,10 +65,41 @@
 }
 
 .bb-friends-back {
+  --bb-chroma-corner-size: 12px;
+  position: relative;
   width: 28px;
   min-width: 28px;
   height: 28px;
+  min-height: 28px;
+  flex: 0 0 28px;
+  box-sizing: border-box;
   padding: 0;
+  border: 0;
+  background: var(--bb-chroma-button-corners), var(--bb-primary-gradient);
+  box-shadow: 0 5px var(--bb-ink), 0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink), -5px 0 var(--bb-ink),
+    inset 0 4px rgba(255, 255, 255, 0.16);
+}
+
+.bb-friends-back:hover:not(:disabled) {
+  filter: brightness(1.12) saturate(1.06);
+  transform: none;
+}
+
+.bb-friends-back-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  clip-path: polygon(38% 0, 38% 13%, 25% 13%, 25% 25%, 13% 25%, 13% 38%, 0 38%, 0 63%, 13% 63%, 13% 75%, 25% 75%, 25% 88%, 38% 88%, 38% 100%, 50% 100%, 50% 69%, 100% 69%, 100% 31%, 50% 31%, 50% 0);
+}
+
+.bb-friends-back:active:not(:disabled) {
+  filter: brightness(0.96);
+  transform: none;
+  box-shadow: 0 5px var(--bb-ink), 0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink), -5px 0 var(--bb-ink),
+    inset 0 4px rgba(0, 0, 0, 0.22);
 }
 
 .bb-friends-back[hidden] {

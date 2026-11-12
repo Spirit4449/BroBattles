@@ -231,6 +231,8 @@ async function loadPartySettings() {
     visibilitySupported: payload?.visibilitySupported !== false,
     allowMemberSelection: payload?.allowMemberSelection !== false,
     memberSelectionSupported: payload?.memberSelectionSupported !== false,
+    hideEnemyBros: payload?.hideEnemyBros === true,
+    hideEnemyBrosSupported: payload?.hideEnemyBrosSupported === true,
   };
 
   const toggle = document.getElementById("party-public-toggle");
@@ -242,6 +244,11 @@ async function loadPartySettings() {
     memberToggle.disabled =
       !__partySettingsState.isOwner ||
       !__partySettingsState.memberSelectionSupported;
+  }
+  const hideToggle = document.getElementById("party-hide-enemy-bros-toggle");
+  if (hideToggle) {
+    hideToggle.checked = __partySettingsState.hideEnemyBros;
+    hideToggle.disabled = !__partySettingsState.isOwner || !__partySettingsState.hideEnemyBrosSupported;
   }
   if (toggle) toggle.checked = __partySettingsState.isPublic;
   if (nameInput) nameInput.value = __partySettingsState.publicName;
@@ -261,6 +268,8 @@ async function loadPartySettings() {
       "Map and mode permissions require the latest party migration.",
       true,
     );
+  } else if (!__partySettingsState.hideEnemyBrosSupported) {
+    setPartySettingsStatus("Hidden enemy Bros requires the latest party migration.", true);
   } else if (!__partySettingsState.isOwner) {
     setPartySettingsStatus(
       "Only the party owner can edit these settings.",
@@ -310,6 +319,8 @@ async function savePartySettings() {
         partyId,
         isPublic,
         publicName,
+        ...(__partySettingsState.hideEnemyBrosSupported
+          ? { hideEnemyBros: !!document.getElementById("party-hide-enemy-bros-toggle")?.checked } : {}),
         ...(__partySettingsState.memberSelectionSupported
           ? {
               allowMemberSelection: !!document.getElementById(
@@ -335,6 +346,7 @@ async function savePartySettings() {
 function syncPublicPartyNameVisibility() {
   const toggle = document.getElementById("party-public-toggle");
   const isPublic = !!toggle?.checked;
+  document.getElementById("party-public-hint")?.classList.toggle("hidden", isPublic);
   document
     .getElementById("party-public-name-group")
     ?.classList.toggle("hidden", !isPublic);

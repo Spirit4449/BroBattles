@@ -39,6 +39,7 @@ export function createPixelSelect({ options, value, label, onChange, className =
   root.append(trigger, list);
 
   let selected = value;
+  let dragPointer = null;
   function render() {
     const option = options.find((o) => o.value === selected) || options[0];
     current.textContent = option.label;
@@ -64,6 +65,7 @@ export function createPixelSelect({ options, value, label, onChange, className =
       if (focus) (items.find((i) => i.dataset.value === selected) || items[0]).focus();
     } else {
       document.removeEventListener("pointerdown", onOutside, true);
+      endDrag();
       if (focus) trigger.focus();
     }
   }
@@ -76,7 +78,53 @@ export function createPixelSelect({ options, value, label, onChange, className =
     onChange?.(nextValue);
   }
 
-  trigger.addEventListener("click", () => setOpen(list.hidden, { focus: list.hidden }));
+  function endDrag() {
+    dragPointer = null;
+    document.removeEventListener("pointermove", onDragMove, true);
+    document.removeEventListener("pointerup", onDragEnd, true);
+    document.removeEventListener("pointercancel", onDragCancel, true);
+  }
+
+  function optionAt(event) {
+    const item = document.elementFromPoint(event.clientX, event.clientY)?.closest('[role="option"]');
+    return items.includes(item) ? item : null;
+  }
+
+  function onDragMove(event) {
+    if (event.pointerId !== dragPointer) return;
+    optionAt(event)?.focus({ preventScroll: true });
+  }
+
+  function onDragEnd(event) {
+    if (event.pointerId !== dragPointer) return;
+    const item = optionAt(event);
+    const overTrigger = trigger.contains(document.elementFromPoint(event.clientX, event.clientY));
+    endDrag();
+    if (item) choose(item.dataset.value);
+    else if (!overTrigger) setOpen(false, { focus: true });
+  }
+
+  function onDragCancel(event) {
+    if (event.pointerId === dragPointer) setOpen(false, { focus: true });
+  }
+
+  trigger.addEventListener("pointerdown", (event) => {
+    // Touch keeps tap-to-open and scrolling; mouse/pen support press-drag-release.
+    if (event.button !== 0 || event.pointerType === "touch" || trigger.disabled) return;
+    event.preventDefault();
+    setOpen(list.hidden, { focus: true });
+    if (list.hidden) return;
+    dragPointer = event.pointerId;
+    document.addEventListener("pointermove", onDragMove, true);
+    document.addEventListener("pointerup", onDragEnd, true);
+    document.addEventListener("pointercancel", onDragCancel, true);
+  });
+  trigger.addEventListener("click", (event) => {
+    // Pointer presses already toggled the menu. Keep keyboard/assistive clicks.
+    if (event.detail === 0 || event.pointerType === "touch") {
+      setOpen(list.hidden, { focus: list.hidden });
+    }
+  });
   trigger.addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();

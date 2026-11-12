@@ -121,6 +121,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         ownerName: result.ownerName || null,
         isOwner: String(result.ownerName || "") === String(username || ""),
         allowMemberSelection: Number(result.party?.allow_member_selection ?? 1) === 1,
+    hideEnemyBros: Number(result.party?.hide_enemy_bros ?? 0) === 1,
         isPublic: Number(result.party?.is_public || 0) === 1,
         publicName: String(result.party?.public_name || "").trim(),
         viewer: username,
@@ -297,6 +298,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         isPublic,
         publicName,
         allowMemberSelection: req.body?.allowMemberSelection,
+        hideEnemyBros: req.body?.hideEnemyBros,
       });
       if (!result.ok) {
         const statusCode = Number(result.statusCode) || 403;

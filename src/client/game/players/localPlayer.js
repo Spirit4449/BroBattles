@@ -2017,7 +2017,7 @@ function performWallJump(scene, wallSide, tuning) {
 function updateWallSlide(scene, wall, tuning, movementLocked) {
   const sliding = applyWallSlide(player, {
     dead, movementLocked, wallSlideContact: wall.wallSlideContact, wallSide: wall.wallSide,
-    wallBrakeHeld: wall.wallBrakeHeld,
+    wallBrakeHeld: wall.wallBrakeHeld, drivingIntoWall: wall.drivingIntoWall,
   });
   if (sliding && !player._lockFlip) {
     const wasFlip = player.flipX;

@@ -12,6 +12,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="shortcut icon" href="/assets/logos/logo-small.webp" type="image/webp" />
     <title>Bro Battles</title>
+    <meta name="description" content="Choose a fighter, team up with friends, and battle in real time in Bro Battles, a multiplayer browser arena game." />
+    <meta property="og:site_name" content="Bro Battles" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Bro Battles | Multiplayer Browser Battle Arena" />
+    <meta property="og:description" content="Choose a fighter, team up with friends, and battle in real time in Bro Battles." />
+    <meta name="twitter:card" content="summary" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -172,7 +178,7 @@
         aria-label="Party Settings"
         title="Party Settings"
       >
-        <img src="/assets/ui/party-settings-bb-generated-v2.png" alt="" width="28" height="28" />
+        <img src="/assets/ui/party-settings-white.png" alt="" width="28" height="28" />
       </button>
     </div>
     <div class="lobby-quick-actions" role="group" aria-label="Lobby actions">
@@ -790,7 +796,6 @@
         <header class="trophy-overlay-head">
           <div>
             <h2 id="party-discovery-title">Discover Public Parties</h2>
-            <p>Search by party name, owner, or member username.</p>
           </div>
           <button
             id="party-discovery-close"
@@ -839,7 +844,6 @@
         <header class="trophy-overlay-head">
           <div>
             <h2 id="party-settings-title">Party Settings</h2>
-            <p>Choose who can find your party and change its map and mode.</p>
           </div>
           <button
             id="party-settings-close"
@@ -852,35 +856,25 @@
           </button>
         </header>
         <div id="party-settings-status" class="party-settings-status" role="status" aria-live="polite"></div>
-        <div class="form-group">
-          <label class="party-visibility-toggle" for="party-public-toggle">
-            <input id="party-public-toggle" type="checkbox" aria-describedby="party-public-hint" />
-            <span>Public Party</span>
-          </label>
-          <p id="party-public-hint" class="party-settings-hint">
-            Let other players find your party in discovery.
-          </p>
-        </div>
-        <div id="party-public-name-group" class="form-group hidden">
-          <label class="party-public-name-label" for="party-public-name">
-            Public Party Name
-          </label>
-          <input
-            id="party-public-name"
-            class="party-public-name-input"
-            type="text"
-            maxlength="32"
-            placeholder="Give your public party a name"
-          />
-        </div>
-        <div class="form-group">
-          <label class="party-visibility-toggle" for="party-member-selection-toggle">
+        <div class="party-settings-body">
+          <div class="site-setting">
+            <label class="site-setting-title" for="party-public-toggle">Public Party</label>
+            <input id="party-public-toggle" type="checkbox" aria-controls="party-public-name-group" />
+            <small id="party-public-hint">Let other players find your party in discovery.</small>
+            <div id="party-public-name-group" class="hidden">
+              <input id="party-public-name" class="party-public-name-input" type="text" aria-label="Public party name" maxlength="32" placeholder="Give your public party a name" disabled />
+            </div>
+          </div>
+          <label class="site-setting" for="party-member-selection-toggle">
+            <span class="site-setting-title">Member map &amp; mode control</span>
             <input id="party-member-selection-toggle" type="checkbox" checked aria-describedby="party-member-selection-hint" />
-            <span>Allow members to change map and mode</span>
+            <small id="party-member-selection-hint">Let party members change the map and game mode. When off, only the owner can.</small>
           </label>
-          <p id="party-member-selection-hint" class="party-settings-hint">
-            When off, only the party owner can change the map and mode.
-          </p>
+          <label class="site-setting" for="party-hide-enemy-bros-toggle">
+            <span class="site-setting-title">Hide enemy Bros</span>
+            <input id="party-hide-enemy-bros-toggle" type="checkbox" aria-describedby="party-hide-enemy-bros-hint" />
+            <small id="party-hide-enemy-bros-hint">Hide opponents’ selected Bros in the lobby until the match starts. Your teammates’ Bros remain visible.</small>
+          </label>
         </div>
         <div class="party-settings-actions">
           <button

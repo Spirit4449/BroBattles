@@ -28,6 +28,21 @@ describe("Action playback and locks", () => {
     assert.equal(calls.at(-1).key, 'ninja-jumping');
   });
 
+  test('a dash plays the clip for its direction, and art without one keeps its single dash', () => {
+    const played = (clips, direction) => {
+      const calls = [];
+      const sprite = { body: { touching: { down: true } }, anims: { play(key) { calls.push(key); this.currentAnim = { key }; } } };
+      animation.playCharacterAnimation({ scene: {}, sprite, character: 'ninja', logical: 'dashing', dashDirection: direction,
+        resolveAnimKey: (_scene, char, wanted) => (clips.includes(wanted) ? `${char}-${wanted}` : `${char}-idle`) });
+      return calls.at(-1);
+    };
+    const all = ['dashing', 'dashright', 'dashdiagonal', 'dashup'];
+    assert.equal(played(all, { x: 1, y: 0 }), 'ninja-dashright');
+    assert.equal(played(all, { x: -1, y: -1 }), 'ninja-dashdiagonal');
+    assert.equal(played(all, { x: 0, y: -1 }), 'ninja-dashup');
+    assert.equal(played(['dashing'], { x: 0, y: -1 }), 'ninja-dashing', 'a skin drawn with one dash still dashes');
+  });
+
   test('remote death wins over residual velocity and dash snapshots reset landed jumps', () => {
     assert.equal(animation.chooseRemoteAnimationState({ animation: 'dying',
       currentPosition: { grounded: false, vy: -300, wallSliding: false } }), 'dying');
@@ -88,8 +103,18 @@ describe("Action playback and locks", () => {
     const action = (logical, options = {}) => api.playSpriteAnimation({ scene, sprite, character: 'wizard', logical, fallback: 'idle', ...options });
     const move = logical => api.playCharacterAnimation({ scene, sprite, character: 'wizard', logical,
       resolveAnimKey: (_scene, char, wanted) => `${char}-${wanted}` });
-    return { api, sprite, plays, action, move, duration: key => api.getAnimationDurationMs(scene, key), advance: ms => { now += ms; } };
+    return { api, sprite, plays, clips, action, move, duration: key => api.getAnimationDurationMs(scene, key), advance: ms => { now += ms; } };
   }
+
+  test('an action plays its variant drawing when the art has one, and the plain clip otherwise', () => {
+    const rig = actionRig();
+    rig.clips['wizard-special-up'] = { frameRate: 10, frames: [{}] };
+    assert.equal(rig.action('special', { variant: 'up' }), 'wizard-special-up');
+    assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-special-up');
+    rig.move('running');
+    assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-special-up', 'a variant is still the action');
+    assert.equal(rig.action('special', { variant: 'sideways', restart: true }), 'wizard-special');
+  });
 
   test('a special shows for its whole animation and movement cannot cut it short', () => {
     const rig = actionRig();
@@ -213,3 +238,18 @@ describe("Attached presentation lifecycle", () => {
     assert.equal(sprite._bbAttachments.size, 0);
   });
 });
+
+ test('stomp duck pose continues after the burst and releases on landing or a jump', () => {
+  const animation = loadClientModule('src/client/game/characters/shared/animationState.js');
+  const sprite = { anims: { play(key) { this.currentAnim = { key }; } } };
+  const play = logical => animation.playCharacterAnimation({ scene: {}, sprite, character: 'ninja',
+    logical, dashDirection: { x: 0, y: 1 }, resolveAnimKey: (_s, c, a) => `${c}-${a}` });
+  assert.equal(play('dashing'), 'ninja-ducking');
+  assert.equal(play('falling'), 'ninja-ducking');
+  assert.equal(play('falling'), 'ninja-ducking');
+  assert.equal(play('idle'), 'ninja-idle');
+  assert.equal(play('falling'), 'ninja-falling');
+  play('dashing');
+  assert.equal(play('jumping'), 'ninja-jumping');
+  assert.equal(play('falling'), 'ninja-falling');
+ });

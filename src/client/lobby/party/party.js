@@ -106,6 +106,7 @@ let __modePopupUi = null;
 let __partyContext = {
   partyId: null,
   ownerName: null,
+  hideEnemyBros: false,
   allowMemberSelection: true,
   isPublic: false,
   publicName: "",
@@ -704,7 +705,8 @@ export function resetLobbyRoute(partyId) {
   window.clearTimeout(__partyRosterCommitTimer);
   __partyRosterCommitTimer = null;
   __partyContext = { partyId: partyId || null, ownerName: null,
-    allowMemberSelection: true, isPublic: false, publicName: '',
+    hideEnemyBros: false,
+  allowMemberSelection: true, isPublic: false, publicName: '',
     capacity: null, members: [], botSlots: [] };
   hidePartyJoinRequestScreen();
   document.querySelectorAll('.character-slot').forEach(clearLobbySpawnAnimation);
@@ -1347,6 +1349,7 @@ export function renderPartyMembers(data) {
     ownerName: data?.ownerName || __partyContext.ownerName || null,
     allowMemberSelection:
       data?.allowMemberSelection ?? __partyContext.allowMemberSelection,
+    hideEnemyBros: data?.hideEnemyBros ?? __partyContext.hideEnemyBros,
     isPublic: data?.isPublic ?? __partyContext.isPublic,
     publicName: String(data?.publicName ?? __partyContext.publicName).trim(),
     capacity,
@@ -1485,6 +1488,8 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
   const previousCharacter = String(slot.dataset.character || "").trim();
   const currentUserName = getCurrentLobbyUserName();
   const isCurrentUser = member.name === currentUserName;
+  const hiddenBro = __partyContext.hideEnemyBros && isYourTeam === false && !isCurrentUser;
+  slot.classList.toggle("hidden-bro", hiddenBro);
   const displayName = member.name;
   // Mark slot ownership for delegated handlers
   slot.dataset.isCurrentUser = isCurrentUser ? "true" : "false";
@@ -1504,14 +1509,15 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
   }
 
   if (spriteEl) {
-    const cls = member.char_class || DEFAULT_CHARACTER;
-    const skinAsset =
+    const cls = hiddenBro ? "Hidden Bro" : member.char_class || DEFAULT_CHARACTER;
+    const skinAsset = hiddenBro ? "/assets/ui/hidden-bro.png" :
       String(member.selected_skin_asset_url || "").trim() ||
       buildCharacterSkinBodyUrl(cls, member.selected_skin_id ?? member.selected_skin_id_by_char?.[resolveCharacterKey(cls)]);
     if (spriteEl.getAttribute("src") !== skinAsset) spriteEl.src = skinAsset;
     spriteEl.alt = cls;
     spriteEl.classList.remove("random", "bot-shuffle-icon");
     if (
+      !hiddenBro &&
       previousPlayerKey === getLobbyMemberKey(member) &&
       previousCharacter &&
       previousCharacter !== "Random" &&
@@ -1568,8 +1574,8 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
 
   slot.classList.remove("empty", "player-display", "op-display");
   slot.classList.add(isYourTeam ? "player-display" : "op-display");
-  slot.dataset.character = member.char_class || DEFAULT_CHARACTER;
-  setSlotLevelBadge(slot, getMemberLevel(member));
+  slot.dataset.character = hiddenBro ? "Hidden" : member.char_class || DEFAULT_CHARACTER;
+  setSlotLevelBadge(slot, hiddenBro ? null : getMemberLevel(member));
 
   // Set interaction properties
   slot.style.pointerEvents = "auto";
@@ -1947,6 +1953,7 @@ function resetSlotToRandom(slot) {
     "bot-display",
   );
   slot.classList.add("empty");
+  slot.classList.remove("hidden-bro");
   slot.dataset.character = "Random";
   slot.dataset.isCurrentUser = "false";
   slot.dataset.playerName = "";
@@ -2181,6 +2188,14 @@ function collectCurrentPartyMembers() {
   });
 
   const yourTeam = getCurrentPartyMember()?.team || null;
+  if (__partyContext.hideEnemyBros && yourTeam) {
+    for (const player of players) {
+      if (player.team && player.team !== yourTeam) {
+        player.char_class = "Hidden";
+        player.selected_skin_asset_url = "/assets/ui/hidden-bro.png";
+      }
+    }
+  }
   return [...players, ...botPreviews].sort((a, b) => {
     if (!yourTeam) return 0;
     return Number(b?.team === yourTeam) - Number(a?.team === yourTeam);

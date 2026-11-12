@@ -110,3 +110,22 @@ test('matchmaking receives the equipped solo portrait and party skin selection t
   await f.settle();
   assert.equal(preview.find(player => player.name === 'Owner').selected_skin_id, 'ninja-arena-sovereign');
 });
+
+test('hidden Bros follows opponent teams, repeated updates, and disabling the setting', () => {
+  const f = setup();
+  const roster = { ...f.roster(), hideEnemyBros: true };
+  f.api.renderPartyMembers(roster);
+  const enemy = f.document.getElementById('op-slot-1');
+  assert.equal(enemy.querySelector('.character-sprite').getAttribute('src'), '/assets/ui/hidden-bro.png');
+  assert.equal(enemy.dataset.character, 'Hidden');
+  assert.equal(enemy.querySelector('.character-sprite').alt, 'Hidden Bro');
+  assert.match(f.document.getElementById('your-slot-1').querySelector('.character-sprite').getAttribute('src'), /ninja/);
+  roster.members[1].char_class = 'thorg';
+  f.api.renderPartyMembers(roster);
+  assert.equal(enemy.querySelector('.character-sprite').getAttribute('src'), '/assets/ui/hidden-bro.png');
+  f.api.renderPartyMembers({ ...roster, hideEnemyBros: false });
+  assert.match(enemy.querySelector('.character-sprite').getAttribute('src'), /thorg/);
+  f.api.renderPartyMembers({ ...roster, hideEnemyBros: true, members: roster.members.map(m => ({ ...m, team: m.team === 'team1' ? 'team2' : 'team1' })) });
+  assert.equal(f.document.getElementById('your-slot-1').querySelector('.character-sprite').getAttribute('src'), '/assets/ui/hidden-bro.png');
+  assert.match(f.document.getElementById('op-slot-1').querySelector('.character-sprite').getAttribute('src'), /ninja/);
+});

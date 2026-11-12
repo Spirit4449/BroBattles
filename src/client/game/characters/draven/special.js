@@ -135,7 +135,7 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
   let nextExplosionAt = scene.time.now + 80;
 
   const tick = () => {
-    if (!player || !player.active) return;
+    if (!player || !player.active || player._matchEnded) return;
     if (player._dravenInfernoToken !== token) return;
 
     const now = scene.time.now;
@@ -322,6 +322,8 @@ export function perform(
     destroyInfernoOverlay(player);
 
     if (player._matchEnded) {
+      delete player._dravenInfernoPrevGravity;
+      delete player._dravenInfernoToken;
       if (player.body) {
         player.setVelocity(0, 0);
       }

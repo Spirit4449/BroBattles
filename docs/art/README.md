@@ -50,6 +50,20 @@ and inspect the alpha edges and loop after importing.
 - **Arena Sovereign Ninja:** padded 72px logical atlas frames, explicit duck/falling overrides, crown projectile and upright crown-spin assets are supplied through skin assets. Preserve animation names and inspect both predicted and remote flight after repacking.
 - **Wizard / Draven:** friendly and enemy `*-bb` atlases have matching JSON. Wizard's fireball is drawn in code (`src/client/game/characters/wizard/fireballArt.js`, blue and red palettes) with procedural pixel trails in `fireballParticles.js`; Draven uses `explosion-bb` and `special-bb` pairs. Team affiliation is viewer-relative and retained on released attacks. The shared team presentation contract is `src/shared/projectilePresentation.js`.
 
+Chat reactions use six hand-authored SVG icons on a shared 16×16 pixel grid in
+`public/assets/chat-reactions/`. Regenerate them with
+`python3 scripts/art/generate-chat-reactions.py`. The renderer maps existing
+Unicode reaction values to these assets for both party chat and direct messages;
+unknown legacy reactions keep their text fallback. Each icon uses square edges,
+transparent margins, a dark outline, and stepped shading from the game palette.
+
+Site waffle-menu icons live in `public/assets/icons/menu/` (96×96 lossless
+WebP, shown at 24px, 20px for the legal links). They were generated with Codex
+`image_gen` on flat `#FF00FF`, one asset per run, using `gem.webp` and
+`lock.webp` as style references. `node scripts/art/install-menu-icons.cjs
+[sourceDir] [--preview]` keys, trims and installs them from
+`output/menu-icons/<name>.png`.
+
 ## Tools and regeneration
 
 For terrain or props redrawn as crisp pixel art in code (the Lushy Peaks platforms), follow [Code-drawn pixel art](code-pixel-art.md): process, choosing pixel size from map scale, and quality rules.

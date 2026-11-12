@@ -50,7 +50,8 @@ function registerAdminRoutes({
         "SELECT match_id, status, mode, map, created_at FROM matches ORDER BY match_id DESC LIMIT 6"
       );
       const recentUsers = await db.runQuery(
-        `SELECT user_id, name, coins, gems, status, created_at
+        `SELECT user_id, name, coins, gems, trophies, status, char_class,
+                selected_profile_icon_id, expires_at, created_at
            FROM users
           ORDER BY updated_at DESC
           LIMIT 6`
@@ -177,6 +178,85 @@ function registerAdminRoutes({
     }
   });
 
+  // Adds (or removes) coins and gems for one or more players in one
+  // transaction. Balances never drop below zero; the ledger records the
+  // amount actually applied, tagged with the admin and an optional note.
+  const GRANT_LIMIT = 10_000_000;
+  const MAX_GRANT_RECIPIENTS = 50;
+  app.post("/api/admin/grant", async (req, res) => {
+    const admin = await requireAdminUser(req, res);
+    if (!admin) return sendUnauthorized(res);
+    const body = req.body || {};
+    const userIds = [...new Set(Array.isArray(body.userIds) ? body.userIds : [body.userId])];
+    if (!userIds.length || userIds.length > MAX_GRANT_RECIPIENTS || userIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+      return res.status(400).json({ error: `Choose between 1 and ${MAX_GRANT_RECIPIENTS} players` });
+    }
+    const amounts = {};
+    for (const currency of ["coins", "gems"]) {
+      const value = body[currency] ?? 0;
+      if (!Number.isInteger(value) || Math.abs(value) > GRANT_LIMIT) {
+        return res.status(400).json({ error: `${currency} must be a whole number up to ${GRANT_LIMIT.toLocaleString("en-US")}` });
+      }
+      if (value) amounts[currency] = value;
+    }
+    if (!Object.keys(amounts).length) return res.status(400).json({ error: "Enter an amount of coins or gems" });
+    const note = typeof body.note === "string" ? body.note.replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, 40) : "";
+    const batch = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      const users = await db.withTransaction(async (_conn, q) => {
+        const rows = await q(`SELECT user_id, name, coins, gems FROM users WHERE user_id IN (${userIds.map(() => "?").join(", ")}) FOR UPDATE`, userIds);
+        if (rows.length !== userIds.length) {
+          const found = new Set(rows.map((row) => Number(row.user_id)));
+          const error = new Error(`Player not found: #${userIds.filter((id) => !found.has(id)).join(", #")}`);
+          error.status = 404;
+          throw error;
+        }
+        const results = [];
+        for (const row of rows) {
+          const applied = {};
+          const next = {};
+          for (const currency of ["coins", "gems"]) {
+            const before = Number(row[currency]) || 0;
+            next[currency] = Math.min(2147483647, Math.max(0, before + (amounts[currency] || 0)));
+            applied[currency] = next[currency] - before;
+          }
+          await q("UPDATE users SET coins = ?, gems = ?, updated_at = NOW() WHERE user_id = ?", [next.coins, next.gems, row.user_id]);
+          for (const currency of ["coins", "gems"]) {
+            if (!applied[currency]) continue;
+            await q(
+              "INSERT INTO shop_currency_ledger (user_id, currency, amount, source_type, source_id) VALUES (?, ?, ?, ?, ?)",
+              [row.user_id, currency, applied[currency], "admin_grant", `${admin.user_id}:${batch}:${row.user_id}${note ? `:${note}` : ""}`.slice(0, 96)],
+            );
+          }
+          results.push({ user_id: row.user_id, name: row.name, coins: next.coins, gems: next.gems, applied });
+        }
+        return results;
+      });
+      console.log(`[admin] ${admin.user_id} granted ${JSON.stringify(amounts)} to ${userIds.join(", ")}${note ? ` (${note})` : ""}`);
+      return res.json({ success: true, users });
+    } catch (error) {
+      if (error.status === 404) return res.status(404).json({ error: error.message });
+      console.error("[admin] grant", error);
+      return res.status(500).json({ error: "Unable to grant currency" });
+    }
+  });
+
+  app.get("/api/admin/grants", async (req, res) => {
+    if (!await requireAdminUser(req, res)) return sendUnauthorized(res);
+    try {
+      const rows = await db.runQuery(
+        `SELECT l.ledger_id, l.user_id, u.name, l.currency, l.amount, l.source_id, l.created_at
+           FROM shop_currency_ledger l LEFT JOIN users u ON u.user_id = l.user_id
+          WHERE l.source_type = 'admin_grant'
+          ORDER BY l.ledger_id DESC LIMIT 30`,
+      );
+      return res.json({ success: true, grants: rows.map(({ source_id, ...row }) => ({ ...row, note: String(source_id || "").split(":").slice(3).join(":") })) });
+    } catch (error) {
+      console.error("[admin] grants", error);
+      return res.status(500).json({ error: "Grant history is unavailable" });
+    }
+  });
+
   app.post("/api/admin/runtime", async (req, res) => {
     const admin = await requireAdminUser(req, res);
     if (!admin) return sendUnauthorized(res);
@@ -226,6 +306,83 @@ function registerAdminRoutes({
       return res
         .status(500)
         .json({ success: false, error: "Failed to update runtime" });
+    }
+  });
+
+  // ---- Shop catalog editor ----
+  // The catalog JSON is the shop's source of truth. Admins edit a draft in the
+  // panel and publish the whole document; it is validated with the same rules
+  // the server uses at runtime, then written atomically and reloaded.
+  const fs = require("fs");
+  const crypto = require("crypto");
+  const shopCatalog = require("../../services/shop/shopCatalog");
+  const PUBLIC_DIR = path.resolve(__dirname, "../../../../public");
+  const catalogPath = () => shopCatalog.CATALOG_PATH;
+  const revisionOf = (text) => crypto.createHash("sha1").update(text).digest("hex");
+  const listAssets = (dir, pattern) => {
+    try {
+      return fs.readdirSync(path.join(PUBLIC_DIR, dir)).filter((name) => pattern.test(name)).sort().map((name) => `/${dir}/${name}`);
+    } catch (_) { return []; }
+  };
+
+  app.get("/api/admin/shop/catalog", async (req, res) => {
+    if (!await requireAdminUser(req, res)) return sendUnauthorized(res);
+    try {
+      const text = fs.readFileSync(catalogPath(), "utf8");
+      const catalog = JSON.parse(text);
+      const { skins, cards, profileIcons } = shopCatalog.getCosmeticCatalogs();
+      const pick = ({ id, name, assetUrl, rarity, character }) => ({ id, name, assetUrl, rarity, character });
+      return res.json({
+        success: true,
+        catalog,
+        revision: revisionOf(text),
+        errors: shopCatalog.validateCatalog(catalog),
+        options: {
+          skins: Object.values(skins?.characters || {}).flatMap((entry) => entry.skins || []).map(pick),
+          cards: (cards?.cards || []).map(pick),
+          profileIcons: (profileIcons?.icons || []).map(pick),
+          banners: listAssets("assets/shop/banners", /^[a-z0-9-]+\.webp$/),
+          icons: listAssets("assets/shop/icons", /^[a-z0-9-]+\.(webp|svg)$/),
+        },
+      });
+    } catch (error) {
+      console.error("[admin] shop catalog read", error);
+      return res.status(500).json({ error: "Unable to read the shop catalog" });
+    }
+  });
+
+  app.get("/api/admin/shop/status", async (req, res) => {
+    if (!await requireAdminUser(req, res)) return sendUnauthorized(res);
+    try {
+      return res.json({ success: true, ...(await shopService.getAdminStatus()), payment: stripeShopService.getConfigurationStatus() });
+    } catch (error) {
+      console.error("[admin] shop status", error);
+      return res.json({ success: true, error: error?.message || "Shop schema is unavailable", payment: stripeShopService.getConfigurationStatus() });
+    }
+  });
+
+  app.put("/api/admin/shop/catalog", async (req, res) => {
+    const admin = await requireAdminUser(req, res);
+    if (!admin) return sendUnauthorized(res);
+    const catalog = req.body?.catalog;
+    if (!catalog || typeof catalog !== "object" || Array.isArray(catalog)) return res.status(400).json({ error: "Invalid catalog" });
+    try {
+      const current = fs.readFileSync(catalogPath(), "utf8");
+      if (req.body?.revision !== revisionOf(current)) {
+        return res.status(409).json({ error: "The shop changed since you opened it. Reload the store to get the latest version." });
+      }
+      const errors = shopCatalog.validateCatalog(catalog);
+      if (errors.length) return res.status(422).json({ error: "Fix these problems before publishing", errors });
+      const text = `${JSON.stringify(catalog, null, 2)}\n`;
+      const temp = `${catalogPath()}.${process.pid}.tmp`;
+      fs.writeFileSync(temp, text);
+      fs.renameSync(temp, catalogPath());
+      shopCatalog.invalidateCatalog();
+      console.log(`[admin] ${admin.user_id} published the shop catalog (${catalog.offers?.length || 0} offers)`);
+      return res.json({ success: true, catalog, revision: revisionOf(text) });
+    } catch (error) {
+      console.error("[admin] shop catalog write", error);
+      return res.status(500).json({ error: "Unable to publish the shop catalog" });
     }
   });
 

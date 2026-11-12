@@ -60,7 +60,7 @@ function registerSiteRoutes({ app, db, auth }) {
           AND EXISTS(SELECT 1 FROM site_request_messages m WHERE m.request_id=r.id AND m.sender='admin' AND (r.player_read_at IS NULL OR m.created_at>r.player_read_at))`,[user.user_id]);
         unread = Number(rows[0].total);
       }
-      res.set('Cache-Control','no-store').json({ member:!!user && !auth.isGuest(user), guest:!!user && auth.isGuest(user), username:user && !auth.isGuest(user) ? user.name : null, unread });
+      res.set('Cache-Control','no-store').json({ member:!!user && !auth.isGuest(user), guest:!!user && auth.isGuest(user), username:user && !auth.isGuest(user) ? user.name : null, admin:!!user && auth.isAdminUser(user), unread });
     } catch (_) { res.status(503).json({ error:'Support is temporarily unavailable.' }); }
   });
   app.post('/api/site/help-search', async (req,res) => {

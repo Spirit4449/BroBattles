@@ -1,13 +1,5 @@
-Bro Battles is in beta, and the arena is open. Pick a fighter in your browser, queue on your own, or bring friends.
+The Bro Battles beta is open in your browser. Pick a Bro, choose a mode, and hit Ready.
 
-## Find your playstyle
+Start with **Duels**: one life, 1v1 or 2v2. Bring a friend if you want someone to blame for the loss. At **250 peak trophies**, Bank Bust unlocks with 3v3 vault raids and respawns.
 
-Start with the fighter who looks fun. Each one changes the rhythm of a match, from how you approach a platform to the moment you commit to an attack. The maps give those choices different places to shine.
-
-## Build it with us
-
-Found a bug or have an idea? Send it through [Feedback](/feedback). For account or purchase questions, visit the [Help Center](/help).
-
-The beta will keep changing: balance will move, rough edges will get smoothed out, and new ideas will earn their place. Tell us what felt great and where the fun dropped off.
-
-[Play now](/)
+Found a weird hit or a broken menu? [Tell us what happened](/feedback). Still learning the buttons? The [controls guide](/help/controls) has you covered.

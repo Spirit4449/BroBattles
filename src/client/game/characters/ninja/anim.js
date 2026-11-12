@@ -5,7 +5,8 @@ export function animations(scene) {
   const aliases = { attack: 'throw', wall: 'sliding' };
   for (const row of settings.animations) {
     if (!row.frames.length || row.key === 'unused-original') continue;
-    const key = 'ninja-' + (aliases[row.key] || row.key);
+    // Directional throws (`attack-up`) become variants of the throw (`ninja-throw-up`).
+    const key = 'ninja-' + (aliases[row.key] || row.key.replace(/^attack-/, 'throw-'));
     if (scene.anims.exists(key)) continue;
     scene.anims.create({ key,
       frames: row.frames.map((frame, index) => ({ key: 'ninja', frame,

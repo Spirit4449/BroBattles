@@ -5,7 +5,7 @@ const { createPartyRouteService } = require("../src/server/services/party/partyR
 const { registerPartyEvents } = require("../src/server/core/socketEvents/partyEvents");
 
 function fixture(allow = 1) {
-  const party = { party_id: 7, mode: 1, map: 1, is_public: 0, public_name: null, allow_member_selection: allow };
+  const party = { party_id: 7, mode: 1, map: 1, is_public: 0, public_name: null, allow_member_selection: allow, hide_enemy_bros: 0 };
   const members = [{ name: "Owner", team: "team1", slot_index: 0 }, { name: "Member", team: "team1", slot_index: 1 }];
   const writes = [];
   const emissions = [];
@@ -31,6 +31,7 @@ function fixture(allow = 1) {
         party.is_public = params[0];
         party.public_name = params[1];
         if (query.includes("allow_member_selection = ?")) party.allow_member_selection = params[2];
+        if (query.includes("hide_enemy_bros = ?")) party.hide_enemy_bros = params[query.includes("allow_member_selection = ?") ? 3 : 2];
         return { affectedRows: 1 };
       }
       if (query.startsWith("UPDATE parties SET mode")) {
@@ -191,4 +192,27 @@ test('oversized party is rejected before changing the saved mode or seats', asyn
     selection: { ...selection, modeVariantId: 'duels-1v1' } }), /Too many players/);
   assert.deepEqual(members, original);
   assert.equal(f.writes.length, 0);
+});
+
+for (const hidden of [true, false]) {
+  test(`owner saves and broadcasts hidden enemy Bros: ${hidden}`, async () => {
+    const f = fixture();
+    const result = await f.state.setPartyVisibility({ partyId: 7, actorName: 'Owner', isPublic: false, hideEnemyBros: hidden });
+    assert.equal(result.settings.hideEnemyBros, hidden);
+    assert.equal((await f.view.getPartySettingsView({ partyId: 7, username: 'Owner' })).payload.hideEnemyBros, hidden);
+    assert.equal((await f.view.getPartyMembersView({ partyId: 7, username: 'Member' })).payload.hideEnemyBros, hidden);
+    assert.equal(f.emissions.find(e => e.event === 'party:members').data.hideEnemyBros, hidden);
+    await f.state.setPartyVisibility({ partyId: 7, actorName: 'Owner', isPublic: false });
+    assert.equal(f.party.hide_enemy_bros, Number(hidden));
+  });
+}
+test('hidden Bros remains unavailable on old schemas and owner-only on new ones', async () => {
+  const f = fixture();
+  const result = await f.state.setPartyVisibility({ partyId: 7, actorName: 'Member', hideEnemyBros: true });
+  assert.equal(result.ok, false);
+  assert.equal(f.writes.length, 0);
+  delete f.party.hide_enemy_bros;
+  const view = await f.view.getPartySettingsView({ partyId: 7, username: 'Owner' });
+  assert.equal(view.payload.hideEnemyBros, false);
+  assert.equal(view.payload.hideEnemyBrosSupported, false);
 });

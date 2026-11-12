@@ -23,6 +23,51 @@ function run(sim, ms) {
 
 const area = (blobs) => blobs.reduce((sum, b) => sum + b.radius * b.radius, 0);
 
+test('shockwave smoke follows the moving body, turns with its flight, and expires', () => {
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { EventEmitter } = require('node:events');
+  for (const direction of [-1, 1]) {
+    const { spawnShockwaveHitSmoke } = createClientModuleGraph({
+      globals: { ImageData: class {} },
+    }).load('src/client/game/powerups/shockwaveHit.js');
+    // No camera: exercise the real follower and simulation without canvas drawing.
+    const scene = { add: { image() {} }, textures: { createCanvas() {} }, events: new EventEmitter() };
+    const sprite = { active: true, x: 200, y: 150, scaleX: 1, scaleY: 1,
+      displayOriginX: 25, displayOriginY: 40,
+      body: { offset: { x: 0, y: 0 }, width: 50, height: 80 } };
+    spawnShockwaveHitSmoke(scene, sprite, { amountX: direction * 1200, amountY: -600 });
+    const sim = scene._cloudSystem.sim;
+    const first = sim.blobs[0];
+    assert.ok((first.x - sprite.x) * direction < 0, 'smoke starts behind the launch');
+    const initial = new Set(sim.blobs);
+    sprite.x += direction * 100;
+    scene.events.emit('update', 16, 16);
+    const trail = sim.blobs.filter(blob => !initial.has(blob));
+    assert.ok(trail.length > 3, 'moving lays multiple puffs along the travelled path');
+    assert.ok(trail.some(blob => (blob.x - first.x) * direction > 50), 'smoke follows the body away from the impact');
+    assert.ok(sim.blobs.every(blob => blob.layer === 'back'));
+    const beforeTurn = new Set(sim.blobs);
+    sprite.y -= 100;
+    scene.events.emit('update', 32, 16);
+    const turn = sim.blobs.filter(blob => !beforeTurn.has(blob));
+    assert.ok(turn.some(blob => blob.y < sprite.y + 50), 'trail follows a change in flight direction');
+    assert.ok(turn.some(blob => blob.vy > 0), 'fresh smoke drifts behind upward travel');
+    const stoppedCount = sim.size;
+    scene.events.emit('update', 48, 16);
+    assert.equal(sim.size, stoppedCount, 'stopping does not pile up new smoke');
+    for (let i = 0; i < 300; i++) {
+      sprite.x += direction * 10;
+      scene.events.emit('update', 48 + i * 16, 16);
+    }
+    assert.equal(sim.size, 0, 'emission ends even if the fighter keeps moving, and the trail dissipates');
+    spawnShockwaveHitSmoke(scene, { ...sprite, active: false }, {});
+    spawnShockwaveHitSmoke(scene, null, {});
+    assert.equal(sim.size, 0);
+    scene.events.emit('shutdown');
+    assert.equal(scene.events.listenerCount('update'), 0);
+  }
+});
+
 describe('cloud simulation', () => {
   test('a cloud puffs out, breaks into smaller drifting pieces, then dissipates completely', () => {
     const sim = createCloudSim({ random: seeded() });

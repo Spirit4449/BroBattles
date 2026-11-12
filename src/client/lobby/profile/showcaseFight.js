@@ -1,3 +1,4 @@
+import movementPhysics from '../../../shared/physics/movementPhysics.json';
 import { basicAim, requestBasic } from "../../../shared/combat/combat";
 import { isMovementSuppressed } from "../../../shared/combat/runtime/abilityRuntimeManager";
 import { remoteAnimationLockUntil } from "../../game/characters/shared/animationState";
@@ -9,6 +10,7 @@ import { handleRemoteAttack, getCharacterSocketEvents, getCharacterEffectTickSou
   applyCharacterPowerupFx, drawCharacterPowerupAura, playCharacterSound } from '../../game/characters';
 import { performSpecial } from '../../game/characters/special';
 import { createPowerupRenderer } from '../../game/powerups/powerupRenderer';
+import { spawnShockwaveHitSmoke } from '../../game/powerups/shockwaveHit';
 import { POWERUP_COLORS, createPowerupTickSounds } from '../../game/powerups/powerupConfig';
 import { playPlayerSound } from '../../game/audio/playerAudio';
 import { playHitFeedback } from '../../game/characters/shared/hitFeedback';
@@ -17,6 +19,10 @@ import { createShowcaseDirector, seededRandom } from './showcaseDirector';
 // Presentation consumes match events. No damage, collision, ammo, status or
 // ability timing is authored here.
 export function createShowcaseFight({ scene, fighters, halfWidth, face, play, movementStep, showHealthChange, showDefeat, onRoundEnd, autoplay = true, initialCharge = {} }) {
+  // Preview action sequences restart each round on the same Phaser scene.
+  // Old splats and dedupe entries must not consume the new round's first shot.
+  scene._bbSeenPackets?.clear();
+  scene._gloopSplats?.clear();
   const byId = new Map(fighters.map(f => [f.id, f]));
   const wrappers = Object.fromEntries(fighters.map(f => [f.id, { opponent: f.sprite, username: f.id, character: f.character }]));
   const context = { localUsername: '', opponentPlayersRef: wrappers, teamPlayersRef: {}, findSprite: id => byId.get(id)?.sprite };
@@ -52,6 +58,7 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
         if (victim) playCharacterSound(scene, fighter.character, 'hit', {}, victim.sprite);
         return;
       }
+      fighter.sprite.anims.timeScale = 1;
       handleRemoteAttack(scene, fighter.character, packet.action, { opponent: fighter.sprite });
     } else if (type === 'player:special') {
       presentationUntil = scene.time.now + 3500;
@@ -59,6 +66,7 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
       if (!fighter) return;
       const allies = fighters.filter(f => f.team === fighter.team && f !== fighter).map(f => f.sprite);
       const enemies = fighters.filter(f => f.team !== fighter.team).map(f => f.sprite);
+      fighter.sprite.anims.timeScale = 1;
       performSpecial(fighter.character, scene, fighter.sprite, allies, enemies, fighter.id, null, false, packet.aim);
     } else if (type === 'health-update') {
       const fighter = byId.get(packet.username);
@@ -69,6 +77,8 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
     } else if (type === 'player:death') {
       const fighter = byId.get(packet.username);
       fighter.health = 0; fighter.defeated = true; showDefeat(fighter);
+    } else if (type === 'shockwave:hit') {
+      spawnShockwaveHitSmoke(scene, byId.get(packet.username)?.sprite, packet);
     } else if (type === 'powerup:tick') {
       const sound = tickSounds[packet.type];
       if (sound) playPlayerSound(scene, byId.get(packet.username)?.sprite, sound.key, sound.options);
@@ -78,6 +88,22 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
   }
   session = new PreviewSession(fighters.map(f => ({ id: f.id, name: f.name, character: f.character, level: f.level, team: f.team, role: f.role, x: f.homeX, superCharge: initialCharge[f.id] || 0 })),
     { halfWidth, onEvent: receive, random: seededRandom(19) });
+  // The stage is centered on (0, 0), unlike Phaser's default canvas bounds.
+  // Projectile renderers must use the same arena as the combat host.
+  const world = session.geometry.world;
+  scene.physics.world.setBounds(world.x, world.y, world.width, world.height);
+  // Stage art is fitted independently of match sprite sizes. Contacts must
+  // follow the bodies actually displayed, including their grounded origins.
+  for (const fighter of fighters) {
+    const p = session.players.get(fighter.id), body = fighter.sprite.body;
+    p.y = p.groundY = fighter.standY;
+    p._bodyHalfWidth = body.width / 2;
+    p._bodyHalfHeight = body.height / 2;
+    p._bodyCenterOffsetX = body.center.x - fighter.sprite.x;
+    p._bodyCenterOffsetY = body.center.y - fighter.sprite.y;
+    p._lastWidth = fighter.sprite.displayWidth;
+    p._lastHeight = fighter.sprite.displayHeight;
+  }
   scene.showcaseSession = session;
   const bootstrap = session.bootstrap();
   for (const network of networks) { network.configure(bootstrap[network.bootstrapKey]); network.attach(scene, context); }
@@ -102,15 +128,22 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
       fighter.status = snapshotActive(p, session.now);
       if (autoplay || isMovementSuppressed(p, session.now)) sprite.setPosition(p.x, fighter.standY + p.y - p.groundY);
       sprite._powerupEffects = fighter.status;
+      sprite._bbAnimationVelocity = { x: p.vx, y: p.vy };
+      fighter.movementSpeedRatio = Math.min(1, Math.abs(p.vx) / movementPhysics.maxSpeed);
       if (!p.isAlive || !autoplay) continue;
       const pushed = session.now < (p._previewImpulseUntil || 0);
       const moving = !pushed && Math.abs(p.vx) > 10;
       const aiming = session.now < (p._botActionUntil || 0) || performance.now() < remoteAnimationLockUntil(sprite);
       face(fighter, moving && !aiming ? Math.sign(p.vx) : p.flip ? -1 : 1);
       // playSpriteAnimation respects an active action's lock.
-      if (performance.now() >= remoteAnimationLockUntil(sprite)) play(fighter, !p.grounded ? (p.vy < 0 ? 'jumping' : 'falling') : moving ? 'running' : 'idle');
+      if (performance.now() >= remoteAnimationLockUntil(sprite)) {
+        play(fighter, !p.grounded ? (p.vy < 0 ? 'jumping' : 'falling') : moving ? 'running' : 'idle');
+        // Legacy run atlases have no bbMotion metadata. Match their stride
+        // to simulation speed too, without slowing attacks or airborne poses.
+        sprite.anims.timeScale = moving && p.grounded ? Math.max(0.15, fighter.movementSpeedRatio) : 1;
+      }
       if (moving && p.grounded && time >= (fighter.nextDustAt || 0)) {
-        fighter.nextDustAt = time + 140; movementStep(fighter, Math.sign(p.vx));
+        fighter.nextDustAt = time + 140 / Math.max(0.15, fighter.movementSpeedRatio); movementStep(fighter, Math.sign(p.vx));
       }
     }
     for (const network of networks) network.observe({ snapshotEpoch: session._snapshotEpoch, sentMono: performance.now(), tMono: session._simulationMono });

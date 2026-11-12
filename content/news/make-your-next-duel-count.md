@@ -1,19 +1,7 @@
-Every duel starts with the same question: what will you do differently this time?
+One life each. No respawns. Duels is a 1v1 or 2v2 fight to knock out the other side.
 
-Maybe you rushed too early last time. This round, you wait half a second and catch the landing. Maybe your teammate buys just enough room to turn a close fight around. Small choices make every rematch feel personal.
+Go solo to settle a rivalry, or bring a teammate who might save your next bad jump. Both formats share the same four maps.
 
-## Your fight, your team size
+Take too long and **poison rises from the floor**. That platform won’t stay safe forever. Keep climbing and finish the fight.
 
-Duels brings elimination battles to **1v1 and 2v2**. Go head-to-head to work on your timing, or bring friends and find out how your playstyles fit together. There are no respawns in Duels, so staying in the fight matters as much as landing a hit.
-
-## Learn one thing each match
-
-Try a fighter from the lobby and give yourself a small challenge: make better use of cover, leave room to dodge, or keep an eye on your teammate before committing. You do not need a perfect match to find a better move.
-
-A close loss can give you the next idea. A hard-earned win feels better when you know exactly what made the difference.
-
-## Bring the rematch energy
-
-Want to play together? Our [party guide](/help/parties) will help you get your group into the lobby. Then choose your team size and ready up.
-
-[Find your next fight](/)
+Lost by one hit? [Invite your friend](/help/parties) and run it back.

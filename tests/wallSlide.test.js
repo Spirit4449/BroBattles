@@ -112,6 +112,8 @@ test('wall braking preserves ascent and jump ramp, then limits descent after the
     player.body.velocity.y = 0;
     localSlide({ player, wallBrakeHeld });
     assert.equal(player.body.velocity.y, 0);
+    // Arriving on the wall already falling (no apex ramp in progress).
+    player._wallRiseDragAt = null;
     player.body.velocity.y = 200;
     localSlide({ player, wallBrakeHeld });
     assert.equal(player.body.velocity.y, wallBrakeHeld ? 75 : 120);
@@ -214,4 +216,76 @@ test('bots follow the same rule: no slide or kick on a step, both on a wall', ()
   assert.equal(wall.fallSpeed, tuning.wallSlideMaxFallSpeed);
   assert.ok(!step.events.includes('wall-jump'));
   assert.ok(step.fallSpeed > 400);
+});
+
+test('jumping straight up beside a wall never starts a slide; jumping into it still does', () => {
+  for (const side of ['left', 'right']) {
+    const toward = side === 'left' ? -1 : 1;
+    let now = 1000;
+    const { player } = localSlide({ wallSide: side, wallSlideContact: false });
+    const tick = (overrides = {}) => applyWallSlide(player, {
+      dead: false, movementLocked: false, wallSlideContact: true, wallSide: side,
+      wallBrakeHeld: false, ...overrides }, now);
+    player.body.velocity = { x: 0, y: -300 };
+    assert.equal(tick(), false);
+    now += 200;
+    assert.equal(tick(), false, 'neutral rise stays detached');
+    assert.equal(tick({ drivingIntoWall: true }), false);
+    now += 60;
+    assert.equal(tick({ drivingIntoWall: true }), true, 'held input into the wall attaches while rising');
+    assert.equal(tick(), true, 'an attach under way holds after releasing');
+
+    const momentum = localSlide({ wallSide: side, wallSlideContact: false }).player;
+    momentum.body.velocity = { x: 200 * toward, y: -300 };
+    assert.equal(applyWallSlide(momentum, { wallSlideContact: true, wallSide: side }, 0), false);
+    momentum.body.velocity.x = 0;
+    assert.equal(applyWallSlide(momentum, { wallSlideContact: true, wallSide: side }, 60), true,
+      'momentum into the wall attaches even after collision zeroes it');
+  }
+  const falling = localSlide({ wallSlideContact: false }).player;
+  falling.body.velocity = { x: 0, y: 200 };
+  applyWallSlide(falling, { wallSlideContact: true, wallSide: 'right' }, 0);
+  assert.equal(applyWallSlide(falling, { wallSlideContact: true, wallSide: 'right' }, 60), true);
+});
+
+test('wall contact reports held input toward the wall', () => {
+  const run = (side, left, right) => resolveWallContact(
+    { body: { x: 100, y: 100, width: 30, height: 50, touching: {}, blocked: { [side]: true }, velocity: { x: 0, y: -100 } } },
+    [], { left, right }, 0).drivingIntoWall;
+  assert.equal(run('right', false, true), true);
+  assert.equal(run('right', false, false), false);
+  assert.equal(run('right', true, false), false);
+  assert.equal(run('left', true, false), true);
+});
+
+test('rising while wall-sliding bleeds upward speed each frame, but not during the jump ramp', () => {
+  const { player } = localSlide();
+  player.body.velocity.y = -300;
+  let now = 1000;
+  const tick = () => localSlide({ player, Date: { now: () => now } });
+  tick();
+  assert.equal(player.body.velocity.y, -300);
+  now += 16;
+  tick();
+  const afterOneFrame = player.body.velocity.y;
+  assert.ok(afterOneFrame > -300 && afterOneFrame < 0);
+  for (let i = 0; i < 60; i++) { now += 16; tick(); }
+  assert.equal(player.body.velocity.y, 0, 'drag stops at the apex instead of pushing down');
+
+  // Gravity would snap the slide to full speed; the descent ramps in gently.
+  now += 16;
+  player.body.velocity.y = 990 * 0.016;
+  tick();
+  const firstFall = player.body.velocity.y;
+  assert.ok(firstFall > 0 && firstFall < 990 * 0.016);
+  for (let i = 0; i < 3; i++) { now += 16; player.body.velocity.y += 990 * 0.016; tick(); }
+  assert.ok(player.body.velocity.y < tuning.wallSlideMaxFallSpeed);
+  for (let i = 0; i < 60; i++) { now += 16; player.body.velocity.y += 990 * 0.016; tick(); }
+  assert.equal(player.body.velocity.y, tuning.wallSlideMaxFallSpeed);
+
+  player.body.velocity.y = -300;
+  player._jumpLaunch = { startedAt: now, vy: -300 };
+  now += 16;
+  tick();
+  assert.equal(player.body.velocity.y, -300);
 });

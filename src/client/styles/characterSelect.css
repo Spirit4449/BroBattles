@@ -871,10 +871,10 @@
   pointer-events: none;
   /* Fixed square cells, sharing the card portrait's palette and mosaic. */
   background:
-    var(--portrait-chroma-0) left top / 64px 64px no-repeat,
-    var(--portrait-chroma-1) right top / 64px 64px no-repeat,
-    var(--portrait-chroma-2) left bottom / 64px 64px no-repeat,
-    var(--portrait-chroma-3) right bottom / 64px 64px no-repeat;
+    var(--portrait-chroma-0) left top / 112px 112px no-repeat,
+    var(--portrait-chroma-1) right top / 112px 112px no-repeat,
+    var(--portrait-chroma-2) left bottom / 112px 112px no-repeat,
+    var(--portrait-chroma-3) right bottom / 112px 112px no-repeat;
 }
 
 .character-details-preview-frame.is-locked .character-details-preview-image {
@@ -929,8 +929,17 @@
   pointer-events: none;
 }
 
-.is-skin-revolving .character-details-preview-image {
-  will-change: transform, opacity;
+.character-skin-pixel {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.55));
+}
+
+.character-details-preview-frame[data-showcase-view="animations"] .character-skin-pixel,
+.character-details-preview-frame[data-showcase-view="fight"] .character-skin-pixel {
+  display: none;
 }
 
 .character-details-preview-level-badge {
@@ -1039,9 +1048,7 @@
 }
 
 .character-details-inline-skin.is-locked {
-  background:
-    linear-gradient(rgba(64, 70, 81, 0.38), rgba(25, 31, 42, 0.58)),
-    linear-gradient(180deg, #202c3f, #101827);
+  background: linear-gradient(180deg, #1b293d, #101a2b);
   box-shadow:
     0 3px #000,
     0 -3px #000,
@@ -1164,11 +1171,13 @@
 }
 
 .stat-box-value-stack {
+  position: relative;
   margin-left: auto;
   display: grid;
   justify-items: end;
-  gap: 3px;
-  min-width: 58px;
+  min-width: 5ch;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-box-value-stack .stat-box-value {
@@ -1177,12 +1186,20 @@
 }
 
 .stat-box-gain {
+  position: absolute;
+  top: calc(100% + 3px);
+  right: 0;
   visibility: hidden;
   color: #fff;
   font-family: "Press Start 2P", "Lato", sans-serif;
   font-size: 9px;
   line-height: 1;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
+.stat-box-header {
+  /* Reserve gain space before confirmation, so the window never jumps. */
+  padding-bottom: 12px;
 }
 
 .is-upgrade-confirming .stat-box-gain {
@@ -1320,7 +1337,8 @@
 .stat-box-metrics {
   display: grid;
   gap: 8px;
-  margin-block: auto;
+  width: 88%;
+  margin: auto;
   padding-top: 0;
 }
 
@@ -1335,7 +1353,7 @@
 
 .stat-box-metric {
   min-width: 0;
-  min-height: 50px;
+  min-height: 42px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -1358,8 +1376,8 @@
 }
 
 .attack-metrics .stat-box-metric {
-  min-height: 44px;
-  padding-block: 5px;
+  min-height: 40px;
+  padding-block: 3px;
 }
 
 .stat-box-metric.ammo-metric {
@@ -1378,16 +1396,16 @@
 }
 
 .stat-box-metric img {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 2px 0 rgba(1, 4, 10, 0.75));
 }
 
 .stat-box-metric-copy {
-  min-width: 0;
+  min-width: 64px;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -1570,18 +1588,44 @@
 }
 
 .character-details-inline-skin.is-locked .character-details-skin-name-box {
-  background:
-    linear-gradient(rgba(64, 70, 81, 0.5), rgba(25, 31, 42, 0.72)),
-    linear-gradient(180deg, #263244, #151e2c);
+  background: linear-gradient(180deg, #223149, #152238);
   box-shadow:
     0 3px #000,
     0 -3px #000,
+    3px 0 #000,
+    -3px 0 #000,
+    inset 0 3px #ffffff12,
+    inset 0 -3px #00000038;
+}
+
+.character-details-inline-skin.is-locked .character-details-skin-stepper:disabled {
+  opacity: 1;
+  filter: none;
+  color: #64748b;
+  background: #162235;
+  box-shadow:
+    0 3px #000,
+    0 -3px #000,
+    3px 0 #000,
+    -3px 0 #000,
     inset 0 3px #ffffff0d;
 }
 
+.character-details-inline-skin.is-locked .character-details-skin-name-text,
 .character-details-inline-skin.is-locked .character-details-skin-rarity {
-  color: rgba(var(--skin-rarity-rgb), 0.78);
-  text-shadow: 0 0 7px rgba(var(--skin-rarity-rgb), 0.36);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  text-shadow: 0 2px #07101f;
+  filter: none;
+  animation: none;
+}
+
+.character-details-inline-skin.is-locked .character-details-skin-name-text {
+  color: #d4dce8;
+}
+
+.character-details-inline-skin.is-locked .character-details-skin-rarity {
+  color: rgb(var(--skin-rarity-rgb));
 }
 
 .character-details-skin-rarity {
@@ -2423,4 +2467,151 @@
 
 @keyframes characterShowcaseLoading {
   50% { opacity: 0.55; }
+}
+
+/* Purchase feedback uses the shared pixel window and button styles. */
+.cs-purchase-confirm { text-align: center; }
+.cs-unlock-confirm .cs-hero { height: 176px; margin: 12px 0; isolation: isolate; }
+.cs-unlock-confirm .cs-hero-img {
+  width: 156px; height: 156px; image-rendering: pixelated;
+  filter: none;
+  animation: none;
+}
+.cs-unlock-confirm .cs-hero-beams {
+  display: block; width: 210px; height: 210px; z-index: -1;
+  background: repeating-conic-gradient(transparent 0deg 30deg, var(--bb-blue) 30deg 36deg);
+  opacity: .45; filter: none; border-radius: 0;
+  mask-image: radial-gradient(circle, transparent 20%, #000 42%, transparent 70%);
+  animation: csSpin 18s linear infinite;
+}
+.cs-unlock-confirm .cs-hero::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 6px; height: 6px; z-index: -1;
+  background: transparent; color: var(--bb-gold);
+  box-shadow: -88px -52px 0 currentColor, 82px -32px 0 currentColor,
+    -72px 58px 0 currentColor, 74px 66px 0 currentColor;
+  animation: halo-sparks 1400ms steps(3, end) infinite alternate;
+}
+
+.cs-unlock-name {
+  color: var(--bb-text); font-family: var(--bb-font-display);
+  font-size: 18px; text-transform: uppercase; line-height: 1.5; margin-bottom: 12px;
+}
+.cs-unlock-confirm .cs-confirm-body .cs-price-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 16px auto 4px;
+  padding: 12px 16px;
+  background: var(--bb-panel-bg);
+  border: var(--bb-panel-border);
+  box-shadow: 0 3px 0 var(--bb-ink), inset 0 2px 0 var(--bb-border-soft);
+  color: var(--bb-text-soft);
+  font-family: var(--bb-font-display);
+  font-size: 10px;
+  line-height: 1.6;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+}
+.cs-unlock-confirm .cs-price-row .cs-currency { width: 24px; height: 24px; image-rendering: pixelated; }
+body .cs-unlock-confirm .cs-confirm-actions { display: grid; grid-template-columns: 1fr 1.5fr; gap: 18px; margin-top: 26px; }
+.cs-unlock-confirm .cs-btn { min-width: 0; }
+.character-details-success {
+  --reveal-color: var(--bb-gold); overflow: hidden; isolation: isolate; background: none;
+}
+.character-details-success.is-unlock { --reveal-color: var(--bb-blue); }
+.character-details-success.fade-out { opacity: 0; transition: opacity 240ms steps(4, end); }
+.character-details-success-beams { display: none; }
+.character-details-success-ring {
+  position: absolute; width: 112px; height: 112px;
+  border: 4px solid var(--reveal-color); border-radius: 0;
+  box-shadow: 4px 4px 0 var(--bb-ink), inset 4px 4px 0 var(--bb-ink);
+  animation: pixel-ring 720ms steps(8, end) both;
+}
+.character-details-success-spark {
+  position: absolute; left: 50%; top: 50%; width: 8px; height: 8px;
+  background: var(--reveal-color); box-shadow: 4px 4px 0 var(--bb-ink);
+  animation: pixel-spark 900ms steps(8, end) var(--spark-delay) both;
+}
+.character-details-success-label {
+  padding: 12px 16px; max-width: 90%; box-sizing: border-box;
+  border: 3px solid var(--reveal-color); background: var(--bb-popup-bg);
+  box-shadow: 4px 0 var(--bb-ink), -4px 0 var(--bb-ink), 0 4px var(--bb-ink), 0 -4px var(--bb-ink);
+  color: var(--bb-text); font-size: clamp(12px, 2vw, 18px); text-align: center;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+  animation: pixel-hero-in 320ms steps(5, end) 100ms both;
+}
+/* Split the exact locked-chain artwork into four pieces at its centre. */
+.unlock-shackles { position: absolute; inset: 0; pointer-events: none; display: grid; place-items: center; }
+.unlock-chain {
+  position: absolute; inset: 0;
+  background: url("/assets/locked-chains.svg") center / cover no-repeat;
+  animation: chain-break 1000ms cubic-bezier(.2,.7,.4,1) 420ms both;
+}
+.unlock-chain-top-left { clip-path: inset(0 50% 50% 0); --chain-x: -55%; --chain-y: -30%; }
+.unlock-chain-top-right { clip-path: inset(0 0 50% 50%); --chain-x: 55%; --chain-y: -30%; }
+.unlock-chain-bottom-left { clip-path: inset(50% 50% 0 0); --chain-x: -55%; --chain-y: 60%; }
+.unlock-chain-bottom-right { clip-path: inset(50% 0 0 50%); --chain-x: 55%; --chain-y: 60%; }
+.unlock-breaking-lock {
+  position: relative; width: 80px; height: 80px; object-fit: contain; image-rendering: pixelated;
+  filter: brightness(1.5) drop-shadow(0 3px 0 var(--bb-ink)) drop-shadow(0 0 6px var(--bb-ink));
+  animation: lock-break 850ms ease-out both;
+}
+.is-unlock .character-details-success-label { align-self: flex-end; margin-bottom: 20px; animation-delay: 850ms; }
+.is-unlock .character-details-success-ring { animation-delay: 420ms; }
+.is-unlock .character-details-success-spark { animation-delay: calc(420ms + var(--spark-delay)); }
+.character-details-preview-frame[data-confirming="true"] .character-showcase-view:not([aria-pressed="true"]) { opacity: .45; cursor: default; }
+@keyframes halo-sparks { from { opacity: .25; } to { opacity: .8; } }
+@keyframes chain-break { 0% { transform: translate(0,0); opacity: 1; } 20% { opacity: 1; } 100% { transform: translate(var(--chain-x),var(--chain-y)); opacity: 0; } }
+@keyframes lock-break {
+  0% { transform: translateX(0) scale(1); opacity: 1; }
+  10%, 30% { transform: translateX(-5px) rotate(-7deg) scale(1.08); }
+  20%, 40% { transform: translateX(5px) rotate(7deg) scale(1.16); }
+  52% { transform: translateX(0) scale(1.3); opacity: 1; }
+  100% { transform: scale(1.85); opacity: 0; }
+}
+@keyframes pixel-hero-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes pixel-ring { from { opacity: 1; transform: scale(.5); } to { opacity: 0; transform: scale(2.5); } }
+@keyframes pixel-spark { from { opacity: 1; transform: translate(0, 0); } to { opacity: 0; transform: translate(var(--spark-x), var(--spark-y)); } }
+@keyframes shackle-left { 0%, 15% { transform: translate(0, 0); opacity: 1; } 35% { transform: translate(-24px, -12px) rotate(-12deg); opacity: 1; } 100% { transform: translate(-100px, 100px) rotate(-36deg); opacity: 0; } }
+@keyframes shackle-right { 0%, 15% { transform: translate(0, 0); opacity: 1; } 35% { transform: translate(24px, -12px) rotate(12deg); opacity: 1; } 100% { transform: translate(100px, 100px) rotate(36deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .cs-unlock-confirm .cs-hero-img, .cs-unlock-confirm .cs-hero-beams, .cs-unlock-confirm .cs-hero::before, .character-details-success-label { animation: none; }
+  .character-details-success-ring, .character-details-success-spark, .unlock-shackles { display: none; }
+  .character-details-success.fade-out { transition: none; }
+}
+
+/* A quiet level-up reveal: halo behind the body, short text below. */
+.character-upgrade-halo {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 340px; height: 340px;
+  z-index: 0;
+  pointer-events: none;
+  background: repeating-conic-gradient(transparent 0deg 22deg, var(--bb-gold) 22deg 30deg);
+  mask-image: radial-gradient(circle, transparent 12%, #000 35%, transparent 68%);
+  opacity: .6;
+  animation: upgrade-halo-spin 12s linear infinite;
+  transition: opacity 300ms ease;
+}
+.character-upgrade-halo.fade-out { opacity: 0; }
+.character-details-success.is-upgrade .character-details-success-label {
+  align-self: flex-end;
+  margin-bottom: 20px;
+  padding: 8px 12px;
+  border: none;
+  box-shadow: none;
+  background: none;
+  color: var(--bb-gold);
+  text-transform: none;
+  animation: none;
+}
+@keyframes upgrade-halo-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .character-upgrade-halo { animation: none; transform: translate(-50%, -50%); transition: none; }
 }

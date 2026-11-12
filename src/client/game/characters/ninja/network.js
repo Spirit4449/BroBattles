@@ -2,6 +2,7 @@ import { applyTeamVisual } from "../../../../shared/projectilePresentation";
 import { presentSwarmRelease } from './swarmPresentation';
 import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileTexture';
 import { createShurikenEffects } from './effects';
+import { beginThrow, claimThrow, handPoint, presentRelease } from './throwPresentation';
 import { playSpriteAnimation } from '../shared/animationState';
 import { aimFacesLeft, faceAttack } from '../shared/flipLock';
 import { serverClock as matchClock, ensureServerClockEpoch as ensureMatchEpoch } from '../../match/serverClock';
@@ -136,11 +137,18 @@ function attachNinjaScene(scene,next={}){
       // Bound catch-up work after stalls; authoritative state is refreshed on return.
       const until=sim+(e.lead||0);
       let count=0;while(e.at+STEP_MS<=until&&count++<360&&!e.p.done){stepAt(e.p,o,e.at);e.at+=STEP_MS;}
-      if(!e.sprite){
+      // A basic throw with a directional pose keeps its star in the hand until the
+      // release beat. The flight above runs on regardless; only its drawing waits.
+      // Only a fresh launch starts in the hand; one already well into its flight
+      // (a late packet, a reconnect) is drawn where it is.
+      if(e.thrown===undefined)e.thrown=e.p.special||e.p.elapsed>(e.p.cfg.hitArmMs||60)+STEP_MS?null:claimThrow(displayedOwner);
+      const inHand=!!e.thrown&&now-e.thrown.startedAt<e.thrown.releaseMs;
+      if(!e.sprite&&!inHand){
         if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,displayedOwner,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
         const team=o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88};
         e.texture=ninjaProjectileTexture(scene,displayedOwner,team);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && e.texture==="shuriken")e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,team,true,e.texture.includes("-weapon")?"crown":null);
-        e.fx=createShurikenEffects(scene,e.sprite,{x:e.p.startX,y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:e.p.elapsed<180});
+        const hand=e.thrown&&displayedOwner?handPoint(displayedOwner,e.thrown.hand):null;
+        e.fx=createShurikenEffects(scene,e.sprite,{x:hand?hand.x:e.p.startX,y:hand?hand.y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:!!hand||e.p.elapsed<180});
         if(e.p.ownerName!==ctx.localUsername)e.correction=remoteLaunchCorrection(displayedOwner,e.p.returnTarget,e.p.elapsed,now);
       }
       const next=copy(e.p);if(!next.done)stepAt(next,o,e.at);
@@ -154,6 +162,7 @@ function attachNinjaScene(scene,next={}){
       const blend=e.correction?Math.max(0,1-(now-e.correction.at)/(e.correction.duration||60)):0;
       const flight={x:e.p.x+(next.x-e.p.x)*f,y:e.p.y+(next.y-e.p.y)*f};
       if(!e.p.done&&isLocalShooter(e.p.ownerName))predictHits(scene,e,flight);
+      if(!e.sprite){if(e.p.done)tombstone(id);continue;}
       let x=flight.x+(e.correction?.x||0)*blend;
       let y=flight.y+(e.correction?.y||0)*blend;
       // Confirmation can describe a younger outbound projectile than prediction.
@@ -164,6 +173,7 @@ function attachNinjaScene(scene,next={}){
         const forward=(x-e.sprite.x)*fx+(y-e.sprite.y)*fy;
         if(forward<0){x-=forward*fx;y-=forward*fy;record({type:'backtrack-prevented',id,at:now,distancePx:-forward});}
       }
+      if(e.thrown){const leaving=presentRelease(e.thrown,{x,y},displayedOwner,now);x=leaving.x;y=leaving.y;e.sprite.setScale(e.p.cfg.scale*leaving.scale);}
       e.sprite.setPosition(x,y);e.renderPhase=e.p.phase;
       animateNinjaProjectile(e.sprite,e.texture,e.p.elapsed,e.p.cfg.rotationSpeed,e.p.direction);
       e.fx?.update(now,!e.p.done);
@@ -187,7 +197,7 @@ function handleNinjaPacket(scene,packet,next){
     if(!a.projectile.special&&packet.playerName!==ctx.localUsername&&!active.has(a.projectile.id)&&!terminals.has(a.projectile.id)){
       const sprite=owner(packet.playerName);
       // Each launched projectile is its own throw.
-      playSpriteAnimation({scene,sprite,character:'ninja',logical:'throw',fallback:'idle',id:a.projectile.id,remote:true});
+      playSpriteAnimation({scene,sprite,character:'ninja',logical:'throw',fallback:'idle',id:a.projectile.id,remote:true,variant:beginThrow(sprite,a.projectile.angle,performance.now())});
       playPlayerSound(scene, sprite, 'shurikenThrow', {volume:1,rate:1.3});
     }
     accept(a.projectile,a.simMono);

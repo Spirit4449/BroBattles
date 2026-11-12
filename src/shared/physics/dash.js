@@ -22,7 +22,8 @@ function acceptDash(player, input, now) {
   player.dashSeq = id;
   player.dashX = x;
   player.dashY = y;
-  player._stompPendingUntil = x === 0 && y === 1 && !player.grounded ? now + physics.dashDurationMs + physics.dashCoastMs : 0;
+  player._stompPendingUntil = x === 0 && y === 1 && !player.grounded ? Number.MAX_SAFE_INTEGER : 0;
+  player._stompStartY = player._stompPendingUntil ? player.y : null;
   return true;
 }
 module.exports = { dashDirection, acceptDash };

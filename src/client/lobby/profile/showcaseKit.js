@@ -6,7 +6,7 @@ export function resolveShowcaseKit(character, overrides = {}) {
 
 // Use the content registry rather than a separate showcase roster.
 export function dummyCharacterFor(character) {
-  if (character === "gloop") return "ninja";
+  if (character === "gloop") return "thorg";
   const candidates = Object.keys(characterDefinitions).filter(key => key !== character);
   const basicDamage = key => Number(characterDefinitions[key]?.stats?.baseDamage) || 0;
   const fragile = candidates.find(key => key === "ninja") || candidates[0];
@@ -23,5 +23,7 @@ export function showcaseRoster({ character, skinId = "", level = 1, mode, name =
   if (mode !== 'fight') return [entry('hero', character, 'team1', 0, true)];
   if (character === 'wizard') return [entry('hero', character, 'team1', -65, true),
     { ...entry('ally', 'ninja', 'team1', -195), role: 'bystander' }, entry('enemy', 'thorg', 'team2', 125)];
+  if (character === 'thorg') return [entry('hero', character, 'team1', -190, true),
+    entry('enemy', dummyCharacterFor(character), 'team2', 10)];
   return [entry('hero', character, 'team1', -100, true), entry('enemy', dummyCharacterFor(character), 'team2', 100)];
 }

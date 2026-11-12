@@ -303,6 +303,7 @@ function getCosmeticCatalogs() {
 }
 
 module.exports = {
+  CATALOG_PATH,
   findOfferForGrant,
   getCosmeticCatalogs,
   getShopCatalog,

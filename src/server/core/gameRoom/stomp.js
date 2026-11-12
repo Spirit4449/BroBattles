@@ -48,7 +48,8 @@ function resolveStomp(room, player, now = Date.now()) {
     interrupted.push(target.name);
   }
   room.io.to(`game:${room.matchId}`).emit('player:stomp', {
-    username: player.name, dashSeq: player.dashSeq, x, y, radius: STOMP_RADIUS, interrupted,
+    username: player.name, dashSeq: player.dashSeq, x, y,
+    fallDistance: Number.isFinite(player._stompStartY) ? Math.max(0, player.y - player._stompStartY) : 0, radius: STOMP_RADIUS, interrupted,
   });
   return true;
 }

@@ -1,0 +1,157 @@
+/* About has its own composition; shared news/help styles stay independent. */
+.site-about .site-main{padding:0;overflow:hidden;background:#0c1727}
+.site-about .site-header>.site-play{display:none}
+.site-about .site-main>section:not(.site-hero){max-width:1280px;box-sizing:border-box;padding:80px 40px;margin:0 auto}
+.site-about .site-main h2{font:400 clamp(20px,2vw,28px)/1.6 var(--bb-font-display);letter-spacing:.01em}
+.site-about .site-main h3{font:400 16px/1.6 var(--bb-font-display)}
+.site-about .site-eyebrow{font-size:11px;letter-spacing:.14em;color:#ecc77f}
+.site-about .site-main p{color:#b7c8db;font-size:17px;line-height:1.7}
+.site-about .site-main .about-intro{display:grid;grid-template-columns:.85fr 1.2fr;align-items:center;gap:42px;max-width:1512px;padding:70px 48px 60px;min-height:650px;background:radial-gradient(ellipse at 80% 30%,#24435a55,transparent 65%)}
+.about-intro-copy{max-width:520px}
+.site-about .about-intro h1{font:400 clamp(24px,2.6vw,36px)/1.55 var(--bb-font-display);letter-spacing:.005em;margin:20px 0 24px;text-shadow:0 4px #03080f}
+.about-intro h1 em{font-style:normal;color:#f2ca80}
+.site-about .about-intro-copy>p{font-size:18px;line-height:1.7;max-width:490px}
+.about-actions{display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-top:28px}
+.site-about .about-actions .pixel-menu-button,.site-about .about-next>.pixel-menu-button{font-size:11px;padding:20px 22px;line-height:1.6;background:linear-gradient(#efc575,#c58e3a);color:#171b25;border-color:#050b14;box-shadow:inset 0 3px #ffe3a0,0 5px #050b14;text-shadow:none}
+.about-actions .pixel-menu-button span{margin-left:10px}
+.site-about .about-text-link{display:inline-flex;gap:14px;align-items:center;font-size:14px;font-weight:700;color:#e9d4a8!important;padding:8px 0;border-bottom:1px solid #6b644e}
+.about-text-link:hover{border-color:#f2ca80}
+.about-facts{display:flex;flex-wrap:wrap;gap:8px 18px;list-style:none;padding:0;margin:26px 0 0;color:#96abc3;font-size:12px}
+.about-facts li:before{content:'+';color:#eac67d;margin-right:7px}
+.about-cinema{min-width:0;background:#15253a;border:3px solid #040a12;box-shadow:0 8px #040a12,inset 0 2px #5b7793;transform:none}
+.about-video-frame{position:relative;aspect-ratio:16/9;background:#080f1b;overflow:hidden}
+.about-video{display:block;width:100%;height:100%;object-fit:cover}
+.about-film-label{position:absolute;left:16px;right:12px;top:14px;display:flex;align-items:center;gap:7px;color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;text-shadow:0 1px 3px #000}
+.about-film-label>span:last-child{margin-left:auto;background:#08101ee6;padding:5px 8px;font-size:9px;color:#ccdaea}
+.about-recording-mark{width:7px;height:7px;background:#f1c880;box-shadow:0 0 0 3px #0b1526}
+.about-reel-toggle{position:absolute;right:14px;bottom:15px;padding:9px 12px;border:1px solid #8cabc0;background:#071321ed;color:#fff;font:600 12px system-ui;cursor:pointer;min-height:36px}
+.about-video-progress{height:3px;position:absolute;bottom:0;left:0;right:0;background:#0a1524}
+.about-video-progress>span{display:block;height:100%;width:0;background:#f1ca7e}
+.about-reel-caption{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:19px 20px 16px}
+.about-reel-caption .site-eyebrow{font-size:9px}
+.about-reel-caption strong{display:block;margin-top:4px;font:400 14px var(--bb-font-display);color:#f3f5f7}
+.about-reel-hint{font-size:10px;color:#99b0c9}
+.about-reel-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid #38516b}
+.about-reel-choices button{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:15px 6px;background:#102035;color:#a9bdd3;border:0;border-right:1px solid #38516b;box-shadow:inset 0 -3px transparent;font:600 12px system-ui;cursor:pointer}
+.about-reel-choices button:last-child{border-right:0}
+.about-reel-choices button>span{font-size:9px;color:#6986a1}
+.about-reel-choices button small{font-size:9px;color:#96acc5}
+.about-reel-choices button[aria-pressed=true]{background:#243b50;color:#ffe0a0;box-shadow:inset 0 -3px #efc779}
+.about-reel-status{padding:0 20px;font-size:12px!important}
+.about-jump-nav{display:flex;justify-content:center;gap:54px;flex-wrap:wrap;padding:22px 24px;background:#14243a;border-block:1px solid #334961}
+.about-jump-nav a{font-size:12px;color:#bccfe3!important;letter-spacing:.06em;text-transform:uppercase;font-weight:700}
+.about-jump-nav a:hover{color:#f5ce80!important}
+.about-section-heading{display:flex;align-items:end;justify-content:space-between;gap:40px;margin-bottom:38px}
+.about-section-heading h2{margin:14px 0 0}
+.about-section-heading>p{max-width:350px;margin:0}
+.about-basics-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px}
+.about-basics-grid article{border-top:2px solid #38516a;padding-top:22px}
+.about-step{font:10px var(--bb-font-display);color:#d6af6d}
+.about-basics-grid h3{margin:18px 0 12px}
+.about-key-hint{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:22px;font-size:11px;color:#90a7c0}
+.about-key-hint kbd{font:11px system-ui;background:#1b2c41;color:#e8eff8;padding:5px 8px;border:1px solid #49627c;box-shadow:0 2px #040a13}
+.site-about .site-main .about-roster{position:relative;background:#15263b;border-top:1px solid #2a415a;border-bottom:1px solid #2a415a;max-width:none;padding-inline:max(40px,calc((100vw - 1200px)/2))}
+.about-roster-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start}
+.about-fighter{background:#0d1b2c;border:2px solid #3d536c;box-shadow:0 4px #070e18;overflow:hidden;min-width:0}
+.about-fighter summary{cursor:pointer;list-style:none;display:block;text-align:center}
+.about-fighter summary::-webkit-details-marker{display:none}
+.about-fighter-art{display:block;overflow:hidden;background:radial-gradient(ellipse at 50% 100%,#42627770,transparent 70%);border-bottom:1px solid #344b60;aspect-ratio:4/5}
+.about-fighter-art img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;transform:scale(1.08);transform-origin:center bottom;transition:transform .2s}
+.about-fighter:hover .about-fighter-art img{transform:scale(1.15)}
+.about-fighter-name{display:block;margin:18px 8px 6px;font:400 14px var(--bb-font-display);color:#eff4fc}
+.about-fighter-role{display:block;min-height:36px;padding:0 9px;color:#a4bbd3;font-size:11px;line-height:1.5}
+.about-fighter-more{display:flex;justify-content:space-between;gap:8px;margin-top:15px;padding:11px 10px;background:#1d334b;border-top:1px solid #3c566c;color:#ead09e;font-size:10px;font-weight:700}
+.about-fighter-more>span{font-size:14px;line-height:1}
+.about-fighter[open]{border-color:#edc67d}
+.about-fighter[open] .about-fighter-more>span{transform:rotate(45deg)}
+.about-fighter-moves{padding:0 12px 10px}
+.site-about .about-fighter-moves p{font-size:12px;line-height:1.6}
+.about-fighter-moves strong{display:block;margin-bottom:5px;color:#f1cb83;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.about-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.about-mode{border:2px solid #334b65;background:#122237;box-shadow:0 5px #050c16;overflow:hidden}
+.about-mode>img{width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;image-rendering:pixelated;display:block;border-bottom:2px solid #334b65}
+.about-mode-copy{padding:30px}
+.site-about .about-mode h3{font-size:24px;margin:14px 0 10px}
+.about-mode-copy>p{margin:12px 0}
+.site-about .about-mode .about-win-condition{padding:16px 0;margin-top:24px;border-block:1px solid #3a5068;font-size:14px;color:#ecdebd}
+.about-win-condition strong{font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-right:8px;color:#e6bc70}
+.site-about .site-main .about-crew{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:60px;padding-top:20px}
+.about-crew-art{display:flex;align-items:end;position:relative;min-width:0;background:radial-gradient(ellipse at center,#3d596a80,transparent 70%);border-bottom:4px solid #496079}
+.about-crew-art img{width:42%;height:auto;image-rendering:pixelated;margin-left:-8%;position:relative}
+.about-crew-art img:first-child{margin-left:0;z-index:1}
+.about-crew-art img:nth-child(2){width:45%;z-index:2;transform:translateY(-8px)}
+.about-crew-art img:last-child{z-index:3}
+.about-crew h2{margin:16px 0 20px}
+.about-crew .about-actions{gap:14px 24px}
+.site-about .site-main .about-next{display:grid;grid-template-columns:1fr auto;align-items:center;gap:30px;max-width:1200px;padding:42px;margin:0 auto 70px;background:#20374b;border:3px solid #030b15;box-shadow:inset 0 2px #6c8295,0 7px #030b15}
+.about-next h2{margin:12px 0}
+.about-next p{margin:0}
+.about-beta-note{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:14px 28px;padding-top:24px;border-top:1px solid #456078;font-size:12px;color:#a9c0d5}
+.about-beta-note>span{margin-right:auto;color:#e5c389}
+.about-beta-note a{font-size:12px}
+.site-about [id]{scroll-margin-top:30px}
+.about-reel-choices button:focus-visible,.about-reel-toggle:focus-visible,.about-fighter summary:focus-visible,.about-jump-nav a:focus-visible,.about-text-link:focus-visible{outline:3px solid #f3cf87;outline-offset:3px}
+
+/* A shared footer composed from shipped arena and character art. */
+.arena-footer{background:#08121f;color:#bdcde0;border-top:4px solid #040b13;font:14px/1.6 system-ui,sans-serif;overflow:hidden}
+.arena-footer-scene{height:220px;position:relative;display:flex;align-items:center;padding:0 max(40px,calc((100vw - 1200px)/2));border-bottom:1px solid #355269;isolation:isolate}
+.arena-footer-scene>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 55%;image-rendering:pixelated;filter:brightness(.5) saturate(.75);z-index:-2}
+.arena-footer-scene:after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#08121fa8,transparent,#08121f88);z-index:-1}
+.arena-footer-scene>span{font:400 clamp(18px,2vw,28px) var(--bb-font-display);color:#f2dfb3;text-shadow:0 4px #08101b;max-width:60%}
+.arena-footer-scene>div{display:flex;position:absolute;right:max(25px,calc((100vw - 1200px)/2));bottom:-3px;height:210px}
+.arena-footer-scene>div img{width:210px;height:100%;object-fit:contain;image-rendering:pixelated}
+.arena-footer-scene>div img+img{margin-left:-50px}
+.arena-footer-links{display:grid;grid-template-columns:1.5fr repeat(3,1fr);gap:36px;max-width:1280px;margin:auto;padding:46px 40px 24px}
+.arena-footer-brand img{display:block;max-width:220px;width:100%;height:auto;image-rendering:pixelated}
+.arena-footer-brand p{font:400 12px var(--bb-font-display);color:#eee2c9;margin:20px 0 8px}
+.arena-footer-brand>span{font-size:12px;color:#8fa7bf}
+.arena-footer nav h2{font:10px/1.6 var(--bb-font-display);color:#e8c78c;margin:0 0 18px}
+.arena-footer nav a{display:block;width:fit-content;padding:7px 0;color:#abbfd4;font-size:13px;text-decoration:none}
+.arena-footer nav a:hover{color:#f4d08a!important;text-decoration:underline;text-underline-offset:5px}
+.arena-footer-bottom{grid-column:1/-1;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px 24px;margin-top:12px;padding-top:23px;border-top:1px solid #293e53;color:#7d96b0;font-size:11px}
+.arena-footer-bottom a{color:#a3b9d0}
+@media(min-width:1600px){.site-about .site-main .about-intro{min-height:720px}}
+@media(max-width:1100px){.site-about .site-main .about-intro{grid-template-columns:1fr;gap:35px;padding:48px 32px}.about-intro-copy{max-width:700px}.site-about .about-intro h1{font-size:24px}.site-about .about-intro-copy>p{max-width:650px}.about-cinema{transform:none;max-width:900px;width:100%;margin:auto}.about-video-frame{aspect-ratio:16/9}.about-roster-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.about-fighter-art{aspect-ratio:5/4}.about-fighter-art img{transform:scale(1)}.about-fighter-role{min-height:20px}.arena-footer-links{grid-template-columns:repeat(3,1fr)}.arena-footer-brand{grid-column:1/-1;display:flex;align-items:center;gap:30px}.arena-footer-brand p{margin:0}.arena-footer-brand>span{display:none}}
+@media(max-width:700px){.site-about .site-main>section:not(.site-hero){padding:50px 22px}.site-about .site-main .about-intro{padding:38px 20px 35px;gap:32px;min-height:0}.site-about .about-intro h1{font-size:clamp(22px,5vw,30px);margin-top:15px}.site-about .about-intro-copy>p{font-size:16px}.about-actions{gap:18px;margin-top:22px}.site-about .about-actions .pixel-menu-button{font-size:10px;padding:16px 18px}.about-facts{font-size:10px;gap:12px}.about-film-label{left:10px;top:10px;font-size:8px}.about-film-label>span:last-child{font-size:7px;padding:4px}.about-reel-caption{padding:15px 12px}.about-reel-caption strong{font-size:22px}.about-reel-hint{display:none}.about-reel-choices button{font-size:11px;gap:5px;padding:13px 4px}.about-reel-choices button small{display:none}.about-jump-nav{gap:12px 24px;padding:20px}.about-jump-nav a{font-size:10px}.about-section-heading{display:block;margin-bottom:28px}.about-section-heading>p{max-width:none;margin-top:20px}.site-about .site-main h2{font-size:22px}.site-about .site-main p{font-size:15px}.about-basics-grid{grid-template-columns:1fr;gap:28px}.about-basics-grid h3{margin:12px 0 8px}.about-basics-grid p{margin:10px 0}.about-key-hint{margin-top:15px}.site-about .site-main .about-roster{padding-inline:22px}.about-roster-grid{gap:12px}.about-fighter-art{aspect-ratio:4/5}.about-fighter-name{font-size:14px;margin:12px 3px 4px}.about-fighter-role{font-size:10px;min-height:30px;padding:0 5px}.about-fighter-more{font-size:9px;padding:10px 6px;gap:4px}.about-fighter-moves{padding:0 7px 6px}.site-about .about-fighter-moves p{font-size:11px}.about-mode-grid{grid-template-columns:1fr;gap:25px}.about-mode-copy{padding:24px}.site-about .about-mode h3{font-size:24px}.about-mode .site-eyebrow{font-size:9px}.site-about .site-main .about-crew{grid-template-columns:1fr;gap:30px;padding-top:0}.about-crew-art{max-width:440px;width:100%;margin:auto}.site-about .site-main .about-next{grid-template-columns:1fr;margin:0 20px 45px;padding:28px 22px;gap:24px}.about-next>.pixel-menu-button{justify-self:start}.about-beta-note{gap:14px}.about-beta-note>span{width:100%}.arena-footer-scene{height:160px;padding:0 22px}.arena-footer-scene>span{font-size:24px;max-width:53%;line-height:1.1}.arena-footer-scene>div{height:140px;right:8px}.arena-footer-scene>div img{width:140px}.arena-footer-scene>div img+img{margin-left:-55px}.arena-footer-links{grid-template-columns:1fr 1fr;gap:30px 22px;padding:35px 22px 24px}.arena-footer-brand{display:block}.arena-footer-brand img{max-width:180px}.arena-footer-brand p{margin:16px 0 0;font-size:20px}.arena-footer nav h2{font-size:9px;margin-bottom:12px}.arena-footer nav a{font-size:12px}.arena-footer-bottom{font-size:10px;display:grid;gap:10px}.arena-footer-bottom>a{padding:7px 0}}
+@media(max-width:380px){.about-roster-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.about-actions{gap:14px}.about-facts{gap:7px}.about-reel-choices button>span{display:none}}
+@media(prefers-reduced-motion:reduce){.about-fighter-art img{transition:none}.about-cinema{transform:none}}
+
+/* Keep the landing page quiet around the actual game art. */
+.site-about .site-main{max-width:none}
+.site-about .site-main .about-intro{max-width:1440px;grid-template-columns:.85fr 1.3fr;gap:48px;min-height:0;padding:64px 40px;background:none}
+.site-about .about-intro-copy>p{font-size:17px;line-height:1.7}
+.about-jump-nav,.about-step,.about-section-heading .site-eyebrow,.about-reel-hint,.about-reel-caption,.about-recording-mark{display:none}
+.about-film-label{justify-content:flex-end;font-size:0}
+.about-film-label>span:last-child{font-size:9px}
+.about-reel-choices button>span,.about-reel-choices button small{display:none}
+.about-reel-choices button{padding:12px;font-size:12px}
+.about-facts{margin-top:20px}
+.about-facts li:before{display:none}
+.about-cinema{border:4px solid #03060b;box-shadow:inset 0 2px #607b9e,0 5px #03060b}
+.about-section-heading{align-items:center}
+.about-fighter-art,.about-crew-art{background:none}
+.about-fighter-art img,.about-fighter:hover .about-fighter-art img{transform:none}
+.about-fighter-role{display:none}
+.about-fighter-name{line-height:1.6}
+.about-fighter-more{font-size:11px}
+.site-about .site-main>section:not(.site-hero){padding-block:56px}
+.site-about .site-main .about-roster{padding-inline:max(32px,calc((100vw - 1200px)/2))}
+.about-mode-copy{padding:24px}
+.about-mode .site-eyebrow{letter-spacing:.04em;font-size:10px}
+.about-crew-art{max-width:380px;justify-self:center}
+.arena-footer-scene>span{line-height:1.7}
+.arena-footer-brand p{line-height:1.8}
+@media(max-width:1100px){.site-about .site-main .about-intro{grid-template-columns:1fr;padding:40px 32px;gap:32px}.about-intro-copy{max-width:760px}.site-about .about-intro h1{font-size:30px}.about-roster-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.site-about .site-main .about-intro{padding:32px 20px}.site-about .about-intro h1{font-size:clamp(20px,5vw,28px)}.site-about .site-main>section:not(.site-hero){padding-block:36px}.about-roster-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.about-fighter-art{aspect-ratio:5/4}.site-about .site-main h2{font-size:20px}.site-about .site-main h3{font-size:16px}.arena-footer-scene>span{font-size:17px}.about-section-heading>p{margin-top:16px}}
+
+.site-about .about-intro h1{font-size:24px;line-height:1.7;margin-top:0}
+.site-about .site-main .about-crew{padding-bottom:56px}
+@media(max-width:700px){.site-about .about-intro h1{font-size:20px}.about-section-heading{margin-bottom:24px}.about-mode-copy{padding:20px}}
+
+.about-fighter-name{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:16px 12px;margin:0;font-size:12px}
+.about-fighter-plus{color:var(--bb-gold);font:18px system-ui}
+.about-fighter[open] .about-fighter-plus{transform:rotate(45deg)}
+.about-fighter-art img{padding:10px;box-sizing:border-box}
+.site-about .site-main .about-intro{padding-bottom:36px}
+.arena-footer-links{padding-bottom:20px;gap:24px}
+@media(max-width:700px){.about-fighter-art{aspect-ratio:1}.about-fighter-art img{max-height:100%;max-width:100%}.about-fighter-name{font-size:11px;padding:12px 8px}.about-crew-art{overflow:hidden}.site-about .site-main h2{font-size:18px}.about-film-label>span:last-child{font-size:7px}.about-reel-toggle{font-size:10px;padding:6px 9px;min-height:32px}}

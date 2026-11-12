@@ -574,9 +574,18 @@ export function createGameOverScreenController({
     const button = document.getElementById("go-lobby");
     preloadSound("cursor4");
 
+    const onExitKey = (event) => {
+      if (!div.isConnected || !["Escape", "Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.repeat) button?.click();
+    };
+    window.addEventListener("keydown", onExitKey, true);
+
     const goToLobby = async () => {
       if (leaving) return;
       leaving = true;
+      window.removeEventListener("keydown", onExitKey, true);
       try {
         sessionStorage.removeItem("matchId");
         sessionStorage.setItem(POST_BATTLE_LOBBY_RETURN_KEY, "1");

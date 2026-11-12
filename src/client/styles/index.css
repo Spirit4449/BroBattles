@@ -1846,11 +1846,11 @@ body .mode-select-grid .mode-select-card.is-expanded:active:not([aria-disabled="
 
 .mode-variant-reveal {
   position: absolute;
-  top: 100%;
+  top: calc(100% - 6px);
   left: -2px;
   right: -2px;
-  padding: 2px 14px 14px;
-  background: var(--bb-card-gradient, linear-gradient(180deg, #14243c, #0b172a));
+  padding: 10px 14px 16px;
+  background: #0b172a;
   border: 2px solid;
   border-color: inherit;
   border-top: 0;
@@ -1905,7 +1905,7 @@ body .mode-select-grid .mode-select-card.is-expanded:active:not([aria-disabled="
 
 
 .mode-variant-option.pixel-menu-button {
-  min-height: 36px;
+  min-height: 42px;
   padding: 0 8px;
   background: linear-gradient(180deg, var(--bb-gold, #efc86e), var(--bb-orange, #e0893a));
   color: var(--bb-ink, #1a1206);
@@ -1914,6 +1914,7 @@ body .mode-select-grid .mode-select-card.is-expanded:active:not([aria-disabled="
   letter-spacing: 1px;
   text-align: center;
   text-shadow: none;
+  transition: filter 140ms ease, background 140ms ease;
 }
 
 .mode-variant-option.pixel-menu-button:hover:not(:disabled) {
@@ -1923,6 +1924,11 @@ body .mode-select-grid .mode-select-card.is-expanded:active:not([aria-disabled="
 /* The team size you're queued for. */
 .mode-variant-option.pixel-menu-button.active {
   box-shadow: var(--bb-control-shadow), inset 0 0 0 2px #fff4cf;
+}
+
+.mode-variant-option.pixel-menu-button:focus-visible {
+  outline: 2px solid #fff4cf;
+  outline-offset: 5px;
 }
 
 .mode-select-teams {
@@ -8565,4 +8571,17 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   border-radius: 0;
   box-sizing: border-box;
   image-rendering: pixelated;
+}
+
+.party-settings-body { display: grid; gap: var(--bb-space-3); }
+.party-settings-body .site-setting { margin: 0; text-align: left; align-items: center; }
+.party-settings-body .site-setting small { margin: 0; }
+.party-settings-body #party-public-name-group { grid-column: 1 / -1; min-width: 0; }
+.party-settings-body .party-public-name-input { width: 100%; box-sizing: border-box; }
+.party-settings-body input:focus-visible { outline: 3px solid var(--bb-gold); outline-offset: 4px; }
+.party-settings-body input:disabled { opacity: .45; cursor: not-allowed; }
+.character-slot.hidden-bro .character-sprite { object-fit: contain; image-rendering: pixelated; }
+.character-slot.hidden-bro .slot-level-badge { visibility: hidden; }
+@media (max-width: 520px) {
+  .party-settings-body .site-setting { padding: 12px; }
 }

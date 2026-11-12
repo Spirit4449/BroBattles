@@ -73,6 +73,7 @@ async function emitRoster(io, partyId, party, members, db = null, snapshot = {})
     partyId,
     ownerName,
     allowMemberSelection: Number(party?.allow_member_selection ?? 1) === 1,
+    hideEnemyBros: Number(party?.hide_enemy_bros ?? 0) === 1,
     isPublic: Number(party?.is_public || 0) === 1,
     publicName: String(party?.public_name || "").trim(),
     mode: party.mode,

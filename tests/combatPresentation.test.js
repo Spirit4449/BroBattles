@@ -41,7 +41,7 @@ describe("Draven confirmed impacts", () => {
       '../../powerups/shieldBubble': load('src/client/game/powerups/shieldBubble.js', {}),
     }, { Phaser: { BlendModes: { ADD: 1 }, Math: { Between: a => a, FloatBetween: a => a,
       Clamp: (v, min, max) => Math.max(min, Math.min(max, v)), Easing: { Cubic: { Out: v => v } } } } });
-    for (const isOwner of [true, false]) for (const ending of ['complete', 'interrupt', 'destroy', 'shutdown']) {
+    for (const isOwner of [true, false]) for (const ending of ['complete', 'interrupt', 'destroy', 'shutdown', 'match-end']) {
       const timers = [];
       const shape = () => ({ active: true, circles: [], reflections: [],
         setDepth(v) { this.depth = v; }, setBlendMode() {},
@@ -64,9 +64,24 @@ describe("Draven confirmed impacts", () => {
       timers.find(timer => timer.delay === 16).callback();
       assert.equal(shield.circles[0].x, player.x);
       assert.equal(shield.circles[0].y, player.y);
-      if (ending === 'complete') timers.find(timer => timer.delay === tuning.getResolvedCharacterSpecialConfig('draven', 'inferno').durationMs).callback();
+      if (ending === 'match-end') {
+        player._matchEnded = true;
+        // Move away from the cast anchor so a surviving hover tick is observable.
+        player.x += 25;
+        player.y += 35;
+        const position = { x: player.x, y: player.y };
+        const timerCount = timers.length;
+        timers.filter(timer => timer.delay === 16).at(-1).callback();
+        assert.deepEqual({ x: player.x, y: player.y }, position);
+        assert.equal(timers.length, timerCount, 'ended matches must not reschedule hover');
+      }
+      if (ending === 'complete' || ending === 'match-end') timers.find(timer => timer.delay === tuning.getResolvedCharacterSpecialConfig('draven', 'inferno').durationMs).callback();
       else if (ending === 'shutdown') scene.events.emit('shutdown');
       else player.emit(ending === 'interrupt' ? 'attack:interrupted' : 'destroy');
+      if (ending === 'match-end') {
+        assert.equal(player._dravenInfernoToken, undefined);
+        assert.equal(player._dravenInfernoPrevGravity, undefined);
+      }
       assert.equal(shield.active, false);
       assert.equal(player._dravenInfernoShield, undefined);
       assert.equal(scene.events.listenerCount('shutdown'), 0);
@@ -79,19 +94,21 @@ describe("Ninja collision and playback", () => {
   const { characterBody } = require('../src/shared/physics/duelGeometry');
 
   test('standard Ninja preserves authoritative standing and ducking collision geometry', () => {
-    const presentation = spritePresentation('ninja', { key:'ninja', has:()=>true, get:()=>({width:256}) });
+    // The base atlas's cell size, whatever the installed art uses.
+    const cell = require('../src/shared/characters').characterPresentation('ninja').hiResArt.sourceSize;
+    const presentation = spritePresentation('ninja', { key:'ninja', has:()=>true, get:()=>({width:cell}) });
     const {body,scale,originX,originY} = presentation;
     const original = characterBody('ninja');
-    const width = 256-body.widthShrink, height = 256-body.heightShrink;
+    const width = cell-body.widthShrink, height = cell-body.heightShrink;
     const close = (a,b) => assert.ok(Math.abs(a-b)<1e-8, `${a} != ${b}`);
     close(width*scale,original.width);
     close(height*scale,original.height);
     // Client body centre: origin plus offset (the origin sits under the rig's feet).
-    close((128+body.offsetXFromHalf-256*originX)*scale,original.offsetX);
-    close((body.offsetY+height/2-256*originY)*scale,original.offsetY);
+    close((cell/2+body.offsetXFromHalf-cell*originX)*scale,original.offsetX);
+    close((body.offsetY+height/2-cell*originY)*scale,original.offsetY);
     for(const ratio of [1,0.55]) {
       const duckHeight=height*ratio;
-      close((body.offsetY+height-duckHeight+duckHeight-256*originY)*scale,
+      close((body.offsetY+height-duckHeight+duckHeight-cell*originY)*scale,
         original.offsetY+original.height/2);
     }
   });

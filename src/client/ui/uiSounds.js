@@ -48,6 +48,7 @@ const soundFiles = {
   shopBigSuccess: "shop-big-success.ogg",
   shopError: "shop-error.ogg",
   shopReveal: "shop-reveal.ogg",
+  skinSwitch: "skin-switch.wav",
   streakIncrease: "rewards/streak-increase.mp3",
   streakLost: "rewards/streak-lost.mp3",
   streakDingCoin: "rewards/streak-ding-coin.mp3",
