@@ -934,8 +934,8 @@ class GameScene extends Phaser.Scene {
       this.textures.get("coin-spin").setFilter(Phaser.Textures.FilterMode.LINEAR);
     }
     // Poison water overlay graphics (sudden death - drawn every frame in update)
-    const worldH = BASE_GAME_HEIGHT;
-    this._poisonWaterY = worldH + 60; // start off-screen below world
+    // Map bounds are installed later; resolve the inactive level at render time.
+    this._poisonWaterY = null;
     this._smoothPoisonY = null; // interpolated, set on first use
     this._poisonGraphics = this.add.graphics();
     this._poisonGraphics.setDepth(RENDER_LAYERS.POISON);

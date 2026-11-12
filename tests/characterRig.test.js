@@ -77,6 +77,22 @@ describe("Rig anchors and projectile origins", () => {
     }
   });
 
+  test('resized Ninja and Sparrow keep client hitboxes aligned with server bounds and rig feet', () => {
+    const { characterBody } = require('../src/shared/physics/characterBody');
+    for (const character of ['ninja', 'sparrow']) for (const flip of [false, true]) {
+      const sprite = setup(character, flip);
+      const server = characterBody(character, flip);
+      const left = sprite.x + (sprite.body.offset.x - sprite.displayOriginX) * sprite.scaleX;
+      const top = sprite.y + (sprite.body.offset.y - sprite.displayOriginY) * sprite.scaleY;
+      close(sprite.body.width, server.width, `${character} width`);
+      close(sprite.body.height, server.height, `${character} height`);
+      close(left + sprite.body.width / 2, sprite.x + server.offsetX, `${character} center x`);
+      close(top + sprite.body.height / 2, sprite.y + server.offsetY, `${character} center y`);
+      const feet = rig.spriteArtPoint(sprite, rigPointArt(character, 'feet'));
+      close(feet.y, top + sprite.body.height, `${character} grounded feet`);
+    }
+  });
+
   test('the ozzy\'s fireball spawns on his staff tip as drawn at the release frame', () => {
     const { launchPoint } = require('../src/shared/characters/characterRig');
     const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');

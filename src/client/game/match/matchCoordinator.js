@@ -1203,11 +1203,8 @@ export function createMatchCoordinator(config) {
       if (scene) scene._poisonWaterY = payload.poisonY;
       onStartSuddenDeathMusic();
     } else if (scene) {
-      const worldH =
-        Number(scene.physics?.world?.bounds?.height) ||
-        Number(scene.game?.config?.height) ||
-        1000;
-      scene._poisonWaterY = worldH + 60;
+      scene._poisonWaterY = null;
+      scene._smoothPoisonY = null;
     }
   }
 

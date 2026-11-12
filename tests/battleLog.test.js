@@ -245,7 +245,7 @@ test("getBattleLogForUser handles defeat and negative trophies", async () => {
   assert.equal(battle.matchId, 100);
   assert.equal(battle.outcome, "defeat");
   assert.equal(battle.trophiesDelta, -12);
-  assert.equal(battle.mapLabel, "Mangrove Meadow");
+  assert.equal(battle.mapLabel, "Sky Soil");
 });
 
 test("getBattleLogForUser handles historical matches without summary", async () => {

@@ -7,6 +7,12 @@ import { buildScenery, preloadScenery } from '../../../src/client/game/maps/scen
 import { mapArena } from '../../../src/shared/maps/arenas';
 
 const map = window.__SNAPSHOT_MAP__;
+// The full-arena frame reveals above Candy Land's sky artwork. Lower its
+// canopy for this snapshot only so the candy border covers that exposed strip.
+if (String(map.id) === '5') {
+  const canopy = map.scenery?.layers?.find(layer => layer.id === 'canopy');
+  if (canopy) canopy.y = (canopy.y || 0) + 80;
+}
 const { camera } = mapArena(map);
 const width = window.innerWidth, height = window.innerHeight;
 

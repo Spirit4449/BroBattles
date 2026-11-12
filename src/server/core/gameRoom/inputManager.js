@@ -342,7 +342,11 @@ function handlePlayerInput(room, socketId, inputData) {
       const tolerance = Math.max(COLLISION_PACKET_TOLERANCE, DASH_COLLISION_CORRECTION_PX);
       collisionClamped = Math.abs(nextX - rawX) > tolerance || Math.abs(nextY - rawY) > tolerance;
       collisionErrorPx = Math.hypot(nextX - rawX, nextY - rawY);
-      rawX = nextX; rawY = nextY; dashCollision = resolved.hits;
+      // Reconstructing the sprite position from fractional body dimensions can
+      // introduce rounding noise. Do not spend movement credit on that noise.
+      if (Math.abs(nextX - rawX) > 1e-8) rawX = nextX;
+      if (Math.abs(nextY - rawY) > 1e-8) rawY = nextY;
+      dashCollision = resolved.hits;
     }
 
     // Distance credit is replenished by elapsed server time, never by packet count.

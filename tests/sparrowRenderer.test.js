@@ -2,6 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {EventEmitter}=require('node:events');
 const loadServerClock=require('./helpers/serverClockModule');
 const loadShotPrediction=require('./helpers/shotPredictionModule');
+const loadProjectileReplication=require('./helpers/projectileReplicationModule');
 const babel=require('@babel/core');
 const model=require('../src/shared/characters/sparrowProjectile');
 const replication=require('../src/shared/characters/sparrowReplication');
@@ -38,7 +39,8 @@ function setup(colliders=[],networkOptions=null){
   const socket={connected:false};
   const serverClock=loadServerClock({performance:{now:()=>now}});
   const shots=loadShotPrediction({serverClock});
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('sparrowProjectile')?model:name.includes('sparrowReplication')?replication:
+  const replicationHelpers=loadProjectileReplication({performance:{now:()=>now}});
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectileReplication')?replicationHelpers:name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('sparrowProjectile')?model:name.includes('sparrowReplication')?replication:
     name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):
     name.includes('playerAudio')?playerAudio:
     name.includes('runtimeId')?{createRuntimeId:()=> 'generated'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:10}}:socket,

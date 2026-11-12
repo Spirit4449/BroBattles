@@ -11,7 +11,7 @@
     "specialBaseDamage": 335,
     "specialChargeHits": 6,
     "specialChargePerHit": 0.25,
-    "spriteScale": 0.9,
+    "spriteScale": 0.81,
     "body": {
       "widthShrink": 42,
       "heightShrink": 15,
@@ -122,9 +122,9 @@
   "presentation": {
     "hiResArt": {
       "sourceSize": 384,
-      "scale": 0.2667,
+      "scale": 0.24,
       "groundY": 339,
-      "hudTopOffset": -35,
+      "hudTopOffset": -31.5,
       "requiresFrame": "attack00",
       "duckFrame": "duck00"
     }

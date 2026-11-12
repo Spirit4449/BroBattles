@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Rebuild Candy Land's painterly scenery on a deliberate screen-pixel grid.
 // Existing platform linework receives only edge-safe palette cleanup.
-// Usage: node scripts/art/pixelate-candyland.cjs [--install]
+// Usage: node scripts/art/pixelate-candyland.cjs [--install] [--only=top,bottom]
 // Original scenery masters live beside this script for reproducible rebuilds.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -10,18 +10,19 @@ const ROOT = path.resolve(__dirname, '../..');
 const OUT = path.join(ROOT, 'output/candyland-pixel');
 const SOURCE = path.join(__dirname, 'candyland-originals');
 const INSTALLED = path.join(ROOT, 'public/assets/candyland');
-// Pixel size is selected from texture scale: the floor renders at 0.557x,
+// Pixel size follows texture scale: both borders render at 1.2x,
 // side props at roughly 0.7x, and the other layers at roughly native size.
 const ITEMS = [
   ['background', 4, 28], ['lobby-background', 4, 32],
   ['peaks', 4, 28], ['midground-peaks', 4, 32],
   ['side-candy-left', 5, 32], ['side-candy-right', 5, 28],
-  ['top', 4, 28], ['bottom', 8, 32],
+  ['top', 4, 32], ['bottom', 4, 32],
   ['platform-base', 0, 48], ['platform-tall', 0, 48],
   ['platform-top-arch', 0, 48], ['platform-moving', 0, 36],
   ['lobby-platform', 0, 40],
 ];
 const install = process.argv.includes('--install');
+const only = process.argv.find(arg => arg.startsWith('--only='))?.slice(7).split(',');
 const rgb = (data, i) => [data[i], data[i + 1], data[i + 2]];
 const dist = (a, b) => {
   const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
@@ -130,5 +131,7 @@ async function renderPlatform(name, colors, source, width, height) {
 }
 (async () => {
   fs.mkdirSync(SOURCE, { recursive: true });
-  for (const item of ITEMS) await render(...item);
+  fs.mkdirSync(OUT, { recursive: true });
+  if (only?.some(name => !ITEMS.some(item => item[0] === name))) throw new Error('Unknown asset in --only');
+  for (const item of ITEMS) if (!only || only.includes(item[0])) await render(...item);
 })().catch(error => { console.error(error); process.exitCode = 1; });

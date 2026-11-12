@@ -2,6 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {EventEmitter}=require('node:events');
 const loadServerClock=require('./helpers/serverClockModule');
 const loadShotPrediction=require('./helpers/shotPredictionModule');
+const loadProjectileReplication=require('./helpers/projectileReplicationModule');
 const model=require('../src/shared/characters/ninjaProjectile'),clock=require('../src/shared/characters/sparrowReplication');
 const code=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/ninja/network'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
 const playerAudio={};
@@ -15,7 +16,8 @@ function setup(initial={}){
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:animation,performance:{now:()=>now}});
   const serverClock=loadServerClock({performance:{now:()=>now}});
   const shots=loadShotPrediction({serverClock});
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./throwPresentation'?require('../src/client/game/characters/ninja/throwPresentation'):name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('sparrowReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:name.includes('flipLock')?flipLock:{connected:false},
+  const replicationHelpers=loadProjectileReplication({performance:{now:()=>now}});
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectileReplication')?replicationHelpers:name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./throwPresentation'?require('../src/client/game/characters/ninja/throwPresentation'):name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('sparrowReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:name.includes('flipLock')?flipLock:{connected:false},
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){}});
   const sprite=(x,y,texture)=>{const s={x,y,texture,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
   const flashes=[];
@@ -266,4 +268,14 @@ test('a directional throw keeps the star in the hand until the release beat, the
   const skin={x:0,y:0,_bbSkinTextureKey:'ninja-king'};
   assert.equal(throwing.beginThrow(skin,0,0,config),null,'skins keep their own throw');
   assert.equal(skin._ninjaThrow,undefined);
+});
+test('moving to a new scene stops drawing into the old one, whose shutdown then leaves the runtime alone',()=>{
+  const f=setup(),next={events:new EventEmitter(),add:f.scene.add,tweens:f.scene.tweens,sound:f.scene.sound};
+  f.api.attachNinjaScene(next,{localUsername:'owner',localPlayer:f.owner});
+  assert.equal(f.scene.events.listenerCount('update'),0);
+  assert.equal(next.events.listenerCount('update'),1);
+  f.scene.events.emit('shutdown');
+  assert.equal(f.api.ninjaEnabled(),true);
+  next.events.emit('shutdown');
+  assert.equal(f.api.ninjaEnabled(),false);
 });

@@ -280,3 +280,15 @@ flowers above them. Soil blocks retain their side walls for wall-jumping, with
 heights bounded by the artwork. Floating ledges use shallow bodies inset from the
 fringe. Every platform permits upward passage through its underside and catches
 players descending onto its top. Saved overrides retain their authored positions.
+
+### Sky Soil art
+
+Map 2 is displayed as **Sky Soil** (formerly Mangrove Meadow). The stable
+`mangrove-meadow` key and asset keys remain compatible with existing matches.
+`public/assets/sky-soil/` contains separate sky, distant mountain and nearer
+forest-ridge layers plus the tapered rock/root underside. The mountain layers
+use different parallax factors with interleaved clouds; High/Super High adds
+distance fog, drifting mist, sunlight rays, glow, motes and platform lighting.
+The former side islands are removed. The lobby uses a flattened mountain view. The underside uses a world-fixed `arena` scenery layer;
+it is decorative and adds no collision. Both the built-in and saved map keep
+these layers. Current art prompts are in `public/assets/sky-soil/README.md`.

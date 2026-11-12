@@ -117,3 +117,28 @@ describe("Pregame camera lifecycle", () => {
     assert.ok(close(end.x, 900) && close(end.y, 300) && close(end.zoom, 1.8));
   });
 });
+
+test('inactive poison stays below tall arenas and resets after sudden death', () => {
+  const { renderPoisonWater } = loadClientModule('src/client/game/scene/poisonWaterRenderer.js', {
+    document: { getElementById: () => null },
+  });
+  let draws = 0;
+  const scene = {
+    time: { now: 0 },
+    physics: { world: { bounds: { y: 0, height: 1420, width: 2300 } } },
+    game: { config: { height: 1000 } },
+    _poisonGraphics: { clear() {}, fillStyle() {}, fillRect() { draws++; } },
+    _poisonWaterY: null,
+  };
+  renderPoisonWater(scene, {});
+  assert.equal(draws, 0, 'no poison before the first timer update');
+  scene._poisonWaterY = 1100;
+  scene.time.now += 50;
+  renderPoisonWater(scene, {});
+  assert.ok(draws > 0, 'server sudden-death level draws poison');
+  draws = 0;
+  scene._poisonWaterY = null;
+  scene.time.now += 50;
+  renderPoisonWater(scene, {});
+  assert.equal(draws, 0, 'inactive poison disappears without lerping through the arena');
+});

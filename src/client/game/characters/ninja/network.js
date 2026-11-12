@@ -14,6 +14,7 @@ import { createRuntimeId } from '../shared/runtimeId';
 import { isLocalShooter, predictShotContact, shotBlockersFor, notePredictedHit } from '../shared/shotPrediction';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { playPlayerSound } from '../../audio/playerAudio';
+import { movingColliderMotion, observeSnapshotClock, displayedPlayer, ownerTeamLook, catchUpAmmo, bindSceneUpdates, exposeDiagnostics } from '../shared/projectileReplication';
 // Match and embedded previews own separate flights, clocks and teardown.
 export function createNinjaNetwork(options = {}) {
 const clock = options.clock || matchClock;
@@ -21,7 +22,7 @@ const ensureServerClockEpoch = options.ensureEpoch || ensureMatchEpoch;
 const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
 const diagnostics=[];
 function record(event){diagnostics.push(event);if(diagnostics.length>120)diagnostics.shift();}
-let enabled=false,sceneRef=null,listener=null,shutdown=null,ctx={},colliders=[],revision=0;
+let enabled=false,sceneRef=null,unbindScene=null,ctx={},colliders=[],revision=0;
 // Bootstrap colliders carry their motion; move them to each step's server time,
 // as the server does, so predictions hit moving platforms where they are.
 let platformMotion={movingColliders:[]};
@@ -30,12 +31,11 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 function ninjaEnabled(){return enabled;}
 function resetNinjaNetwork(){
   if(sceneRef) delete sceneRef._ninjaCombatEnabled;
-  if(sceneRef&&listener)sceneRef.events.off('update',listener);
-  if(sceneRef&&shutdown)sceneRef.events.off('shutdown',shutdown);
+  unbindScene?.();
   for(const e of active.values()){e.fx?.destroy();e.sprite?.destroy();}
   for(const e of effects)e.destroy();effects.clear();
   active.clear();terminals.clear();requests.clear();diagnostics.length=0;
-  enabled=false;sceneRef=null;listener=null;shutdown=null;ctx={};revision=0;
+  enabled=false;sceneRef=null;unbindScene=null;ctx={};revision=0;
 }
 // Remove combat presentation that was on screen when the browser stopped
 // rendering. Keep the network runtime configured so fresh packets can resume
@@ -47,15 +47,15 @@ function discardNinjaPresentation(){
 }
 function configureNinjaNetwork(state){
   resetNinjaNetwork();if(state?.ninjaCombatVersion!==VERSION)return;
-  enabled=true;colliders=state.colliders||[];platformMotion={movingColliders:colliders.filter(c=>c.motion&&c.base)};ensureServerClockEpoch(state.epoch);clock.observe(state,performance.now());
-  if(typeof window!=='undefined')window.__BB_NINJA_DIAGNOSTICS__=()=>({
+  enabled=true;colliders=state.colliders||[];platformMotion=movingColliderMotion(colliders);ensureServerClockEpoch(state.epoch);clock.observe(state,performance.now());
+  exposeDiagnostics('__BB_NINJA_DIAGNOSTICS__',()=>({
     epoch:clock.epoch,active:active.size,rttMs:clock.samples.map(p=>p.rtt),events:diagnostics.slice(),
-  });
+  }));
   for(const t of state.terminals||[])terminals.add(t.id);
   for(const e of state.active||[])accept(e.projectile,state.simMono);
 }
-function observeNinjaSnapshot(snapshot){if(enabled)clock.observe({epoch:snapshot.snapshotEpoch,sentMono:snapshot.sentMono,simMono:snapshot.tMono},performance.now());}
-function owner(name){return name===ctx.localUsername?ctx.localPlayer:ctx.opponentPlayersRef?.[name]?.opponent||ctx.teamPlayersRef?.[name]?.opponent;}
+function observeNinjaSnapshot(snapshot){if(enabled)observeSnapshotClock(clock,snapshot);}
+const owner=name=>displayedPlayer(ctx,name);
 function accept(projectile,simMono){
   if(terminals.has(projectile.id))return;
   const prior=active.get(projectile.id);
@@ -93,10 +93,8 @@ function remove(id){const e=active.get(id);e?.fx?.destroy();e?.sprite?.destroy()
 function tombstone(id){terminals.add(id);while(terminals.size>512)terminals.delete(terminals.values().next().value);remove(id);}
 function applyAmmo(action){
   if(action.revision<=revision)return;revision=action.revision;
-  const ammo={...action.ammoState};if(!ammo.reloadMs)return;
-  const age=Math.max(0,clock.now(performance.now())-action.simMono);
-  ammo.nextFireInMs=Math.max(0,ammo.nextFireInMs-age);
-  if(ammo.charges<ammo.capacity){const elapsed=ammo.reloadTimerMs+age;ammo.charges=Math.min(ammo.capacity,ammo.charges+Math.floor(elapsed/ammo.reloadMs));ammo.reloadTimerMs=ammo.charges===ammo.capacity?0:elapsed%ammo.reloadMs;}
+  if(!action.ammoState?.reloadMs)return;
+  const ammo=catchUpAmmo(action.ammoState,Math.max(0,clock.now(performance.now())-action.simMono));
   ammo.charges=Math.max(0,ammo.charges-[...requests.values()].filter(r=>!r.special&&!r.accepted).length);
   ctx.onAmmo?.(ammo);
 }
@@ -118,8 +116,9 @@ function predictNinja(scene,player,username,payload,special=false){
 }
 function attachNinjaScene(scene,next={}){
   ctx={...ctx,...next};if(!enabled||!scene||sceneRef===scene)return;
+  unbindScene?.();
   sceneRef=scene; scene._ninjaCombatEnabled=true;
-  listener=()=>{
+  const update=()=>{
     const now=performance.now(),sim=clock.now(now);
     for(const [id,r] of requests)if(now-r.at>2500){requests.delete(id);if(!r.accepted)for(const [key,e]of active)if(key.startsWith(`${r.username}:${id}:`)&&e.predicted)tombstone(key);}
     for(const [id,e]of active){
@@ -144,7 +143,7 @@ function attachNinjaScene(scene,next={}){
       const inHand=!!e.thrown&&now-e.thrown.startedAt<e.thrown.releaseMs;
       if(!e.sprite&&!inHand){
         if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,displayedOwner,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
-        const team=o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88};
+        const team=ownerTeamLook(ctx,e.p.ownerName,o);
         e.texture=ninjaProjectileTexture(scene,displayedOwner,team);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && e.texture==="shuriken")e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,team,e.texture.includes("-weapon")?"crown":null);
         const hand=e.thrown&&displayedOwner?handPoint(displayedOwner,e.thrown.hand):null;
         e.fx=createShurikenEffects(scene,e.sprite,{x:hand?hand.x:e.p.startX,y:hand?hand.y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:!!hand||e.p.elapsed<180});
@@ -180,7 +179,7 @@ function attachNinjaScene(scene,next={}){
       if(now-(e.trailAt||0)>45&&effects.size<180){e.trailAt=now;const trail=scene.add.image(e.sprite.x,e.sprite.y,e.texture,e.sprite.frame?.name);trail.setScale(e.p.cfg.scale*.48);trail.setDepth(RENDER_LAYERS.ATTACKS-1);trail.alpha=.3;effects.add(trail);scene.tweens.add({targets:trail,alpha:0,duration:220,onComplete:()=>{effects.delete(trail);trail.destroy();}});}
     }
   };
-  scene.events.on('update',listener);shutdown=()=>resetNinjaNetwork();scene.events.once('shutdown',shutdown);
+  unbindScene=bindSceneUpdates(scene,update,()=>{if(sceneRef===scene)resetNinjaNetwork();});
 }
 function handleNinjaPacket(scene,packet,next){
   const a=packet?.action;if(!enabled||a?.ninjaCombatVersion!==VERSION)return false;

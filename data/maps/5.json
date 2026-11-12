@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": 5,
   "label": "Candy Land",
-  "modeVariantId": "duels-2v2",
+  "modeVariantId": "duels",
   "metadata": {
     "key": "candy-land",
     "terrain": "grass",
@@ -358,8 +358,8 @@
         "scroll": 1,
         "fit": "none",
         "stack": "arena",
-        "y": -590,
-        "scale": 1.28,
+        "y": -750,
+        "scale": 1.2,
         "x": 0
       },
       {
@@ -367,9 +367,9 @@
         "url": "/assets/candyland/bottom.webp",
         "scroll": 1,
         "fit": "none",
-        "y": 570,
+        "y": 735,
         "stack": "front",
-        "scale": 0.557333,
+        "scale": 1.2,
         "x": 0
       }
     ],
@@ -649,5 +649,6 @@
         }
       ]
     }
-  }
+  },
+  "arenaId": "duels-2v2"
 }
