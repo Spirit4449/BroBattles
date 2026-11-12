@@ -234,7 +234,9 @@ party's page; navigation uses it only when `/status` confirms that party.
 
 Battle entry overlaps its requests. `match:gameReady` prefetches the game page
 and `/gamedata` during the success hold, and any `/game/:id` navigation
-requests `/gamedata` alongside the page. The game bundle takes that response
+requests `/gamedata` alongside the page. A direct load or refresh of
+`/game/:id` starts `/gamedata` when the navigation bundle runs in the document
+head, in parallel with Phaser and the game bundle. The game bundle takes that response
 once through `consumeGameData(matchId)`, falling back to its own request.
 The terms dialog appears only when `/gamedata` reports `TERMS_REQUIRED`, and
 Phaser starts without waiting for the socket to connect. Route requests start
@@ -284,7 +286,9 @@ No service worker or hidden running lobby is used.
 Character portraits are inlined into the lobby, game and profile bundles from
 small `portrait.webp` copies of each `body.webp`. After changing body art run
 `node scripts/art/build-portraits.cjs`; `npm run validate:content` reports
-missing or stale portraits. Pages load Lato from `/styles/lato.css` rather than
+missing or stale portraits. Roster slots, bot pickers, matchmaking and HUD
+avatars also display these copies through `bodyDisplayUrl()` in
+`views/skinAssets.js`; `body.webp` remains the source art. Pages load Lato from `/styles/lato.css` rather than
 Google Fonts. Lobby backgrounds are separate from the larger `gameBg` scenery
 layers and are kept at roughly 2.7K wide.
 

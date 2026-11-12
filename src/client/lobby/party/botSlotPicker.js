@@ -3,7 +3,7 @@ import socket from "../../lib/socket.js";
 import { sonner } from "../../ui/sonner.js";
 import { getSharedSelectionPopupShell } from "../../ui/selectionPopupShell.js";
 import { getAllCharacters } from "../../../shared/characters/characterStats.js";
-import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
+import { bodyDisplayUrl, buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 
 let __botPopupUi = null;
 
@@ -46,7 +46,7 @@ function openBotPicker(slot, partyId) {
     ...getAllCharacters().map((id) => ({
       id,
       label: `Bot · ${id[0].toUpperCase()}${id.slice(1)}`,
-      image: buildCharacterSkinBodyUrl(id, ""),
+      image: bodyDisplayUrl(buildCharacterSkinBodyUrl(id, "")),
     })),
   ];
   grid.innerHTML = "";

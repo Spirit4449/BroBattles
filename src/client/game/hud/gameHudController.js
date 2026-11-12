@@ -11,7 +11,7 @@ import {
   normalizeGameSelection,
   selectionToLegacyMode,
 } from "../../lib/gameSelectionCatalog.js";
-import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
+import { bodyDisplayUrl, buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { LEVEL_CAP, DEFAULT_CHARACTER, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 import { renderLevelBadge } from "../../views/levelBadgeView.js";
 import { pausePlayerCardPreparation, disposePlayerCardMedia, disposePlayerCardMediaWithin, layerPlayerCardMedia, createPlayerCardMedia, mirrorPlayerCardMedia, positionPlayerCardCanvas, warmEquippedPlayerCard } from "../../views/playerCardAnimation.cjs";
@@ -189,10 +189,10 @@ export function createGameHudController({
       player?.selected_skin_asset_url || "",
     ).trim();
     if (selectedSkinAsset) {
-      sprite.src = selectedSkinAsset;
+      sprite.src = bodyDisplayUrl(selectedSkinAsset);
       sprite.alt = cls || "character";
     } else if (cls) {
-      sprite.src = buildCharacterSkinBodyUrl(cls, "");
+      sprite.src = bodyDisplayUrl(buildCharacterSkinBodyUrl(cls, ""));
       sprite.alt = cls;
     } else {
       sprite.src = card?.assetUrl || DEFAULT_CARD_ASSET;
@@ -992,13 +992,13 @@ export function createGameHudController({
       avatarCore.className = "team-hud-avatar-core";
       const img = document.createElement("img");
       const cls = (p?.char_class || DEFAULT_CHARACTER).toLowerCase();
-      img.src =
+      img.src = bodyDisplayUrl(
         String(p?.selected_skin_asset_url || "").trim() ||
-        buildCharacterSkinBodyUrl(cls, "");
+        buildCharacterSkinBodyUrl(cls, ""));
       img.alt = `${getCharacterDisplayName(cls)} body`;
       img.onerror = () => {
         img.onerror = null;
-        img.src = "/assets/ninja/body.webp";
+        img.src = "/assets/ninja/portrait.webp";
       };
       const cross = document.createElement("div");
       cross.className = "team-hud-cross";

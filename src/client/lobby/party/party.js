@@ -25,7 +25,7 @@ import {
 } from "../../game/maps/manifest";
 import { openMapPreviewLightbox } from "./mapPreviewLightbox.js";
 import { openModeInfoDialog } from "./modeInfoDialog.js";
-import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
+import { bodyDisplayUrl, buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { DEFAULT_CHARACTER, resolveCharacterKey, parseCharacterLevels, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 import { setSlotLevelBadge } from "../../views/levelBadgeView.js";
 import {
@@ -1510,9 +1510,9 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
 
   if (spriteEl) {
     const cls = hiddenBro ? "Hidden Bro" : member.char_class || DEFAULT_CHARACTER;
-    const skinAsset = hiddenBro ? "/assets/ui/hidden-bro.png" :
+    const skinAsset = hiddenBro ? "/assets/ui/hidden-bro.png" : bodyDisplayUrl(
       String(member.selected_skin_asset_url || "").trim() ||
-      buildCharacterSkinBodyUrl(cls, member.selected_skin_id ?? member.selected_skin_id_by_char?.[resolveCharacterKey(cls)]);
+      buildCharacterSkinBodyUrl(cls, member.selected_skin_id ?? member.selected_skin_id_by_char?.[resolveCharacterKey(cls)]));
     if (spriteEl.getAttribute("src") !== skinAsset) spriteEl.src = skinAsset;
     spriteEl.alt = hiddenBro ? cls : getCharacterDisplayName(cls);
     spriteEl.classList.remove("random", "bot-shuffle-icon");
@@ -1598,7 +1598,7 @@ function applyBotToSlot(bot, slot, isYourTeam) {
   usernameEl.className = `username${isYourTeam ? "" : " op-player"}`;
   spriteEl.src = isShuffle
     ? "/assets/shuffle/shuffle1.svg"
-    : buildCharacterSkinBodyUrl(character, "");
+    : bodyDisplayUrl(buildCharacterSkinBodyUrl(character, ""));
   spriteEl.alt = isShuffle ? "Shuffle bot" : `${getCharacterDisplayName(character)} bot`;
   spriteEl.classList.remove("random");
   spriteEl.classList.toggle("bot-shuffle-icon", isShuffle);

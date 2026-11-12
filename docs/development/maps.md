@@ -286,9 +286,13 @@ players descending onto its top. Saved overrides retain their authored positions
 Map 2 is displayed as **Sky Soil** (formerly Mangrove Meadow). The stable
 `mangrove-meadow` key and asset keys remain compatible with existing matches.
 `public/assets/sky-soil/` contains separate sky, distant mountain and nearer
-forest-ridge layers plus the tapered rock/root underside. The mountain layers
+forest-ridge layers plus an integrated sandstone, moss and root island base. The whole main island renders as one pixel-finished, world-fixed
+`island-base` scenery image. The original `p0`–`p3` rows retain their collision
+surfaces and IDs with `alpha: 0`, eliminating visible joins. The saved layout
+uses a matching master with its lower pillar. All art layers use hard pixel
+grids, limited palettes, lossless textures and nearest filtering. The mountain layers
 use different parallax factors with interleaved clouds; High/Super High adds
 distance fog, drifting mist, sunlight rays, glow, motes and platform lighting.
-The former side islands are removed. The lobby uses a flattened mountain view. The underside uses a world-fixed `arena` scenery layer;
+The former side islands are removed. The lobby uses a flattened mountain view. The unified island uses a world-fixed `arena` scenery layer;
 it is decorative and adds no collision. Both the built-in and saved map keep
 these layers. Current art prompts are in `public/assets/sky-soil/README.md`.

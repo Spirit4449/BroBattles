@@ -41,7 +41,7 @@ import { formatSuspensionTime } from "../chat/presentation.js";
 import { createFriendsPanelController } from "../friends/friendsPanelController.js";
 import { pixelSprite } from "../friends/pixelArt.js";
 
-import { buildCharacterSkinBodyUrl } from "../views/skinAssets.js";
+import { bodyDisplayUrl, buildCharacterSkinBodyUrl } from "../views/skinAssets.js";
 
 import { initializeShop } from "../lobby/shop/shop.js";
 import "../styles/levelBadge.css";
@@ -550,10 +550,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const initialSkinId = String(
     userData?.selected_skin_id_by_char?.[initialCharClass] || "",
   ).trim();
-  if (characterBodyElement) characterBodyElement.src = buildCharacterSkinBodyUrl(
+  if (characterBodyElement) characterBodyElement.src = bodyDisplayUrl(buildCharacterSkinBodyUrl(
     initialCharClass,
     initialSkinId,
-  );
+  ));
   // Ensure non-random styling on initial sprite
   try {
     characterBodyElement.classList.remove("random");

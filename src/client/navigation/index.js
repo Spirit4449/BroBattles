@@ -191,6 +191,13 @@ function takeRoutePrefetch(href, signal) {
 }
 // The game bundle consumes its match data once, from the route that mounted it.
 let gameDataHandoff = null;
+// A direct load or refresh of /game/:id would otherwise request its match data
+// only after Phaser and the game bundle have downloaded and run. /gamedata
+// changes no server state, so start it with the document instead.
+const initialGameMatch = location.pathname.match(gameRoutePattern);
+if (initialGameMatch) {
+  gameDataHandoff = { ticket: sequence, matchId: initialGameMatch[1], request: requestGameData(initialGameMatch[1]) };
+}
 function consumeGameData(matchId) {
   const entry = gameDataHandoff;
   gameDataHandoff = null;
