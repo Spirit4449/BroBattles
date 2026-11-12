@@ -1,4 +1,5 @@
 import SKINS_CATALOG from "../../shared/catalogs/skinsCatalog.json";
+import PORTRAIT_SOURCES from "./portraitSources.json";
 import { DEFAULT_CHARACTER, canonicalCharacterKey } from "../../shared/characters/characterStats.js";
 
 export function normalizeSkinId(skinId) {
@@ -43,6 +44,16 @@ export function buildCharacterSkinTextureKey(character, skinId) {
   const skin = normalizeSkinId(skinId);
   if (!char) return "sprite";
   return skin ? `${char}__${skin}` : char;
+}
+
+// Roster slots, pickers and HUD avatars show bodies at ~80–150 CSS px. The
+// 448 px portrait copy (scripts/art/build-portraits.cjs) is roughly a tenth of
+// the 1254 px lossless original, so display those wherever one exists.
+export function bodyDisplayUrl(url) {
+  const value = String(url || "");
+  return Object.hasOwn(PORTRAIT_SOURCES, value)
+    ? value.replace(/body\.webp$/, "portrait.webp")
+    : value;
 }
 
 export function buildCharacterSkinBodyUrl(character, skinId) {

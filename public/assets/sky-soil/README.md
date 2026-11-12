@@ -35,3 +35,76 @@ The strips are cropped into separate full-canvas layers and extended below
 frame to avoid exposed bottom edges. Installer: `scripts/art/sky-soil/install-layers.cjs`
 (requires the original generated files recorded there). The game-rendered full
 preview is a still composition; live atmosphere is verified separately.
+
+## Livelier sky and integrated island revision
+
+Current runtime art uses `sky-v2.webp`, `forest-ridges-v2.webp`, the existing
+far peaks, four `mangrove-base-*.webp` textures in this folder, and
+`underside-v2.webp`. `island-master.png` is the assembled base master.
+`refine-art.cjs` fits the generated base to the original grassy ledges and
+splits it into the existing texture sizes using original alpha masks. The
+underside comes from the same master, eliminating the separate dark rock band.
+Collision geometry is unchanged. Keep this revision after the older installer.
+
+Built-in image generation prompts, referencing the respective installed assets:
+
+- Sky edit: Rich wind-shaped cream cloud ribbons across the upper half, tall
+  sculptural sunlit cloud banks at the sides, smaller central wisps, warm golden
+  sunshine at upper right, stepped turquoise/mint sky bands. Deliberate chunky
+  pixels, readable gaps, no land, floating islands, UI or text.
+- Forest edit: Keep transparent upper half and lower forested valley composition.
+  Add varied clustered pines, sunlit meadow and moss patches, pink/yellow flowers,
+  a winding turquoise river, two tiered waterfalls and weathered rock shelves.
+  Continuous grounded terrain, no floating islands, labels or buildings.
+- Base edit: Preserve grassy ledge positions and stepped top silhouette. Redraw
+  the whole face and underside together as warm terracotta/tan sandstone strata,
+  rounded stone slabs, exposed roots, moss and hanging vines. Compact organic bowl
+  with three broad uneven lobes. No repeated pointed teeth, grey stalactites,
+  straight join or attached lower band. Transparent background, side-on pixel art.
+
+Artwork generated with the built-in image generation tool. The source paths
+are recorded in `scripts/art/sky-soil/refine-art.cjs`.
+
+## Current: unified pixel finish
+
+Run `node scripts/art/sky-soil/pixel-finish.cjs` for the current installed finish.
+Its project-local source masters are in `scripts/art/sky-soil/pixel-sources/`.
+This deterministic finishing pass uses area sampling, small per-asset palettes,
+hard transparency, nearest-neighbor expansion and lossless WebP. Grid spacing
+is 2 world pixels for the island, 3 texture pixels for the forest, 4 for sky
+and far peaks, and 5 for the small platform's 0.4x texture.
+
+The entire main island now renders as ONE `island-base` world-fixed scenery
+image. `p0`–`p3` retain their exact original collision definitions and IDs but
+have `alpha: 0`. There are no visible tiled joins or separate underside image.
+The saved Map Studio layout uses a refitted master for its lower central pillar;
+the built-in layout uses the original pillar height. Platform lighting overlays
+are disabled for this map to avoid exposing the four hidden rectangles; the
+scene's glow, rays, mist and parallax remain active.
+
+Runtime assets: `sky-pixel.webp`, `peaks-pixel.webp`, `forest-pixel.webp`,
+`small-platform-pixel.webp`, and either `island-pixel.webp` (built-in) or
+`island-saved-pixel.webp` (saved map). `background.webp` is the matching flattened
+lobby background. No new image generation was needed for this finishing pass;
+it processes the previously generated artwork without changing its composition.
+
+## Current: native-detail sharp revision
+
+`sharp-finish.cjs` supersedes the coarse pixel finishing pass. It preserves
+native RGB detail without downsampling or palette reduction, exports lossless
+WebP with hard alpha, and uses nearest texture filtering. The island is stored
+at 1595×986 and scaled to the same 1100-world-pixel design frame. It remains a
+single continuous image with unchanged invisible collision rows. Detached alpha
+specks are removed by retaining the largest connected island component.
+Foreground fog, glow and mist were reduced to retain contrast.
+
+Two new source images were generated with the built-in image tool and saved in
+`scripts/art/sky-soil/sharp-sources/`. Forest prompt: redraw the existing alpine
+valley with exceptionally sharp designed pine/rock clusters, clean waterfalls,
+meadow flowers and river; retain framing and transparent sky, deep teal shadows
+and emerald/gold highlights; no blurred haze, gradients, islands, buildings or UI.
+Island prompt: preserve exact frame and platform silhouette, redraw as sharp
+handcrafted pixel art with terracotta sandstone strata, dark creases, clean
+highlights, olive grass, roots, moss and angular vines; no seams, soft gradients,
+antialiasing, noisy speckling, scenery or text. Sky and distant peaks retain
+native source detail rather than the reduced pixel-grid versions.

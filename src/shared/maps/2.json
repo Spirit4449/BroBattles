@@ -16,23 +16,23 @@
   "assets": {
     "mangrove-base-middle": {
       "type": "image",
-      "url": "/assets/mangrove/baseMiddle.webp"
+      "url": "/assets/sky-soil/mangrove-base-middle.webp"
     },
     "mangrove-base-top": {
       "type": "image",
-      "url": "/assets/mangrove/baseTop.webp"
+      "url": "/assets/sky-soil/mangrove-base-top.webp"
     },
     "mangrove-base-left": {
       "type": "image",
-      "url": "/assets/mangrove/baseLeft.webp"
+      "url": "/assets/sky-soil/mangrove-base-left.webp"
     },
     "mangrove-base-right": {
       "type": "image",
-      "url": "/assets/mangrove/baseRight.webp"
+      "url": "/assets/sky-soil/mangrove-base-right.webp"
     },
     "mangrove-tiny-platform": {
       "type": "image",
-      "url": "/assets/mangrove/lobbyPlatform.webp"
+      "url": "/assets/sky-soil/small-platform-sharp.webp"
     }
   },
   "textureSizes": {
@@ -76,7 +76,8 @@
         "collision": {
           "up": true,
           "down": false
-        }
+        },
+        "alpha": 0
       },
       {
         "textureKey": "mangrove-base-top",
@@ -95,7 +96,8 @@
         "collision": {
           "up": true,
           "down": false
-        }
+        },
+        "alpha": 0
       },
       {
         "textureKey": "mangrove-base-left",
@@ -114,7 +116,8 @@
         "collision": {
           "up": true,
           "down": false
-        }
+        },
+        "alpha": 0
       },
       {
         "textureKey": "mangrove-base-right",
@@ -133,7 +136,8 @@
         "collision": {
           "up": true,
           "down": false
-        }
+        },
+        "alpha": 0
       },
       {
         "textureKey": "mangrove-tiny-platform",
@@ -375,34 +379,38 @@
     "layers": [
       {
         "id": "sky",
-        "url": "/assets/sky-soil/sky.webp",
-        "scroll": 0.025
+        "url": "/assets/sky-soil/sky-sharp.webp",
+        "scroll": 0.025,
+        "filter": "nearest"
       },
       {
         "id": "far-peaks",
-        "url": "/assets/sky-soil/far-peaks.webp",
+        "url": "/assets/sky-soil/peaks-sharp.webp",
         "scroll": 0.1,
         "fit": "cover-x",
         "y": -60,
-        "fog": 0.4
+        "fog": 0.16,
+        "filter": "nearest"
       },
       {
         "id": "forest-ridges",
-        "url": "/assets/sky-soil/forest-ridges.webp",
+        "url": "/assets/sky-soil/forest-sharp.webp",
         "scroll": 0.26,
         "fit": "cover-x",
         "y": 80,
-        "fog": 0.18
+        "fog": 0.04,
+        "filter": "nearest"
       },
       {
-        "id": "island-underside",
-        "url": "/assets/sky-soil/underside.webp",
+        "id": "island-base",
+        "url": "/assets/sky-soil/island-sharp.webp",
         "scroll": 1,
         "fit": "none",
-        "scale": 0.9985102420856612,
-        "x": 1,
-        "y": 507.2653631284916,
-        "stack": "arena"
+        "scale": 0.6896551724137931,
+        "x": 0,
+        "y": 310,
+        "stack": "arena",
+        "filter": "nearest"
       }
     ],
     "clouds": {
@@ -454,8 +462,8 @@
           "radius": 1050,
           "color": "#fff6ce",
           "alpha": [
-            0.2,
-            0.32
+            0.06,
+            0.12
           ],
           "periodMs": 10000
         }
@@ -464,7 +472,7 @@
         {
           "after": "far-peaks",
           "color": "#d4f4db",
-          "alpha": 0.4,
+          "alpha": 0.2,
           "scroll": 0.12,
           "y": 190,
           "height": 400,
@@ -473,7 +481,7 @@
         {
           "after": "forest-ridges",
           "color": "#ccefd7",
-          "alpha": 0.28,
+          "alpha": 0.1,
           "scroll": 0.28,
           "y": 420,
           "height": 400,
@@ -482,7 +490,7 @@
         {
           "after": "arena",
           "color": "#d9f5e1",
-          "alpha": 0.12,
+          "alpha": 0.04,
           "scroll": 0.8,
           "y": 650,
           "height": 320,
@@ -505,8 +513,8 @@
           ],
           "color": "#fff8d6",
           "alpha": [
-            0.06,
-            0.16
+            0.03,
+            0.08
           ],
           "periodMs": [
             6000,
@@ -531,7 +539,7 @@
       "platforms": {
         "top": "#fff5d3",
         "bottom": "#315349",
-        "strength": 0.16
+        "strength": 0
       },
       "vignette": {
         "color": "#123e42",

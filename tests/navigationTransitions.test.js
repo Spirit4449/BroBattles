@@ -152,10 +152,25 @@ function setup({ routeResponse, statusResponse, gameDataResponse, deferStyles = 
   const preload = graph.load(modulePath('navigation/preload.js'));
   imports[modulePath('navigation/preload')] = { ...preload, createBattlePreloader: context.createBattlePreloader };
   graph.load(modulePath('navigation/index.js'));
+  // The document starts on /game/1, so navigation requests that match's data
+  // at startup. Keep it apart from the route requests each test asserts.
+  state.startupFetches = state.fetches.splice(0);
   const nav = window.__BB_NAVIGATION__;
   nav.scope();
   return { nav, state, document, location, status, advanceTime };
 }
+
+test('a direct game load requests its match data at startup and hands it over once', async () => {
+  const body = { success: true, gameData: { matchId: 1 } };
+  const env = setup({ gameDataResponse: () => ({ ok: true, json: async () => body }) });
+  assert.deepEqual(env.state.startupFetches.map(entry => entry.url), ['/gamedata']);
+  assert.equal(JSON.parse(env.state.startupFetches[0].options.body).matchId, 1);
+  const handoff = env.nav.consumeGameData('1');
+  assert.deepEqual(JSON.parse(JSON.stringify(await handoff)), { ok: true, body });
+  assert.equal(env.nav.consumeGameData('1'), null, 'single use');
+  const other = setup({ gameDataResponse: () => ({ ok: true, json: async () => body }) });
+  assert.equal(other.nav.consumeGameData('2'), null, 'another match cannot take it');
+});
 
 test('return overlaps script downloads, CSS, and cleanup; status is delivered once to the new lobby', async () => {
   const env = setup({ deferStyles: true, deferCleanup: true });

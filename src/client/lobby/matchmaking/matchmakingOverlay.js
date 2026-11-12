@@ -1,7 +1,7 @@
 // DOM view for the static #matchmaking-overlay in index.html. Queue state and
 // socket handling live in matchmakingClient.mjs; this module only renders.
 import { getLobbyBgAsset, getLobbyPlatformAsset } from "../../game/maps/manifest";
-import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
+import { bodyDisplayUrl, buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { DEFAULT_CHARACTER, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 import { refreshPlatformGrounding } from "../party/platformGrounding.mjs";
 
@@ -248,7 +248,7 @@ export function createMatchmakingOverlay() {
     const isShuffleBot = p.isConfiguredBot && cls === "shuffle";
     img.src = isShuffleBot
       ? "/assets/shuffle/shuffle1.svg"
-      : String(p.selected_skin_asset_url || "").trim() || buildCharacterSkinBodyUrl(cls, p.selected_skin_id);
+      : bodyDisplayUrl(String(p.selected_skin_asset_url || "").trim() || buildCharacterSkinBodyUrl(cls, p.selected_skin_id));
     img.alt = isShuffleBot ? "Shuffle bot" : getCharacterDisplayName(cls);
     img.className = `mm-character${isShuffleBot ? " bot-shuffle-icon mm-bot-shuffle-icon" : ""}`;
     const name = document.createElement("div");
