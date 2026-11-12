@@ -1,3 +1,4 @@
+const { isPlaced } = require('../../../shared/combat/targetable.js');
 const { participantId, applyParticipantKnockback } = require('./participants');
 const { characterBody } = require('../../../shared/physics/duelGeometry');
 const { isDetachedProjectile } = require('../../../shared/combat/runtime/attackRuntimes/projectileLifecycle.js');
@@ -17,7 +18,7 @@ function resolveStomp(room, player, now = Date.now()) {
   const x = player.x + shape.offsetX, y = player.y + shape.offsetY + shape.halfHeight;
   const interrupted = [];
   for (const target of room.players.values()) {
-    if (target === player || !target.isAlive || target.connected === false || !target.loaded ||
+    if (target === player || !target.isAlive || target.connected === false || !isPlaced(target) ||
         (player.team && target.team === player.team)) continue;
     const body = characterBody(target.char_class, target.flip);
     const tx = target.x + body.offsetX, ty = target.y + body.offsetY;

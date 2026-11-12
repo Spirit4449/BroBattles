@@ -4,6 +4,7 @@ import { updateControlsGuide } from '../../site/controlsGuide.mjs';
 // Keeps DOM/UI concerns out of game scene orchestration.
 
 import { playSound, preloadSound } from "../../ui/uiSounds.js";
+import { playCountdownRiser, playCountdownThump, playFightBoom } from "./countdownSfx.js";
 import {
   getModeById,
   legacyModeToVariantId,
@@ -758,12 +759,19 @@ export function createGameHudController({
     _setTopHudFadeVisible(false, options);
   }
 
+  let noticeKeyHandler = null;
+
   function hideSystemNotice() {
     const overlay = document.getElementById("game-notice-overlay");
     if (!overlay) return;
     overlay.classList.remove("show", "tone-error", "tone-info");
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
+    window.__BB_GAME_NOTICE_OPEN = false;
+    if (noticeKeyHandler) {
+      document.removeEventListener("keydown", noticeKeyHandler, true);
+      noticeKeyHandler = null;
+    }
     if (noticeAutoCloseTimer) {
       clearTimeout(noticeAutoCloseTimer);
       noticeAutoCloseTimer = null;
@@ -804,6 +812,22 @@ export function createGameHudController({
     };
 
     buttonEl.onclick = finish;
+
+    // The notice blocks the match, so give the mouse back and let the
+    // keyboard press its button.
+    window.__BB_GAME_NOTICE_OPEN = true;
+    if (document.pointerLockElement) document.exitPointerLock?.();
+    document.body?.classList?.remove("battle-cursor-hidden");
+    const canvas = document.querySelector("canvas");
+    if (canvas?.style?.cursor === "none") canvas.style.cursor = "";
+    noticeKeyHandler = (event) => {
+      if (event.key !== "Enter" && event.key !== " " && event.key !== "Escape") return;
+      if (event.repeat) return;
+      event.preventDefault();
+      event.stopPropagation();
+      finish();
+    };
+    document.addEventListener("keydown", noticeKeyHandler, true);
     requestAnimationFrame(() => {
       overlay.classList.add("show");
     });
@@ -1119,6 +1143,9 @@ export function createGameHudController({
         "phase-cinematic",
         "phase-darkened",
         "phase-cards",
+        "is-beat",
+        "is-final",
+        "is-fight",
       );
       // The cards are offscreen for the rest of the match; free their decoders.
       mountedCards.forEach(disposePlayerCardMediaWithin);
@@ -1179,23 +1206,37 @@ export function createGameHudController({
     const skippedMs = Math.min(totalMs, Math.max(0, Number(elapsedMs) || 0));
     const at = (ms, fn) => setTimeout(fn, Math.max(0, ms - skippedMs));
 
+    const overlay = document.getElementById("battle-start-overlay");
+    const fightBurst = document.getElementById("fight-burst");
+    const count = Math.ceil(totalMs / 1000);
+    // Replays a CSS animation class on an element that may already have it.
+    const replay = (el, cls) => {
+      if (!el?.classList) return;
+      el.classList.remove(cls);
+      void el.offsetWidth;
+      el.classList.add(cls);
+    };
+
     const showNumber = (num) => {
-      countdownEl.style.transform = "translate(-50%, -50%) scale(0.5)";
-      countdownEl.style.opacity = "0.5";
-      setTimeout(() => {
-        countdownEl.textContent = num;
-        playSound("beep", 0.38, { playbackRate: 1 + (5 - num) * 0.035 });
-        countdownEl.style.transform = "translate(-50%, -50%) scale(1.2)";
-        countdownEl.style.opacity = "1";
-        countdownEl.style.transition = "transform 0.3s ease, opacity 0.3s ease";
-        setTimeout(() => {
-          countdownEl.style.transform = "translate(-50%, -50%) scale(1)";
-        }, 150);
-      }, 50);
+      // 0 for the first number, 1 for the last: drives colour, size and shake.
+      const heat = count > 1 ? (count - num) / (count - 1) : 1;
+      countdownEl.textContent = num;
+      countdownEl.style.transform = "";
+      countdownEl.style.transition = "";
+      if (countdownEl.dataset) countdownEl.dataset.num = String(num);
+      countdownEl.style.setProperty?.("--heat", heat.toFixed(3));
+      overlay?.style?.setProperty?.("--heat", heat.toFixed(3));
+      if (overlay?.dataset) overlay.dataset.count = String(num);
+      overlay?.classList?.toggle("is-final", num <= 3);
+      replay(countdownEl, "is-beat");
+      replay(overlay, "is-beat");
+      playSound("beep", 0.38 + heat * 0.2, { playbackRate: 1 + (count - num) * 0.06 });
+      playCountdownThump(heat);
+      if (num === 3) playCountdownRiser(3000 - Math.max(0, skippedMs - (totalMs - 3000)));
     };
 
     // 5, 4, 3, 2, 1 on whole seconds, then FIGHT.
-    for (let num = Math.ceil(totalMs / 1000); num >= 1; num--) {
+    for (let num = count; num >= 1; num--) {
       const shownAt = totalMs - num * 1000;
       // A rejoin starts on the current number instead of replaying past ones.
       if (shownAt + 1000 <= skippedMs) continue;
@@ -1203,9 +1244,17 @@ export function createGameHudController({
     }
     at(totalMs, () => {
       countdownEl.textContent = "FIGHT!";
-      countdownEl.style.color = "#ef4444";
-      countdownEl.style.transform = "translate(-50%, -50%) scale(1.5)";
       playSound("start", 0.8);
+      playFightBoom();
+      overlay?.classList?.add("is-fight");
+      if (fightBurst) {
+        fightBurst.classList.remove("hidden");
+        replay(fightBurst, "is-on");
+        setTimeout(() => {
+          fightBurst.classList.remove("is-on");
+          fightBurst.classList.add("hidden");
+        }, 1100);
+      }
 
       try {
         if (typeof onCountdownFight === "function") {

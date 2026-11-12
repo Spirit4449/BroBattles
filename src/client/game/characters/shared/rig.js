@@ -38,6 +38,11 @@ export function rigPoint(sprite, name, character) {
   return art ? spriteArtPoint(sprite, art, key) : null;
 }
 
+// The rig's team-ring drop (ring half-heights below the feet), or null.
+export function rigRingDrop(sprite, character) {
+  return rigOf(characterOf(sprite, character)).ringDrop;
+}
+
 // The Arcade body's bounds from the sprite's current transform (as
 // Body.preUpdate places it), so anchors never trail the sprite by a frame.
 export function bodyBounds(sprite) {

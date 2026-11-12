@@ -8,6 +8,8 @@
 //     "frame": [256, 256],                // optional: art size if not the gameplay frame
 //     "feet": [103, 137],                 // stand point: x under the character,
 //                                         // y the hitbox bottom (the floor)
+//     "ringDrop": 0,                      // optional: team ring's centre below the
+//                                         // feet, in ring half-heights
 //     "points": {
 //       "chest": [109, 70],               // the same point on every frame
 //       "staffTip": {                     // or per animation, by frame index
@@ -29,7 +31,8 @@ function rigOf(character) {
   const rig = definition?.rig || {};
   const size = validPoint(rig.frame);
   const frame = size ? { w: size[0], h: size[1] } : characterFrames[character] || null;
-  return { frame, feet: validPoint(rig.feet), points: rig.points || {} };
+  const ringDrop = Number.isFinite(rig.ringDrop) ? rig.ringDrop : null;
+  return { frame, feet: validPoint(rig.feet), ringDrop, points: rig.points || {} };
 }
 
 function validPoint(point) {
@@ -79,6 +82,7 @@ function rigErrors(definition) {
     else if (!(point[0] >= 0 && point[0] <= w && point[1] >= 0 && point[1] <= h)) errors.push(`rig ${label} is outside the ${w}x${h} frame`);
   };
   if (rig.feet !== undefined) check("feet", rig.feet);
+  if (rig.ringDrop !== undefined && !(Number.isFinite(rig.ringDrop) && Math.abs(rig.ringDrop) <= 1)) errors.push("rig ringDrop must be a number from -1 to 1");
   for (const [name, point] of Object.entries(rig.points || {})) {
     if (Array.isArray(point)) { check(name, point); continue; }
     if (!point || typeof point !== "object") { errors.push(`rig ${name} must be [x, y] or per-animation lists`); continue; }

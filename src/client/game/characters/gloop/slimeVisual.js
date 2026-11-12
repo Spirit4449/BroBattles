@@ -5,7 +5,18 @@ import { fillPixelBlob, fillPixelEllipse, PIXEL_FX_SIZE, rasterizePixelBlob } fr
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const random = (a, b) => a + Math.random() * (b - a);
-const COLORS = [0x0fb6b2, 0x169aaf, 0x1268b8, 0x25cbb4];
+const COLORS = [0x45d4cc, 0x2ca7b2, 0x0a50d0, 0xb5f3dc];
+// The ink line around Gloop's body sprite; the ball and bud carry it too.
+const OUTLINE = 0x0a0c16;
+// Base skin: the body sprite's mint rim, cyan/teal skin and blue core.
+const BASE_RAMP = {
+  [OUTLINE]: OUTLINE,
+  0x99e9c9: 0xb5f3dc, 0x93edce: 0xb5f3dc, 0xa2edcf: 0xb5f3dc, 0x9ee6ce: 0xb5f3dc,
+  0x11bbaa: 0x45d4cc, 0x16b6b0: 0x45d4cc, 0x12afaf: 0x45d4cc, 0x13b5ad: 0x45d4cc,
+  0x139ca9: 0x2ca7b2, 0x16afa9: 0x2ca7b2, 0x15aaa9: 0x2ca7b2, 0x13abae: 0x2ca7b2,
+  0x0868b6: 0x0a50d0, 0x0846ae: 0x0336b4, 0x07529b: 0x0336b4,
+  0xf2f5aa: 0xf4f6c8, 0x74dcbc: 0x9ee8d8,
+};
 const CELL = PIXEL_FX_SIZE;
 const snap = v => Math.round(v / CELL) * CELL;
 
@@ -49,25 +60,29 @@ function drawNeck(g, x0, y0, x1, y1, w0, w1, pinch, color, alpha) {
   stampCells(g, samples, color, alpha, true);
 }
 
+// Drawn a little inside the collision radius.
+const VISUAL_SIZE = 0.95;
 export const slimeRadius = (collisionRadius, visualScale = 1.5) =>
-  collisionRadius * clamp(visualScale / 1.5, 0.75, 1.25);
+  collisionRadius * clamp(visualScale / 1.5, 0.75, 1.25) * VISUAL_SIZE;
 
 // Team and skin colouring shared by the ball and the bud it grows from.
 function slimePalette(owner) {
   const crystal = (owner?._bbSkinTextureKey || owner?.texture?.key) === 'gloop__gloop-amethyst';
   const sourceColors = crystal ? [0x4215b8, 0x5633cb, 0x261080, 0x3976bc] : COLORS;
   const skinTint = color => crystal ? ({
+    [OUTLINE]: 0x05031f,
     0x07529b: 0x201060, 0x16afa9: 0x4215b8, 0x15aaa9: 0x4215b8,
     0x16b6b0: 0x5633cb, 0xa2edcf: 0x8099d8, 0x9ee6ce: 0x8099d8,
     0x99e9c9: 0x5366b6, 0x11bbaa: 0x5633cb, 0x139ca9: 0x4215b8,
     0x0868b6: 0x301298, 0x0846ae: 0x261080, 0xf2f5aa: 0x8a9cdd,
     0x93edce: 0x4f7bbf, 0x74dcbc: 0x6755bb, 0x12afaf: 0x4215b8,
     0x13b5ad: 0x5633cb, 0x13abae: 0x4215b8,
-  }[color] ?? color) : color;
+  }[color] ?? color) : (BASE_RAMP[color] ?? color);
   // Hand-selected cherry/coral ramp: keep glossy highlights and saturated depths.
   // Amethyst retains violet facets with ruby edges rather than losing its identity.
   const enemy = teamColor(owner) === TEAM_RED;
   const redRamp = {
+    [OUTLINE]: crystal ? 0x16041a : 0x1c0608,
     0x07529b: 0x9c2049, 0x16afa9: 0xeb4355, 0x15aaa9: 0xeb4355,
     0x16b6b0: 0xf55265, 0xa2edcf: 0xffc5b5, 0x9ee6ce: 0xffb7aa,
     0x99e9c9: crystal ? 0x67204d : 0x882333, 0x11bbaa: 0xe64a56, 0x139ca9: 0xdc3849,
@@ -86,7 +101,7 @@ function slimePalette(owner) {
 // and hands over to the ball at release; offsets are the launch start
 // relative to the owner.
 export function createSlimeBud(scene, owner, { offsetX, offsetY, angle, radius, durationMs }) {
-  const { tint, enemy } = slimePalette(owner);
+  const { tint } = slimePalette(owner);
   const neckG = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 5);
   const blobG = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 6);
   const dx = Math.cos(angle), dy = Math.sin(angle);
@@ -109,6 +124,7 @@ export function createSlimeBud(scene, owner, { offsetX, offsetY, angle, radius, 
     }
     const shape = rasterizePixelBlob(points, { ringCount: 2, grow: 0 });
     fillPixelBlob(blobG, shape, tint(color), alpha);
+    return shape;
   }
   return {
     // false once it has nothing left to draw.
@@ -132,10 +148,12 @@ export function createSlimeBud(scene, owner, { offsetX, offsetY, angle, radius, 
       drawNeck(neckG, rootX, rootY, cx, cy, radius * 0.34, size * 0.45, grown * 0.6, tint(0x11bbaa), 0.98);
       drawNeck(neckG, rootX, rootY, cx, cy, radius * 0.2, size * 0.26, grown * 0.6, tint(0x139ca9), 0.98);
       blobG.setPosition(snap(cx), snap(cy));
-      blob(size * (enemy ? 1.08 : 1.04), stretch, 0x99e9c9, enemy ? 0.95 : 0.48);
+      const rim = blob(size * 1.04, stretch, 0x99e9c9, 0.98);
       blob(size, stretch, 0x11bbaa, 0.98);
       blob(size * 0.89, stretch, 0x139ca9, 0.98);
       blob(size * 0.7, stretch, 0x0868b6, 0.97, -dx * size * 0.12, size * 0.08);
+      // Last, so the wobbling inner layers never paint over it.
+      fillPixelBlob(blobG, rim, tint(OUTLINE), 1, d => d === 1);
       fillPixelEllipse(blobG, -size * 0.4, -size * 0.45, Math.max(CELL * 2, size * 0.2), size * 0.34, tint(0xf2f5aa), 0.93);
       return true;
     },
@@ -148,10 +166,10 @@ export function createSlimeBud(scene, owner, { offsetX, offsetY, angle, radius, 
 // Effects are bounded and outlive the projectile briefly; shutdown owns all cleanup.
 // spit: the root of the neck, relative to the owner, that the ball tears free of.
 export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null, spit = null) {
-  const { crystal, enemy, tint, colors } = slimePalette(owner);
+  const { crystal, tint, colors } = slimePalette(owner);
   const body = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 6);
   const fx = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 2);
-  const r = state.collisionRadius * clamp(visualScale / 1.5, 0.75, 1.25);
+  const r = slimeRadius(state.collisionRadius, visualScale);
   const drops = [], stains = [];
   let time = 0, trail = 0, finished = false, destroyed = false;
   // squash > 0 flattens the mass along the contact normal, < 0 stretches it;
@@ -418,7 +436,7 @@ export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null,
         r * 0.45 * (1 - impactAge / 320), 0x13abae, 0.75);
     }
     // Layered translucent skin, dark lower mass and asymmetric wet reflections.
-    contour(enemy ? 1.08 : 1.04, 0x99e9c9, enemy ? 0.95 : 0.48);
+    const rim = contour(1.04, 0x99e9c9, 0.98);
     const skin = contour(1, 0x11bbaa, 0.98);
     contour(crystal ? 0.95 : 0.89, 0x139ca9, 0.98);
     // The dense core lags the skin, sloshing against the squash velocity.
@@ -426,6 +444,8 @@ export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null,
     const sx = -normal.x * slosh, sy = -normal.y * slosh;
     contour(crystal ? 0.81 : 0.73, 0x0868b6, 0.97, r * 0.02 + sx * 0.6, r * 0.09 + sy * 0.6);
     contour(crystal ? 0.63 : 0.56, 0x0846ae, 0.94, -r * 0.06 + sx, r * 0.13 + sy);
+    // Last, so the wobbling inner layers never paint over it.
+    fillPixelBlob(body, rim, tint(OUTLINE), 1, d => d === 1);
     fillPixelEllipse(body, -r * 0.44, -r * 0.47, Math.max(CELL * 2, r * 0.2), r * 0.36, tint(0xf2f5aa), 0.93);
     fillPixelEllipse(body, r * 0.42, -r * 0.51, Math.max(CELL, r * 0.13), r * 0.28, tint(0xf2f5aa), 0.93);
     if (squash < 0.08) {

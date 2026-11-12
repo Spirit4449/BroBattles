@@ -252,6 +252,84 @@ class GameRoom {
     return this.spawnStateFor(matchPlayer);
   }
 
+  _createHumanPlayerData(matchPlayer, { socketId = null, userId, level, name, connected = true }) {
+    const {
+      maxHealth, baseDamage, specialDamage, specialChargeHits,
+      ammoCapacity, ammoCooldownMs, ammoReloadMs,
+    } = this._computeStats(matchPlayer.char_class, level);
+    const now = Date.now();
+    const playerData = {
+      socketId,
+      participantId: participantId(matchPlayer),
+      user_id: userId,
+      name,
+      team: matchPlayer.team,
+      char_class: matchPlayer.char_class,
+      selected_skin_id: String(matchPlayer.selected_skin_id || "") || null,
+      selected_skin_asset_url: String(matchPlayer.selected_skin_asset_url || "") || null,
+      selected_skin_game_assets: matchPlayer.selected_skin_game_assets || null,
+      profile_icon_id: String(matchPlayer.profile_icon_id || matchPlayer.char_class || DEFAULT_CHARACTER),
+      isBot: false,
+      trophies: Number(matchPlayer.trophies) || 0,
+      connected,
+      loaded: false,
+      spawnIndex: roomStateManager.computeSpawnIndex(this, matchPlayer),
+      x: null,
+      y: null,
+      vx: 0,
+      vy: 0,
+      grounded: false,
+      maxHealth,
+      health: maxHealth,
+      superCharge: 0,
+      maxSuperCharge: specialChargeHits,
+      isAlive: true,
+      lastInput: now,
+      _lastPositionPacketAt: 0,
+      level,
+      baseDamage,
+      specialDamage,
+      lastCombatAt: now,
+      lastAttackAt: 0,
+      lastDamagedAt: 0,
+      _regenCarry: 0,
+      _lastHealthBroadcastAt: 0,
+      effects: {},
+      activeEffects: {},
+      ammoState: {
+        capacity: ammoCapacity,
+        charges: ammoCapacity,
+        cooldownMs: ammoCooldownMs,
+        reloadMs: ammoReloadMs,
+        reloadTimerMs: 0,
+        nextFireInMs: 0,
+      },
+    };
+    if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {
+      Object.assign(playerData, this.spawnStateFor(playerData), { flip: false });
+    }
+    return playerData;
+  }
+
+  // A fighter whose client has not joined yet still stands at its spawn as a
+  // hittable ghost, so every human gets a server entry when the countdown
+  // starts. Joining later takes this entry over like a reconnect.
+  _seedAbsentHumans() {
+    for (const matchPlayer of Array.isArray(this.matchData?.players) ? this.matchData.players : []) {
+      const userId = Number(matchPlayer?.user_id);
+      if (matchPlayer?.isBot || !Number.isFinite(userId) || userId <= 0) continue;
+      const present = Array.from(this.players.values()).some((p) => !p.isBot && Number(p.user_id) === userId);
+      if (present) continue;
+      const level = Number(matchPlayer.level) > 0 ? Number(matchPlayer.level) : 1;
+      const playerData = this._createHumanPlayerData(matchPlayer, {
+        userId, level, name: matchPlayer.name, connected: false,
+      });
+      inputManager.updateBodyGeometry(playerData, this);
+      inputManager.resetMovementBudget(playerData);
+      this.players.set(`offline:${userId}`, playerData);
+    }
+  }
+
   async addPlayer(socket, user) {
     const userId = Number(user?.user_id);
     const matchPlayer = this.matchData.players.find(
@@ -279,61 +357,9 @@ class GameRoom {
       if (this._disposed || this.status === "finished") {
         throw Object.assign(new Error("This match has finished"), { code: "MATCH_FINISHED" });
       }
-      const {
-        maxHealth, baseDamage, specialDamage, specialChargeHits,
-        ammoCapacity, ammoCooldownMs, ammoReloadMs,
-      } = this._computeStats(matchPlayer.char_class, level);
-      const now = Date.now();
-      playerData = {
-        socketId: socket.id,
-        participantId: participantId(matchPlayer),
-        user_id: userId,
-        name: matchPlayer.name || user.name,
-        team: matchPlayer.team,
-        char_class: matchPlayer.char_class,
-        selected_skin_id: String(matchPlayer.selected_skin_id || "") || null,
-        selected_skin_asset_url: String(matchPlayer.selected_skin_asset_url || "") || null,
-        selected_skin_game_assets: matchPlayer.selected_skin_game_assets || null,
-        profile_icon_id: String(matchPlayer.profile_icon_id || matchPlayer.char_class || DEFAULT_CHARACTER),
-        isBot: false,
-        trophies: Number(matchPlayer.trophies) || 0,
-        connected: true,
-        loaded: false,
-        spawnIndex: roomStateManager.computeSpawnIndex(this, matchPlayer),
-        x: null,
-        y: null,
-        vx: 0,
-        vy: 0,
-        grounded: false,
-        maxHealth,
-        health: maxHealth,
-        superCharge: 0,
-        maxSuperCharge: specialChargeHits,
-        isAlive: true,
-        lastInput: now,
-        _lastPositionPacketAt: 0,
-        level,
-        baseDamage,
-        specialDamage,
-        lastCombatAt: now,
-        lastAttackAt: 0,
-        lastDamagedAt: 0,
-        _regenCarry: 0,
-        _lastHealthBroadcastAt: 0,
-        effects: {},
-        activeEffects: {},
-        ammoState: {
-          capacity: ammoCapacity,
-          charges: ammoCapacity,
-          cooldownMs: ammoCooldownMs,
-          reloadMs: ammoReloadMs,
-          reloadTimerMs: 0,
-          nextFireInMs: 0,
-        },
-      };
-      if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {
-        Object.assign(playerData, this.spawnStateFor(playerData), { flip: false });
-      }
+      playerData = this._createHumanPlayerData(matchPlayer, {
+        socketId: socket.id, userId, level, name: matchPlayer.name || user.name,
+      });
       inputManager.updateBodyGeometry(playerData, this);
       inputManager.resetMovementBudget(playerData);
       this.players.set(socket.id, playerData);
@@ -613,6 +639,7 @@ class GameRoom {
    * Initialize spawn positions for players
    */
   initializeSpawnPositions() {
+    this._seedAbsentHumans();
     roomStateManager.initializeSpawnPositions(this);
   }
 

@@ -1,3 +1,4 @@
+const { isPlaced } = require('../targetable.js');
 const huntressModel = require('../../characters/huntressProjectile');
 const { EFFECT_RULES } = require('../../effectRules');
 const ninjaCombat = require('./ninjaCombat.js');
@@ -93,7 +94,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     if (
       attacker.connected === false ||
       attacker.loaded !== true ||
-      (!targetObjective && target.loaded !== true)
+      (!targetObjective && !isPlaced(target))
     ) {
       if (room.DEBUG_HIT_EVENTS) {
         console.log(

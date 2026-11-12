@@ -1,3 +1,4 @@
+const { isPlaced } = require('../../../shared/combat/targetable.js');
 const effects = require('../../../shared/combat/runtime/effects/effectManager.js');
 const { participantId, getParticipant } = require('../gameRoom/participants');
 const { bounds } = require('./physics');
@@ -5,7 +6,7 @@ const { botProfile } = require('../../../shared/combat/characterProfiles.js');
 
 function observe(room, player, now, samples) {
   const enemies = [...room.players.values()].filter((p) =>
-    p !== player && p.team !== player.team && p.isAlive && p.loaded &&
+    p !== player && p.team !== player.team && p.isAlive && isPlaced(p) &&
     !effects.isActive(p, 'invisibility', now) && Math.hypot(p.x - player.x, p.y - player.y) < 1600,
   ).map((p) => ({
     participantId: participantId(p), char_class: p.char_class, x: p.x, y: p.y,

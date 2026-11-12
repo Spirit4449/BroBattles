@@ -1,6 +1,7 @@
 import { playSpriteAnimation } from "../shared/animationState.js";
 import rigData from "../../../../shared/characters/characterRig.js";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { huntressAimVariant } from "./aimPoses";
 
 const { launchPoint } = rigData;
 
@@ -12,6 +13,7 @@ export function perform(
   username,
   gameId,
   isOwner = false,
+  specialData = null,
 ) {
   if (!scene || !player || !player.active) return;
   player._specialCastLockUntil = Date.now() + 450;
@@ -23,6 +25,7 @@ export function perform(
     fallback: "throw",
     holdMs: 450,
     remote: !isOwner,
+    variant: huntressAimVariant(specialData?.angle),
   });
 
   try {

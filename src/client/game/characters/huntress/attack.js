@@ -3,6 +3,7 @@ import { createRuntimeId } from "../shared/runtimeId.js";
 import { lockPlayerFlip } from "../shared/flipLock.js";
 import { playSpriteAnimation } from "../shared/animationState.js";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { huntressAimVariant } from "./aimPoses";
 
 const ARROWS = getResolvedCharacterAttackConfig("huntress", "arrowSpread");
 
@@ -17,7 +18,8 @@ export function performHuntressArrowSpread(instance, attackContext = null) {
   const speed = Math.max(1, ARROWS.speed * (Number(context.speedScale) || 1));
   const id = createRuntimeId("huntressArrow");
   const unlockFlip = lockPlayerFlip(p);
-  playSpriteAnimation({ scene, sprite: p, character: "huntress", logical: "throw", fallback: "throw", id });
+  playSpriteAnimation({ scene, sprite: p, character: "huntress", logical: "throw", fallback: "throw", id,
+    variant: huntressAimVariant(angle) });
   try {
     if (scene?.cache?.audio?.exists?.("huntress-attack") || scene?.sound?.get?.("huntress-attack")) {
       playPlayerSound(scene, p, "huntress-attack", { volume: 0.48 });

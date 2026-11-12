@@ -198,6 +198,35 @@ test('human reconnect preserves identity and combat state, and releases old sock
   assert.equal(h.room.getPlayerCount(), 2);
 });
 
+test('a human who has not joined by the countdown is a hittable ghost at spawn, and joining takes it over', async (t) => {
+  const h = await setup(t, 2, { humans: 2 });
+  const host = h.socket('host');
+  await h.join(host);
+  await h.ready(host);
+  t.mock.timers.tick(START_DEADLINE_MS);
+  assert.equal(h.room.status, 'active');
+  const ghost = [...h.room.players.values()].find((p) => p.name === h.friends[0].name);
+  assert.ok(ghost, 'the absent human has a server entry');
+  assert.equal(ghost.loaded, false);
+  assert.ok(Number.isFinite(ghost.x) && Number.isFinite(ghost.y), 'stands at a spawn');
+  assert.equal(h.room.hasConnectedHumanPlayers(), true);
+  assert.equal(h.room.getPlayerCount(), [...h.room.players.values()].filter((p) => p.connected).length);
+
+  const enemy = [...h.room.players.values()].find((p) => p.isBot && p.team !== ghost.team);
+  // A melee attacker: ninja hits are only trusted from its own projectiles.
+  Object.assign(enemy, { char_class: 'draven', x: ghost.x + 20, y: ghost.y, flip: true, _posHistory: [] });
+  const before = ghost.health;
+  const result = h.room.handleHit(enemy.participantId, { attacker: enemy.name, target: ghost.name, attackType: 'basic', instanceId: 'g' }, { server: true });
+  assert.equal(result?.accepted, true);
+  assert.ok(ghost.health < before, 'the ghost takes damage');
+
+  const late = h.socket('late', { ...h.friends[0] });
+  assert.equal((await h.join(late)).ok, true);
+  assert.equal(h.room.players.get(late.id), ghost, 'joining takes over the ghost');
+  assert.equal(ghost.connected, true);
+  assert.ok(ghost.health < before, 'damage taken as a ghost is kept');
+});
+
 test('a socket cannot enter a match by claiming a bot name', async (t) => {
   const h = await setup(t);
   t.mock.method(console, 'error', () => {});

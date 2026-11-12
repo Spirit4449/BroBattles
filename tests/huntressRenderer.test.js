@@ -14,6 +14,7 @@ const attackCode=babel.transformSync(fs.readFileSync(require.resolve('../src/cli
 }).code;
 const attackApi={};
 const playerAudio={};
+const playedAnimations=[];
 vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/playerAudio.js'),'utf8'),{
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code,{exports:playerAudio});
@@ -22,7 +23,8 @@ vm.runInNewContext(attackCode,{exports:attackApi,require:name=>name.includes('pr
   name.includes('playerAudio')?playerAudio:
   name.includes('runtimeId')?{createRuntimeId:()=> 'aim'}:
   name.includes('flipLock')?{lockPlayerFlip:()=>()=>{}}:
-  name.includes('animationState')?{playSpriteAnimation(){}}:{},
+  name.includes('aimPoses')?require('../src/client/game/characters/huntress/aimPoses'):
+  name.includes('animationState')?{playSpriteAnimation:(options)=>playedAnimations.push(options)}:{},
   Phaser:{Physics:{Arcade:{Image:class{}}}}});
 const code=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/huntress/network.js'),'utf8'),{
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
@@ -296,4 +298,20 @@ test('isolated showcase arrows stay compact, follow embedded targets, expire and
   f.tick(600);assert.equal(arrow.active,false);
   f.api.resetHuntressNetwork();
   assert.equal(f.scene.events.listenerCount('update'),0);
+});
+
+test('shots play the drawn pose nearest their aim, mirrored for either facing',()=>{
+  const {DIRECTIONS,huntressAimVariant}=require('../src/client/game/characters/huntress/aimPoses');
+  assert.equal(huntressAimVariant(0),null,'a level shot plays the base clip');
+  assert.equal(huntressAimVariant(-Math.PI/2),'high','screen angles rise toward negative y');
+  assert.equal(huntressAimVariant(Math.PI+0.55),'up','a shot to the left picks the same pose');
+  assert.equal(huntressAimVariant(0.5),'down');
+  assert.equal(huntressAimVariant(Math.PI/2),'low');
+  assert.equal(huntressAimVariant(undefined),null);
+  // Every listed pose is drawn in the installed atlas, as a full six-frame shot.
+  const atlas=new Set(require('../public/assets/huntress/animations.json').frames.map(f=>f.filename));
+  for(const {frame} of DIRECTIONS) for(let i=0;i<6;i++) assert.ok(atlas.has(`${frame}${String(i).padStart(2,'0')}`),`${frame} frame ${i}`);
+  playedAnimations.length=0;
+  attackApi.performHuntressArrowSpread({scene:{time:{delayedCall(){}}},player:{flipX:false}},{angle:-1,speedScale:1});
+  assert.equal(playedAnimations.at(-1).variant,'high');
 });

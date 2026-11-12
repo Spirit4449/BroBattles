@@ -53,9 +53,11 @@ import { createRemoteMovementAudio } from "../audio/remoteMovementAudio";
 import { DUCK_HEIGHT_RATIO } from "../../../shared/physics/ducking.js";
 import { INVISIBLE_ALPHA, invisibleAttackAlpha } from "../powerups/invisibilityReveal.js";
 
+const ENEMY_RED_OVERLAY_ALPHA = 0.1; // experiment: enemy body red filter strength
+
 const OP_PLAYER_NAME_OFFSET_Y = 42;
 // A fighter still loading during the pregame stands at its spawn as a ghost.
-const LOADING_GHOST_ALPHA = 0.4;
+const LOADING_GHOST_ALPHA = 0.6;
 
 export default class RemotePlayer {
   constructor(
@@ -114,7 +116,10 @@ export default class RemotePlayer {
     this.opponent._bbSkinId = this.skinId;
     this.opponent._bbSkinTextureKey = textureKey;
     this.opponent._bbTeamColor = ["teammate", "ally", true].includes(this.team) ? TEAM_GREEN : TEAM_RED;
-    applyTeamVisual(this.opponent, this.opponent);
+    // Experiment: enemies get a slight red body filter (Canvas frame recolor).
+    const isEnemy = this.opponent._bbTeamColor === TEAM_RED;
+    applyTeamVisual(this.opponent, this.opponent, isEnemy, isEnemy ? "body" : null);
+    if (isEnemy) this._createEnemyRedOverlay();
     this.opponent.username = this.username; // Attach username for collision detection
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
     this.opponent.setVisible(false);
@@ -295,6 +300,36 @@ export default class RemotePlayer {
       }
     };
     socket.on("player:special", this.specialListener);
+  }
+
+  // Experiment: WebGL path for the enemy red filter. A tint multiplies, so it
+  // can't redden black pixels; a red-filled copy at low alpha can. Canvas uses
+  // the frame recolor in applyTeamVisual instead.
+  _createEnemyRedOverlay() {
+    if (this.scene.game.renderer?.type !== Phaser.WEBGL) return;
+    const o = this.scene.add.sprite(0, 0, this.opponent.texture.key);
+    o.setTintFill(0xff2020);
+    o.setVisible(false);
+    this._enemyRedOverlay = o;
+    this._syncEnemyRedOverlay = () => {
+      const b = this.opponent;
+      if (!b || !b.scene || !o.scene) return;
+      const show = b.visible && b.alpha > 0;
+      o.setVisible(show);
+      if (!show) return;
+      if (o.texture !== b.texture || o.frame !== b.frame) o.setTexture(b.texture.key, b.frame.name);
+      o.setPosition(b.x, b.y).setOrigin(b.originX, b.originY).setScale(b.scaleX, b.scaleY)
+        .setFlip(b.flipX, b.flipY).setRotation(b.rotation).setScrollFactor(b.scrollFactorX, b.scrollFactorY)
+        .setAlpha(b.alpha * ENEMY_RED_OVERLAY_ALPHA).setDepth(b.depth + 0.001);
+    };
+    this.scene.events.on("prerender", this._syncEnemyRedOverlay);
+  }
+
+  _destroyEnemyRedOverlay() {
+    if (this._syncEnemyRedOverlay) this.scene?.events?.off("prerender", this._syncEnemyRedOverlay);
+    this._enemyRedOverlay?.destroy();
+    this._enemyRedOverlay = null;
+    this._syncEnemyRedOverlay = null;
   }
 
   _onSceneUpdate() {
@@ -683,7 +718,7 @@ export default class RemotePlayer {
 
   /**
    * Before FIGHT, show a fighter that has not finished loading as a faded
-   * ghost at its spawn instead of hiding it. Once live, unloaded stays hidden.
+   * ghost at its spawn instead of hiding it. It stays a ghost after FIGHT too.
    */
   setLoadingGhost(active) {
     this._loadingGhost = active === true;
@@ -698,8 +733,9 @@ export default class RemotePlayer {
       !!this.opponent?.active &&
       !this._corpseRemoved &&
       this._spawnPresented;
-    const ghost = visible && !this.presenceLoaded && this._loadingGhost;
+    const ghost = visible && !this.presenceLoaded;
     const shouldRender = visible && this.presenceLoaded;
+    const uiAlpha = ghost ? LOADING_GHOST_ALPHA : 1;
     if (this.opponent) {
       this.opponent.setVisible(shouldRender || ghost);
       this.opponent.setAlpha(
@@ -712,7 +748,7 @@ export default class RemotePlayer {
       this.opPlayerName.setVisible(
         (shouldRender || ghost) && !this._worldUiHidden && !this._powerupInvisible,
       );
-      this.opPlayerName.setAlpha(ghost ? LOADING_GHOST_ALPHA : 1);
+      this.opPlayerName.setAlpha(uiAlpha);
     }
     this.spectateIcon?.setVisible(
       this._isSpectated &&
@@ -723,15 +759,15 @@ export default class RemotePlayer {
     );
     if (this.opHealthText) {
       this.opHealthText.setVisible(
-        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+        (shouldRender || ghost) && !this._worldUiHidden && !this._powerupInvisible,
       );
-      this.opHealthText.setAlpha(1);
+      this.opHealthText.setAlpha(uiAlpha);
     }
     if (this.opHealthBar) {
       this.opHealthBar.setVisible(
-        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+        (shouldRender || ghost) && !this._worldUiHidden && !this._powerupInvisible,
       );
-      this.opHealthBar.setAlpha(1);
+      this.opHealthBar.setAlpha(uiAlpha);
     }
     const showDuckShield =
       shouldRender &&
@@ -751,15 +787,15 @@ export default class RemotePlayer {
     }
     if (this.opSuperBarBack) {
       this.opSuperBarBack.setVisible(
-        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+        (shouldRender || ghost) && !this._worldUiHidden && !this._powerupInvisible,
       );
-      this.opSuperBarBack.setAlpha(1);
+      this.opSuperBarBack.setAlpha(uiAlpha);
     }
     if (this.opSuperBar) {
       this.opSuperBar.setVisible(
-        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+        (shouldRender || ghost) && !this._worldUiHidden && !this._powerupInvisible,
       );
-      this.opSuperBar.setAlpha(1);
+      this.opSuperBar.setAlpha(uiAlpha);
     }
   }
 
@@ -1075,6 +1111,7 @@ export default class RemotePlayer {
       socket.off("health-update", this.healthUpdateListener);
       this.healthUpdateListener = null;
     }
+    this._destroyEnemyRedOverlay();
     if (this.superUpdateListener) {
       socket.off("super-update", this.superUpdateListener);
       this.superUpdateListener = null;

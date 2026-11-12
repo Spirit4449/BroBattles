@@ -72,6 +72,8 @@ describe("HUD preparation and match cues", () => {
       require: name => name.includes('uiSounds') ? {
         playSound: key => calls.push({ key, time: now, display: countdown.textContent }),
         preloadSound: key => preloaded.push(key),
+      } : name.includes('countdownSfx') ? {
+        playCountdownThump() {}, playCountdownRiser() {}, playFightBoom() {},
       } : {},
       window: { addEventListener() {} },
       document: { getElementById: id => id === 'countdown-display' ? countdown : null },

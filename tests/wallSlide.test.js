@@ -55,7 +55,7 @@ test('no attachment away from walls or during ability locks; jumping suppression
   assert.equal(rising.player._jumpLaunch, undefined);
 });
 
-function contact({ side = 'right', upPress = false, spacePress = false, away = false, gap = 8, solid = true } = {}) {
+function contact({ side = 'right', upPress = false, spacePress = false, away = false, gap = tuning.wallSlideSnapDistance, solid = true } = {}) {
   const player = { body: { x: 100, y: 100, width: 30, height: 50,
     touching: {}, blocked: {}, velocity: { x: side === 'right' ? 200 : -200, y: -180 } } };
   const context = { player, scene: { _mapObjects: [{ body: {
@@ -140,10 +140,11 @@ test('brief edge contact never drags; sustained contact attaches after 50 ms', (
   assert.equal(tick({ wallSide: 'left' }).result, false);
 });
 
-test('wall jumps require current proximity within 12 pixels, even after recent contact', () => {
+const REACH = tuning.wallSlideSnapDistance + tuning.wallJumpHorizontalGracePx;
+test('wall jumps require current proximity within snap + grace reach, even after recent contact', () => {
   for (const side of ['left', 'right']) {
-    assert.equal(contact({ side, gap: 12, spacePress: true }).result.effectiveWallSide, side);
-    for (const gap of [13, 24, 40]) {
+    assert.equal(contact({ side, gap: REACH, spacePress: true }).result.effectiveWallSide, side);
+    for (const gap of [REACH + 1, 24, 40]) {
       const state = contact({ side, gap, spacePress: true });
       state.player._lastWallSide = side;
       state.player._lastWallContactTs = Date.now();

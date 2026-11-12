@@ -7,6 +7,7 @@ import { playSpriteAnimation } from "../shared/animationState";
 import { applyScaleLockedRageFx } from "../shared/powerupFx";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { withShotView } from "../shared/shotPrediction";
+import { huntressAimVariant } from "./aimPoses";
 
 const NAME = "huntress";
 
@@ -53,6 +54,7 @@ class Huntress extends CharacterEntityBase {
         logical: "throw",
         fallback: "idle",
         id: data.id ?? null,
+        variant: huntressAimVariant(data.angle),
       });
       return true;
     }

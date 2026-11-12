@@ -19,7 +19,7 @@
   "wallSlideBrakeFallSpeed": 75,
   "wallSlideRiseDrag": 1400,
   "wallSlideFallAccel": 450,
-  "wallSlideSnapDistance": 10,
+  "wallSlideSnapDistance": 4,
   "wallSlideAttachDelayMs": 50,
   "wallKickLockMs": 160,
   "wallKickFull": 360,

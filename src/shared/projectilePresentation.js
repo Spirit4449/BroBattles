@@ -38,6 +38,12 @@ function materialPixel(value, color, style, x = 0, width = 1) {
     const target = color === TEAM_RED ? [230,105,98] : [95,205,145];
     return [r,g,b].reduce((v,c,i)=>(v<<8)|Math.round(c*0.82+target[i]*0.18),0);
   }
+  if (style === 'body' && color === TEAM_RED) {
+    // Experiment: slight red filter on enemy bodies.
+    // Blend toward red so dark/neutral pixels shift too, not just bright ones.
+    const k = 0.18;
+    return (Math.round(r*(1-k)+255*k) << 16) | (Math.round(g*(1-k)+40*k) << 8) | Math.round(b*(1-k)+40*k);
+  }
   return value;
 }
 // Kept for effects that deliberately retain their existing palette.

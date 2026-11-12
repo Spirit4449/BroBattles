@@ -3,19 +3,11 @@
 // damage) is untouched. `throw` in animation-settings.json describes the baked
 // poses; sheets without it keep the single forward throw and show the star at once.
 const settings = require('../../../../../public/assets/ninja/animation-settings.json');
-
-// Aim above level in degrees, whichever way the throw faces.
-function aimElevation(angle) {
-  return (Math.atan2(-Math.sin(angle), Math.abs(Math.cos(angle))) * 180) / Math.PI;
-}
+const { aimElevation, nearestAimPose } = require('../shared/aimPose');
 
 // The baked pose whose wrist points closest to `angle`.
 function throwPose(angle, config = settings.throw) {
-  const poses = config?.directions;
-  if (!poses?.length || !Number.isFinite(Number(angle))) return null;
-  const elevation = aimElevation(Number(angle));
-  return poses.reduce((best, pose) =>
-    (Math.abs(pose.elevation - elevation) < Math.abs(best.elevation - elevation) ? pose : best));
+  return nearestAimPose(angle, config?.directions);
 }
 
 // Starts a directional throw on `sprite`. Returns the clip variant to play (see

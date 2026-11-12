@@ -1,3 +1,4 @@
+const { isPlaced } = require("../../targetable.js");
 const { exposeDamageHitbox } = require('../damageHitboxes.js');
 const { chargeSuperForHit } = require("../superCharge.js");
 const effectManager = require("../effects/effectManager.js");
@@ -127,7 +128,7 @@ function tick(room, caster, now) {
 
   for (const target of room.players.values()) {
     if (!target || target.name === caster.name) continue;
-    if (!target.isAlive || target.loaded !== true)
+    if (!target.isAlive || !isPlaced(target))
       continue;
     if (caster.team && target.team && caster.team === target.team) continue;
 

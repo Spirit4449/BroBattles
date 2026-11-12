@@ -23,12 +23,15 @@ export function wireWinStreakBenefits(badge, panel) {
       panel.hidden = false;
       void panel.offsetWidth;
     }
+    const wasOpen = panel.classList.contains('is-open');
     panel.classList.toggle('is-open', open);
+    panel.classList.toggle('is-leaving', !open && wasOpen);
     panel.inert = !open;
     panel.setAttribute('aria-hidden', String(!open));
     badge.setAttribute('aria-expanded', String(open));
   };
   setOpen(false);
+  panel.addEventListener('animationend', () => panel.classList.remove('is-leaving'));
   badge.addEventListener('click', () => setOpen(!open));
   badge.parentElement.addEventListener('focusout', event => {
     if (!badge.parentElement.contains(event.relatedTarget)) setOpen(false);

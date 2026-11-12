@@ -1016,12 +1016,12 @@ export function createPlayer(
   combatMouseController = createCombatMouseController({
     getPreferences: getSettings,
     scene: sceneParam,
-    canPrepare: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
+    canPrepare: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN && !window.__BB_GAME_NOTICE_OPEN &&
       !mobileControlsController?.isEnabled?.() && sceneParam.sys.isActive(),
-    canCapture: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
+    canCapture: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN && !window.__BB_GAME_NOTICE_OPEN &&
       !mobileControlsController?.isEnabled?.() &&
       sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
-    canPlay: () => !!player && !dead && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
+    canPlay: () => !!player && !dead && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN && !window.__BB_GAME_NOTICE_OPEN &&
       !mobileControlsController?.isEnabled?.() &&
       sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
     onRelease: () => {

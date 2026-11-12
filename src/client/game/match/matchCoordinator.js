@@ -226,11 +226,9 @@ export function createMatchCoordinator(config) {
         pd.team,
         idx,
       );
-      // Before FIGHT the server spawn is authoritative; once live, only a
-      // loaded player's position is.
-      if (!getIsLiveGame() || pd.loaded === true) {
-        _applyAuthoritativeRemotePosition(op, pd);
-      }
+      // The server position is authoritative, also for a loading ghost
+      // (skipped when the server has none yet).
+      _applyAuthoritativeRemotePosition(op, pd);
       op.finalizeSpawnPresentation?.();
       op.updateUIPosition?.();
     } catch (_) {}

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Huntress attack: 6 frames, matching attack00-05 in animations.json (played at
-// 24 fps for the basic shot; the special replays them as 00 01 02 02 03 04 05).
+// 24 fps for the basic shot; the special replays them as 00 01 02 02 03 04 05),
+// plus the same six aimed high, up, down and low (attackHigh00-05, ...).
 //   00 reach back over the shoulder for an arrow  03 full draw: string to the chin
 //   01 lift it overhead                            04 release: hand flies back
 //   02 nock it across the levelled bow             05 recover, bow coming down
@@ -23,7 +24,7 @@ const OUT_DIR = path.join(ROOT, 'output/huntress-pixel/attack');
 // Frames are exported square with the body canvas centred, the convention the
 // sheet packer reads (it centres a larger canvas over the 64px art). The margin
 // leaves room for the nocked arrow past the bow and the arrow lifted overhead.
-const MARGIN = 8;
+const MARGIN = 16; // room for the bow tipped to a high or low shot
 const SIDE = SIZE + MARGIN * 2;
 const PREVIEW_SCALE = 6;
 
@@ -59,24 +60,65 @@ const DARKER = { l: 'm', m: 'g', g: 'G', o: 'b', b: 'B' };
 // archer. arm: drawing arm joints in rest-pose px (they move with the body).
 // nock: where the arrow's back end sits; 'string' = on the resting string, a
 // number = drawn back to that x. Arrows ride the bow hand's height.
+// turn: how much of an angled shot's aim the frame takes (the bow swings onto
+// the aim while she nocks, holds it through the release, and eases off).
+// follow: how far the drawing arm swings with the bow (1 while on the string).
 const KEYS = [
-  { lean: 0, aim: -8, flex: 0, arm: { elbow: [18, 23], hand: [24, 14] } },
-  { lean: 0, aim: -14, flex: 0, arm: { elbow: [21, 19], hand: [30, 10] },
+  { lean: 0, aim: -8, flex: 0, turn: 0.35, arm: { elbow: [18, 23], hand: [24, 14] } },
+  { lean: 0, aim: -14, flex: 0, turn: 0.6, arm: { elbow: [21, 19], hand: [30, 10] },
     arrow: { nock: [30, 9], toward: [8, 5] } },
-  { lean: 0, aim: -20, flex: 0.5, arm: { elbow: [22, 27], hand: [45, 33] }, nock: 'string' },
-  { lean: -1, aim: -20, flex: 1.5, arm: { elbow: [16, 29], hand: [38, 32] }, nock: 38 },
-  { lean: 0, aim: -20, flex: 0, arm: { elbow: [18, 27], hand: [11, 25], open: true } },
-  { lean: 0, aim: -10, flex: 0, restArm: { shoulder: 22, elbow: 12 } },
+  { lean: 0, aim: -20, flex: 0.5, turn: 1, follow: 1, arm: { elbow: [22, 27], hand: [45, 33] }, nock: 'string' },
+  { lean: -1, aim: -20, flex: 1.5, turn: 1, follow: 1, arm: { elbow: [16, 29], hand: [38, 32] }, nock: 38 },
+  { lean: 0, aim: -20, flex: 0, turn: 1, follow: 0.4, arm: { elbow: [18, 27], hand: [11, 25], open: true } },
+  { lean: 0, aim: -10, flex: 0, turn: 0.6, restArm: { shoulder: 22, elbow: 12 } },
 ];
 
-function attackPose(key) {
-  const body = translate(key.lean, STAND_LIFT);
-  const frontArm = mul(body, rotateAbout(JOINTS.frontShoulder, key.aim));
-  const [gx, gy] = apply(frontArm, JOINTS.grip);
+// Angled shots, like the ninja's directional throws. The level shot is the six
+// keys above; each other direction swings the whole draw (bow arm, bow, string,
+// arrow and the drawing hand) about the bow shoulder, after she bends at the
+// waist for part of the aim, as an archer does: leaning back for a high shot,
+// over for a low one. Directions and frame names come from the game's pose
+// table so the art and the picker agree.
+const { DIRECTIONS } = require('../../../src/client/game/characters/huntress/aimPoses.js');
+const DRAW_LENGTH = 17; // px from the anchor at her chin to the bow grip at full draw
+const ANCHOR_CLEAR = 6; // px the anchor moves forward at a straight-up aim
+const FOREARM_TIP = 0.45; // how much shorter the drawing forearm looks at a steep aim
+const WAIST_SHARE = 0.4; // share of the elevation taken by the waist; the arms take the rest
+const SKIRT_SHARE = 0.4; // the skirt follows the waist this much, so the hem stays over the legs
+
+function attackPose(key, direction = DIRECTIONS.find((d) => !d.key)) {
+  // The level draw is laid out upright, as before; an angled shot then bends the
+  // body at the waist and swings the draw (bow arm, bow, string, arrow, drawing
+  // hand) about the bow shoulder. Screen rotation is clockwise-positive, so
+  // aiming up is a negative turn.
+  const aimTurn = -direction.elevation * key.turn;
+  const waist = aimTurn * WAIST_SHARE;
+  const upright = translate(key.lean, STAND_LIFT);
+  const hip = apply(upright, JOINTS.hip);
+  const bend = rotateAbout(hip, waist);
+  const body = mul(bend, upright);
+  const skirt = mul(rotateAbout(hip, waist * SKIRT_SHARE), upright);
+  const level = mul(upright, rotateAbout(JOINTS.frontShoulder, key.aim));
+  const [gx, gy] = apply(level, JOINTS.grip);
   const bowShift = [Math.round(gx - JOINTS.grip[0]), Math.round(gy - JOINTS.grip[1])];
+  // The anchor (the nock at full draw, by her chin) rides the waist; the bow sits
+  // DRAW_LENGTH out from it along the aim, and the bow arm turns at the shoulder
+  // to reach it. A level shot lands exactly on the level layout.
+  // Aiming up, the anchor slides forward off her face so the arrow clears it.
+  const rise = Math.max(0, Math.sin((-aimTurn * Math.PI) / 180));
+  const anchor = apply(bend, [gx - DRAW_LENGTH + ANCHOR_CLEAR * rise, gy + 2 * rise]);
+  const aimDir = [Math.cos((aimTurn * Math.PI) / 180), Math.sin((aimTurn * Math.PI) / 180)];
+  const grip = [anchor[0] + aimDir[0] * DRAW_LENGTH, anchor[1] + aimDir[1] * DRAW_LENGTH];
+  const draw = mul(rotateAbout(grip, aimTurn), translate(grip[0] - gx, grip[1] - gy));
+  const undraw = mul(translate(gx - grip[0], gy - grip[1]), rotateAbout(grip, -aimTurn));
+  const shoulderAt = apply(body, JOINTS.frontShoulder);
+  const armGrip = apply(mul(bend, level), JOINTS.grip);
+  const heading = (v) => Math.atan2(v[1] - shoulderAt[1], v[0] - shoulderAt[0]) * 180 / Math.PI;
+  const bowArm = mul(rotateAbout(shoulderAt, heading(grip) - heading(armGrip)), mul(bend, level));
   const half = (BOW_BOTTOM[1] - BOW_TOP[1]) / 2;
   const drawn = typeof key.nock === 'number';
-  const bowWarp = (x, y) => {
+  const bowWarp = (ox, oy) => {
+    const [x, y] = apply(undraw, [ox, oy]);
     const rx = x - bowShift[0]; const ry = y - bowShift[1];
     const reach = Math.min(1, Math.abs(ry - JOINTS.grip[1]) / half);
     const sx = rx + key.flex * reach * reach;
@@ -85,15 +127,15 @@ function attackPose(key) {
   };
   const carried = (joint) => {
     const [x, y] = apply(body, joint);
-    return translate(x - joint[0], y - joint[1]);
+    return translate(Math.round(x - joint[0]), Math.round(y - joint[1]));
   };
   const pose = {
     backLeg: { hidden: true }, frontThigh: { hidden: true }, frontBoot: { hidden: true },
     torso: { m: body },
-    skirt: { m: body },
+    skirt: { m: skirt },
     quiver: { m: body },
     head: { m: carried(JOINTS.neck) }, hairBack: { m: carried(JOINTS.neck) },
-    frontArm: { m: frontArm }, bow: { warp: bowWarp }, bowHand: { m: translate(...bowShift) },
+    frontArm: { m: bowArm }, bow: { warp: bowWarp }, bowHand: { m: mul(draw, translate(...bowShift)) },
   };
   if (key.restArm) {
     const upper = mul(body, rotateAbout(JOINTS.backShoulder, key.restArm.shoulder));
@@ -102,16 +144,39 @@ function attackPose(key) {
   } else {
     Object.assign(pose, { backUpper: { hidden: true }, backFore: { hidden: true }, backHand: { hidden: true } });
   }
-  const tip = (p) => [p[0] + bowShift[0] - key.flex, p[1] + bowShift[1]];
-  const at = (p) => apply(body, p).map(Math.round);
+  // Level-draw points (upright, rest-canvas px) to where they are drawn.
+  const drawnAt = (p) => apply(draw, p).map(Math.round);
+  const tip = (p) => apply(draw, [p[0] + bowShift[0] - key.flex, p[1] + bowShift[1]]);
+  const at = (p) => apply(upright, p).map(Math.round);
+  const onBody = (p) => apply(bend, p).map(Math.round);
   const arrowY = Math.round(gy) - 1;
-  const nock = key.nock === 'string' ? [STRING.x0 + 1 + bowShift[0], arrowY]
+  const levelNock = key.nock === 'string' ? [STRING.x0 + 1 + bowShift[0], arrowY]
     : drawn ? [at([key.nock, 0])[0], arrowY] : null;
+  // A drawing hand on the string swings with the draw; `follow` below 1 lets a
+  // released hand lag between the body and the draw.
+  const follow = key.follow ?? 0;
+  const armAt = (p) => {
+    const [bx, by] = apply(bend, at(p)); const [dx, dy] = apply(draw, at(p));
+    return [Math.round(bx + (dx - bx) * follow), Math.round(by + (dy - by) * follow)];
+  };
+  // On the string the forearm lies along the arrow; tipped up or down it is
+  // drawn shorter, as the elbow swings out of the picture plane.
+  const drawArm = (arm) => {
+    const hand = armAt(arm.hand);
+    if (follow < 1) return { ...arm, elbow: armAt(arm.elbow), hand };
+    const [lx, ly] = [at(arm.hand)[0] - at(arm.elbow)[0], at(arm.hand)[1] - at(arm.elbow)[1]];
+    const fore = Math.hypot(lx, ly) * (1 - FOREARM_TIP * Math.abs(Math.sin((aimTurn * Math.PI) / 180)));
+    const back = apply(draw, [at(arm.hand)[0] - lx, at(arm.hand)[1] - ly]);
+    const unit = Math.hypot(back[0] - hand[0], back[1] - hand[1]) || 1;
+    return { ...arm, hand, elbow: [0, 1].map((i) => Math.round(hand[i] + ((back[i] - hand[i]) / unit) * fore)) };
+  };
   return {
-    pose, nock, drawn, bowTop: tip(BOW_TOP), bowBottom: tip(BOW_BOTTOM),
+    pose, drawn, bowTop: tip(BOW_TOP), bowBottom: tip(BOW_BOTTOM),
+    nock: levelNock && drawnAt(levelNock),
+    along: levelNock && apply(draw, [levelNock[0] + 40, levelNock[1]]),
     shoulder: apply(body, JOINTS.backShoulder),
-    arm: key.arm && { ...key.arm, elbow: at(key.arm.elbow), hand: at(key.arm.hand) },
-    heldArrow: key.arrow && { nock: at(key.arrow.nock), toward: at(key.arrow.toward) },
+    arm: key.arm && drawArm(key.arm),
+    heldArrow: key.arrow && { nock: onBody(at(key.arrow.nock)), toward: onBody(at(key.arrow.toward)) },
   };
 }
 
@@ -198,8 +263,8 @@ function drawArm(g, shoulder, { elbow, hand, open }) {
 }
 
 // ------------------------------------------------------------------------------
-function renderAttack(key) {
-  const { pose, nock, drawn, bowTop, bowBottom, shoulder, arm, heldArrow } = attackPose(key);
+function renderAttack(key, direction) {
+  const { pose, nock, along, drawn, bowTop, bowBottom, shoulder, arm, heldArrow } = attackPose(key, direction);
   const body = renderPose(pose);
   const px = Buffer.alloc(SIDE * SIDE * 4);
   for (let y = 0; y < SIZE; y++) body.copy(px, cell(0, y) * 4, y * SIZE * 4, (y + 1) * SIZE * 4);
@@ -227,19 +292,21 @@ function renderAttack(key) {
     line(front, nock, bowBottom.map(Math.round), 'b');
   }
   if (heldArrow) arrow(front, heldArrow.nock, heldArrow.toward);
-  if (nock) arrow(front, nock, [nock[0] + 1, nock[1]]);
+  if (nock) arrow(front, nock, along);
   paint(front, false);
   return px;
 }
 
-const FRAMES = KEYS.map(renderAttack);
+// Frames per direction, keyed by atlas frame prefix (attack, attackHigh, ...).
+const SETS = Object.fromEntries(DIRECTIONS.map((d) => [d.frame, KEYS.map((key) => renderAttack(key, d))]));
+const FRAMES = SETS.attack;
 const raw = (data) => sharp(data, { raw: { width: SIDE, height: SIDE, channels: 4 } });
 
-async function gif(name, order, fps) {
+async function gif(name, order, fps, frames = FRAMES) {
   const dir = path.join(OUT_DIR, `.${name}`);
   fs.mkdirSync(dir, { recursive: true });
   for (const [n, i] of order.entries()) {
-    await raw(FRAMES[i]).resize(SIDE * PREVIEW_SCALE, SIDE * PREVIEW_SCALE, { kernel: 'nearest' })
+    await raw(frames[i]).resize(SIDE * PREVIEW_SCALE, SIDE * PREVIEW_SCALE, { kernel: 'nearest' })
       .flatten({ background: '#ffffff' }).png().toFile(path.join(dir, `${String(n).padStart(2, '0')}.png`));
   }
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(dir, '%02d.png'),
@@ -249,13 +316,17 @@ async function gif(name, order, fps) {
 
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
+  // One strip row per direction, high at the top.
   const crops = [];
-  for (const [i, px] of FRAMES.entries()) {
-    const crop = await raw(px).png().toBuffer();
-    await sharp(crop).toFile(path.join(OUT_DIR, `attack${String(i).padStart(2, '0')}.png`));
-    crops.push({ input: crop, left: i * SIDE, top: 0 });
+  for (const [row, [prefix, frames]] of Object.entries(SETS).entries()) {
+    for (const [i, px] of frames.entries()) {
+      const crop = await raw(px).png().toBuffer();
+      await sharp(crop).toFile(path.join(OUT_DIR, `${prefix}${String(i).padStart(2, '0')}.png`));
+      crops.push({ input: crop, left: i * SIDE, top: row * SIDE });
+    }
+    if (prefix !== 'attack') await gif(`${prefix}-preview`, [0, 1, 2, 3, 4, 5, 5, 5, 5, 5], 24, frames);
   }
-  await sharp({ create: { width: SIDE * FRAMES.length, height: SIDE, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+  await sharp({ create: { width: SIDE * KEYS.length, height: SIDE * DIRECTIONS.length, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite(crops).png().toFile(path.join(OUT_DIR, 'attack-strip.png'));
   // Basic shot at game speed, held on the last frame like the idle blend, plus the special's timing.
   await gif('attack-preview', [0, 1, 2, 3, 4, 5, 5, 5, 5, 5], 24);
@@ -265,4 +336,4 @@ async function main() {
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exitCode = 1; });
 
-module.exports = { FRAMES, KEYS };
+module.exports = { FRAMES, SETS, KEYS };

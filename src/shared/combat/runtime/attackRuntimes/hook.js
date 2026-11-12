@@ -1,3 +1,4 @@
+const { isPlaced } = require('../../targetable.js');
 const { exposeDamageHitbox } = require('../damageHitboxes.js');
 const { getResolvedCharacterSpecialConfig } = require("../../../characters/characterTuning");
 const HOOK = getResolvedCharacterSpecialConfig("gloop", "hook");
@@ -107,7 +108,7 @@ function tickRuntimeControlEffects(room, now = Date.now()) {
     if (!pull) continue;
     if (
       !target.isAlive ||
-      target.loaded !== true
+      !isPlaced(target)
     ) {
       delete target._gloopPullState;
       continue;

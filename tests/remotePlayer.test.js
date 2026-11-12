@@ -146,16 +146,15 @@ describe("Loading presence", () => {
     return wrapper;
   }
 
-  test('before FIGHT an unloaded fighter is a faded ghost, then solid once loaded', () => {
+  test('an unloaded fighter is a faded ghost with its UI, then solid once loaded', () => {
     const fighter = remoteFighter();
-    fighter.setPresenceState(true, false);
-    assert.equal(fighter.opponent.visible, false, 'hidden without the pregame ghost');
-
     fighter.setLoadingGhost(true);
+    fighter.setPresenceState(true, false);
     assert.equal(fighter.opponent.visible, true);
     assert.ok(fighter.opponent.alpha < 1, 'drawn faded');
     assert.equal(fighter.opPlayerName.visible, true, 'name shows who is loading');
-    assert.equal(fighter.opHealthBar.visible, false, 'no combat UI on a ghost');
+    assert.equal(fighter.opHealthBar.visible, true, 'health bar shows on a ghost');
+    assert.ok(fighter.opHealthBar.alpha < 1, 'ghost UI is faded');
 
     fighter.setPresenceState(true, true);
     assert.equal(fighter.opponent.visible, true);
@@ -163,12 +162,13 @@ describe("Loading presence", () => {
     assert.equal(fighter.opHealthBar.visible, true);
   });
 
-  test('once live, an unloaded fighter stays hidden', () => {
+  test('once live, an unloaded fighter stays a ghost', () => {
     const fighter = remoteFighter();
     fighter.setLoadingGhost(true);
     fighter.setPresenceState(true, false);
     fighter.setLoadingGhost(false);
-    assert.equal(fighter.opponent.visible, false);
+    assert.equal(fighter.opponent.visible, true);
+    assert.ok(fighter.opponent.alpha < 1);
   });
 });
 

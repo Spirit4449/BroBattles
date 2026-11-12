@@ -1,3 +1,4 @@
+const { isPlaced } = require('../targetable.js');
 const { combatNow } = require("./clock");
 const { shotBlockers } = require('./attackRuntimes/geometry.js');
 const { exposeDamageHitbox } = require('./damageHitboxes.js');
@@ -43,7 +44,7 @@ function request(room,p,data={},special=false){
 function targets(room,p,viewRewindMs=0,now=combatNow(room)){
   const list=[];
   for(const t of room.players.values()){
-    if(t===p||t.team===p.team||!t.isAlive||!t.loaded)continue;
+    if(t===p||t.team===p.team||!t.isAlive||!isPlaced(t))continue;
     const at=poseAt(t,viewRewindMs,now);
     const body=characterBody(t.char_class,t.flip),x=at.x+(at._bodyCenterOffsetX??body.offsetX),y=at.y+(at._bodyCenterOffsetY??body.offsetY),w=at._bodyHalfWidth??body.halfWidth,h=at._bodyHalfHeight??body.halfHeight;
     list.push({name:t.name,movementReportAgeMs:!t.isBot&&t._lastPositionPacketAt>0?Math.max(0,combatNow(room)-t._lastPositionPacketAt):null,bounds:{left:x-w,right:x+w,top:y-h,bottom:y+h}});

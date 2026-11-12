@@ -1,3 +1,4 @@
+const { isPlaced } = require('../targetable.js');
 const { combatNow } = require("./clock");
 const { shotTerrain } = require('./attackRuntimes/geometry.js');
 const { exposeDamageHitbox } = require('./damageHitboxes.js');
@@ -82,7 +83,7 @@ function packetFor(attack) {
 function targetList(room, owner, viewRewindMs = 0, now = combatNow(room)) {
   const targets = [];
   for (const p of room.players.values()) {
-    if (!p.isAlive || !p.loaded || p === owner || p.team === owner.team) continue;
+    if (!p.isAlive || !isPlaced(p) || p === owner || p.team === owner.team) continue;
     const body = characterBody(p.char_class, p.flip), at = poseAt(p, viewRewindMs, now);
     const x = at.x + (at._bodyCenterOffsetX ?? body.offsetX), y = at.y + (at._bodyCenterOffsetY ?? body.offsetY);
     const hw = at._bodyHalfWidth ?? body.halfWidth, hh = at._bodyHalfHeight ?? body.halfHeight;

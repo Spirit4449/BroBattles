@@ -22,7 +22,10 @@ const INSTALL_DIR = path.join(ROOT, 'public/assets/huntress');
 const OUT_DIR = path.join(ROOT, 'output/huntress-pixel/sheet');
 
 // Code animations, by frame-name prefix in animations.json.
-const ANIMATIONS = { idle: require('./idle.cjs').FRAMES, ...require('./jump.cjs').FRAMES, attack: require('./attack.cjs').FRAMES, run: require('./run.cjs').FRAMES, die: require('./die.cjs').FRAMES };
+const ANIMATIONS = { idle: require('./idle.cjs').FRAMES, ...require('./jump.cjs').FRAMES, attack: require('./attack.cjs').FRAMES, run: require('./run.cjs').FRAMES, die: require('./die.cjs').FRAMES, ...require('./duck-slide.cjs').FRAMES };
+// Code-only animations with no legacy cell (the angled shots), packed in rows
+// added below the legacy grid.
+const EXTRA = Object.fromEntries(Object.entries(require('./attack.cjs').SETS).filter(([prefix]) => prefix !== 'attack'));
 
 // Square cell, centred on the hitbox: wide enough for the legacy dying pose, which
 // lies 78px out from the body centre once resized.
@@ -86,8 +89,17 @@ async function main() {
       spriteSourceSize: { x: 0, y: 0, w: CELL, h: CELL }, sourceSize: { w: CELL, h: CELL } });
   }
 
+  const extra = Object.entries(EXTRA).flatMap(([prefix, set]) => set.map((px, i) => [`${prefix}${String(i).padStart(2, '0')}`, px]));
+  for (const [n, [filename, px]] of extra.entries()) {
+    const col = n % cols; const row = rows + Math.floor(n / cols);
+    tiles.push({ input: await codeCell(px), left: col * CELL, top: row * CELL });
+    frames.push({ filename, rotated: false, trimmed: false, frame: { x: col * CELL, y: row * CELL, w: CELL, h: CELL },
+      spriteSourceSize: { x: 0, y: 0, w: CELL, h: CELL }, sourceSize: { w: CELL, h: CELL } });
+    fromCode.push(filename);
+  }
+
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const size = { w: cols * CELL, h: rows * CELL };
+  const size = { w: cols * CELL, h: (rows + Math.ceil(extra.length / cols)) * CELL };
   await sharp({ create: { width: size.w, height: size.h, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite(tiles).webp({ lossless: true }).toFile(path.join(OUT_DIR, 'spritesheet.webp'));
   fs.writeFileSync(path.join(OUT_DIR, 'animations.json'), JSON.stringify({ frames, meta: { ...atlas.meta, size } }));

@@ -680,20 +680,234 @@
         }
       }
       #battle-start-overlay .bs-count {
+        --heat: 0;
+        --count-hue: 205;
         position: absolute;
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
         z-index: 4;
-        font-size: clamp(28px, 6vw, 56px);
+        font-size: clamp(56px, 11vw, 132px);
         font-weight: 800;
+        line-height: 1;
         margin: 0;
         letter-spacing: 2px;
-        color: #d6ecff;
+        color: hsl(var(--count-hue) 100% 66%);
         font-family: "Press Start 2P", "Lato", sans-serif;
-        text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+        text-shadow:
+          0.05em 0 0 #10131c,
+          -0.05em 0 0 #10131c,
+          0 0.05em 0 #10131c,
+          0 -0.05em 0 #10131c,
+          0.05em 0.1em 0 #10131c,
+          0 0 0.4em hsl(var(--count-hue) 100% 55% / 0.75);
         opacity: 0;
         transition: opacity 200ms ease;
+        pointer-events: none;
+      }
+      /* Diamond shockwave and glow burst; pseudo-elements survive textContent. */
+      #battle-start-overlay .bs-count::before,
+      #battle-start-overlay .bs-count::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 1.3em;
+        height: 1.3em;
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* Stepped pixel diamond, drawn as a mask so it takes the number's colour. */
+      #battle-start-overlay .bs-count::before {
+        width: 1.7em;
+        height: 1.7em;
+        background: currentColor;
+        -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2017%2017%22%20shape-rendering%3D%22crispEdges%22%3E%3Crect%20x%3D%228%22%20y%3D%220%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%228%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%229%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%229%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2210%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2210%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2211%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2211%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2212%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2212%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2213%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2213%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2214%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2214%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2215%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%220%22%20y%3D%228%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%228%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2215%22%20y%3D%228%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2216%22%20y%3D%228%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%229%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%229%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2214%22%20y%3D%229%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2215%22%20y%3D%229%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%2210%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%2210%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2213%22%20y%3D%2210%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2214%22%20y%3D%2210%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%2211%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%2211%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2212%22%20y%3D%2211%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2213%22%20y%3D%2211%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%2212%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%2212%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2211%22%20y%3D%2212%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2212%22%20y%3D%2212%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%2213%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%2213%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2210%22%20y%3D%2213%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2211%22%20y%3D%2213%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%2214%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%2214%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%229%22%20y%3D%2214%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2210%22%20y%3D%2214%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%2215%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%228%22%20y%3D%2215%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%229%22%20y%3D%2215%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%228%22%20y%3D%2216%22%20width%3D%221%22%20height%3D%221%22/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2017%2017%22%20shape-rendering%3D%22crispEdges%22%3E%3Crect%20x%3D%228%22%20y%3D%220%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%228%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%229%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%229%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2210%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2210%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2211%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2211%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2212%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2212%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2213%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2213%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2214%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2214%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2215%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%220%22%20y%3D%228%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%228%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2215%22%20y%3D%228%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2216%22%20y%3D%228%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%229%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%229%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2214%22%20y%3D%229%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2215%22%20y%3D%229%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%2210%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%2210%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2213%22%20y%3D%2210%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2214%22%20y%3D%2210%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%2211%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%2211%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2212%22%20y%3D%2211%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2213%22%20y%3D%2211%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%2212%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%2212%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2211%22%20y%3D%2212%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2212%22%20y%3D%2212%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%2213%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%2213%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2210%22%20y%3D%2213%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2211%22%20y%3D%2213%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%2214%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%2214%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%229%22%20y%3D%2214%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%2210%22%20y%3D%2214%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%2215%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%228%22%20y%3D%2215%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%229%22%20y%3D%2215%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%228%22%20y%3D%2216%22%20width%3D%221%22%20height%3D%221%22/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+        transform: translate(-50%, -50%) scale(0.4);
+      }
+      #battle-start-overlay .bs-count::after {
+        z-index: -1;
+        width: 2.6em;
+        height: 2.6em;
+        background: radial-gradient(
+          circle,
+          hsl(var(--count-hue) 100% 70% / 0.55) 0%,
+          hsl(var(--count-hue) 100% 60% / 0) 65%
+        );
+        transform: translate(-50%, -50%) scale(0.4);
+      }
+      #battle-start-overlay .bs-count.is-beat {
+        animation: bs-count-slam 1000ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+      }
+      #battle-start-overlay .bs-count.is-beat::before {
+        animation: bs-count-ring 560ms steps(7, end) both;
+      }
+      #battle-start-overlay .bs-count.is-beat::after {
+        animation: bs-count-glow 700ms ease-out both;
+      }
+      #battle-start-overlay.is-fight .bs-count {
+        opacity: 0 !important;
+      }
+
+      /* Spinning rays that brighten toward FIGHT. */
+      #battle-start-overlay .bs-rays {
+        position: absolute;
+        left: 50%;
+        top: 55%;
+        width: 220vmax;
+        height: 220vmax;
+        z-index: 1;
+        pointer-events: none;
+        background: repeating-conic-gradient(
+          hsl(205 100% 65% / 0.16) 0deg 6deg,
+          transparent 6deg 18deg
+        );
+        -webkit-mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.5) 18%, transparent 45%);
+        mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.5) 18%, transparent 45%);
+        opacity: 0;
+        transform: translate(-50%, -50%);
+        transition: opacity 300ms ease;
+        animation: bs-rays-spin 14s linear infinite;
+      }
+      #battle-start-overlay.phase-cards .bs-rays {
+        opacity: calc(0.45 + var(--heat, 0) * 0.55);
+      }
+      #battle-start-overlay.is-final .bs-rays {
+        animation-duration: 5s;
+      }
+      /* Only the last number shakes the cards. */
+      #battle-start-overlay[data-count="1"].is-beat .bs-grid {
+        animation: bs-grid-shake 320ms linear both;
+      }
+      #battle-start-overlay .bs-col {
+        transition: transform 320ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+      }
+      #battle-start-overlay.is-fight .bs-col {
+        transition: transform 300ms cubic-bezier(0.6, 0, 0.9, 0.5);
+      }
+      #battle-start-overlay.is-fight #bs-your {
+        transform: translateX(-70vw) rotate(-6deg);
+      }
+      #battle-start-overlay.is-fight #bs-opp {
+        transform: translateX(70vw) rotate(6deg);
+      }
+
+      @keyframes bs-count-slam {
+        0% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
+        14% { transform: translate(-50%, -50%) scale(0.86); opacity: 1; }
+        26% { transform: translate(-50%, -50%) scale(1.1); }
+        40% { transform: translate(-50%, -50%) scale(1); }
+        82% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        100% { transform: translate(-50%, -50%) scale(0.7); opacity: 0.35; }
+      }
+      @keyframes bs-count-ring {
+        0% { opacity: 1; transform: translate(-50%, -50%) scale(0.9); }
+        70% { opacity: 1; }
+        100% { opacity: 0; transform: translate(-50%, -50%) scale(calc(2 + var(--heat) * 1.2)); }
+      }
+      @keyframes bs-count-glow {
+        0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+        15% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+        100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+      }
+      @keyframes bs-rays-spin {
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+      }
+      @keyframes bs-grid-shake {
+        0% { transform: translate(0, 0); }
+        20% { transform: translate(calc(var(--heat, 0) * -10px - 3px), calc(var(--heat, 0) * 4px + 1px)); }
+        40% { transform: translate(calc(var(--heat, 0) * 9px + 2px), calc(var(--heat, 0) * -5px - 1px)); }
+        60% { transform: translate(calc(var(--heat, 0) * -6px - 1px), calc(var(--heat, 0) * 3px)); }
+        80% { transform: translate(calc(var(--heat, 0) * 3px), calc(var(--heat, 0) * -2px)); }
+        100% { transform: translate(0, 0); }
+      }
+
+      /* FIGHT! lands over the arena while the overlay clears and input opens. */
+      #fight-burst {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      #fight-burst.hidden {
+        display: none;
+      }
+      #fight-burst > * {
+        grid-area: 1 / 1;
+      }
+      #fight-burst .fb-flash {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle, #fff6d6 0%, rgba(255, 120, 60, 0.6) 40%, rgba(255, 40, 40, 0) 75%);
+        opacity: 0;
+      }
+      #fight-burst .fb-streaks {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 160vmax;
+        height: 160vmax;
+        background: repeating-conic-gradient(
+          rgba(255, 214, 102, 0.55) 0deg 3deg,
+          transparent 3deg 14deg
+        );
+        -webkit-mask-image: radial-gradient(circle, transparent 6%, #000 12%, transparent 48%);
+        mask-image: radial-gradient(circle, transparent 6%, #000 12%, transparent 48%);
+        opacity: 0;
+      }
+      #fight-burst .fb-text {
+        font-family: "Press Start 2P", "Lato", sans-serif;
+        font-size: clamp(64px, 13vw, 168px);
+        line-height: 1;
+        letter-spacing: 0.04em;
+        color: #ff4a3d;
+        text-shadow:
+          0.045em 0 0 #ffd35c,
+          -0.045em 0 0 #ffd35c,
+          0 0.045em 0 #ffd35c,
+          0 -0.045em 0 #ffd35c,
+          0.09em 0.11em 0 #2a0d0d,
+          0 0 0.5em rgba(255, 90, 40, 0.8);
+        opacity: 0;
+      }
+      #fight-burst.is-on .fb-flash {
+        animation: fb-flash 420ms ease-out both;
+      }
+      #fight-burst.is-on .fb-streaks {
+        animation: fb-streaks 900ms cubic-bezier(0.1, 0.8, 0.3, 1) both;
+      }
+      #fight-burst.is-on .fb-text {
+        animation: fb-text 1100ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+      }
+      @keyframes fb-flash {
+        0% { opacity: 0.9; }
+        100% { opacity: 0; }
+      }
+      @keyframes fb-streaks {
+        0% { opacity: 1; transform: translate(-50%, -50%) scale(0.4) rotate(0deg); }
+        100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4) rotate(25deg); }
+      }
+      @keyframes fb-text {
+        0% { opacity: 0; transform: scale(3.2) rotate(-8deg); }
+        12% { opacity: 1; transform: scale(0.88) rotate(-3deg); }
+        22% { transform: scale(1.08) rotate(-3deg) translate(4px, -2px); }
+        30% { transform: scale(1) rotate(-3deg) translate(-3px, 2px); }
+        38% { transform: scale(1) rotate(-3deg); }
+        68% { opacity: 1; transform: scale(1.04) rotate(-3deg); }
+        100% { opacity: 0; transform: scale(1.5) rotate(-3deg) translateY(-6%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #fight-burst *,
+        #fight-burst *::before {
+          animation: none !important;
+        }
+        #fight-burst.is-on .fb-text {
+          opacity: 1;
+        }
       }
       #battle-start-overlay.phase-darkened .bs-backdrop {
         opacity: 1;

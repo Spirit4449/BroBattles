@@ -1,3 +1,4 @@
+const { isPlaced } = require('../../targetable.js');
 const { combatNow } = require("../clock");
 const { exposeDamageHitbox } = require('../damageHitboxes.js');
 const effectManager = require("../effects/effectManager.js");
@@ -127,7 +128,7 @@ function getObjectiveTargets(room, attacker) {
 function buildTargetList(room, attackerName, attackerTeam) {
   return Array.from(room.players.values()).filter((target) => {
     if (!target || !target.isAlive) return false;
-    if (target.loaded !== true) return false;
+    if (!isPlaced(target)) return false;
     if (target.name === attackerName) return false;
     if (attackerTeam && target.team && attackerTeam === target.team)
       return false;

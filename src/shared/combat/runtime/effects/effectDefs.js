@@ -1,3 +1,4 @@
+const { isPlaced } = require('../../targetable.js');
 const { EFFECT_RULES, getEffectModifiers } = require('../../../effectRules');
 
 // src/shared/combat/runtime/effects/effectDefs.js
@@ -161,7 +162,7 @@ const effectDefs = {
           target === player ||
           !target.isAlive ||
           target.connected === false ||
-          target.loaded !== true ||
+          !isPlaced(target) ||
           (!target.socketId && !target.isBot)
         ) {
           continue;

@@ -329,6 +329,7 @@ const hud = createGameHudController({
       if (gameScene) gameScene._bgmIntensity = 1;
       gameScene?._startMainBgm?.();
       gameScene?._bgmEnvelope?.fade(1, 900);
+      gameScene?.cameras?.main?.shake?.(260, 0.006);
     } catch (_) {}
   },
   onCountdownStart: () => {
@@ -763,11 +764,10 @@ function isPosition(value) {
   return value != null && value !== "" && Number.isFinite(Number(value));
 }
 
-// Before FIGHT the server's spawn is authoritative for every fighter. In a live
-// game only a loaded player's position is; others still fall back to the map.
+// The server's position is authoritative for every placed fighter, loaded or
+// still loading (a hittable ghost); others fall back to the map spawn.
 function hasServerPosition(playerData) {
   return (
-    (!isLiveGame || playerData?.loaded === true) &&
     isPosition(playerData?.x) &&
     isPosition(playerData?.y)
   );
@@ -1907,7 +1907,9 @@ class GameScene extends Phaser.Scene {
       // Attack/airborne precision is handled by sampleRemoteFrame's small lead.
       let targetX = spr.x;
       let targetY = spr.y;
-      if (isLoaded) {
+      // A loading fighter is still a hittable ghost, so it follows the server's
+      // position too; otherwise it would be drawn where its hitbox is not.
+      {
         const airborne = !(bPosData?.grounded ?? aPosData?.grounded ?? false);
         const effectiveAlpha = alpha;
         const aX = Number(aPosData?.x);

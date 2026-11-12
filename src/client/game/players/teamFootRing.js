@@ -1,7 +1,7 @@
 import { RENDER_LAYERS } from "../scene/renderLayers.js";
 import { fillPixelBlob, rasterizePixelBlob } from "../powerups/pixelShapes.js";
 import { PIXEL_INK, snapPixel } from "../scene/pixelBar.js";
-import { playerAnchor } from "../characters/shared/rig.js";
+import { playerAnchor, rigRingDrop } from "../characters/shared/rig.js";
 
 // Team marker: a pixel-art oval on the floor around each player's feet, blue
 // for your team, white for yourself and red for the other team. It sits
@@ -32,7 +32,8 @@ const GLINT_HALF_ANGLE = 0.26;
 const SPIN_STEPS = 96;
 const MAX_STEP_PX = 40;
 // The soles sit a third of the way down from the ring's back edge, so it
-// lies on the floor around the feet instead of hovering behind them.
+// lies on the floor around the feet instead of hovering behind them. A rig's
+// `ringDrop` overrides it for wide stances (Thorg) that read better centred.
 const DROP_PER_RADIUS = 0.35;
 
 export function footRingColor(isAlly, isSelf = false) {
@@ -157,7 +158,8 @@ export function attachTeamFootRing(scene, sprite, { isAlly, isSelf = false, hidd
     lastX = sprite.x;
     draw(sprite.body.width);
     // The rig's feet anchor: the stand point the health bar also centres on.
-    ring.setPosition(snapPixel(foot.x), snapPixel(foot.y + shape.ry * DROP_PER_RADIUS));
+    const drop = rigRingDrop(sprite) ?? DROP_PER_RADIUS;
+    ring.setPosition(snapPixel(foot.x), snapPixel(foot.y + shape.ry * drop));
     ring.setAlpha(sprite.alpha);
     ring.setVisible(true);
   };

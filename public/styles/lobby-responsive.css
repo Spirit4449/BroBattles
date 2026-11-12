@@ -101,15 +101,17 @@
 #bottom-bar .win-streak-control {
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 4px);
+  bottom: calc(100% + 12px);
   z-index: 3;
   transform: translateX(-50%);
 }
 #bottom-bar .win-streak-benefits {
   right: auto;
   left: 50%;
-  margin-left: calc(min(320px, 100vw - 24px) / -2);
+  margin-left: calc(var(--win-streak-popup-w) / -2);
 }
+#bottom-bar .win-streak-benefits::before,
+#bottom-bar .win-streak-benefits::after { left: 50%; right: auto; transform: translateX(-50%); }
 
 /* Faint spawn-in light when mode, map or ready changes (buttonSpawnFx.js).
    Enter rises in cyan like a player spawning; exit falls in red. */
