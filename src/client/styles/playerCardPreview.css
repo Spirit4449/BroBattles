@@ -1,47 +1,114 @@
+/* Reward preview: shop info button for cards and bundles. */
 .player-card-preview {
   box-sizing: border-box;
-  width: min(760px, 94vw);
+  width: min(920px, 94vw);
   max-height: 92dvh;
   padding: 0;
   text-align: center;
 }
+.player-card-preview.is-single { width: min(460px, 94vw); }
 .player-card-preview[open] { display: flex; flex-direction: column; }
 .player-card-preview .bb-popup-header { flex: 0 0 auto; text-align: left; }
 .player-card-preview .bb-popup-title { min-width: 0; overflow-wrap: anywhere; }
+
+/* Equal-width tiles, up to three per row. */
 .player-card-preview-gallery {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 24px;
-  padding: 24px;
-  overflow: auto;
+  --preview-art-height: min(40dvh, 340px);
+  display: grid;
+  grid-template-columns: repeat(var(--preview-columns, 3), minmax(0, 1fr));
+  align-items: stretch;
+  gap: 22px;
   min-height: 0;
+  padding: 26px;
+  overflow: auto;
 }
-.player-card-preview figure { margin: 0; flex: 0 1 280px; min-width: 0; }
-.player-card-preview figure > :is(img, .player-card-canvas) {
+.player-card-preview.is-single .player-card-preview-gallery { --preview-art-height: min(62dvh, 520px); }
+
+/* Tile: type, artwork, name, rarity. The frame glows in the rarity colour. */
+.reward-preview-item {
+  box-sizing: border-box;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto var(--preview-art-height) 1fr;
+  justify-items: center;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 14px 16px;
+  border: 2px solid rgba(var(--rarity-rgb), 0.85);
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(var(--rarity-rgb), 0.2), transparent 62%),
+    linear-gradient(160deg, #142238, #0a1222 70%);
+  box-shadow:
+    0 0 0 3px var(--bb-ink),
+    0 6px 0 3px var(--bb-ink),
+    0 0 26px rgba(var(--rarity-rgb), 0.42),
+    inset 0 0 20px rgba(var(--rarity-rgb), 0.16);
+}
+
+.reward-preview-type {
   width: 100%;
-  height: min(66dvh, 560px);
+  padding-bottom: 10px;
+  border-bottom: 2px solid rgba(var(--rarity-rgb), 0.35);
+  color: color-mix(in srgb, rgb(var(--rarity-rgb)) 70%, white);
+  font: 700 9px/1.2 var(--bb-font-display);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.reward-preview-item > :is(img, .player-card-canvas, .reward-preview-art) {
+  width: 100%;
+  height: var(--preview-art-height);
   object-fit: contain;
   display: block;
 }
-.player-card-preview figure figcaption {
-  display: inline-flex;
+
+.reward-preview-art {
+  display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 12px 0 8px;
-  padding: 6px 12px;
-  border-block: 2px solid rgba(var(--rarity-rgb), .65);
-  background: linear-gradient(90deg, transparent, rgba(var(--rarity-rgb), .2), transparent);
-  color: color-mix(in srgb, rgb(var(--rarity-rgb)) 68%, white);
-  font-size: clamp(10px, 2vw, 14px);
-  letter-spacing: .1em;
-  text-shadow: 0 2px #050b14;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 12px;
 }
-.player-card-preview figcaption::before,
-.player-card-preview figcaption::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  background: rgb(var(--rarity-rgb));
-  transform: rotate(45deg);
+.reward-preview-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 14px rgba(var(--rarity-rgb), 0.45));
+}
+.reward-preview-profileIcon img { width: 72%; height: 72%; }
+.reward-preview-title { font-size: clamp(12px, 1.6vw, 16px); }
+
+/* Name pinned to the top, rarity to the bottom: both line up across tiles. */
+.reward-preview-item figcaption {
+  align-self: stretch;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  justify-items: center;
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.reward-preview-name {
+  max-width: 100%;
+  color: #f6f8ff;
+  font: 700 clamp(9px, 1.3vw, 12px)/1.45 var(--bb-font-display);
+  text-shadow: 2px 2px 0 #050b14;
+  overflow-wrap: anywhere;
+}
+/* Rarity uses the shared label rule in ui-system.css. The empty slot matches
+   its height so tiles without a rarity (currency) still line up. */
+.reward-preview-tag-slot { display: block; height: var(--preview-tag-height, 25px); }
+
+@media (max-width: 560px) {
+  .player-card-preview-gallery {
+    --preview-art-height: min(26dvh, 200px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    padding: 16px;
+  }
+  .player-card-preview.is-single .player-card-preview-gallery { --preview-art-height: min(52dvh, 420px); grid-template-columns: 1fr; }
+  .reward-preview-item { padding: 10px 10px 12px; gap: 8px; }
 }

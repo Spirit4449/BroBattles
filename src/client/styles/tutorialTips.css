@@ -119,9 +119,8 @@
 }
 
 .tutorial-mouse-key img {
-  width: 14px;
-  height: 17px;
-  object-fit: contain;
+  width: auto;
+  height: 15px;
 }
 
 .tutorial-key-row kbd.is-down,

@@ -75,6 +75,12 @@
       "summary": "What happens when you leave and how to get back in."
     },
     {
+      "slug": "friends",
+      "title": "Friends and direct messages",
+      "category": "Gameplay",
+      "summary": "Add friends, send messages, and manage invitations and privacy."
+    },
+    {
       "slug": "battle-rewards",
       "title": "Rewards and trophies",
       "category": "Progression & Rewards",
@@ -90,7 +96,13 @@
       "slug": "skins",
       "title": "Skins and cosmetics",
       "category": "Progression & Rewards",
-      "summary": "Unlock a new look without changing how a fighter plays."
+      "summary": "Equip skins, icons, player cards, and titles."
+    },
+    {
+      "slug": "shop",
+      "title": "Shop and sales",
+      "category": "Progression & Rewards",
+      "summary": "Find offers, check bundles, and equip what you buy."
     },
     {
       "slug": "accounts",
@@ -121,6 +133,12 @@
       "title": "Chat limits",
       "category": "Troubleshooting",
       "summary": "Why chat may pause, how restrictions work, and what to do next."
+    },
+    {
+      "slug": "support",
+      "title": "Contact support and send feedback",
+      "category": "Troubleshooting",
+      "summary": "Get a reply, check your requests, or report a bug."
     },
     {
       "slug": "safety",

@@ -1,26 +1,16 @@
-1. Check that your internet connection is working.
-2. Refresh once and give the map and fighter art time to load.
-3. Try an up-to-date desktop browser and close unnecessary tabs.
-4. If the game is in maintenance, try again later.
+If the game won't load or keeps disconnecting:
 
-Avoid clearing browser cookies while using a guest account: you may lose access to that guest session.
+1. Check your internet connection, then refresh the page once. The first visit may take a little longer while art downloads.
+2. Update your browser and close unnecessary tabs or downloads.
+3. If a trusted browser extension is blocking a game request, check its settings. Don't bypass certificate warnings or turn off browser security protections.
+4. If maintenance is in progress, try again later.
 
-Still stuck? [Contact support](/help/contact) and describe your browser, what happened, and the approximate time. Report reproducible gameplay bugs through [Feedback](/feedback).
+Don't clear cookies while using a guest account unless you've saved your progress by signing up; you may lose access to the session.
 
-## Loading screen or frozen page
+## Lag in a match
 
-The first visit may need a moment to download map and fighter art. If it stays stuck, refresh once and check for a browser update. Closing video streams, games, or other demanding tabs can free memory.
+A slow connection, distance from the server, or device performance can all cause lag. Pause large downloads and keep the game tab active: browsers may slow background tabs. Opening a menu doesn't pause an online match.
 
-If an extension blocks a required game request, allow the game only in an extension you recognize and trust. Do not disable your browser's security protections or bypass certificate warnings.
+If you disconnect, return to the lobby as soon as you can and use the rejoin option while the match is still running. See [Leave or rejoin](/help/leaving-and-rejoining).
 
-## Lag during a match
-
-Lag can come from your connection, distance to the server, or device performance. Pause large downloads and see whether other sites feel slow too. A high download speed does not always mean a quick response in a live match.
-
-Keep the game tab active. Background tabs can be throttled by the browser. Settings menus do not pause the server's match.
-
-## Useful details for a report
-
-Include your browser and device, the mode and map, the approximate time, and the exact behavior. Say whether the issue happens every match or only occasionally, and list steps that reproduce it if you know them.
-
-Describe errors in your own words or copy the non-sensitive error text. Never paste cookies, session tokens, or passwords. If the problem is a repeatable gameplay bug, use Feedback; if you need individual assistance, use Contact us.
+Still stuck? [Contact support](/help/contact) with your browser and device, mode and map, approximate time, and what happened. For a repeatable bug, include the steps in [Feedback](/feedback). Don't paste passwords, cookies, or session tokens.

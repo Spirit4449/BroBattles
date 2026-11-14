@@ -3,7 +3,7 @@ import "../styles/pixelSelect.css";
 let nextId = 0;
 
 // Pixel-styled dropdown; native <select> popups can't be themed.
-export function createPixelSelect({ options, value, label, onChange, className = "" }) {
+export function createPixelSelect({ options, value, label, onChange, onSelect, className = "" }) {
   const id = `bb-pixel-select-${++nextId}`;
   const root = document.createElement("div");
   root.className = `bb-pixel-select ${className}`.trim();
@@ -71,6 +71,7 @@ export function createPixelSelect({ options, value, label, onChange, className =
   }
 
   function choose(nextValue) {
+    if (onSelect?.(nextValue) === false) return;
     setOpen(false, { focus: true });
     if (nextValue === selected) return;
     selected = nextValue;
@@ -158,6 +159,8 @@ export function createPixelSelect({ options, value, label, onChange, className =
   return {
     element: root,
     get value() { return selected; },
+    open({ focus = false } = {}) { setOpen(true, { focus }); },
+    close({ focus = true } = {}) { setOpen(false, { focus }); },
     setValue(nextValue) { selected = nextValue; render(); },
     setDisabled(disabled) {
       trigger.disabled = !!disabled;

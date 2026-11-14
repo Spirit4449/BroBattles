@@ -9,6 +9,8 @@ import { createCooldown, safeReturnPath, wireCodeInputs } from '../account/email
 wireFullscreenToggles();
 const form = document.getElementById('signupForm');
 const panel = document.getElementById('verification-panel');
+const title = document.getElementById('auth-title');
+const subtitle = document.querySelector('.subtitle');
 const emailInput = document.getElementById('email');
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
@@ -43,8 +45,8 @@ async function api(url, body) {
 }
 function message(node, text) { node.textContent = text || ''; node.style.display = text ? 'block' : 'none'; }
 function currentCode() { return inputs.map(input => input.value).join(''); }
-function showVerification(data) { challengeId = data.challengeId; sentEmail = data.email; correctionUsed = !!data.correctionUsed; document.getElementById('verification-email').textContent = data.email; form.hidden = true; panel.hidden = false; document.querySelector('.guest-info').hidden = true; digits.clear(); inputs[0].focus(); }
-function showSignup() { panel.hidden = true; form.hidden = false; message(document.getElementById('verification-message'), ''); emailInput.focus(); }
+function showVerification(data) { challengeId = data.challengeId; sentEmail = data.email; correctionUsed = !!data.correctionUsed; document.getElementById('verification-email').textContent = data.email; title.textContent = 'Verify your email'; subtitle.hidden = true; form.hidden = true; panel.hidden = false; document.querySelector('.guest-info').hidden = true; digits.clear(); inputs[0].focus(); }
+function showSignup() { panel.hidden = true; form.hidden = false; title.textContent = 'Create Account'; subtitle.hidden = false; message(document.getElementById('verification-message'), ''); emailInput.focus(); }
 function setResend(seconds) { cooldown.set(seconds); }
 
 document.getElementById('guestName').textContent = getDisplayName();

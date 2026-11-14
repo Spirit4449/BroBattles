@@ -1,3 +1,4 @@
+const { isAccountBanned } = require("../../shared/moderation/accountBan");
 const { createPlayerActivityService } = require("../services/match/playerActivityService");
 // socket.js
 const cookie = require("cookie");
@@ -152,7 +153,7 @@ function initSocket({
           socketId: socket.id,
           sessionCookiePresent: !!userIdStr,
         });
-      } else if (Number(user.is_banned || 0) === 1) {
+      } else if (isAccountBanned(user)) {
         socket.data.user = null;
         return next(new Error("Account banned"));
       }

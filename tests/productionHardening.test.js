@@ -389,6 +389,145 @@ test('login reveals ban status only after the password is verified', async () =>
   assert.equal(wrong.payload.banned, undefined);
   assert.doesNotMatch(JSON.stringify(wrong.payload), /Cheating/);
   const right = await login('correct-horse');
-  assert.equal(right.statusCode, 403);
+  assert.equal(right.statusCode, 200);
+  assert.equal(right.ok, true);
   assert.equal(right.payload.banned, true);
+});
+
+test('temporary bans allow support login while blocking gameplay auth and sockets until their deadline', async t => {
+  const bcrypt = require('bcrypt');
+  const { loginPermanentUser } = require('../src/server/services/auth/authAccountService');
+  const { makeAuthHelpers } = require('../src/server/services/auth/auth');
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const deadline = now + 60000;
+  const user = { user_id: 2, name: 'Suspended', password: await bcrypt.hash('correct-password', 4), is_banned: 1, ban_expires_at: new Date(deadline), ban_reason: 'Test restriction', session_expires_at: new Date(now + 3600000) };
+  const db = { runQuery: async () => [user], withTransaction: fn => fn(null, async () => [user]) };
+  const cookieOpts = { SIGNED_COOKIE_OPTS: {}, DISPLAY_COOKIE_OPTS: {} };
+  const auth = makeAuthHelpers(db, cookieOpts);
+  const token = 'a'.repeat(64);
+  const req = () => ({ body: { username: user.name, password: 'correct-password' }, signedCookies: { user_id: token }, cookies: {} });
+  const cleared = [];
+  const res = { cookie() {}, clearCookie(name) { cleared.push(name); } };
+  const socket = Object.assign(new EventEmitter(), { data: {}, use() {}, disconnect() {} });
+  const blocked = await loginPermanentUser({ app: {}, db, req: req() });
+  assert.equal(blocked.statusCode, 200);
+  assert.equal(blocked.ok, true);
+  assert.equal(blocked.payload.banned, true);
+  assert.equal(blocked.payload.reason, user.ban_reason);
+  assert.equal(await auth.requireCurrentUser(req(), res), null);
+  assert.equal((await auth.requireCurrentUser(req(), res, { allowBanned: true })).user_id, user.user_id);
+  assert.deepEqual(cleared, [], 'ban checks preserve login cookies');
+  await auth.sessions.authenticateSocket(socket, token);
+  assert.equal(socket.data.user, undefined);
+  now = deadline;
+  assert.equal((await loginPermanentUser({ app: {}, db, req: req() })).ok, true);
+  assert.equal((await auth.requireCurrentUser(req(), res)).user_id, user.user_id);
+  await auth.sessions.authenticateSocket(socket, token);
+  assert.equal(socket.data.user.user_id, user.user_id);
+  socket.emit('disconnect');
+});
+
+test('browser ban holds end on expiry or admin unban and use the current account reason', async t => {
+  const { getBanHoldFromRequest, setBanHoldCookies, BAN_HOLD_USER_COOKIE } = require('../src/server/services/auth/banHold');
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const deadline = now + 60000;
+  let user = { user_id: 2, is_banned: 1, ban_expires_at: new Date(deadline), ban_reason: 'Current reason' };
+  const db = { runQuery: async () => [user] };
+  const cleared = [], cookies = [];
+  const res = { clearCookie: name => cleared.push(name), cookie: (...args) => cookies.push(args) };
+  const req = { signedCookies: { [BAN_HOLD_USER_COOKIE]: '2' }, cookies: { bb_ban_reason: 'Stale reason', bb_ban_hold_until: now + 86400000 } };
+  const hold = await getBanHoldFromRequest(req, { db, res });
+  assert.equal(hold.reason, 'Current reason');
+  assert.equal(hold.untilMs, deadline);
+  setBanHoldCookies({ req, res, userId: 2, reason: hold.reason, expiresAt: hold.expiresAt });
+  assert.equal(cookies.find(c => c[0] === 'bb_ban_hold_until')[2].maxAge, deadline - now);
+  assert.equal(cookies.find(c => c[0] === BAN_HOLD_USER_COOKIE)[2].signed, true);
+  now = deadline;
+  assert.equal(await getBanHoldFromRequest(req, { db, res }), null);
+  assert.ok(cleared.includes(BAN_HOLD_USER_COOKIE));
+  now -= 30000;
+  user = { ...user, is_banned: 0 };
+  assert.equal(await getBanHoldFromRequest(req, { db, res }), null);
+  user = { ...user, is_banned: 1, ban_expires_at: null };
+  assert.ok(await getBanHoldFromRequest(req, { db, res }));
+  assert.equal(await getBanHoldFromRequest({ cookies: req.cookies }, { db, res }), null);
+});
+
+test('ban enforcement preserves sessions on HTTP requests and new abuse bans', async () => {
+  for (const existingBan of [true, false]) {
+    const f = sessions();
+    const token = await f.service.create(f.db.state.user, f.res);
+    if (existingBan) f.db.state.user.is_banned = 1;
+    let reached = false, status, payload;
+    const middleware = createAbuseHttpMiddleware({
+      resolveUser: () => f.service.resolve(token),
+      abuseControl: { guardHttpAction: async () => ({ allowed: false, type: 'ban', clearAuth: true }) },
+    });
+    await middleware({ method: 'POST', path: '/status', ip: 'local' }, {
+      ...f.res, status(code) { status = code; return this; }, json(value) { payload = value; },
+    }, () => { reached = true; });
+    assert.equal(status, 403);
+    assert.equal(payload.banned, true);
+    assert.equal(reached, false);
+    assert.equal(f.cookies.get('user_id'), token);
+    assert.ok(await f.service.resolve(token));
+  }
+});
+
+test('banned accounts can authenticate again despite a browser hold and login middleware', async () => {
+  const f = sessions();
+  f.db.state.user.password = await require('bcrypt').hash('correct-password', 4);
+  f.db.state.user.is_banned = 1;
+  const oldToken = await f.service.create(f.db.state.user, f.res);
+  const req = { method: 'POST', path: '/login', ip: 'local', body: { username: 'Player', password: 'correct-password' },
+    signedCookies: { user_id: oldToken, bb_ban_user: '1' }, get: name => name === 'sec-fetch-site' ? 'same-origin' : null };
+  const guardCalls = [];
+  let reached = false;
+  const middleware = createAbuseHttpMiddleware({ resolveUser: () => f.service.resolve(oldToken),
+    abuseControl: { guardHttpAction: async value => { guardCalls.push(value); return { allowed: true }; } } });
+  await middleware(req, f.res, () => { reached = true; });
+  assert.equal(reached, true);
+  assert.equal(guardCalls[0].userId, 0);
+  assert.equal(guardCalls[0].identityKey, 'ip:local');
+
+  const routes = new Map();
+  const app = { locals: { authSessions: f.service }, get() {}, use() {}, post: (route, handler) => routes.set(route, handler) };
+  // Credential lookup uses the real account; session storage remains real.
+  require('../src/server/routes/modules/authRoutes').registerAuthRoutes({ app,
+    db: { runQuery: async () => [f.db.state.user] } });
+  let payload;
+  await routes.get('/login')(req, { ...f.res, status(code) { assert.equal(code, 200); return this; }, json(value) { payload = value; } });
+  assert.equal(payload.success, true);
+  assert.equal(payload.banned, true);
+  const newToken = f.cookies.get('user_id');
+  assert.notEqual(newToken, oldToken);
+  assert.equal(await f.service.resolve(oldToken), null);
+  assert.equal((await f.service.resolve(newToken)).user_id, 1);
+});
+
+test('banned sessions cannot load lobby, party or game pages without ban cookies', async () => {
+  const { makeAuthHelpers } = require('../src/server/services/auth/auth');
+  const f = sessions();
+  const token = await f.service.create(f.db.state.user, f.res);
+  f.db.state.user.is_banned = 1;
+  const auth = makeAuthHelpers(f.db, { SIGNED_COOKIE_OPTS: {}, DISPLAY_COOKIE_OPTS: {} });
+  const routes = new Map();
+  require('../src/server/routes/modules/pageRoutes').registerPageRoutes({ app: { get: (route, handler) => routes.set(route, handler) },
+    db: f.db, ...auth, pageRoot: '/pages', distDir: '/dist' });
+  const staticGuard = require('../src/server/routes/modules/pageRoutes').createBanPageGuard({ db: f.db, requireCurrentUser: auth.requireCurrentUser });
+  let staticRedirect, reachedStatic = false;
+  await staticGuard({ signedCookies: { user_id: token } }, { ...f.res, redirect(value) { staticRedirect = value; } }, () => { reachedStatic = true; });
+  assert.equal(staticRedirect, '/banned');
+  assert.equal(reachedStatic, false);
+  for (const route of ['/', '/party/:partyid', '/game/:matchid']) {
+    let destination;
+    await routes.get(route)({ signedCookies: { user_id: token } }, { ...f.res, redirect(value) { destination = value; } });
+    assert.equal(destination, '/banned');
+    assert.equal(f.cookies.get('user_id'), token);
+  }
+  let file;
+  await routes.get('/banned')({ signedCookies: { user_id: token } }, { ...f.res, set() {}, sendFile(value) { file = value; } });
+  assert.equal(file, '/pages/Errors/banned.html');
 });

@@ -36,15 +36,15 @@ describe("Reading position and new messages", () => {
       scroll.restore(snapshot, {added:1});
       assert.equal(top, 100);
       assert.equal(button.hidden, false);
-      assert.equal(button.textContent, '↓ 1 new');
+      assert.equal(button.textContent, '1 new');
       snapshot = scroll.capture();
       messages.scrollHeight += 100;
       scroll.restore(snapshot, {added:1});
       assert.equal(top, 100);
-      assert.equal(button.textContent, '↓ 2 new');
+      assert.equal(button.textContent, '2 new');
       // Metadata-only redraws must not count as incoming messages.
       scroll.restore(scroll.capture());
-      assert.equal(button.textContent, '↓ 2 new');
+      assert.equal(button.textContent, '2 new');
       click();
       assert.equal(top, 900);
       assert.equal(button.hidden, true);

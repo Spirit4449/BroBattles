@@ -118,38 +118,89 @@ export function showToast(message, isError = false) {
   setStatus(message, isError);
 }
 
-// One reusable modal for forms: returns { body, close } and resolves actions.
-export function openModal(title, { wide = false, onSubmit, submitLabel = "Done", extraActions = [] } = {}) {
-  const dialog = node("dialog", null, `modal${wide ? " is-wide" : ""}`);
+// One reusable modal for forms: returns { body, close, dialog, setError }.
+// onSubmit may return false (stay open) or a promise; thrown errors show inline.
+export function openModal(title, { wide = false, className = "", onSubmit, onClose, submitLabel = "Done", submitClass = "primary", cancelLabel = "Cancel", extraActions = [], dismissible = false } = {}) {
+  const dialog = node("dialog", null, `modal${wide ? " is-wide" : ""}${className ? ` ${className}` : ""}`);
   const form = node("form", null, "modal-frame");
   form.method = "dialog";
   const header = node("header");
-  header.append(node("h2", title), button("×", "dialog-close", () => close()));
+  const close = () => { if (!dialog.isConnected) return; dialog.close(); dialog.remove(); onClose?.(); };
+  const closeButton = button("×", "dialog-close", close);
+  closeButton.setAttribute("aria-label", "Close");
+  header.append(node("h2", title), closeButton);
   const body = node("div", null, "modal-body");
   const error = node("p", null, "modal-error");
   error.hidden = true;
+  error.setAttribute("role", "alert");
+  const setError = (message) => { error.textContent = message || ""; error.hidden = !message; };
   const actions = node("div", null, "modal-actions");
   for (const extra of extraActions) actions.append(button(extra.label, extra.className || "", () => extra.run(close)));
-  actions.append(node("span", null, "spacer"), button("Cancel", "", () => close()));
-  const submit = node("button", submitLabel, "primary");
+  actions.append(node("span", null, "spacer"));
+  if (cancelLabel) actions.append(button(cancelLabel, "", close));
+  const submit = node("button", submitLabel, submitClass);
   submit.type = "submit";
   actions.append(submit);
   form.append(header, body, error, actions);
   dialog.append(form);
   document.body.append(dialog);
-  function close() { dialog.close(); dialog.remove(); }
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    error.hidden = true;
+    setError("");
+    submit.disabled = true;
     try {
-      if (onSubmit?.() === false) return;
+      if (await onSubmit?.() === false) return;
       close();
     } catch (err) {
-      error.textContent = err.message;
-      error.hidden = false;
-    }
+      setError(err.message);
+    } finally { submit.disabled = false; }
   });
   dialog.addEventListener("cancel", (event) => { event.preventDefault(); close(); });
+  // Only small dialogs close from a backdrop click, so editors never lose work by accident.
+  if (dismissible) dialog.addEventListener("click", (event) => { if (event.target === dialog) close(); });
   dialog.showModal();
-  return { body, close, dialog };
+  return { body, close, dialog, setError, submit };
+}
+
+// Styled replacement for window.confirm. Resolves true only when confirmed.
+export function confirmDialog({ title = "Are you sure?", message = "", details = [], confirmLabel = "Confirm", danger = false } = {}) {
+  // Browsers (and test DOMs) without <dialog> support fall back to the native prompt.
+  if (typeof HTMLDialogElement === "undefined" || !HTMLDialogElement.prototype.showModal) {
+    return Promise.resolve(window.confirm([title, message, ...details].filter(Boolean).join("\n")));
+  }
+  return new Promise((resolve) => {
+    let confirmed = false;
+    const modal = openModal(title, {
+      className: "is-confirm",
+      dismissible: true,
+      submitLabel: confirmLabel,
+      submitClass: danger ? "danger" : "primary",
+      onSubmit: () => { confirmed = true; },
+      onClose: () => resolve(confirmed),
+    });
+    if (message) modal.body.append(node("p", message, "confirm-message"));
+    if (details.length) {
+      const list = node("ul", null, "confirm-details");
+      for (const detail of details) list.append(node("li", detail));
+      modal.body.append(list);
+    }
+    modal.submit.focus();
+  });
+}
+
+// Styled replacement for window.prompt. Resolves the trimmed text, or null.
+export function promptDialog({ title, label, value = "", placeholder = "", confirmLabel = "Save", maxLength = 60 } = {}) {
+  return new Promise((resolve) => {
+    let result = null;
+    const field_ = input("text", value, { placeholder, maxlength: String(maxLength), required: "" });
+    const modal = openModal(title, {
+      className: "is-confirm",
+      submitLabel: confirmLabel,
+      onSubmit: () => { if (!field_.value.trim()) throw new Error("Enter a value."); result = field_.value.trim(); },
+      onClose: () => resolve(result),
+    });
+    modal.body.append(field(label, field_));
+    field_.focus();
+    field_.select();
+  });
 }

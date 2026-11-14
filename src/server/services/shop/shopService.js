@@ -50,7 +50,7 @@ function createShopError(status, code, message, detail = {}) {
   return error;
 }
 
-const { getSaleOfferIds, getSalePrice, getBundleValue, buildOfferIndexes, ownsGrant } = require("./shopOfferRules");
+const { getRotatingOfferIds, isRotatingSection, isOfferInRotation, getSaleOfferIds, getSalePrice, getBundleValue, buildOfferIndexes, ownsGrant } = require("./shopOfferRules");
 
 function createShopService({ db, catalogProvider = getShopCatalog }) {
   const initialCatalog = catalogProvider();
@@ -68,12 +68,14 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
   }
 
   async function getOwnership(user) {
+    const titleState = await require("../cosmetics/titleOwnership").getTitleOwnership(db, user);
     const [skinState, iconState, cardState] = await Promise.all([
       syncSkinOwnershipForUser(db, user),
       syncProfileIconOwnershipForUser(db, user),
       syncPlayerCardOwnershipForUser(db, user),
     ]);
     return {
+      titles: new Set(titleState.ownedTitleIds),
       skins: new Set((skinState?.ownedSkinIds || []).map(String)),
       cards: new Set((cardState?.ownedCardIds || []).map(String)),
       profileIcons: new Set((iconState?.ownedIconIds || []).map(String)),
@@ -81,12 +83,14 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
   }
 
   async function getOwnershipWithRunner(q, userId) {
-    const [skinRows, cardRows, iconRows] = await Promise.all([
+    const [skinRows, cardRows, iconRows, titleRows] = await Promise.all([
       q("SELECT skin_id FROM user_skins WHERE user_id = ?", [userId]),
       q("SELECT card_id FROM user_cards WHERE user_id = ?", [userId]),
       q("SELECT icon_id FROM user_profile_icons WHERE user_id = ?", [userId]),
+      q("SELECT title_id FROM user_titles WHERE user_id = ?", [userId]),
     ]);
     return {
+      titles: new Set((titleRows || []).map(row => String(row.title_id))),
       skins: new Set((skinRows || []).map((row) => String(row.skin_id))),
       cards: new Set((cardRows || []).map((row) => String(row.card_id))),
       profileIcons: new Set((iconRows || []).map((row) => String(row.icon_id))),
@@ -126,6 +130,10 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
         name: currency === "gems" ? "Gems" : "Coins",
         image: currencyAsset(currency),
       };
+    }
+    if (grant?.kind === "title") {
+      const title = cosmetics?.titles?.titles?.find(item => item.id === grant.id);
+      if (title) return { ...title, kind: "title", image: "/assets/shop/icons/profile-v2.webp" };
     }
     if (grant?.kind === "skin") {
       const characters = cosmetics?.skins?.characters || {};
@@ -210,24 +218,9 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
     };
   }
 
-  async function buildBootstrap(user, { paymentsEnabled = false, publishableKey = null } = {}) {
-    const freshUser = (await getFreshUser(user.user_id)) || user;
-    const catalog = catalogProvider();
-    const cosmetics = getCosmeticCatalogs();
-    const [rotations, ownership, redemptionRows, viewedRows] = await Promise.all([
-      rotationService.getBoth(),
-      getOwnership(freshUser),
-      db.runQuery(
-        "SELECT offer_id, limit_key, status FROM shop_redemptions WHERE user_id = ? AND status = 'fulfilled'",
-        [freshUser.user_id],
-      ),
-      db.runQuery("SELECT view_kind, view_key FROM shop_views WHERE user_id = ?", [freshUser.user_id]),
-    ]);
-    const redemptionSet = new Set(
-      (redemptionRows || []).map(
-        (row) => `${String(row.limit_key || "")}:${String(row.offer_id || "")}`,
-      ),
-    );
+  // Player-facing section contents for one rotation; shared by the shop and the
+  // admin preview so both always agree on what is shown and at what price.
+  function buildSections({ catalog, cosmetics, rotations, ownership, redemptionSet, paymentsEnabled }) {
     const { offerById, offerByGrant } = buildOfferIndexes(catalog);
 
     const dailyRewards = catalog?.rotation?.dailies?.rewards || [];
@@ -283,9 +276,11 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
         );
       });
 
+    const rotatingIds = new Map((catalog.sections || []).filter(isRotatingSection)
+      .map(section => [section.id, new Set(getRotatingOfferIds(catalog, rotations.sales, section.id, saleIds))]));
     const sections = Object.fromEntries((catalog.sections || []).map(section => [section.id, []]));
     for (const offer of catalog.offers || []) {
-      if (saleIds.includes(offer.id) || offer.section === "sales") continue;
+      if (saleIds.includes(offer.id) || offer.section === "sales" || (rotatingIds.has(offer.section) && !rotatingIds.get(offer.section).has(offer.id))) continue;
       const bundleValue = getBundleValue(offer, offerByGrant, ownership);
       sections[offer.section]?.push(serializeOffer(
         offer, cosmetics, ownership, redemptionSet, paymentsEnabled,
@@ -294,6 +289,28 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
     }
     sections.sales = sales;
     sections.dailies = dailyOffer ? [dailyOffer] : [];
+    return sections;
+  }
+
+  async function buildBootstrap(user, { paymentsEnabled = false, publishableKey = null } = {}) {
+    const freshUser = (await getFreshUser(user.user_id)) || user;
+    const catalog = catalogProvider();
+    const cosmetics = getCosmeticCatalogs();
+    const [rotations, ownership, redemptionRows, viewedRows] = await Promise.all([
+      rotationService.getBoth(),
+      getOwnership(freshUser),
+      db.runQuery(
+        "SELECT offer_id, limit_key, status FROM shop_redemptions WHERE user_id = ? AND status = 'fulfilled'",
+        [freshUser.user_id],
+      ),
+      db.runQuery("SELECT view_kind, view_key FROM shop_views WHERE user_id = ?", [freshUser.user_id]),
+    ]);
+    const redemptionSet = new Set(
+      (redemptionRows || []).map(
+        (row) => `${String(row.limit_key || "")}:${String(row.offer_id || "")}`,
+      ),
+    );
+    const sections = buildSections({ catalog, cosmetics, rotations, ownership, redemptionSet, paymentsEnabled });
 
     const viewed = new Set(viewedRows.map(row => `${row.view_kind}:${row.view_key}`));
     const notifications = { sections: {}, hasNew: false };
@@ -353,6 +370,8 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
           "INSERT IGNORE INTO user_cards (user_id, card_id, source) VALUES (?, ?, ?)",
           [userId, String(grant.id), source],
         );
+      } else if (grant.kind === "title") {
+        await q("INSERT IGNORE INTO user_titles (user_id, title_id, source) VALUES (?, ?, ?)", [userId, String(grant.id), source]);
       } else if (grant.kind === "profileIcon") {
         await q(
           "INSERT IGNORE INTO user_profile_icons (user_id, icon_id, source) VALUES (?, ?, ?)",
@@ -371,7 +390,7 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
     return totals;
   }
 
-  async function redeem({ userId, offer, grants, price, limitKey, kind, idempotencyKey, expectedPrice, expectedCurrency }) {
+  async function redeem({ userId, offer, grants, price, limitKey, kind, idempotencyKey, expectedPrice, expectedCurrency, available = true }) {
     const normalizedKey = normalizeIdempotencyKey(idempotencyKey);
     if (!normalizedKey) {
       throw createShopError(400, "invalid_idempotency_key", "A valid idempotency key is required.");
@@ -389,6 +408,9 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
         [userId, normalizedKey, offer.id, limitKey],
       );
       if (duplicateRows[0]) {
+        if (!available && String(duplicateRows[0].idempotency_key || "") !== normalizedKey) {
+          throw createShopError(409, "offer_unavailable", "This offer is not in the current shop rotation.");
+        }
         if (
           String(duplicateRows[0].idempotency_key || "") === normalizedKey &&
           String(duplicateRows[0].offer_id || "") !== String(offer.id || "")
@@ -414,6 +436,8 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
           grants: describeGrants(parseJson(duplicateRows[0].reward_snapshot, grants)),
         };
       }
+
+      if (!available) throw createShopError(409, "offer_unavailable", "This offer is not in the current shop rotation.");
 
       if ((expectedPrice != null && Number(expectedPrice) !== Number(price?.amount)) ||
           (expectedCurrency != null && expectedCurrency !== price?.currency)) {
@@ -518,9 +542,7 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
     }
     const saleRotation = await rotationService.ensure("sales");
     const onSale = getSaleOfferIds(catalog, saleRotation).includes(offer.id);
-    if (offer.section === "sales" && !onSale) {
-      throw createShopError(409, "offer_unavailable", "This offer is not in the current sale rotation.");
-    }
+    const available = isOfferInRotation(catalog, offer, saleRotation);
     const price = onSale ? getSalePrice(offer, catalog) : offer.price;
     const limitKey = offer.purchaseLimit === "unlimited"
       ? `request:${normalizeIdempotencyKey(idempotencyKey) || "invalid"}`
@@ -532,6 +554,7 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
       price,
       limitKey,
       kind: "virtual",
+      available,
       idempotencyKey,
       expectedPrice,
       expectedCurrency,
@@ -583,6 +606,20 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
     return { success: true };
   }
 
+  // What a new player (owning nothing) sees for the given catalog, `weeks` and
+  // `days` after the current rotations. Used by the admin store preview, so a
+  // draft can be checked before it is published.
+  async function buildAdminPreview(catalog, { weeks = 0, days = 0 } = {}) {
+    const current = await rotationService.getBoth();
+    const shift = (rotation, by) => ({ ...rotation, ordinal: (Number(rotation.ordinal) || 0) + by, cycleKey: `${rotation.cycleKey}:preview${by}` });
+    const rotations = { ...current, sales: shift(current.sales, weeks), dailies: shift(current.dailies, days) };
+    const empty = { skins: new Set(), cards: new Set(), profileIcons: new Set(), titles: new Set() };
+    const sections = buildSections({
+      catalog, cosmetics: getCosmeticCatalogs(), rotations, ownership: empty, redemptionSet: new Set(), paymentsEnabled: true,
+    });
+    return { sectionMeta: catalog.sections || [], sections, rotations: current };
+  }
+
   async function getAdminStatus() {
     const rotations = await rotationService.getBoth();
     const recentOrders = await db.runQuery(
@@ -604,6 +641,7 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
     createShopError,
     findOfferForGrant,
     getAdminStatus,
+    buildAdminPreview,
     getFreshUser,
     getShopOfferById,
     normalizeIdempotencyKey,

@@ -18,4 +18,9 @@ function assetUrl(value, fallback = "/assets/player-cards/default/default.webp")
   }
 }
 
-module.exports = { escapeHtml, assetUrl };
+// Server-rendered twin of src/client/ui/pixelArrow.js.
+function arrowHtml(direction = "right", size = "") {
+  return `<span class="bb-arrow bb-arrow-${direction}${size ? ` bb-arrow-${size}` : ""}" aria-hidden="true"></span>`;
+}
+
+module.exports = { escapeHtml, assetUrl, arrowHtml };

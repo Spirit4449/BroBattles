@@ -108,3 +108,62 @@ handcrafted pixel art with terracotta sandstone strata, dark creases, clean
 highlights, olive grass, roots, moss and angular vines; no seams, soft gradients,
 antialiasing, noisy speckling, scenery or text. Sky and distant peaks retain
 native source detail rather than the reduced pixel-grid versions.
+
+## Current: Codex islands, code-drawn platform, animated sea and falls
+
+Run, in order:
+
+```bash
+node scripts/art/sky-soil/main-platform.cjs --install
+node scripts/art/sky-soil/compose-backdrop.cjs --install
+node scripts/art/sky-soil/library-clouds.cjs --install
+```
+
+**Main platform** (`island-v4.webp` built-in, `island-saved-v4.webp` saved
+layout). Drawn in code on the small platform's own grid: 2 world px per art
+pixel, with the palette sampled from `small-platform-sharp.webp` (lime grass
+over warm brown soil, light left rim, dark base). Extra texture: broad
+two-tone strata, rounded outlined stones, speckles, leafy vines, grass bumps
+and branching roots. The silhouette comes from the previous island art in
+`scripts/art/sky-soil/platform-masks/`, opened to drop plant overhangs and
+flattened along each ledge, so the grassy tops stay on the unchanged invisible
+`p0`–`p3` collision rows. A Codex repaint was tried and rejected: its art
+pixels were 4x the small platform's.
+
+**Backdrop.** Islands were generated with Codex `image_gen` in BB style on flat
+`#FF00FF`, then pixelated: the source's own pixel grid (about 12.5–13 px) is
+detected from colour edges and resampled one majority-colour sample per art
+pixel. Sources are in `scripts/art/sky-soil/codex-sources/`. Prompts (style
+references: `small-platform-sharp.webp`, Candy Land's full preview, then
+`island-b.png` for the later ones):
+
+- island-a: big wide floating island, lime grass, pines on the left and two
+  round pink blossom trees on the right, terracotta strata with rounded stones,
+  lobed underside with rocky points, hanging roots and leafy vines; no water.
+- island-b: big island with a higher right plateau, tall pines, one pink
+  blossom tree, bushes, strata, stones, a deep rocky keel, roots and vines.
+- islets: three small islands in a row: one with a pine, a bare grassy rock,
+  and one with a blossom tree and a bush.
+
+Layers, back to front:
+
+- `sky-v4.webp`: smooth gradient sky, soft sun glow and blurred, sky-tinted
+  distant islands and cloud banks. No pixel grid, linear filtering.
+- `far-isles-v4.webp`: hazed islands (2 px grid) over a far cloud sea.
+- `cloud-sea.webp` + `cloud-sea-anim.webp`: the cloud sea the arena floats in,
+  stored at native size (the cover fit scales it 2x). The part loops 12 frames
+  at 5 fps: lobes swell on their own phases and banks sway by one pixel.
+- `near-isles-v4.webp` (3 px grid): framing islands and islets, with
+  `waterfall-1/2.webp` parts (8 frames at 14 fps) placed on each island's
+  inner grass lip and falling into the sea.
+- Sky clouds come only from the scenery clouds feature (library clouds).
+
+**Cloud library.** `library-clouds.cjs` redraws all twelve
+`public/assets/clouds/cloud-*.png` as pixel cumulus on a 4 px grid, each at its
+original's size, so maps that place them (Candy Land, Sky Soil) keep their
+layout.
+
+`pixel-kit.cjs` holds the shared drawing code: cumulus, cloud sea, waterfall
+helpers and the per-layer on-screen windows (`WIN`), which were measured from a
+game render of the whole camera bounds. Re-measure them if a layer's `scroll`,
+`fit` or offset changes.

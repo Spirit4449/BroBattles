@@ -1,7 +1,10 @@
+const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const path = require("path");
+const { getPlayerStats, getPlayerInventory, updatePlayerInventory, setPlayerStreak } = require("../../services/admin/playerAdminService");
 
 function registerAdminRoutes({
   app,
+  io,
   db,
   auth,
   pageRoot,
@@ -95,9 +98,9 @@ function registerAdminRoutes({
   });
 
   const userFields = `user_id, name, coins, gems, trophies, trophy_peak, status,
-    char_class, char_levels, expires_at, created_at, updated_at,
+    char_class, char_levels, expires_at, created_at, updated_at, last_seen_at, highest_win_streak,
     selected_card_id, selected_profile_icon_id, selected_skin_id_by_char,
-    is_banned, banned_at, ban_reason, chat_suspended_until, mm_suspended_until`;
+    is_banned, banned_at, ban_expires_at, ban_reason, chat_suspended_until, mm_suspended_until`;
   const { LEVEL_CAP } = require("../../../shared/characters/characterStats");
   const { characterDefinitions } = require("../../../shared/characters");
 
@@ -135,12 +138,93 @@ function registerAdminRoutes({
         try { history[key] = { rows: await db.runQuery(sql, [id]) }; }
         catch (error) { console.error(`[admin] ${key}`, error); history[key] = { error: "This history is temporarily unavailable" }; }
       }));
-      return res.json({ success: true, user, history });
+      const [stats, inventory] = await Promise.all([
+        getPlayerStats(db, id).catch(error => { console.error("[admin] player stats", error); return { error: "Match statistics are temporarily unavailable" }; }),
+        getPlayerInventory(db, user).catch(error => { console.error("[admin] inventory", error); return { error: "Inventory is temporarily unavailable" }; }),
+      ]);
+      return res.json({ success: true, user, history, stats, inventory });
     } catch (error) {
       console.error("[admin] detail", error);
       return res.status(500).json({ error: "Unable to load player" });
     }
   });
+
+  for (const [action, update] of [["inventory", (id, adminId, body) => updatePlayerInventory(db, id, adminId, body.changes)], ["streak", (id, adminId, body) => setPlayerStreak(db, id, adminId, body.streak)]]) {
+    app.post(`/api/admin/users/:id/${action}`, async (req, res) => {
+      const admin = await requireAdminUser(req, res);
+      if (!admin) return sendUnauthorized(res);
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid player ID" });
+      try {
+        return res.json({ success: true, ...await update(id, admin.user_id, req.body || {}) });
+      } catch (error) {
+        console.error(`[admin] ${action}`, error);
+        return res.status(error.status || 500).json({ error: error.status ? error.message : `Unable to update player ${action}` });
+      }
+    });
+  }
+
+  function moderationRoute(action) {
+    return async (req, res) => {
+      const admin = await requireAdminUser(req, res);
+      if (!admin) return sendUnauthorized(res);
+      const userId = req.body?.userId;
+      const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+      if (!Number.isSafeInteger(userId) || userId <= 0) return res.status(400).json({ error: "Choose a valid player" });
+      if (action !== "unban" && (!reason || reason.length > 220 || /[\x00-\x1f\x7f]/.test(reason))) {
+        return res.status(400).json({ error: "Enter a reason of up to 220 characters" });
+      }
+      const durationMinutes = req.body?.durationMinutes;
+      if (action === "suspend" && (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 525600)) {
+        return res.status(400).json({ error: "Choose a suspension between 1 minute and 365 days" });
+      }
+      if (action !== "unban" && userId === Number(admin.user_id)) return res.status(400).json({ error: "You cannot restrict your own account" });
+      try {
+        const user = await db.withTransaction(async (_conn, q) => {
+          const [target] = await q(`SELECT ${userFields} FROM users WHERE user_id = ? FOR UPDATE`, [userId]);
+          if (!target) return null;
+          // Repeated requests preserve an existing permanent ban. A suspension
+          // cannot accidentally downgrade it; the admin must lift it first.
+          if (action !== "unban" && isAccountBanned(target) && !target.ban_expires_at) {
+            if (action === "suspend") {
+              const error = new Error("Unban this player before applying a temporary suspension");
+              error.status = 409;
+              throw error;
+            }
+            return target;
+          }
+          if (action === "unban" && Number(target.is_banned) !== 1) return target;
+          const expiresAt = action === "suspend" ? new Date(Date.now() + durationMinutes * 60000) : null;
+          if (action === "unban") {
+            await q("UPDATE users SET is_banned = 0, banned_at = NULL, ban_expires_at = NULL, ban_reason = NULL, updated_at = NOW() WHERE user_id = ?", [userId]);
+          } else {
+            await q("UPDATE users SET is_banned = 1, banned_at = NOW(), ban_reason = ?, ban_expires_at = ?, updated_at = NOW() WHERE user_id = ?", [reason, expiresAt, userId]);
+          }
+          await q(
+            "INSERT INTO user_abuse_events (user_id, category, source, action_taken, offense_level, detail) VALUES (?, ?, ?, ?, ?, ?)",
+            [userId, "account", "admin", action, 0, JSON.stringify({ adminUserId: admin.user_id, reason: action === "unban" ? null : reason, expiresAt })],
+          );
+          const [updated] = await q(`SELECT ${userFields} FROM users WHERE user_id = ?`, [userId]);
+          return updated;
+        });
+        if (!user) return res.status(404).json({ error: "Player not found" });
+        if (action !== "unban") {
+          const sockets = io?.in(`user:${userId}`);
+          sockets?.emit("auth:banned", { reason: user.ban_reason, expiresAt: user.ban_expires_at });
+          sockets?.disconnectSockets(true);
+        }
+        console.log(`[admin] ${admin.user_id} ${action} player ${userId}`);
+        return res.json({ success: true, user });
+      } catch (error) {
+        if (error.status === 409) return res.status(409).json({ error: error.message });
+        console.error(`[admin] ${action}`, error);
+        return res.status(500).json({ error: "Unable to update player restriction" });
+      }
+    };
+  }
+  app.post("/api/admin/user-ban", moderationRoute("ban"));
+  app.post("/api/admin/user-suspend", moderationRoute("suspend"));
+  app.post("/api/admin/user-unban", moderationRoute("unban"));
 
   app.post("/api/admin/user-update", async (req, res) => {
     const admin = await requireAdminUser(req, res);
@@ -273,28 +357,26 @@ function registerAdminRoutes({
         if (typeof body.announcements !== "string" || body.announcements.length > 500) return res.status(400).json({ error: "Announcement must be at most 500 characters" });
         patch.announcements = body.announcements.trim();
       }
-      if (
-        body.rewardMultipliers &&
-        typeof body.rewardMultipliers === "object"
-      ) {
+      const multipliers = body.rewardMultipliers;
+      if (multipliers && typeof multipliers === "object") {
         patch.rewardMultipliers = {};
-        if (typeof body.rewardMultipliers.coins !== "undefined") {
-          const c = Number(body.rewardMultipliers.coins);
-          if (Number.isFinite(c) && c > 0) patch.rewardMultipliers.coins = c;
-        }
-        if (typeof body.rewardMultipliers.gems !== "undefined") {
-          const g = Number(body.rewardMultipliers.gems);
-          if (Number.isFinite(g) && g > 0) patch.rewardMultipliers.gems = g;
+        for (const currency of ["coins", "gems"]) {
+          if (typeof multipliers[currency] === "undefined") continue;
+          const value = Number(multipliers[currency]);
+          if (!(value > 0 && value <= 10)) return res.status(400).json({ error: `The ${currency === "coins" ? "coin" : "gem"} multiplier must be above 0 and at most 10` });
+          patch.rewardMultipliers[currency] = value;
         }
       }
-      if (typeof body.rewardFloor !== "undefined") {
-        const floor = Number(body.rewardFloor);
-        if (Number.isFinite(floor)) patch.rewardFloor = floor;
+      for (const [key, min] of [["rewardFloor", 0], ["rewardCeiling", 1]]) {
+        if (typeof body[key] === "undefined") continue;
+        const value = Number(body[key]);
+        if (!Number.isInteger(value) || value < min || value > 1_000_000) return res.status(400).json({ error: `${key === "rewardFloor" ? "Coin floor" : "Coin ceiling"} must be a whole number from ${min} to 1,000,000` });
+        patch[key] = value;
       }
-      if (typeof body.rewardCeiling !== "undefined") {
-        const ceil = Number(body.rewardCeiling);
-        if (Number.isFinite(ceil)) patch.rewardCeiling = ceil;
-      }
+      const current = runtimeConfig && typeof runtimeConfig.get === "function" ? runtimeConfig.get() : {};
+      const floor = patch.rewardFloor ?? current.rewardFloor;
+      const ceiling = patch.rewardCeiling ?? current.rewardCeiling;
+      if (Number.isFinite(floor) && Number.isFinite(ceiling) && floor > ceiling) return res.status(400).json({ error: "The coin floor can't be above the ceiling" });
       const updated =
         runtimeConfig && typeof runtimeConfig.update === "function"
           ? runtimeConfig.update(patch)
@@ -330,7 +412,7 @@ function registerAdminRoutes({
     try {
       const text = fs.readFileSync(catalogPath(), "utf8");
       const catalog = JSON.parse(text);
-      const { skins, cards, profileIcons } = shopCatalog.getCosmeticCatalogs();
+      const { skins, cards, profileIcons, titles } = shopCatalog.getCosmeticCatalogs();
       const pick = ({ id, name, assetUrl, rarity, character }) => ({ id, name, assetUrl, rarity, character });
       return res.json({
         success: true,
@@ -338,9 +420,10 @@ function registerAdminRoutes({
         revision: revisionOf(text),
         errors: shopCatalog.validateCatalog(catalog),
         options: {
-          skins: Object.values(skins?.characters || {}).flatMap((entry) => entry.skins || []).map(pick),
-          cards: (cards?.cards || []).map(pick),
+          skins: Object.entries(skins?.characters || {}).flatMap(([character, entry]) => (entry.skins || []).map((skin) => pick({ character, ...skin }))),
+          cards: (cards?.cards || []).map((card) => ({ ...pick(card), shopImage: card.shopAssetUrl || null })),
           profileIcons: (profileIcons?.icons || []).map(pick),
+          titles: (titles?.titles || []).map(({ id, name, rarity, color }) => ({ id, name, rarity, color })),
           banners: listAssets("assets/shop/banners", /^[a-z0-9-]+\.webp$/),
           icons: listAssets("assets/shop/icons", /^[a-z0-9-]+\.(webp|svg)$/),
         },
@@ -383,6 +466,25 @@ function registerAdminRoutes({
     } catch (error) {
       console.error("[admin] shop catalog write", error);
       return res.status(500).json({ error: "Unable to publish the shop catalog" });
+    }
+  });
+
+  // Validates a draft and returns what a new player would see, `weeks` sales
+  // rotations and `days` daily rotations from now. Nothing is written.
+  app.post("/api/admin/shop/preview", async (req, res) => {
+    if (!await requireAdminUser(req, res)) return sendUnauthorized(res);
+    const catalog = req.body?.catalog;
+    if (!catalog || typeof catalog !== "object" || Array.isArray(catalog)) return res.status(400).json({ error: "Invalid catalog" });
+    const offset = (value) => Math.max(-52, Math.min(52, Number.parseInt(value, 10) || 0));
+    let errors;
+    try { errors = shopCatalog.validateCatalog(catalog); }
+    catch (error) { errors = [`The catalog could not be read: ${error.message}`]; }
+    try {
+      const preview = await shopService.buildAdminPreview(catalog, { weeks: offset(req.body?.weeks), days: offset(req.body?.days) });
+      return res.json({ success: true, errors, ...preview });
+    } catch (error) {
+      console.error("[admin] shop preview", error);
+      return res.json({ success: true, errors, previewError: "The preview could not be built from this draft." });
     }
   });
 

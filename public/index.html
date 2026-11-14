@@ -101,25 +101,31 @@
         </h1>
       </div>
       <div class="flex" id="navbar-right">
-        <button
-          id="coin-resource-button"
-          class="flex resources currency-resource"
-          type="button"
-          aria-label="Open coin shop"
-        >
-          <img src="/assets/icons/coin.webp" width="20px" alt="coins" />
-          <p id="coin-count"></p>
-        </button>
+        <div class="lobby-wallet-home" data-wallet-home>
+          <div class="bb-wallet" id="lobby-wallet" role="group" aria-label="Your wallet">
+            <button
+              id="coin-resource-button"
+              class="bb-wallet-chip currency-resource"
+              data-shop-wallet-shell="coins"
+              type="button"
+              aria-label="Open coin shop"
+            >
+              <img src="/assets/icons/coin.webp" width="20px" alt="coins" />
+              <p id="coin-count" data-shop-wallet="coins"></p>
+            </button>
 
-        <button
-          id="gem-resource-button"
-          class="flex resources currency-resource"
-          type="button"
-          aria-label="Open gem shop"
-        >
-          <img src="/assets/icons/gem.webp" width="20px" alt="gems" />
-          <p id="gem-count"></p>
-        </button>
+            <button
+              id="gem-resource-button"
+              class="bb-wallet-chip currency-resource"
+              data-shop-wallet-shell="gems"
+              type="button"
+              aria-label="Open gem shop"
+            >
+              <img src="/assets/icons/gem.webp" width="20px" alt="gems" />
+              <p id="gem-count" data-shop-wallet="gems"></p>
+            </button>
+          </div>
+        </div>
         <button
           id="trophy-resource-button"
           class="flex resources trophy-resource pixel-menu-button"
@@ -369,8 +375,11 @@
               <div class="profile-hero-center">
                 <div class="profile-hero-copy">
                   <div id="profile-hero-name" class="profile-hero-name">-</div>
-                  <div id="profile-hero-class" class="profile-hero-class">
-                    Ninja
+                  <div class="profile-title-row">
+                    <div id="profile-hero-class" class="profile-hero-class"></div>
+                    <button id="profile-title-edit" type="button" class="profile-title-edit" aria-label="Edit title" title="Edit title">
+                      <span class="profile-edit-badge" aria-hidden="true"><img src="/assets/ui/edit-pen-simple.svg" alt="" width="14" height="14" /></span>
+                    </button>
                   </div>
                 </div>
 
@@ -383,7 +392,7 @@
                   >
                     <span class="profile-card-edit-badge profile-edit-badge" aria-hidden="true">
                       <img
-                        src="/assets/edit.svg"
+                        src="/assets/ui/edit-pen-simple.svg"
                         alt=""
                         width="14"
                         height="14"
@@ -414,7 +423,7 @@
                         aria-hidden="true"
                       >
                         <img
-                          src="/assets/edit.svg"
+                          src="/assets/ui/edit-pen-simple.svg"
                           alt=""
                           width="14"
                           height="14"
@@ -435,9 +444,12 @@
                   </span>
                   <span>Trophies</span><strong id="profile-trophies">0</strong>
                 </div>
+                <div id="profile-favorite-character" class="profile-metric-card" data-profile-metric="favorite-character"></div>
               </div>
             </div>
           </article>
+
+
 
           <article
             id="profile-character-levels-panel"
@@ -565,6 +577,7 @@
             <div id="profile-icons-grid" class="profile-icon-collection"></div>
           </section>
 
+          <section id="profile-titles-panel" class="profile-loadout-section is-hidden"><div id="profile-titles-grid"></div></section>
           <section id="profile-cards-panel" class="profile-loadout-section">
             <div id="profile-cards-grid" class="profile-cards-grid"></div>
           </section>

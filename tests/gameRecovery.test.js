@@ -37,6 +37,20 @@ describe("Recovery actions", () => {
     assert.equal(api.resolveGameErrorAction({ code: "UNAUTHORIZED" }, ctx).action, "dismiss");
     assert.equal(api.resolveGameErrorAction({ code: "CLIENT_UPDATE_REQUIRED" }, ctx).action, "reload");
   });
+
+  test('live ban notifications and banned reconnects leave the game for account support', () => {
+    const { EventEmitter } = require('node:events');
+    const { createClientModuleGraph } = require('./helpers/clientModule');
+    const socket = new EventEmitter();
+    const destinations = [];
+    const window = { location: { pathname: '/', search: '', replace: value => destinations.push(value) } };
+    createClientModuleGraph({ globals: { window }, imports: { 'socket.io-client': { io: () => socket } } }).load('src/client/lib/socket.js');
+    socket.emit('connect_error', new Error('Network unavailable'));
+    assert.deepEqual(destinations, []);
+    socket.emit('auth:banned', { reason: 'Restriction' });
+    socket.emit('connect_error', new Error('Account banned'));
+    assert.deepEqual(destinations, ['/banned', '/banned']);
+  });
 });
 
 describe("Stale matches", () => {
@@ -69,6 +83,7 @@ for (const status of [null, 'completed', 'cancelled', 'live', 'queued']) {
       registerPageRoutes({
         app: { get: (path, handler) => routes.set(path, handler) },
         db: { runQuery: async () => status ? [{ status }] : [] },
+        requireCurrentUser: async () => null,
         pageRoot: '/pages', distDir: '/dist',
       });
       let redirect, file;

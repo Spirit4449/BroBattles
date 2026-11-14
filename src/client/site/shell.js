@@ -1,5 +1,5 @@
 import { sonner } from "../ui/sonner";
-import { MAINTENANCE_MESSAGE, maintenanceClock, maintenanceRemaining } from "../../shared/site/maintenance";
+import { renderReadyRestrictions } from '../views/readyRestrictionView.js';
 import { wireBackdropDismiss, wireOutsideDismiss } from './dialogDismiss.mjs';
 import { renderHeader } from '../../shared/site/siteHeader.cjs';
 import { remapKeys } from './remapKeys';
@@ -43,7 +43,7 @@ export async function openLegal(kind) {
 }
 export function openSettings() {
   const existing=document.querySelector('.site-settings-window');if(existing){existing.close();return;}
-  const inGame=location.pathname.startsWith('/game/');
+  const inGame=location.pathname.startsWith('/game/') || location.pathname === '/map-editor/playtest';
   if(inGame && document.querySelector('#battle-keybind-hud')?.dataset.state==='expanded') document.getElementById('battle-keybind-close')?.click();
   const {dialog,body}=openDialog('Settings',{side:inGame});dialog.classList.add('site-settings-window');
 
@@ -144,7 +144,7 @@ function wireNavigation() {
     document.addEventListener('click',event=>{if(!wrap.contains(event.target))toggle(false);});
     wrap.addEventListener('focusout',event=>{if(event.relatedTarget && !wrap.contains(event.relatedTarget))toggle(false);});
   }
-  if(location.pathname.startsWith('/game/')){const button=element('button',null,'site-battle-settings fullscreen-toggle');button.setAttribute('aria-label','Settings');const img=element('img');img.src='/assets/icons/settings.webp';img.alt='';button.append(img);button.onclick=openSettings;document.body.append(button);}
+  if(location.pathname.startsWith('/game/') || location.pathname === '/map-editor/playtest'){const button=element('button',null,'site-battle-settings fullscreen-toggle');button.setAttribute('aria-label','Settings');const img=element('img');img.src='/assets/icons/settings.webp';img.alt='';button.append(img);button.onclick=openSettings;document.body.append(button);}
 }
 // Existing lobby code reads textContent as identity. Keep that data intact and
 // obscure its presentation; the accessibility tree receives only a neutral label.
@@ -173,8 +173,11 @@ function applyStreamer() {
     else if(savedAttributes.has(node)){const attrs=savedAttributes.get(node);for(const [key,value] of Object.entries({role:attrs.role,'aria-label':attrs.label,title:attrs.title})){if(value===null)node.removeAttribute(key);else node.setAttribute(key,value);}savedAttributes.delete(node);}
   }
 }
+// The last known account lets the next page draw its header control at once.
+const SESSION_CACHE='bb_site_account';
+function renderCachedAccount(){try{const cached=JSON.parse(sessionStorage.getItem(SESSION_CACHE)||'null');if(cached)renderSiteAccount(cached);}catch(_){}}
 export async function refreshUnread() {
-  try{const data=await api('/api/site/session');renderSiteAccount(data);document.querySelectorAll('[data-admin-link]').forEach(node=>{node.hidden=!data.admin;});const hasUnread=data.unread>0;const unreadLabel=`${data.unread} unread ${data.unread===1?'message':'messages'}`;document.querySelectorAll('[data-support-unread]').forEach(node=>node.classList.toggle('is-visible',hasUnread));const waffle=document.querySelector('.site-waffle');if(waffle)waffle.setAttribute('aria-label',hasUnread?`Open site menu. ${unreadLabel}.`:'Open site menu');const helpLink=document.querySelector('.site-menu a[href="/help"]');if(helpLink)helpLink.setAttribute('aria-label',hasUnread?`Help Center. ${unreadLabel}.`:'Help Center');document.querySelectorAll('a[href="/help/requests"]').forEach(link=>link.setAttribute('aria-label',hasUnread?`My requests. ${unreadLabel}.`:'My requests'));return data;}catch(_){return null;}
+  try{const data=await api('/api/site/session');renderSiteAccount(data);document.querySelectorAll('[data-admin-link]').forEach(node=>{node.hidden=!data.admin;});const hasUnread=data.unread>0;const unreadLabel=`${data.unread} unread ${data.unread===1?'message':'messages'}`;document.querySelectorAll('[data-support-unread]').forEach(node=>node.classList.toggle('is-visible',hasUnread));const waffle=document.querySelector('.site-waffle');if(waffle)waffle.setAttribute('aria-label',hasUnread?`Open site menu. ${unreadLabel}.`:'Open site menu');const helpLink=document.querySelector('.site-menu a[href="/help"]');if(helpLink)helpLink.setAttribute('aria-label',hasUnread?`Help Center. ${unreadLabel}.`:'Help Center');document.querySelectorAll('a[href="/help/requests"]').forEach(link=>link.setAttribute('aria-label',hasUnread?`My requests. ${unreadLabel}.`:'My requests'));try{sessionStorage.setItem(SESSION_CACHE,JSON.stringify({member:data.member,username:data.username}));}catch(_){}return data;}catch(_){if(!document.querySelector('.site-header .site-account[data-identity]'))renderSiteAccount(null);return null;}
 }
 let acceptancePromise;
 export function ensureLegalAcceptance() {
@@ -193,10 +196,7 @@ export function ensureLegalAcceptance() {
     });
   })().catch(error=>{acceptancePromise=null;throw error;});return acceptancePromise;
 }
-function initializeRuntimeBanner() {
-  const banner = element('aside', null, 'site-runtime-banner');
-  banner.setAttribute('role', 'timer'); banner.hidden = true;
-  document.body.append(banner);
+function initializeRuntimeStatus() {
   let runtime = {}, offset = 0;
   let announcementShown = false;
   const isGameEntry = location.pathname === '/' || location.pathname.startsWith('/game/');
@@ -210,10 +210,11 @@ function initializeRuntimeBanner() {
   document.addEventListener('lobby:ready', showAnnouncement, { once: true });
   function render() {
     const now = Date.now() + offset;
-    const active = maintenanceRemaining(runtime.maintenanceUntil, now) > 0;
-    const message = active ? `Matchmaking Disabled — ${MAINTENANCE_MESSAGE} ◷ ${maintenanceClock(runtime.maintenanceUntil, now)} remaining` : '';
-    if (banner.textContent !== message) banner.textContent = message;
-    banner.hidden = !message;
+    renderReadyRestrictions(document, {
+      maintenanceUntil: runtime.maintenanceUntil,
+      suspendedUntil: window.__BRO_BATTLES_SUSPENSION__?.matchmaking,
+      now,
+    });
   }
   async function refresh() {
     try {
@@ -234,12 +235,12 @@ function initializeRuntimeBanner() {
   window.addEventListener('pagehide', () => clearInterval(timer), { once: true });
 }
 function initialize() {
-  // Tool pages (admin, Map Studio) borrow only the waffle menu, not the lobby's sounds, banner or streamer masking.
+  // Tool pages (admin, Map Studio) borrow only the waffle menu, not the lobby's sounds, runtime status or streamer masking.
   const toolPage=!!document.querySelector('.site-menu-host');
-  if(!toolPage){initUISounds();initializeRuntimeBanner();}
+  if(!toolPage){initUISounds();initializeRuntimeStatus();}
   // Auth pages have no lobby header: supply a compact shared brand header.
   if((['/signup','/login'].includes(location.pathname)) && !document.querySelector('.site-brand')){document.body.insertAdjacentHTML('afterbegin',renderHeader(location.pathname));}
-  wireNavigation();initializeDesktopNavigation();
+  wireNavigation();initializeDesktopNavigation();renderCachedAccount();
   if(!toolPage){applyStreamer();subscribeSettings(applyStreamer);}
   let pending=false;if(!toolPage)new MutationObserver(records=>{
     if(!getSettings().streamer || pending) return;

@@ -86,9 +86,9 @@
         "w": 344,
         "h": 688
       },
-      "animationBytes": 93402,
+      "animationBytes": 111241,
       "animationAppleUrl": "/assets/player-cards/slime-circuit/slime-circuit-animated.mov",
-      "animationAppleBytes": 267539,
+      "animationAppleBytes": 267920,
       "battleViewport": {
         "width": 464,
         "height": 816,
@@ -97,20 +97,20 @@
         "w": 344,
         "h": 696
       },
-      "animationVersion": "edad4d559da9844e",
-      "animationAppleVersion": "2f6720c80ee98bcc"
+      "animationVersion": "28672fae8c2aa5c9",
+      "animationAppleVersion": "c2945718d23572e9"
     },
     {
       "id": "arena-crown",
       "name": "Crown of the Arena",
       "assetUrl": "/assets/player-cards/arena-crown/arena-crown-poster.webp",
       "animationUrl": "/assets/player-cards/arena-crown/arena-crown-animated.webm",
-      "animationBytes": 163212,
+      "animationBytes": 255854,
       "animationViewport": {
-        "width": 448,
-        "height": 848,
-        "x": 37,
-        "y": 69,
+        "width": 496,
+        "height": 896,
+        "x": 61,
+        "y": 93,
         "w": 375,
         "h": 720
       },
@@ -124,24 +124,24 @@
         "min": 10000
       },
       "animationAppleUrl": "/assets/player-cards/arena-crown/arena-crown-animated.mov",
-      "animationAppleBytes": 357003,
+      "animationAppleBytes": 430518,
       "battleViewport": {
-        "width": 448,
-        "height": 848,
-        "x": 48,
-        "y": 76,
+        "width": 496,
+        "height": 896,
+        "x": 72,
+        "y": 100,
         "w": 352,
         "h": 678
       },
-      "animationVersion": "001ffd4edf0405e9",
-      "animationAppleVersion": "ab534e5871625801"
+      "animationVersion": "1b84441d529b50b2",
+      "animationAppleVersion": "1a1c0a88846870d5"
     },
     {
       "id": "radiant-silver",
       "name": "Radiant Silver",
       "assetUrl": "/assets/player-cards/radiant-silver/radiant-silver-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-silver/radiant-silver-animated.webm",
-      "animationBytes": 37245,
+      "animationBytes": 32681,
       "animationViewport": {
         "width": 456,
         "height": 804,
@@ -156,7 +156,7 @@
         "gems": 29
       },
       "animationAppleUrl": "/assets/player-cards/radiant-silver/radiant-silver-animated.mov",
-      "animationAppleBytes": 112394,
+      "animationAppleBytes": 98529,
       "shopAssetUrl": "/assets/player-cards/radiant-silver/radiant-silver.webp",
       "renderScale": 0.95,
       "battleViewport": {
@@ -167,8 +167,8 @@
         "w": 344,
         "h": 590
       },
-      "animationVersion": "cbc19f76f8e5ef99",
-      "animationAppleVersion": "abcd8c52d80155a7"
+      "animationVersion": "5a4e56bc4e7e3d75",
+      "animationAppleVersion": "9dd08d4f671f3189"
     },
     {
       "id": "astral-amethyst",
@@ -188,9 +188,9 @@
         "w": 350,
         "h": 678
       },
-      "animationBytes": 143078,
+      "animationBytes": 286678,
       "animationAppleUrl": "/assets/player-cards/astral-amethyst/astral-amethyst-animated.mov",
-      "animationAppleBytes": 283838,
+      "animationAppleBytes": 351809,
       "shopAssetUrl": "/assets/player-cards/astral-amethyst/astral-amethyst.webp",
       "battleViewport": {
         "width": 520,
@@ -200,8 +200,8 @@
         "w": 348,
         "h": 674
       },
-      "animationVersion": "5b7ed412d4bd4e1a",
-      "animationAppleVersion": "3af0586adad682e5"
+      "animationVersion": "6a641c7706162e5a",
+      "animationAppleVersion": "26195fc5a1c5d5d5"
     },
     {
       "id": "mjolnirs-anvil",
@@ -254,9 +254,9 @@
         "w": 364,
         "h": 694
       },
-      "animationBytes": 58189,
+      "animationBytes": 48482,
       "animationAppleUrl": "/assets/player-cards/radiant-diamond/radiant-diamond-animated.mov",
-      "animationAppleBytes": 173861,
+      "animationAppleBytes": 136268,
       "shopAssetUrl": "/assets/player-cards/radiant-diamond/radiant-diamond.webp",
       "renderScale": 0.95,
       "battleViewport": {
@@ -267,8 +267,8 @@
         "w": 348,
         "h": 592
       },
-      "animationVersion": "2833f1d92731ca77",
-      "animationAppleVersion": "093f29d1dbdb1d5c"
+      "animationVersion": "1fcd917e1824aef0",
+      "animationAppleVersion": "a6e45af5d26dabc0"
     },
     {
       "id": "radiant-emerald",
@@ -288,9 +288,9 @@
         "w": 357,
         "h": 687
       },
-      "animationBytes": 94752,
+      "animationBytes": 30165,
       "animationAppleUrl": "/assets/player-cards/radiant-emerald/radiant-emerald-animated.mov",
-      "animationAppleBytes": 218140,
+      "animationAppleBytes": 109875,
       "shopAssetUrl": "/assets/player-cards/radiant-emerald/radiant-emerald.webp",
       "renderScale": 0.95,
       "battleViewport": {
@@ -301,8 +301,8 @@
         "w": 344,
         "h": 594
       },
-      "animationVersion": "33e1fc4b288819ac",
-      "animationAppleVersion": "a888cc45ca4f9b02"
+      "animationVersion": "ef56e7436201d71f",
+      "animationAppleVersion": "0a97a085f89f2b49"
     },
     {
       "id": "radiant-gold",
@@ -322,9 +322,9 @@
         "w": 357,
         "h": 692
       },
-      "animationBytes": 51464,
+      "animationBytes": 32252,
       "animationAppleUrl": "/assets/player-cards/radiant-gold/radiant-gold-animated.mov",
-      "animationAppleBytes": 157017,
+      "animationAppleBytes": 104572,
       "shopAssetUrl": "/assets/player-cards/radiant-gold/radiant-gold.webp",
       "renderScale": 0.95,
       "battleViewport": {
@@ -335,8 +335,8 @@
         "w": 344,
         "h": 596
       },
-      "animationVersion": "f3d1940a0079b0d5",
-      "animationAppleVersion": "4195bfd2eaf2c7ad"
+      "animationVersion": "8489b871597a58ff",
+      "animationAppleVersion": "6f4b93acea18d66d"
     },
     {
       "id": "radiant-ruby",
@@ -356,9 +356,9 @@
         "w": 358,
         "h": 690
       },
-      "animationBytes": 49871,
+      "animationBytes": 57016,
       "animationAppleUrl": "/assets/player-cards/radiant-ruby/radiant-ruby-animated.mov",
-      "animationAppleBytes": 194498,
+      "animationAppleBytes": 201284,
       "shopAssetUrl": "/assets/player-cards/radiant-ruby/radiant-ruby.webp",
       "renderScale": 0.95,
       "battleViewport": {
@@ -369,8 +369,8 @@
         "w": 344,
         "h": 592
       },
-      "animationVersion": "8f14ca04b79fa596",
-      "animationAppleVersion": "bf4e76f9822d3a8f"
+      "animationVersion": "ddd5e10091654b84",
+      "animationAppleVersion": "863f9a8ea3cc281f"
     },
     {
       "id": "ozzy-spell",
@@ -390,9 +390,9 @@
         "w": 345,
         "h": 627
       },
-      "animationBytes": 50053,
+      "animationBytes": 72552,
       "animationAppleUrl": "/assets/player-cards/ozzy-spell/ozzy-spell-animated.mov",
-      "animationAppleBytes": 132259,
+      "animationAppleBytes": 183277,
       "shopAssetUrl": "/assets/player-cards/ozzy-spell/ozzy-spell.webp",
       "battleViewport": {
         "width": 488,
@@ -402,8 +402,8 @@
         "w": 344,
         "h": 624
       },
-      "animationVersion": "97af63c7ab2dfc87",
-      "animationAppleVersion": "a97a5382df32301c"
+      "animationVersion": "9587f70e854f73e9",
+      "animationAppleVersion": "78166c9843c648b6"
     }
   ]
 }

@@ -268,6 +268,7 @@ class GameRoom {
       selected_skin_id: String(matchPlayer.selected_skin_id || "") || null,
       selected_skin_asset_url: String(matchPlayer.selected_skin_asset_url || "") || null,
       selected_skin_game_assets: matchPlayer.selected_skin_game_assets || null,
+      selected_title_id: matchPlayer.selected_title_id || null,
       profile_icon_id: String(matchPlayer.profile_icon_id || matchPlayer.char_class || DEFAULT_CHARACTER),
       isBot: false,
       trophies: Number(matchPlayer.trophies) || 0,

@@ -1,23 +1,26 @@
 const config = require('../../../shared/site/siteConfig.json');
 const CATEGORIES = ['bug', 'idea', 'gameplay', 'account', 'purchase', 'safety', 'privacy', 'other'];
+const REPORT_REASONS = require('../../../shared/social/profileReports.json');
+const INBOX_CATEGORIES = [...CATEGORIES, 'reports'];
+const { reportTargetId, loadReportCounts, loadReportReview } = require('./profileReportReview');
 function invalid(message, status = 400) { return Object.assign(new Error(message), { status }); }
 function field(value, min, max, label) {
   if (typeof value !== 'string' || value.trim().length < min || value.trim().length > max) throw invalid(`${label} must be ${min}–${max} characters.`);
   return value.trim();
 }
-function validateSubmission(body, reply = false) {
+function validateSubmission(body, reply = false, categories = CATEGORIES) {
   const result = { body: field(body.message, 5, 4000, 'Message'), key: field(body.submissionKey, 16, 64, 'Submission reference') };
   if (!/^[a-zA-Z0-9-]+$/.test(result.key)) throw invalid('Invalid submission reference.');
   if (!reply) {
     result.subject = field(body.subject, 3, 120, 'Subject');
-    if (!CATEGORIES.includes(body.category)) throw invalid('Choose a category.');
+    if (!categories.includes(body.category)) throw invalid('Choose a category.');
     result.category = body.category;
   }
   return result;
 }
 function createSiteSupportService(db) {
-  async function create(user, kind, body) {
-    const input = validateSubmission(body);
+  async function create(user, kind, body, categories = CATEGORIES) {
+    const input = validateSubmission(body, false, categories);
     return db.withTransaction(async (_conn, q) => {
       const result = await q(`INSERT INTO site_requests (user_id, kind, category, subject, version, submission_key, player_read_at)
         VALUES (?, ?, ?, ?, ?, ?, NOW(3)) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)`,
@@ -30,13 +33,30 @@ function createSiteSupportService(db) {
       return { id: result.insertId };
     });
   }
+  async function createReport(user, body = {}) {
+    if (!body || typeof body !== 'object') throw invalid('Invalid report.');
+    const targetId = body.targetUserId;
+    if (!Number.isSafeInteger(targetId) || targetId <= 0) throw invalid('Choose a player to report.');
+    if (targetId === Number(user.user_id)) throw invalid('You cannot report yourself.');
+    const reason = REPORT_REASONS.find(item => item.value === body.reason);
+    if (!reason) throw invalid('Choose a report reason.');
+    const message = field(body.message, 5, 3500, 'Message');
+    const [target] = await db.runQuery('SELECT user_id, name FROM users WHERE user_id=? LIMIT 1', [targetId]);
+    if (!target) throw invalid('Player not found.', 404);
+    return create(user, 'support', {
+      category: 'reports',
+      subject: `Report: ${target.name} (#${target.user_id})`,
+      message: `Reported player: ${target.name}\nAccount ID: ${target.user_id}\nReason: ${reason.label}\n\n${message}`,
+      submissionKey: body.submissionKey,
+    }, INBOX_CATEGORIES);
+  }
   async function list(user, admin, query) {
     const kind = admin && query.kind === 'feedback' ? 'feedback' : 'support';
     const page = Math.max(1, Math.min(100000, parseInt(query.page, 10) || 1));
     const clauses = ['r.kind = ?']; const params = [kind];
     if (!admin) { clauses.push('r.user_id = ?'); params.push(user.user_id); }
     if (['open','in_progress','closed'].includes(query.status)) { clauses.push('r.status = ?'); params.push(query.status); }
-    if (CATEGORIES.includes(query.category)) { clauses.push('r.category = ?'); params.push(query.category); }
+    if (INBOX_CATEGORIES.includes(query.category)) { clauses.push('r.category = ?'); params.push(query.category); }
     const reader = admin ? 'admin_read_at' : 'player_read_at';
     const sender = admin ? 'player' : 'admin';
     const where = clauses.join(' AND ');
@@ -48,6 +68,13 @@ function createSiteSupportService(db) {
     const items = await db.runQuery(`SELECT r.id, r.kind, r.category, r.subject, r.status, r.created_at, r.updated_at, r.version,
       EXISTS(SELECT 1 FROM site_request_messages m WHERE m.request_id=r.id AND m.sender=? AND (r.${reader} IS NULL OR m.created_at>r.${reader})) AS unread${adminColumns}
       FROM site_requests r ${admin ? 'LEFT JOIN users u ON u.user_id=r.user_id ' : ''}WHERE ${where} ORDER BY r.updated_at DESC, r.id DESC LIMIT 20 OFFSET ?`, [sender, ...params, (page - 1) * 20]);
+    if (admin) {
+      const counts = await loadReportCounts((sql, params) => db.runQuery(sql, params), items.map(reportTargetId));
+      for (const item of items) {
+        const summary = counts.get(reportTargetId(item));
+        if (summary) item.reportSummary = summary;
+      }
+    }
     return { items, page, total: Number(total) };
   }
   async function detail(user, admin, id) {
@@ -59,7 +86,8 @@ function createSiteSupportService(db) {
       const { submission_key, user_id, ...request } = rows[0];
       if (!admin) return { request, messages };
       const [player] = await q('SELECT name, selected_profile_icon_id, char_class FROM users WHERE user_id=?', [user_id]);
-      return { request: { ...request, userId: user_id, userName: player?.name || null, userIcon: player?.selected_profile_icon_id || player?.char_class || null }, messages };
+      const reportReview = await loadReportReview(q, request);
+      return { request: { ...request, userId: user_id, userName: player?.name || null, userIcon: player?.selected_profile_icon_id || player?.char_class || null }, messages, ...(reportReview ? { reportReview } : {}) };
     });
   }
   async function reply(user, admin, id, body) {
@@ -88,6 +116,6 @@ function createSiteSupportService(db) {
     await db.runQuery("UPDATE account_emails SET pending_email=NULL,code_hash=NULL,expires_at=NULL WHERE expires_at<NOW(3)");
     await db.runQuery('DELETE a FROM legal_acceptances a LEFT JOIN users u ON u.user_id=a.user_id WHERE u.user_id IS NULL');
   }
-  return { create, list, detail, reply, setStatus, cleanup };
+  return { create, createReport, list, detail, reply, setStatus, cleanup };
 }
 module.exports = { createSiteSupportService, validateSubmission, CATEGORIES };

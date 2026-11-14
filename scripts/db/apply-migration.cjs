@@ -15,6 +15,23 @@ async function requireTables(conn, tables) {
 }
 
 const MIGRATIONS = {
+  'temporary-bans': {
+    describe: 'Optional expiry for account bans and suspensions.',
+    async run(conn) {
+      if (!(await hasColumn(conn, 'users', 'ban_expires_at'))) {
+        await conn.query(readMigration('2026-11-12_temporary_bans.sql'));
+      }
+      if (!(await hasColumn(conn, 'users', 'ban_expires_at'))) throw new Error('Missing users.ban_expires_at');
+    },
+  },
+  titles: {
+    describe: 'Purchasable player titles and equipped title.',
+    async run(conn) {
+      await conn.query(readMigration('2026-11-12_titles.sql'));
+      await requireTables(conn, ['user_titles']);
+      if (!(await hasColumn(conn, 'users', 'selected_title_id'))) throw new Error('Missing users.selected_title_id');
+    },
+  },
   'party-hidden-bros': {
     describe: 'Owner-controlled hidden enemy Bro portraits in party lobbies.',
     async run(conn) {

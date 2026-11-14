@@ -1,46 +1,46 @@
-// Radiant Silver: a striped glint runs around the frame, the corner bolts
-// flash as it passes, then a quicker second glint and scattered twinkles.
-const { rectPath, easeInOut } = require('../lib.cjs');
+// Radiant Silver (follows the original video): the top-left corner glints,
+// then two striped gleams set off from it, one clockwise all the way round the
+// frame and one straight down the left rail, flashing each corner they pass.
+const { WHITE } = require('../lib.cjs');
+const { frameCells, corners, track, cornerS, flare } = require('./_common.cjs');
+const STEEL = { core: WHITE, hi: 0xeef4ff, mid: 0xa9b8cc };
 
 module.exports = {
   id: 'radiant-silver',
   seconds: 6,
   margin: { x: 12, y: 14 },
-  effects(card, { rng }) {
-    const rand = rng(11);
-    const cells = card.frameCells.map(([x, y]) => ({ x, y, s: card.perim(x, y) }));
-    const { x0, y0, x1, y1 } = card.outer;
-    const corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => [x, y, card.perim(x, y)]);
-    const outer = rectPath(card.outer, 0);
-    const twinkles = Array.from({ length: 10 }, () => { const c = cells[Math.floor(rand() * cells.length)]; return { ...c, t0: rand() * 6 }; });
-    const sweep = (ctx, ts, a, b, width, strength) => {
-      if (ts < a || ts >= b) return -1;
-      const head = easeInOut((ts - a) / (b - a));
+  effects(card) {
+    const cells = frameCells(card);
+    const S = cornerS(card);
+    const cs = corners(card, 0);
+    // Gleam: a short band with bright diagonal stripes, centred at s.
+    const gleam = (ctx, s, strength = 1) => {
       for (const c of cells) {
-        const d = ((head - c.s) % 1 + 1) % 1; // distance behind the head
-        if (d > width) continue;
-        const u = d / width;
-        const stripe = ((c.x + c.y) % 7 + 7) % 7 < 2;
-        ctx.lift(c.x, c.y, Math.min(1, (stripe ? 1.15 : 0.5) * (1 - u * u) * strength));
+        let d = Math.abs(c.s - (((s % 1) + 1) % 1)); d = Math.min(d, 1 - d) * S.L;
+        if (d > 13) continue;
+        const stripe = ((c.x + c.y) % 6 + 6) % 6 < 2;
+        const fall = 1 - (d / 13) ** 3;
+        ctx.lift(c.x, c.y, Math.min(1, (stripe ? 1.4 : 0.75) * fall * strength));
       }
-      return head;
     };
+    // Clockwise gleam: TL 1.1 -> TR 2.6 -> BR 4.0 -> BL 4.8 -> TL 5.8.
+    const cw = [[1.1, 0], [2.6, S.tr], [4.0, S.br], [4.8, S.bl], [5.8, 1]];
+    // Second gleam runs down the left rail from TL to BL, fading at the bottom.
+    const ccw = [[1.1, 1], [2.95, S.bl + 0.02]];
+    const passed = [[2.6, cs[1]], [4.0, cs[2]], [4.8, cs[3]], [5.8, cs[0]]];
     return (ctx, ts) => {
-      const head = sweep(ctx, ts, 0.3, 3.3, 0.1, 1);
-      const head2 = sweep(ctx, ts, 3.9, 5.4, 0.07, 0.9);
-      // A star rides the outer edge at each glint's head.
-      for (const h of [head, head2]) if (h >= 0) { const [px, py] = outer.point(h); ctx.sparkle(px, py, 2 + (Math.floor(ts * 12) % 2)); }
-      // Corner bolts flash as the first glint passes them.
-      if (head >= 0) for (const [cx, cy, s] of corners) {
-        const d = ((head - s) % 1 + 1) % 1;
-        if (d < 0.04) ctx.sparkle(cx, cy, d < 0.01 ? 2 : d < 0.025 ? 4 : 1);
+      // 0.4-1.1: the top-left corner kindles and flashes.
+      const k = (ts - 0.4) / 0.75;
+      if (k >= 0 && k < 1) { flare(ctx, cs[0].x, cs[0].y, [1, 2, 3, 4, 4, 3][Math.floor(k * 6)], STEEL); gleam(ctx, 0, k); }
+      const a = track(cw, ts);
+      if (a !== null) gleam(ctx, a, ts > 5.6 ? (5.8 - ts) / 0.2 : 1);
+      const b = track(ccw, ts);
+      if (b !== null) gleam(ctx, b, ts > 2.6 ? (2.95 - ts) / 0.35 : 1);
+      // Corners flash as the clockwise gleam passes them.
+      for (const [t0, c] of passed) {
+        const u = (ts - t0 + 0.12) / 0.35;
+        if (u >= 0 && u < 1) flare(ctx, c.x, c.y, [1, 3, 3, 2, 1][Math.floor(u * 5)], STEEL);
       }
-      for (const tw of twinkles) {
-        const age = ((ts - tw.t0) % 6 + 6) % 6;
-        if (age < 0.3) ctx.sparkle(tw.x, tw.y, age < 0.08 || age > 0.22 ? 0 : 1);
-      }
-      // Gentle sheen across the whole frame at the loop's midpoint.
-      if (ts >= 3.3 && ts < 3.9) { const a = Math.sin(((ts - 3.3) / 0.6) * Math.PI) * 0.18; for (const c of cells) ctx.lift(c.x, c.y, a); }
     };
   },
 };

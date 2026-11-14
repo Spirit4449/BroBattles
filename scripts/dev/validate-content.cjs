@@ -14,6 +14,7 @@ const skinsCatalog = require('../../src/shared/catalogs/skinsCatalog.json');
 const cardsCatalog = require('../../src/shared/catalogs/playerCardsCatalog.json');
 const { FIELDS: CARD_VERSION_FIELDS, playerCardAssetVersion } = require('../art/player-card-versions.cjs');
 const iconsCatalog = require('../../src/shared/catalogs/profileIconsCatalog.json');
+const titlesCatalog = require('../../src/shared/catalogs/titlesCatalog.json');
 const { validateCatalog } = require('../../src/server/services/shop/shopCatalog');
 const shopCatalog = require('../../src/shared/catalogs/shopCatalog.json');
 
@@ -23,6 +24,16 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
     ...cardsCatalog.cards, ...iconsCatalog.icons,
   ], shop = shopCatalog, botProfiles = BOT_PROFILES } = {}) {
   const errors = combatCoverageErrors(characters);
+  const titleIds = new Set();
+  for (const title of titlesCatalog.titles || []) {
+    if (!/^[a-z0-9-]+$/.test(title.id) || titleIds.has(title.id)) errors.push(`Invalid or duplicate title ID: ${title.id}`);
+    titleIds.add(title.id);
+    if (!title.name || title.name.length > 28) errors.push(`${title.id}: invalid title name`);
+    for (const color of [title.color, title.gleamColor]) {
+      if (!/^#[0-9a-f]{6}$/i.test(color)) errors.push(`${title.id}: invalid title color`);
+    }
+    if (!Number.isSafeInteger(title.cost?.gems) || title.cost.gems < 50) errors.push(`${title.id}: titles require at least 50 gems`);
+  }
   const publicDir = path.resolve(__dirname, '../../public');
   const assetExists = (url, owner) => {
     if (!fs.existsSync(path.join(publicDir, url))) errors.push(`${owner}: missing asset ${url}`);

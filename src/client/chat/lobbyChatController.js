@@ -153,10 +153,30 @@ export function createLobbyChatController({
     return typeof getPartyContext === "function" ? getPartyContext() : null;
   }
 
+  function typingLabel(typers) {
+    const names = typers.map((typer) => typer?.name || "Player");
+    if (names.length === 1) return `${names[0]} is typing`;
+    if (names.length === 2) return `${names[0]} and ${names[1]} are typing`;
+    if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]} are typing`;
+    return `${names.length} people are typing`;
+  }
+
+  // The header status line shows who is typing, otherwise the online count.
   function syncHeader() {
     const context = presence.get();
     const partyId = Number(context?.partyId) || 0;
     ui.titleEl.textContent = "Party Chat";
+    const typers = partyId ? Array.from(state.typingByUser.values()) : [];
+    if (typers.length) {
+      const label = typingLabel(typers);
+      ui.subtitleEl.innerHTML = `<span class="bb-chat-typing-dot" aria-hidden="true"></span><span class="bb-chat-typing-text"></span>`;
+      ui.subtitleEl.querySelector(".bb-chat-typing-text").textContent = label;
+      ui.subtitleEl.title = label;
+      ui.subtitleEl.classList.add("is-typing");
+      return;
+    }
+    ui.subtitleEl.classList.remove("is-typing");
+    ui.subtitleEl.title = "";
     if (!partyId) {
       ui.subtitleEl.textContent = "Party only";
       return;
@@ -173,9 +193,7 @@ export function createLobbyChatController({
 
   function hideTypingIndicator() {
     state.typingByUser.clear();
-    ui.typingEl.classList.add("is-idle");
-    ui.typingIconsEl.innerHTML = "";
-    ui.typingTextEl.textContent = "";
+    syncHeader();
   }
 
   function renderTypingIndicator() {
@@ -185,29 +203,7 @@ export function createLobbyChatController({
         state.typingByUser.delete(key);
       }
     }
-    const typers = Array.from(state.typingByUser.values());
-    if (!typers.length) {
-      ui.typingEl.classList.add("is-idle");
-      ui.typingIconsEl.innerHTML = "";
-      ui.typingTextEl.textContent = "";
-      return;
-    }
-    ui.typingEl.classList.remove("is-idle");
-    ui.typingIconsEl.innerHTML = typers
-      .map(
-        (typer) =>
-          `<span class="bb-chat-typing-icon"><img src="${escapeHtml(buildAvatarUrl(typer?.charClass, typer?.profileIconId))}" alt="${escapeHtml(typer?.name || "Player")}" loading="lazy" decoding="async" /></span>`,
-      )
-      .join("");
-    if (typers.length === 1) {
-      ui.typingTextEl.textContent = `${typers[0]?.name || "Player"} is typing`;
-      return;
-    }
-    if (typers.length === 2) {
-      ui.typingTextEl.textContent = `${typers[0]?.name || "Player"} and ${typers[1]?.name || "Player"} are typing`;
-      return;
-    }
-    ui.typingTextEl.textContent = `${typers.length} people are typing`;
+    syncHeader();
   }
 
   function emitTyping(isTyping) {

@@ -1,4 +1,6 @@
+import { pixelArrow } from "../../ui/pixelArrow.js";
 import { applyWallet, subscribeWallet } from "../wallet.mjs";
+import { mountWallet, releaseWallet, renderWalletBalances } from "../walletView.js";
 import { escapeHtml } from "../../../shared/site/html.cjs";
 import { renderCharacterStatus } from "./characterStatusView.js";
 import { createModalFocus } from "../../ui/modalFocus.js";
@@ -411,6 +413,7 @@ function hideCharacterDetails() {
   }
   _characterDetailsUi.overlay.classList.add("is-hidden");
   _characterDetailsUi.overlay.setAttribute("aria-hidden", "true");
+  releaseWallet(_characterDetailsUi.wallet);
   _characterDetailsUi.focus.deactivate();
   _characterDetailsUi.currentCharacter = null;
   const render = _deferredSkinRender;
@@ -444,11 +447,6 @@ function ensureCharacterDetailsUi() {
 
   const wallet = document.createElement("div");
   wallet.className = "character-details-wallet";
-  wallet.setAttribute("aria-label", "Your wallet");
-  wallet.innerHTML = `
-    <span><img src="/assets/icons/coin.webp" alt="Coins" /><strong data-character-wallet="coins">0</strong></span>
-    <span><img src="/assets/icons/gem.webp" alt="Gems" /><strong data-character-wallet="gems">0</strong></span>
-  `;
 
   titleWrap.appendChild(title);
   titleWrap.appendChild(subtitle);
@@ -550,10 +548,7 @@ function renderCharacterDetails(character) {
     ? `UPGRADE ${getCharacterDisplayName(character).toUpperCase()}`
     : getCharacterDisplayName(character).toUpperCase();
   ui.subtitle.textContent = stats.description || "";
-  ui.wallet.querySelector('[data-character-wallet="coins"]').textContent =
-    Math.max(0, Number(_userDataRef?.coins) || 0).toLocaleString();
-  ui.wallet.querySelector('[data-character-wallet="gems"]').textContent =
-    Math.max(0, Number(_userDataRef?.gems) || 0).toLocaleString();
+  renderWalletBalances(_userDataRef);
 
   disposeSkinCarousel(ui.previewStage);
   ui.preview.innerHTML = "";
@@ -1104,6 +1099,7 @@ export function initializeCharacterSelect(userData) {
     if (_characterDetailsUi?.currentCharacter) renderCharacterDetails(_characterDetailsUi.currentCharacter);
   });
   _userDataRef = userData;
+  renderWalletBalances(userData);
   _skinsCatalog = SKINS_CATALOG;
   _ownedSkinIds = new Set(
     (Array.isArray(userData?.owned_skin_ids) ? userData.owned_skin_ids : [])
@@ -1144,6 +1140,7 @@ export function initializeCharacterSelect(userData) {
       closeButtonText: "×",
       contentNode: charactersGrid,
       backgroundNode: starfield,
+      showWallet: true,
     });
   };
 
@@ -1285,6 +1282,7 @@ function openCharacterDetails(character) {
   if (wasDetached) void ui.overlay.offsetWidth;
   ui.overlay.classList.remove("is-hidden");
   ui.overlay.setAttribute("aria-hidden", "false");
+  mountWallet(ui.wallet);
   ui.focus.activate();
 }
 
@@ -1504,10 +1502,8 @@ function showConfirmDialog(opts, onConfirm) {
     const currImg = createLevelBadge(level, {
       className: "level-badge--framed character-level cs-level-img",
     });
-    const arrow = document.createElement("img");
-    arrow.className = "cs-arrow";
-    arrow.src = "/assets/icons/arrow.webp";
-    arrow.alt = ">";
+    const arrow = pixelArrow("right", "lg");
+    arrow.classList.add("cs-arrow");
     const nextWrap = document.createElement("div");
     nextWrap.className = "cs-next-wrap";
     const beams = document.createElement("div");

@@ -1,11 +1,6 @@
-// Shared art scale for Shop, Trophy Road and the claim stage.
-export function currencyRewardImage(currency, amount) {
-  const type = currency === 'gems' ? 'gems' : 'coins';
-  const value = Math.max(0, Number(amount) || 0);
-  const bands = type === 'gems' ? [20, 60, 150, 400, 1000] : [400, 1000, 2500, 5000, 10000];
-  const level = bands.filter(limit => value >= limit).length;
-  return `/assets/currency/${type}-${['small', 'stack', 'bag', 'chest', 'chests', 'cart'][level]}.webp`;
-}
+// Shared art scale for Shop, Trophy Road and the claim stage (also used server-side).
+import { currencyRewardImage } from '../../shared/currencyRewardArt.cjs';
+export { currencyRewardImage };
 
 // More valuable rewards produce a fuller burst, bounded for mobile devices.
 export function currencyParticleCount(currency, amount) {

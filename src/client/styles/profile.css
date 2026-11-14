@@ -304,11 +304,17 @@ body.profile-page-body .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
+  /* Room inside the scrolling panel for effects that spill past the outer tiles. */
+  padding: 18px 26px;
+}
+
+/* Card effects spill past the tile; the hovered (playing) card draws over its neighbours. */
+body.profile-page-body .card-tile:is(:hover, :focus-within) {
+  z-index: 2;
 }
 
 body.profile-page-body .card-tile {
   position: relative;
-  overflow: hidden;
   padding: 10px;
   border: 2px solid var(--bb-border-soft);
   border-radius: var(--bb-radius-card);
@@ -372,38 +378,6 @@ body.profile-page-body .card-actions {
 }
 .profile-card-rarity.legendary {
   background: #c47b16;
-}
-
-.profile-card-tile.rare::before,
-.profile-card-tile.epic::before,
-.profile-card-tile.legendary::before,
-.card-tile.rare::before,
-.card-tile.epic::before,
-.card-tile.legendary::before {
-  content: "";
-  position: absolute;
-  top: -120%;
-  left: -40%;
-  width: 30%;
-  height: 320%;
-  background: linear-gradient(
-    180deg,
-    transparent,
-    rgba(255, 255, 255, 0.38),
-    transparent
-  );
-  transform: rotate(20deg);
-  animation: profileCardGlimmer 2.8s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes profileCardGlimmer {
-  from {
-    transform: translateX(-170%) rotate(20deg);
-  }
-  to {
-    transform: translateX(420%) rotate(20deg);
-  }
 }
 
 .profile-cost {

@@ -371,13 +371,12 @@
     "layers": [
       {
         "id": "sky",
-        "url": "/assets/sky-soil/sky-sharp.webp",
-        "scroll": 0.025,
-        "filter": "nearest"
+        "url": "/assets/sky-soil/sky-v4.webp",
+        "scroll": 0.025
       },
       {
         "id": "far-peaks",
-        "url": "/assets/sky-soil/peaks-sharp.webp",
+        "url": "/assets/sky-soil/far-isles-v4.webp",
         "scroll": 0.1,
         "fit": "cover-x",
         "y": -60,
@@ -385,20 +384,90 @@
         "filter": "nearest"
       },
       {
+        "id": "cloud-sea",
+        "url": "/assets/sky-soil/cloud-sea.webp",
+        "scroll": 0.26,
+        "fit": "cover-x",
+        "y": 80,
+        "filter": "nearest",
+        "parts": [
+          {
+            "url": "/assets/sky-soil/cloud-sea-anim.webp",
+            "frameWidth": 768,
+            "frameHeight": 170,
+            "frameRate": 5,
+            "frames": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11
+            ],
+            "x": 384,
+            "y": 319
+          }
+        ]
+      },
+      {
         "id": "forest-ridges",
-        "url": "/assets/sky-soil/forest-sharp.webp",
+        "url": "/assets/sky-soil/near-isles-v4.webp",
         "scroll": 0.26,
         "fit": "cover-x",
         "y": 80,
         "fog": 0.04,
-        "filter": "nearest"
+        "filter": "nearest",
+        "parts": [
+          {
+            "url": "/assets/sky-soil/waterfall-1.webp",
+            "frameWidth": 45,
+            "frameHeight": 162,
+            "frameRate": 14,
+            "frames": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "x": 337.5,
+            "y": 519
+          },
+          {
+            "url": "/assets/sky-soil/waterfall-2.webp",
+            "frameWidth": 42,
+            "frameHeight": 156,
+            "frameRate": 14,
+            "frames": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "x": 1185,
+            "y": 522
+          }
+        ]
       },
       {
         "id": "island-base",
-        "url": "/assets/sky-soil/island-saved-sharp.webp",
+        "url": "/assets/sky-soil/island-saved-v4.webp",
         "scroll": 1,
         "fit": "none",
-        "scale": 0.6896551724137931,
+        "scale": 0.6666666666666666,
         "x": 0,
         "y": 310,
         "stack": "arena",
@@ -409,37 +478,70 @@
       "enabled": true,
       "items": [
         {
-          "id": "sky-soil-far-cloud",
-          "type": "cloud-1",
-          "x": 400,
-          "y": 80,
+          "id": "sky-soil-cloud-1",
+          "type": "cloud-2",
+          "x": 300,
+          "y": -40,
           "direction": "right",
-          "speed": 4,
-          "scale": 0.55,
-          "alpha": 0.5,
+          "speed": 5,
+          "scale": 0.6,
+          "alpha": 1,
           "after": "sky"
         },
         {
-          "id": "sky-soil-mid-cloud",
-          "type": "cloud-3",
-          "x": 1800,
-          "y": 210,
-          "direction": "left",
-          "speed": 7,
+          "id": "sky-soil-cloud-2",
+          "type": "cloud-9",
+          "x": 1250,
+          "y": 20,
+          "direction": "right",
+          "speed": 4,
           "scale": 0.55,
-          "alpha": 0.5,
+          "alpha": 0.95,
+          "after": "sky"
+        },
+        {
+          "id": "sky-soil-cloud-3",
+          "type": "cloud-6",
+          "x": 1900,
+          "y": -80,
+          "direction": "right",
+          "speed": 6,
+          "scale": 0.6,
+          "alpha": 1,
+          "after": "sky"
+        },
+        {
+          "id": "sky-soil-cloud-4",
+          "type": "cloud-4",
+          "x": 800,
+          "y": 170,
+          "direction": "left",
+          "speed": 8,
+          "scale": 0.7,
+          "alpha": 0.95,
           "after": "far-peaks"
         },
         {
-          "id": "sky-soil-low-cloud",
-          "type": "cloud-6",
-          "x": 900,
-          "y": 900,
+          "id": "sky-soil-cloud-5",
+          "type": "cloud-11",
+          "x": 1650,
+          "y": 300,
+          "direction": "left",
+          "speed": 9,
+          "scale": 0.65,
+          "alpha": 0.9,
+          "after": "far-peaks"
+        },
+        {
+          "id": "sky-soil-cloud-6",
+          "type": "cloud-7",
+          "x": 100,
+          "y": 330,
           "direction": "right",
-          "speed": 11,
-          "scale": 0.75,
-          "alpha": 0.35,
-          "after": "forest-ridges"
+          "speed": 7,
+          "scale": 0.6,
+          "alpha": 0.9,
+          "after": "far-peaks"
         }
       ]
     },

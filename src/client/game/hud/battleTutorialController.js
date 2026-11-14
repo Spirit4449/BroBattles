@@ -129,7 +129,11 @@ export function createBattleTutorialController({
     if (icon) {
       return `<span class="tutorial-mouse-key${isDown ? " is-down" : ""}" data-codes="${escapeHtml(codes.join(","))}"><img src="${escapeHtml(icon)}" alt="${escapeHtml(label)}"></span>`;
     }
-    return `<kbd data-codes="${escapeHtml(codes.join(","))}" class="${isDown ? "is-down" : ""}">${escapeHtml(label)}</kbd>`;
+    const arrow = { "↑": "up", "↓": "down", "←": "left", "→": "right" }[label];
+    const face = arrow
+      ? `<span class="bb-arrow bb-arrow-${arrow} bb-arrow-sm" aria-hidden="true"></span><span class="bb-visually-hidden">${arrow} arrow</span>`
+      : escapeHtml(label);
+    return `<kbd data-codes="${escapeHtml(codes.join(","))}" class="${isDown ? "is-down" : ""}">${face}</kbd>`;
   }
 
   function keysFor(id, wallSide = null) {

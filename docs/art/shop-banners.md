@@ -25,3 +25,34 @@ pixelated image scaling.
 six named PNG masters before exporting them at their catalog dimensions.
 Generation sometimes returns a larger canvas than requested; check its actual
 dimensions and prepare the medium master before running the importer. Completed preview exports are not retained in the repository. The installed lossless WebPs preserve the approved native pixels; keep any new editable source masters outside the public asset tree.
+
+## Bundle banners
+
+A bundle banner must show every kind of reward in the pack, so players can tell
+what they get before opening the info preview. When a bundle includes currency,
+place the game's own currency artwork in the scene: the coin bag
+(`public/assets/currency/coins-bag.webp`, or `gems-bag.webp` for gems). Do not
+repaint coins by hand or with image generation; generated piles were rejected as
+looking pasted in. Cosmetics in the pack (player card, profile icon, skin)
+stay the main subjects.
+
+Use `scripts/art/compose-bundle-banner.cjs`:
+
+```bash
+node scripts/art/compose-bundle-banner.cjs banner.png out.png --art coins-bag --x 297 --floor 343 --width 112
+```
+
+- Stand the bag on the middle of the walkway/floor's top face (`--floor`), not
+  on its back edge, or it looks like it hangs over the platform. The script adds
+  a soft contact shadow there.
+- Keep it inside the part every shop card shows, about x 230-795 of a 1024px
+  banner, clear of the NEW tag (top-left), rarity badge (top-right) and info
+  button (bottom-right). The open floor left of the card frame works well.
+- Keep the art's own colours. `--light` (scene tinting) exists but darkened the
+  bag in the crystal cave and was rejected.
+- Preview a before/after at the phone-card crop before installing, then encode
+  the 1024x384 result as lossless WebP over the banner.
+
+Installed 2026-11-13: Sky Adventure (bag at x 297, floor 343, width 112) and
+Crystal Treasury (x 298, floor 338, width 116). Their pre-bag banners are in git
+history before that date.

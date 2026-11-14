@@ -1,3 +1,4 @@
+const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const crypto=require('node:crypto');
 const bcrypt=require('bcrypt');
 const config=require('../../../shared/site/siteConfig.json');
@@ -8,8 +9,8 @@ const result=(statusCode,payload)=>({ok:statusCode<400,statusCode,payload});
 const fail=(message,status=400)=>result(status,{success:false,error:message});
 const digest=(id,email,code)=>hashCode(`signup:${id}`,email,code);
 const {emailCooldown}=require('../email/emailCooldown');
-async function getGuest({requireCurrentUser,req,res}) {
-  if(getBanHoldFromRequest(req))return null;
+async function getGuest({db,requireCurrentUser,req,res}) {
+  if(await getBanHoldFromRequest(req, {db,res}))return null;
   const user=await requireCurrentUser(req,res);
   return user?.expires_at && new Date(user.expires_at).getTime()>Date.now() ? user : null;
 }
@@ -26,7 +27,7 @@ async function sendChallenge(q,user,row,fields) {
 }
 async function beginSignup(context) {
   const {db,req}=context;
-  if(getBanHoldFromRequest(req))return fail('This browser is temporarily blocked from creating accounts.',403);
+  if(await getBanHoldFromRequest(req, {db,res:context.res}))return fail('This browser is temporarily blocked from creating accounts.',403);
   if(req.body?.accepted!==true||req.body.termsVersion!==config.termsVersion||req.body.privacyVersion!==config.privacyVersion)return fail('Please accept the current Terms and acknowledge the Privacy Policy.');
   const credentials=require('./authAccountService').validateCredentials(req.body.username,req.body.password);
   if(!credentials.ok)return credentials;
@@ -34,8 +35,8 @@ async function beginSignup(context) {
   const user=await getGuest(context);if(!user)return fail('A guest session is required. Return to the lobby and try again.',409);
   const passwordHash=await bcrypt.hash(credentials.password,Number(process.env.BCRYPT_ROUNDS)||12);
   return db.withTransaction(async(_conn,q)=>{
-    const [live]=await q('SELECT user_id,expires_at,is_banned FROM users WHERE user_id=? FOR UPDATE',[user.user_id]);
-    if(!live?.expires_at || new Date(live.expires_at).getTime()<=Date.now() || Number(live.is_banned)===1)return fail('Your guest session has ended. Return to the lobby.',409);
+    const [live]=await q('SELECT user_id,expires_at,is_banned,ban_expires_at FROM users WHERE user_id=? FOR UPDATE',[user.user_id]);
+    if(!live?.expires_at || new Date(live.expires_at).getTime()<=Date.now() || isAccountBanned(live))return fail('Your guest session has ended. Return to the lobby.',409);
     const names=await q('SELECT user_id FROM users WHERE name=? AND user_id<>? LIMIT 1',[credentials.username,user.user_id]);
     if(names.length)return fail('Username is already taken.',409);
     const emails=await q('SELECT user_id FROM account_emails WHERE email=? LIMIT 1',[email]);

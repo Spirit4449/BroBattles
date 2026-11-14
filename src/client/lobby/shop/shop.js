@@ -1,64 +1,79 @@
+import { titleMarkup } from "../../views/titleView.js";
 import { getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 import { applyWallet, subscribeWallet, walletRevision } from "../wallet.mjs";
+import { mountWallet, releaseWallet, renderWalletBalances } from "../walletView.js";
 import { escapeHtml } from "../../../shared/site/html.cjs";
 import { playerCardImage, hydratePlayerCardMedia, disposePlayerCardMediaWithin } from "../../views/playerCardAnimation.cjs";
-import { showPlayerCardPreview } from "../../views/playerCardPreview.js";
+import { showRewardPreview } from "../../views/playerCardPreview.js";
 import { sonner } from "../../ui/sonner.js";
 import { currencyRewardImage, rewardSound, currencyParticleCount, currencyFlightPlan, resolveRewardGrants } from "../../views/rewardPresentation.js";
 import { playSound } from "../../ui/uiSounds.js";
 import { createModalFocus } from "../../ui/modalFocus.js";
+import { dismissPopup } from "../../ui/popupMotion.js";
 import "../../styles/shop.css";
 
+/*
+ * Shop overview
+ * - Section presentation (layout, rarity, owned filtering, row limits) comes from
+ *   each catalog section in src/shared/catalogs/shopCatalog.json.
+ * - Everything a grant kind shows (type label, name icon, reward label, artwork)
+ *   lives in GRANT_KINDS / grantArtMarkup below. Add new kinds there.
+ * - render() builds plain markup strings and patchChildren() swaps only the nodes
+ *   whose markup changed, so refreshes never flash or reset untouched cards.
+ *   View state (active tab, expanded sections) is applied after patching and
+ *   never baked into markup.
+ */
+
 const FRIENDLY_ERRORS = {
-  insufficient_funds: {
-    title: "Not enough currency",
-    message: "Check your balance and choose another item or get more currency.",
-  },
-  payments_unavailable: {
-    title: "Checkout unavailable",
-    message: "Try again in a moment.",
-  },
-  account_required: {
-    title: null,
-    message: "Create an account to buy currency.",
-  },
-  offer_ineligible: {
-    title: "Offer unavailable",
-    message: "You already own the featured cosmetic in this offer.",
-  },
-  unknown_offer: {
-    title: "Shop refreshed",
-    message: "Pick from the latest offers.",
-  },
-  price_changed: {
-    title: "Price changed",
-    message: "The sale refreshed. Open the shop again to see the current price.",
-  },
-  order_not_found: {
-    title: "Could not find this order",
-    message: "Refresh the shop and check your balance before trying another purchase.",
-  },
+  insufficient_funds: { title: "Not enough currency", message: "Check your balance and choose another item or get more currency." },
+  payments_unavailable: { title: "Checkout unavailable", message: "Try again in a moment." },
+  account_required: { title: null, message: "Create an account to buy currency." },
+  offer_ineligible: { title: "Offer unavailable", message: "You already own the featured cosmetic in this offer." },
+  unknown_offer: { title: "Shop refreshed", message: "Pick from the latest offers." },
+  price_changed: { title: "Price changed", message: "The sale refreshed. Open the shop again to see the current price." },
+  order_not_found: { title: "Could not find this order", message: "Refresh the shop and check your balance before trying another purchase." },
 };
+
+const RARITY_ORDER = { common: 0, rare: 1, epic: 2, legendary: 3 };
+const SHOP_ICON = "/assets/shop/icons/shop-v2.webp";
+const PROFILE_ICON = "/assets/shop/icons/profile-v2.webp";
+
+// One place for everything a grant kind shows in cards, dialogs and reveals.
+const GRANT_KINDS = {
+  currency: {
+    offerType: grant => (grant.currency === "gems" ? "GEM PACK" : "COIN PACK"),
+    icon: grant => currencyImage(grant.currency),
+    reward: () => "Currency",
+  },
+  skin: {
+    offerType: grant => (grant.character ? `${getCharacterDisplayName(grant.character).toUpperCase()} SKIN` : "FIGHTER SKIN"),
+    icon: () => "/assets/shop/icons/skins-hanger.webp",
+    reward: grant => `${grant.character || "Bro"} Skin`,
+  },
+  card: { offerType: () => "PLAYER CARD", icon: () => PROFILE_ICON, reward: () => "Player Card" },
+  profileIcon: { offerType: () => "PROFILE ICON", icon: () => PROFILE_ICON, reward: () => "Player Icon" },
+  title: { offerType: () => "PLAYER TITLE", icon: () => PROFILE_ICON, reward: () => "Player Title" },
+  character: { offerType: () => "NEW BRO", icon: () => SHOP_ICON, reward: () => "New Bro" },
+  mode: { offerType: () => "GAME MODE", icon: () => SHOP_ICON, reward: () => "Game Mode" },
+};
+const UNKNOWN_KIND = { offerType: () => "SHOP ITEM", icon: () => SHOP_ICON, reward: () => "Reward" };
+const grantKind = grant => GRANT_KINDS[grant?.kind] || UNKNOWN_KIND;
 
 function safeCssToken(value) {
   return String(value || "item").replace(/[^a-z0-9_-]/gi, "-");
 }
 
 function delay(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+  return new Promise(resolve => window.setTimeout(resolve, ms));
 }
 
 function idempotencyKey(prefix) {
   const uuid = window.crypto?.randomUUID?.();
-  if (uuid) return `${prefix}:${uuid}`;
-  return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  return uuid ? `${prefix}:${uuid}` : `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 }
 
 async function fetchShopJson(url, options = {}) {
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    ...options,
-  });
+  const response = await fetch(url, { credentials: "same-origin", ...options });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(data?.error || "Shop request failed.");
@@ -69,38 +84,51 @@ async function fetchShopJson(url, options = {}) {
   return data;
 }
 
+function postShopJson(url, body) {
+  return fetchShopJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
 function formatMoney(price) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format((Number(price?.amountCents) || 0) / 100);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 })
+    .format((Number(price?.amountCents) || 0) / 100);
 }
 
 function formatCountdown(targetIso, now = Date.now()) {
-  const remaining = Math.max(0, new Date(targetIso).getTime() - now);
-  const totalSeconds = Math.floor(remaining / 1000);
+  const totalSeconds = Math.floor(Math.max(0, new Date(targetIso).getTime() - now) / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
   if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return [hours, minutes, totalSeconds % 60].map(part => String(part).padStart(2, "0")).join(":");
 }
 
+const formatCount = value => (Number(value) || 0).toLocaleString();
+const currencyImage = currency => `/assets/icons/${currency === "coins" ? "coin" : "gem"}.webp`;
+
 function currencyIcon(currency) {
-  return `<img class="purchase-currency-icon" src="/assets/icons/${currency === "coins" ? "coin" : "gem"}.webp" alt="">`;
+  return `<img class="purchase-currency-icon" src="${currencyImage(currency)}" alt="">`;
 }
 
 function priceMarkup(price) {
-  if (!price || price.type === "free") {
-    return '<span class="shop-price-free">FREE</span>';
-  }
-  if (price.type === "money") {
-    return `<span class="shop-price-money">${formatMoney(price)}</span>`;
-  }
+  if (!price || price.type === "free") return '<span class="shop-price-free">FREE</span>';
+  if (price.type === "money") return `<span class="shop-price-money">${formatMoney(price)}</span>`;
   const currency = price.currency === "coins" ? "coins" : "gems";
-  return `<span class="shop-price-virtual"><img src="/assets/icons/${currency === "coins" ? "coin" : "gem"}.webp" alt="${currency}" /><strong>${(Number(price.amount) || 0).toLocaleString()}</strong></span>`;
+  return `<span class="shop-price-virtual"><img src="${currencyImage(currency)}" alt="${currency}" /><strong>${formatCount(price.amount)}</strong></span>`;
+}
+
+const isFree = price => !price || price.type === "free" || (price.type === "virtual" && !(Number(price.amount) > 0));
+
+function grantLabel(grant, { signed = false } = {}) {
+  if (grant.kind !== "currency") return grant.name;
+  return `${signed ? "+" : ""}${formatCount(grant.amount)} ${grant.name}`;
+}
+
+// Artwork for a grant. Reveals use the animated player card; dialogs use shop art.
+function grantArtMarkup(grant, { reveal = false } = {}) {
+  if (grant.kind === "title") return `<span class="title-presentation-box">${titleMarkup(grant.id)}</span>`;
+  if (grant.kind === "currency") return `<img src="${escapeHtml(currencyRewardImage(grant.currency, grant.amount))}" alt="${reveal ? escapeHtml(grant.name) : ""}" />`;
+  if (reveal && grant.kind === "card") return `<img data-animated-card-id="${escapeHtml(grant.id)}" src="${escapeHtml(playerCardImage(grant.id, { animate: false }))}" alt="${escapeHtml(grant.name)}" />`;
+  return `<img src="${escapeHtml((reveal ? grant.image : grant.shopImage || grant.image) || "")}" alt="${reveal ? escapeHtml(grant.name) : ""}" />`;
 }
 
 function getActionState(item) {
@@ -108,164 +136,241 @@ function getActionState(item) {
   if (item.kind === "daily") {
     return {
       disabled: !!itemState.claimed || !itemState.available,
-      label: itemState.claimed
-        ? "CLAIMED"
-        : itemState.available
-          ? "FREE"
-          : "UNAVAILABLE",
+      label: itemState.claimed ? "CLAIMED" : itemState.available ? "FREE" : "UNAVAILABLE",
       action: "daily",
     };
   }
-  if (itemState.purchased) {
-    return { disabled: true, label: "PURCHASED", action: null };
-  }
-  if (itemState.owned) {
-    return { disabled: true, label: "OWNED", action: null };
-  }
-  const offerId =
-    item.offerId || (item.kind !== "browse-item" ? item.id : null);
-  if (!offerId || !itemState.available) {
-    return { disabled: true, label: "UNAVAILABLE", action: null };
-  }
-  if (item?.price?.type === "money") {
-    return { disabled: false, label: null, action: "checkout", offerId };
-  }
-  return { disabled: false, label: null, action: "purchase", offerId };
+  if (itemState.purchased) return { disabled: true, label: "PURCHASED", action: null };
+  if (itemState.owned) return { disabled: true, label: "OWNED", action: null };
+  const offerId = item.offerId || (item.kind !== "browse-item" ? item.id : null);
+  if (!offerId || !itemState.available) return { disabled: true, label: "UNAVAILABLE", action: null };
+  return { disabled: false, label: null, action: item?.price?.type === "money" ? "checkout" : "purchase", offerId };
 }
 
 function getItemTypeLabel(item, grants) {
-  const primary = grants[0] || {};
-  if (item.kind === "daily") {
-    const currency = primary.currency === "gems" ? "GEMS" : "COINS";
-    return `DAILY REWARD · ${currency}`;
-  }
-  if (primary.kind === "skin") {
-    return primary.character
-      ? `${getCharacterDisplayName(primary.character).toUpperCase()} SKIN`
-      : "FIGHTER SKIN";
-  }
-  if (primary.kind === "card") return "PLAYER CARD";
-  if (primary.kind === "profileIcon") return "PROFILE ICON";
-  if (primary.kind === "currency") {
-    return primary.currency === "gems" ? "GEM PACK" : "COIN PACK";
-  }
-  return "SHOP ITEM";
+  if (item.kind === "daily") return `DAILY REWARD · ${grants[0]?.currency === "gems" ? "GEMS" : "COINS"}`;
+  return grantKind(grants[0]).offerType(grants[0] || {});
 }
 
 function getItemIcon(item, grants) {
-  const primary = grants[0] || {};
   if (item.kind === "bundle") return "/assets/shop/icons/bundle-v2.webp";
-  if (primary.kind === "currency") {
-    return primary.currency === "gems"
-      ? "/assets/icons/gem.webp"
-      : "/assets/icons/coin.webp";
-  }
-  if (primary.kind === "skin") return "/assets/shop/icons/skins-hanger.webp";
-  if (primary.kind === "card" || primary.kind === "profileIcon")
-    return "/assets/shop/icons/profile-v2.webp";
-  return "/assets/shop/icons/shop-v2.webp";
+  return grantKind(grants[0]).icon(grants[0] || {});
 }
 
 function isBigPurchase(item) {
   if (item?.kind === "bundle") return true;
-  if (item?.price?.type === "money")
-    return Number(item.price.amountCents) >= 499;
+  if (item?.price?.type === "money") return Number(item.price.amountCents) >= 499;
   return Number(item?.price?.amount) >= 250;
 }
 
-function itemMarkup(item, sectionId, itemIndex) {
+/* ---------- Markup. Pure functions of catalog data; no view state. ---------- */
+
+const INFO_ICON = '<svg class="shop-info-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><path fill="currentColor" d="M6 2h4v3H6zM4 7h6v5h2v2H4v-2h2V9H4z" /></svg>';
+const NEW_TAG = '<span class="shop-new-tag" data-shop-new>NEW</span>';
+
+function offerVisualMarkup(item, grants, { showRarity, rarity }) {
+  const primary = grants[0] || {};
+  const cardArt = grants.length === 1 && primary.kind === "card" ? primary.shopImage : null;
+  return `<div class="shop-offer-visual">
+      <img class="shop-banner-art" src="${escapeHtml(item.banner || "/assets/lushy/lobbyBg.webp")}" alt="" loading="lazy" />
+      <span class="shop-banner-scrim" aria-hidden="true"></span>
+      <span class="shop-banner-light" aria-hidden="true"></span>
+      ${primary.kind === "title" ? `<div class="shop-title-preview">${titleMarkup(primary.id)}</div>` : ""}
+      ${cardArt ? `<img class="shop-original-card" src="${escapeHtml(cardArt)}" alt="" loading="lazy" />` : ""}
+      ${item.kind === "bundle" || grants.some(grant => grant.kind === "card") ? `<button class="shop-card-info bb-button" type="button" data-shop-preview="${escapeHtml(item.id)}" aria-label="See what's in ${escapeHtml(item.name)}" title="See what's inside">${INFO_ICON}</button>` : ""}
+      ${item.isNew ? '<span class="shop-new-tag shop-item-new" aria-label="New item">NEW</span>' : ""}
+      ${item.badge ? `<span class="shop-offer-badge">${escapeHtml(item.badge)}</span>` : ""}
+      ${showRarity ? `<span class="shop-rarity-badge">${escapeHtml(rarity)}</span>` : ""}
+    </div>`;
+}
+
+function offerBodyMarkup(item, grants) {
+  // Bundle contents live behind the info button; the card just says how many.
+  const type = item.kind === "bundle" ? `BUNDLE · ${grants.length} ITEM${grants.length === 1 ? "" : "S"}` : getItemTypeLabel(item, grants);
+  return `<div class="shop-offer-body">
+      <div class="shop-offer-name"><img src="${escapeHtml(getItemIcon(item, grants))}" alt="" /><h3>${escapeHtml(item.name)}</h3></div>
+      <span class="shop-offer-type">${escapeHtml(type)}</span>
+    </div>`;
+}
+
+function offerFooterMarkup(item, action) {
+  const original = item.originalPrice;
+  const discounted = original?.type === "virtual" && Number(original.amount) > Number(item.price?.amount);
+  const showBadge = discounted && Number(item.discountPercent) > 0 && !action.disabled;
+  const claimable = !action.disabled && (action.action === "daily" || (action.action === "purchase" && isFree(item.price)));
+  let label;
+  if (action.disabled) label = `<span class="shop-action-state">${escapeHtml(action.label)}</span>`;
+  else if (discounted) {
+    const reason = item.bundleValue && !item.discountPercent ? "Unowned cosmetic value" : "Original price";
+    label = `<span class="shop-sale-prices"><s class="shop-original-price" aria-label="${reason} ${formatCount(original.amount)} ${escapeHtml(original.currency)}">${formatCount(original.amount)}</s>${priceMarkup(item.price)}</span>`;
+  } else label = priceMarkup(item.price);
+  return `<div class="shop-offer-footer${showBadge ? " has-discount" : ""}">
+      ${showBadge ? `<span class="shop-sale-discount" aria-label="${escapeHtml(item.discountPercent)} percent off">${escapeHtml(item.discountPercent)}%<small>OFF!</small></span>` : ""}
+      <button class="shop-buy-button${claimable ? " is-claimable" : ""}" type="button" data-sound="none"
+        data-shop-action="${escapeHtml(action.action || "")}" data-offer-id="${escapeHtml(action.offerId || "")}" data-item-id="${escapeHtml(item.id)}"
+        ${action.disabled ? "disabled" : ""}>${label}</button>
+    </div>`;
+}
+
+export function offerMarkup(item, meta, index) {
   const grants = Array.isArray(item?.grants) ? item.grants : [];
   const action = getActionState(item);
   const rarity = safeCssToken(String(item?.rarity || "common").toLowerCase());
-  const showsRarity = sectionId === "skins" || sectionId === "profile" || sectionId === "sales";
-  const isBundle = item.kind === "bundle";
-  const isFeatured = sectionId === "sales";
-  const isDiscounted = item.originalPrice?.type === "virtual" && Number(item.originalPrice.amount) > Number(item.price?.amount);
-  const showDiscountBadge = isDiscounted && Number(item.discountPercent) > 0 && !action.disabled;
-  const bundleItems = isBundle ? grants.map(grant => {
-    const label = grant.kind === "currency"
-      ? `${(Number(grant.amount) || 0).toLocaleString()} ${grant.name}`
-      : grant.name;
-    const icon = getItemIcon({ kind: "item" }, [grant]);
-    return `<li><img src="${escapeHtml(icon)}" alt="" /><span>${escapeHtml(label)}</span></li>`;
-  }).join("") : "";
-  const unavailable =
-    action.disabled && !item?.state?.owned && !item?.state?.purchased && !item?.state?.claimed;
-  const itemId = safeCssToken(item.id);
-  const primaryGrant = grants[0] || {};
-  const productKind = safeCssToken(primaryGrant.kind || item.kind || "item");
-  const itemType = isBundle ? null : getItemTypeLabel(item, grants);
-  const itemIcon = getItemIcon(item, grants);
-  const shopCardImage = grants.length === 1 && primaryGrant.kind === 'card' ? primaryGrant.shopImage : null;
-  return `
-    <article class="shop-offer${showsRarity ? ` shop-rarity-${rarity} has-rarity` : ""} shop-product-${productKind} shop-item-${itemId}${isBundle ? " shop-offer-bundle" : ""}${isFeatured ? " shop-offer-featured" : ""}${unavailable ? " is-unavailable" : ""}${item?.state?.owned || item?.state?.purchased ? " is-owned" : ""}${item?.state?.claimed ? " is-claimed" : ""}"
-      data-shop-item-id="${escapeHtml(item.id)}" style="--offer-index:${itemIndex}" tabindex="0">
-      <div class="shop-offer-visual${isBundle ? " is-bundle" : ""}">
-        <img class="shop-banner-art" src="${escapeHtml(item.banner || "/assets/lushy/lobbyBg.webp")}" alt="" loading="lazy" />
-        <span class="shop-banner-scrim" aria-hidden="true"></span>
-        <span class="shop-banner-light" aria-hidden="true"></span>
-        ${shopCardImage ? `<img class="shop-original-card" src="${escapeHtml(shopCardImage)}" alt="" loading="lazy" />` : ''}
-        ${grants.some(grant => grant.kind === "card") ? `<button class="shop-card-info bb-button" type="button" data-shop-card-preview="${escapeHtml(item.id)}" aria-label="Preview player cards in ${escapeHtml(item.name)}" title="Preview player cards"><svg class="shop-info-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><path fill="currentColor" d="M6 2h4v3H6zM4 7h6v5h2v2H4v-2h2V9H4z" /></svg></button>` : ""}
-        ${item.isNew ? '<span class="shop-new-tag shop-item-new" aria-label="New item">NEW</span>' : ""}
-        ${item.badge ? `<span class="shop-offer-badge">${escapeHtml(item.badge)}</span>` : ""}
-        ${showsRarity ? `<span class="shop-rarity-badge">${escapeHtml(rarity)}</span>` : ""}
-        ${isFeatured ? '<span class="shop-sale-sheen" aria-hidden="true"></span>' : ""}
-      </div>
-      <div class="shop-offer-body">
-        <div class="shop-offer-name"><img src="${escapeHtml(itemIcon)}" alt="" /><h3>${escapeHtml(item.name)}</h3></div>
-        ${isBundle ? `<ul class="shop-bundle-items">${bundleItems}</ul>` : `<span class="shop-offer-type">${escapeHtml(itemType)}</span>`}
-      </div>
-      <div class="shop-offer-footer${showDiscountBadge ? " has-discount" : ""}">
-        ${showDiscountBadge ? `<span class="shop-sale-discount" aria-label="${escapeHtml(item.discountPercent)} percent off">${escapeHtml(item.discountPercent)}%<small>OFF!</small></span>` : ""}
-        <button class="shop-buy-button" type="button"
-          data-shop-action="${escapeHtml(action.action || "")}" data-offer-id="${escapeHtml(action.offerId || "")}" data-item-id="${escapeHtml(item.id)}"
-          ${action.disabled ? "disabled" : ""}>${action.disabled ? `<span class="shop-action-state">${escapeHtml(action.label)}</span>` : isDiscounted ? `<span class="shop-sale-prices"><s class="shop-original-price" aria-label="${item.bundleValue && !item.discountPercent ? "Unowned cosmetic value" : "Original price"} ${(Number(item.originalPrice.amount) || 0).toLocaleString()} ${escapeHtml(item.originalPrice.currency)}">${(Number(item.originalPrice.amount) || 0).toLocaleString()}</s>${priceMarkup(item.price)}</span>` : priceMarkup(item.price)}</button>
-      </div>
+  const showRarity = !!meta.showRarity;
+  const owned = item?.state?.owned || item?.state?.purchased;
+  const classes = [
+    "shop-offer",
+    showRarity && `has-rarity shop-rarity-${rarity}`,
+    `shop-product-${safeCssToken(grants[0]?.kind || item.kind || "item")}`,
+    item.kind === "bundle" && "shop-offer-bundle",
+    action.disabled && !owned && !item?.state?.claimed && "is-unavailable",
+    owned && "is-owned",
+    item?.state?.claimed && "is-claimed",
+  ].filter(Boolean).join(" ");
+  return `<article class="${classes}" data-shop-item-id="${escapeHtml(item.id)}" style="--offer-index:${index}">
+      ${offerVisualMarkup(item, grants, { showRarity, rarity })}
+      ${offerBodyMarkup(item, grants)}
+      ${offerFooterMarkup(item, action)}
     </article>`;
 }
 
-function sectionMarkup(meta, items) {
-  const hasUnavailable = items.some(item => getActionState(item).label === "UNAVAILABLE");
-  items = items.filter(item => getActionState(item).label !== "UNAVAILABLE");
-  const collapsible = !!meta.collapsible;
-  if (collapsible) {
-    const ranks = { common: 0, rare: 1, epic: 2, legendary: 3 };
-    items = items.filter(item => !item?.state?.owned && !item?.state?.purchased).sort((a, b) => (ranks[a.rarity] ?? 4) - (ranks[b.rarity] ?? 4) || String(a.name).localeCompare(String(b.name)));
+function visibleOffers(meta, items) {
+  let shown = items.filter(item => getActionState(item).label !== "UNAVAILABLE");
+  if (meta.hideOwned) {
+    shown = shown
+      .filter(item => !item?.state?.owned && !item?.state?.purchased)
+      .sort((a, b) => (RARITY_ORDER[a.rarity] ?? 4) - (RARITY_ORDER[b.rarity] ?? 4) || String(a.name).localeCompare(String(b.name)));
   }
-  const timerKind = meta.rotation;
-  return `
-    <section class="shop-section shop-section-${meta.id}${collapsible ? ' shop-section-collapsible' : ''}" id="shop-section-${meta.id}">
-      <header class="shop-section-head">
-        <div class="shop-section-copy"><img src="${escapeHtml(meta.icon)}" alt="" /><h2>${escapeHtml(meta.name)}</h2></div>
-        ${timerKind ? `<div class="shop-reset-chip"><img class="shop-clock-icon" src="/assets/ui/shop-clock.webp" alt="" /><strong data-shop-countdown="${timerKind}">--:--:--</strong></div>` : ""}
-      </header>
-      <div id="shop-grid-${meta.id}" class="shop-offer-grid${meta.id === "sales" ? " shop-sales-grid" : ""}">
-        ${items.length ? items.map((item, index) => itemMarkup(item, meta.id, index)).join("") : collapsible && !hasUnavailable ? `<div class="shop-empty shop-collection-complete"><img class="shop-collection-star" src="/assets/icons/special.webp" alt="" /><strong>Collection complete!</strong><p>You own everything here. Time to show it off.</p><button class="bb-button" type="button" data-shop-open-profile>Go to Profile</button></div>` : '<div class="shop-empty"><strong>Nothing available right now.</strong></div>'}
-      </div>
-      ${collapsible ? `<button class="shop-expand bb-button" type="button" aria-expanded="false" aria-controls="shop-grid-${meta.id}">Expand</button>` : ''}
-    </section>`;
+  return shown;
 }
 
-function purchaseDialog(title, content, confirm = "", { headerClose = false, onPack } = {}) {
+function emptyStateMarkup(meta, items) {
+  // Nothing left to buy in a collection section (owned offers are filtered out,
+  // and an empty catalog section counts too) reads as complete.
+  const everythingOwned = meta.hideOwned && !items.some(item => getActionState(item).label === "UNAVAILABLE");
+  if (everythingOwned) {
+    const note = meta.rotation ? "You own everything in this rotation. New items arrive at the reset." : "You own everything here. Time to show it off.";
+    return `<div class="shop-empty shop-collection-complete"><img class="shop-collection-star" src="/assets/icons/special.webp" alt="" /><strong>Collection complete!</strong><p>${note}</p><button class="bb-button" type="button" data-shop-open-profile>Go to Profile</button></div>`;
+  }
+  return '<div class="shop-empty"><strong>Nothing available right now.</strong></div>';
+}
+
+// Keyed render tree for one section; patchChildren() turns it into DOM.
+export function sectionTree(meta, items) {
+  const offers = visibleOffers(meta, items);
+  const layout = safeCssToken(meta.layout || "grid");
+  const rows = meta.rows ? ` data-rows="${Number(meta.rows)}"` : "";
+  const head = `<header class="shop-section-head">
+      <div class="shop-section-copy"><img src="${escapeHtml(meta.icon)}" alt="" /><h2>${escapeHtml(meta.name)}</h2></div>
+      ${meta.rotation ? `<div class="shop-reset-chip"><img class="shop-clock-icon" src="/assets/ui/shop-clock.webp" alt="" /><strong data-shop-countdown="${escapeHtml(meta.rotation)}">--:--:--</strong></div>` : ""}
+    </header>`;
+  const children = [
+    { key: "head", html: head },
+    {
+      key: "grid",
+      html: `<div id="shop-grid-${escapeHtml(meta.id)}" class="shop-offer-grid shop-layout-${layout}"></div>`,
+      children: offers.length
+        ? offers.map((item, index) => ({ key: `offer:${item.id}`, html: offerMarkup(item, meta, index) }))
+        : [{ key: "empty", html: emptyStateMarkup(meta, items) }],
+    },
+  ];
+  if (meta.collapsible) {
+    children.push({ key: "expand", html: `<button class="shop-expand bb-button" type="button" aria-expanded="false" aria-controls="shop-grid-${escapeHtml(meta.id)}">Expand</button>` });
+  }
+  return {
+    key: `section:${meta.id}`,
+    html: `<section class="shop-section shop-section-${escapeHtml(meta.id)}${meta.collapsible ? " shop-section-collapsible" : ""}" id="shop-section-${escapeHtml(meta.id)}"${rows}></section>`,
+    children,
+  };
+}
+
+function tabMarkup(meta, notifications) {
+  return `<button type="button" data-shop-jump="${escapeHtml(meta.id)}" data-sound="cursor4" data-volume="0.22"><img class="shop-tab-icon" src="${escapeHtml(meta.icon)}" alt="" /><span>${escapeHtml(meta.name)}</span>${notifications?.sections?.[meta.id]?.hasNew ? NEW_TAG : ""}</button>`;
+}
+
+/* ---------- Keyed DOM patching. ---------- */
+
+const renderedMarkup = new WeakMap();
+
+function elementFromHtml(html) {
+  const box = document.createElement("div");
+  box.innerHTML = html.trim();
+  return box.firstElementChild;
+}
+
+// Reuses a child whose key and markup are unchanged, so images, media, focus and
+// layout survive refreshes; replaces only changed nodes and drops stale ones.
+function patchChildren(parent, entries) {
+  const existing = new Map();
+  for (const child of [...parent.children]) {
+    if (child.dataset.key) existing.set(child.dataset.key, child);
+    else child.remove();
+  }
+  let previous = null;
+  for (const entry of entries) {
+    let node = existing.get(entry.key);
+    existing.delete(entry.key);
+    if (!node || renderedMarkup.get(node) !== entry.html) {
+      const fresh = elementFromHtml(entry.html);
+      fresh.dataset.key = entry.key;
+      renderedMarkup.set(fresh, entry.html);
+      node?.replaceWith(fresh);
+      node = fresh;
+    }
+    const expected = previous ? previous.nextElementSibling : parent.firstElementChild;
+    if (node !== expected) parent.insertBefore(node, expected);
+    if (entry.children) patchChildren(node, entry.children);
+    previous = node;
+  }
+  for (const stale of existing.values()) stale.remove();
+}
+
+/* ---------- Dialogs. ---------- */
+
+// With holdOnConfirm, confirming fades out only the dialog card and resolves to
+// a bridge: the dimmed backdrop stays up until bridge.release(), so the screen
+// never flashes undimmed between "Buy" and the reward reveal.
+function purchaseDialog(title, content, confirm = "", { headerClose = false, onPack, holdOnConfirm = false } = {}) {
   return new Promise(resolve => {
     const backdrop = document.createElement("div");
     backdrop.className = "cs-confirm-backdrop";
+    const header = headerClose
+      ? `<header class="cs-confirm-title purchase-dialog-header"><h2>${escapeHtml(title)}</h2><button type="button" class="bb-close pixel-menu-button" data-dismiss aria-label="Close">×</button></header>`
+      : `<h2 class="cs-confirm-title">${escapeHtml(title)}</h2>`;
+    const actions = headerClose ? "" : `<div class="cs-confirm-actions"><button type="button" class="cs-btn cancel pixel-menu-button" data-dismiss>${confirm ? "Cancel" : "Close"}</button>
+      ${confirm ? `<button type="button" class="cs-btn confirm pixel-menu-button" data-confirm>${confirm}</button>` : ""}</div>`;
     backdrop.innerHTML = `<section class="cs-confirm cs-purchase-confirm purchase-review" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
-      ${headerClose ? `<header class="cs-confirm-title purchase-dialog-header"><h2>${escapeHtml(title)}</h2><button type="button" class="bb-close pixel-menu-button" data-dismiss aria-label="Close">×</button></header>` : `<h2 class="cs-confirm-title">${escapeHtml(title)}</h2>`}
-      <div class="cs-confirm-body">${content}</div>
-      ${headerClose ? "" : `<div class="cs-confirm-actions"><button type="button" class="cs-btn cancel pixel-menu-button" data-dismiss>${confirm ? "Cancel" : "Close"}</button>
-      ${confirm ? `<button type="button" class="cs-btn confirm pixel-menu-button" data-confirm>${confirm}</button>` : ""}</div>`}</section>`;
+      ${header}<div class="cs-confirm-body">${content}</div>${actions}</section>`;
+    let settled = false;
     const finish = value => {
+      if (settled) return;
+      settled = true;
       focus.deactivate();
       backdrop.remove();
       resolve(value);
     };
+    const handOff = () => {
+      if (settled) return;
+      settled = true;
+      focus.deactivate();
+      backdrop.classList.add("is-handing-off");
+      let released = false;
+      resolve({
+        release({ instant = false } = {}) {
+          if (released) return;
+          released = true;
+          if (instant) backdrop.remove();
+          else dismissPopup(backdrop, () => backdrop.remove());
+        },
+      });
+    };
     const focus = createModalFocus(backdrop.firstElementChild, { onEscape: () => finish(null) });
     let reviewingPack = false;
     backdrop.addEventListener("click", async event => {
+      if (settled) return;
       const button = event.target.closest("button");
       if (event.target === backdrop || button?.hasAttribute("data-dismiss")) finish(null);
-      else if (button?.hasAttribute("data-confirm")) finish(true);
+      else if (button?.hasAttribute("data-confirm")) (holdOnConfirm ? handOff() : finish(true));
       else if (button?.dataset.pack && !reviewingPack) {
         reviewingPack = true;
         try {
@@ -282,6 +387,19 @@ function purchaseDialog(title, content, confirm = "", { headerClose = false, onP
   });
 }
 
+function purchaseReviewMarkup(item) {
+  const grants = item.grants || [];
+  const rewards = grants.map(grant => {
+    const tint = grant.kind === "currency"
+      ? `reward-tint-${safeCssToken(grant.currency)}`
+      : `shop-rarity-${safeCssToken(grant.rarity || item.rarity || "common")}`;
+    // Titles render their own nameplate, so they skip the caption.
+    const caption = grant.kind === "title" ? "" : `<strong>${grant.kind === "currency" ? currencyIcon(grant.currency) : ""} ${escapeHtml(grantLabel(grant, { signed: true }))}</strong>`;
+    return `<li class="purchase-grant ${tint} purchase-grant-${safeCssToken(grant.kind)}"><div class="purchase-stage">${grantArtMarkup(grant)}</div>${caption}</li>`;
+  }).join("");
+  return `${grants.length > 1 ? `<h3>${escapeHtml(item.name)}</h3>` : ""}<ul class="purchase-grants">${rewards}</ul>`;
+}
+
 function loadStripeJs() {
   if (window.Stripe) return Promise.resolve(window.Stripe);
   if (window.__bbStripeJsPromise) return window.__bbStripeJsPromise;
@@ -289,37 +407,35 @@ function loadStripeJs() {
     const script = document.createElement("script");
     script.src = "https://js.stripe.com/clover/stripe.js";
     script.async = true;
-    script.onload = () =>
-      window.Stripe
-        ? resolve(window.Stripe)
-        : reject(new Error("Stripe.js did not initialize."));
+    script.onload = () => (window.Stripe ? resolve(window.Stripe) : reject(new Error("Stripe.js did not initialize.")));
     script.onerror = () => reject(new Error("Unable to load Stripe.js."));
     document.head.appendChild(script);
   });
   return window.__bbStripeJsPromise;
 }
 
-export function initializeShop({
-  userData,
-  guest,
-  onWalletChange,
-  onProfileInvalidate,
-  onOpenProfile,
-} = {}) {
+export function initializeShop({ userData, guest, onWalletChange, onProfileInvalidate, onOpenProfile } = {}) {
   const state = {
     data: null,
     overlay: null,
     scroll: null,
+    tabs: null,
     open: false,
     loading: false,
     timer: null,
     refreshingAtBoundary: false,
+    actionPending: false,
     checkout: null,
     checkoutSessionId: null,
     checkoutOfferId: null,
     completingSessionId: null,
     reveal: null,
+    // View state, applied after each render.
     activeSection: null,
+    expandedSections: new Set(),
+    // Programmatic scrolls (tab clicks) pause the scroll spy until they settle.
+    spyPaused: false,
+    spyResumeTimer: null,
     scrollSpyFrame: null,
     viewObserver: null,
     viewTimers: new Map(),
@@ -328,23 +444,18 @@ export function initializeShop({
     savingViews: null,
   };
 
-  const newTag = '<span class="shop-new-tag" data-shop-new>NEW</span>';
+  const sectionMeta = () => state.data?.sectionMeta || [];
+  const sectionNode = id => state.scroll?.querySelector(`#shop-section-${CSS.escape(String(id))}`);
 
-  function updateNewTags() {
-    const notifications = state.data?.notifications;
-    if (!notifications) return;
+  /* ---------- NEW tags and viewed tracking. ---------- */
+
+  function updateShopButtonTag() {
     const shopButton = document.getElementById("shop-button");
-    shopButton?.querySelector("[data-shop-new]")?.remove();
-    if (notifications.hasNew) shopButton?.insertAdjacentHTML("beforeend", newTag);
-    if (shopButton) shopButton.setAttribute("aria-label", notifications.hasNew ? "Shop, new content" : "Shop");
-    state.overlay?.querySelectorAll("[data-shop-jump]").forEach(button => {
-      button.querySelector("[data-shop-new]")?.remove();
-      if (notifications.sections[button.dataset.shopJump]?.hasNew) button.insertAdjacentHTML("beforeend", newTag);
-    });
-    state.scroll?.querySelectorAll("[data-shop-item-id]").forEach(card => {
-      const item = Object.values(state.data.sections).flat().find(item => item.id === card.dataset.shopItemId);
-      if (!item?.isNew) card.querySelector(".shop-item-new")?.remove();
-    });
+    const notifications = state.data?.notifications;
+    if (!shopButton || !notifications) return;
+    shopButton.querySelector("[data-shop-new]")?.remove();
+    if (notifications.hasNew) shopButton.insertAdjacentHTML("beforeend", NEW_TAG);
+    shopButton.setAttribute("aria-label", notifications.hasNew ? "Shop, new content" : "Shop");
   }
 
   function stopViewTracking() {
@@ -388,23 +499,19 @@ export function initializeShop({
     if (!offerIds.length && !Object.keys(rotations).length) return state.savingViews;
     state.viewedOffers.clear();
     state.viewedRotations.clear();
-    const previousSave = state.savingViews;
-    const save = Promise.resolve(previousSave).then(async () => {
+    const save = Promise.resolve(state.savingViews).then(async () => {
       try {
-        await fetchShopJson("/api/shop/viewed", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rotations, offerIds }),
-        });
+        await postShopJson("/api/shop/viewed", { rotations, offerIds });
         if (!state.data || state.open) return;
-        for (const [section, notification] of Object.entries(state.data.notifications.sections)) {
+        const notifications = state.data.notifications;
+        for (const [section, notification] of Object.entries(notifications.sections)) {
           if (rotations[section] === notification.cycleKey) notification.refreshed = false;
           notification.offerIds = notification.offerIds.filter(id => !offerIds.includes(id));
           notification.hasNew = notification.refreshed || notification.offerIds.length > 0;
         }
         Object.values(state.data.sections).flat().forEach(item => { if (offerIds.includes(item.id)) item.isNew = false; });
-        state.data.notifications.hasNew = Object.values(state.data.notifications.sections).some(section => section.hasNew);
-        updateNewTags();
+        notifications.hasNew = Object.values(notifications.sections).some(section => section.hasNew);
+        render();
       } catch (error) {
         // Keep failed acknowledgments for the next close and leave NEW visible.
         offerIds.forEach(id => state.viewedOffers.add(id));
@@ -418,18 +525,13 @@ export function initializeShop({
     return save;
   }
 
-  function sectionMeta() { return state.data?.sectionMeta || []; }
+  /* ---------- Feedback. ---------- */
 
   function shopToast(tone, title, message, duration = 4800) {
     return sonner(title, message, "Got it", undefined, {
       duration,
       tone,
-      sound:
-        tone === "error"
-          ? "shopError"
-          : tone === "success"
-            ? "shopConfirm"
-            : null,
+      sound: tone === "error" ? "shopError" : tone === "success" ? "shopConfirm" : null,
       soundVolume: 0.35,
     });
   }
@@ -440,18 +542,8 @@ export function initializeShop({
       if (currency) return { title: `Not enough ${currency}`, message: `Check your balance and choose another item or get more ${currency}.` };
     }
     if (FRIENDLY_ERRORS[error?.code]) return FRIENDLY_ERRORS[error.code];
-    if (context === "load") {
-      return {
-        title: "Shop unavailable",
-        message: "Try again in a moment.",
-      };
-    }
-    if (context === "checkout") {
-      return {
-        title: "Checkout unavailable",
-        message: "Please try again in a moment. If you already paid, check your balance first.",
-      };
-    }
+    if (context === "load") return { title: "Shop unavailable", message: "Try again in a moment." };
+    if (context === "checkout") return { title: "Checkout unavailable", message: "Please try again in a moment. If you already paid, check your balance first." };
     return {
       title: context === "daily" ? "Could not claim daily reward" : "Could not complete purchase",
       message: "Please try again in a moment.",
@@ -464,6 +556,8 @@ export function initializeShop({
     shopToast("error", copy.title, copy.message);
   }
 
+  /* ---------- Shell and delegated events. ---------- */
+
   function ensureShell() {
     if (state.overlay) return;
     const overlay = document.createElement("div");
@@ -473,67 +567,88 @@ export function initializeShop({
       <div class="shop-backdrop"><span></span><span></span></div>
       <section class="shop-window" role="dialog" aria-modal="true" aria-labelledby="shop-title">
         <header class="shop-header">
-          <div class="shop-brand">
-            <img class="shop-title-icon" src="/assets/shop/icons/shop-v2.webp" alt="" /><h1 id="shop-title">Bro Shop</h1>
-          </div>
-          <div class="shop-header-wallet" aria-label="Your wallet">
-            <span data-shop-wallet-shell="coins"><img src="/assets/icons/coin.webp" alt="Coins" /><strong data-shop-wallet="coins">0</strong></span>
-            <span data-shop-wallet-shell="gems"><img src="/assets/icons/gem.webp" alt="Gems" /><strong data-shop-wallet="gems">0</strong></span>
-          </div>
+          <div class="shop-brand"><img class="shop-title-icon" src="${SHOP_ICON}" alt="" /><h1 id="shop-title">Bro Shop</h1></div>
+          <div class="shop-header-wallet"></div>
           <button class="shop-close bb-close pixel-menu-button" type="button" aria-label="Close shop">×</button>
         </header>
-        <nav class="shop-tabs" aria-label="Jump to a shop section">
-          ${sectionMeta().map((meta) => `<button type="button" data-shop-jump="${meta.id}" data-sound="cursor4" data-volume="0.22"><img class="shop-tab-icon" src="${escapeHtml(meta.icon)}" alt="" /><span>${escapeHtml(meta.name)}</span></button>`).join("")}
-        </nav>
+        <nav class="shop-tabs" aria-label="Jump to a shop section"></nav>
         <div class="shop-scroll"><div class="shop-loading"><span class="shop-loading-rune bb-battle-loader" aria-hidden="true"></span><strong>Opening shop...</strong></div></div>
       </section>
       <div class="shop-checkout" aria-hidden="true">
         <div class="shop-checkout-backdrop"></div>
         <section class="shop-checkout-panel" role="dialog" aria-modal="true" aria-labelledby="shop-checkout-title">
           <header><h2 id="shop-checkout-title">Secure Checkout</h2><button type="button" class="shop-checkout-close bb-close pixel-menu-button" aria-label="Close checkout">×</button></header>
-          <p class="shop-checkout-notice">Currency is delivered after payment confirmation. Refund and withdrawal rights depend on applicable law. See the <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a> or contact <a href="mailto:support@brobattles.dev">support@brobattles.dev</a>.</p>
-          <div class="shop-checkout-host"></div>
+          <div class="shop-checkout-body">
+            <p class="shop-checkout-notice">Currency is delivered after payment confirmation. Refund and withdrawal rights depend on applicable law. See the <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a> or contact <a href="mailto:support@brobattles.dev">support@brobattles.dev</a>.</p>
+            <div class="shop-checkout-host"></div>
+          </div>
         </section>
       </div>`;
     document.body.appendChild(overlay);
     state.overlay = overlay;
     state.scroll = overlay.querySelector(".shop-scroll");
+    state.tabs = overlay.querySelector(".shop-tabs");
+    state.focus = createModalFocus(overlay, {
+      initialFocus: () => overlay.querySelector(".shop-close"),
+    });
 
-    overlay.querySelector(".shop-close")?.addEventListener("click", close);
-    overlay.querySelector(".shop-backdrop")?.addEventListener("click", close);
-    overlay
-      .querySelector(".shop-checkout-close")
-      ?.addEventListener("click", () => {
-        playSound("cancel", 0.3);
-        closeCheckout();
-      });
-    overlay
-      .querySelector(".shop-checkout-backdrop")
-      ?.addEventListener("click", closeCheckout);
-    overlay.querySelector(".shop-tabs").addEventListener("click", (event) => {
+    overlay.querySelector(".shop-close").addEventListener("click", close);
+    overlay.querySelector(".shop-backdrop").addEventListener("click", close);
+    overlay.querySelector(".shop-checkout-close").addEventListener("click", () => {
+      playSound("cancel", 0.3);
+      closeCheckout();
+    });
+    overlay.querySelector(".shop-checkout-backdrop").addEventListener("click", closeCheckout);
+    state.tabs.addEventListener("click", event => {
       const button = event.target.closest("[data-shop-jump]");
       if (button) jumpTo(button.dataset.shopJump);
     });
-    state.scroll.addEventListener(
-      "scroll",
-      () => {
-        if (state.scrollSpyFrame) return;
-        state.scrollSpyFrame = window.requestAnimationFrame(() => {
-          state.scrollSpyFrame = null;
-          updateActiveSection();
-        });
-      },
-      { passive: true },
-    );
-    document.addEventListener("keydown", (event) => {
+    state.scroll.addEventListener("click", handleScrollClick);
+    state.scroll.addEventListener("scroll", handleScroll, { passive: true });
+    // Any direct user scroll takes over from a tab jump right away.
+    for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
+      state.scroll.addEventListener(type, resumeScrollSpy, { passive: true });
+    }
+    document.addEventListener("keydown", event => {
       if (event.key !== "Escape" || !state.open) return;
-      const checkout = state.overlay.querySelector(".shop-checkout");
       if (state.reveal?.dataset.ready === "1") closeReveal();
-      else if (checkout?.getAttribute("aria-hidden") === "false")
-        closeCheckout();
+      else if (state.overlay.querySelector(".shop-checkout")?.getAttribute("aria-hidden") === "false") closeCheckout();
       else close();
     });
   }
+
+  function handleScrollClick(event) {
+    // Only buttons act; clicking the card art or text does nothing.
+    const target = event.target.closest("button");
+    if (!target) return;
+    if (target.matches("[data-shop-preview]")) {
+      const item = findItem(target.dataset.shopPreview);
+      showRewardPreview(item?.grants || [], { title: item?.kind === "bundle" ? item.name : undefined });
+    } else if (target.matches("[data-shop-open-profile]")) {
+      close();
+      if (onOpenProfile) onOpenProfile();
+      else window.location.assign("/index.html?profile=self");
+    } else if (target.matches(".shop-expand")) {
+      const id = target.closest(".shop-section").id.replace("shop-section-", "");
+      setExpanded(id, !state.expandedSections.has(id));
+    } else if (target.matches("[data-shop-action]")) {
+      void runOfferAction(target);
+    }
+  }
+
+  async function runOfferAction(button) {
+    if (button.disabled || state.actionPending) return;
+    const item = findItem(button.dataset.itemId) || findItem(button.dataset.offerId);
+    if (!item) return;
+    state.actionPending = true;
+    try {
+      await reviewItem(item, button);
+    } finally {
+      state.actionPending = false;
+    }
+  }
+
+  /* ---------- Wallet. ---------- */
 
   subscribeWallet((wallet, user) => {
     if (user === userData) updateWallet(wallet, false);
@@ -541,28 +656,17 @@ export function initializeShop({
 
   function updateWallet(wallet, notify = true, pulse = false) {
     if (!wallet) return;
-    const normalized = {
-      coins: Number(wallet.coins) || 0,
-      gems: Number(wallet.gems) || 0,
-    };
+    const normalized = { coins: Number(wallet.coins) || 0, gems: Number(wallet.gems) || 0 };
     if (state.data) state.data.wallet = normalized;
-    state.overlay?.querySelectorAll("[data-shop-wallet]").forEach((node) => {
-      const currency = node.dataset.shopWallet;
-      node.textContent = normalized[currency].toLocaleString();
+    renderWalletBalances(normalized);
+    state.overlay?.querySelectorAll("[data-shop-wallet]").forEach(node => {
+      node.textContent = normalized[node.dataset.shopWallet].toLocaleString();
       if (pulse) {
-        const shell = node.closest("[data-shop-wallet-shell]");
-        shell?.animate(
-          [
-            { transform: "scale(1)", filter: "brightness(1)" },
-            {
-              transform: "scale(1.12)",
-              filter: "brightness(1.5)",
-              offset: 0.42,
-            },
-            { transform: "scale(1)", filter: "brightness(1)" },
-          ],
-          { duration: 520, easing: "cubic-bezier(.2,.8,.2,1)" },
-        );
+        node.closest("[data-shop-wallet-shell]")?.animate([
+          { transform: "scale(1)", filter: "brightness(1)" },
+          { transform: "scale(1.12)", filter: "brightness(1.5)", offset: 0.42 },
+          { transform: "scale(1)", filter: "brightness(1)" },
+        ], { duration: 520, easing: "cubic-bezier(.2,.8,.2,1)" });
       }
     });
     if (notify) {
@@ -571,82 +675,45 @@ export function initializeShop({
     }
   }
 
-  function render({ preserveScroll = true, animateOffers = false } = {}) {
+  /* ---------- Rendering. ---------- */
+
+  function render() {
+    updateShopButtonTag();
     if (!state.data || !state.scroll) return;
-    const previousTop = preserveScroll ? state.scroll.scrollTop : 0;
     updateWallet(state.data.wallet, false);
-    state.activeSection = null;
-    state.overlay.querySelector(".shop-tabs").innerHTML = sectionMeta().map(meta =>
-      `<button type="button" data-shop-jump="${escapeHtml(meta.id)}" data-sound="cursor4" data-volume="0.22"><img class="shop-tab-icon" src="${escapeHtml(meta.icon)}" alt="" /><span>${escapeHtml(meta.name)}</span></button>`).join("");
-    state.scroll.innerHTML = sectionMeta().map((meta) =>
-      sectionMarkup(meta, state.data.sections?.[meta.id] || []),
-    ).join("");
-    state.scroll.scrollTop = previousTop;
-    wireOfferActions();
-    state.scroll.querySelectorAll('[data-shop-open-profile]').forEach(button => {
-      button.addEventListener('click', () => {
-        close();
-        if (onOpenProfile) onOpenProfile();
-        else window.location.assign('/index.html?profile=self');
-      });
-    });
-    state.scroll.querySelectorAll('.shop-expand').forEach(button => {
-      button.addEventListener('click', () => {
-        const expanded = button.getAttribute('aria-expanded') !== 'true';
-        button.setAttribute('aria-expanded', String(expanded));
-        button.textContent = expanded ? 'Show less' : 'Expand';
-        button.closest('.shop-section').classList.toggle('is-expanded', expanded);
-      });
-    });
-    if (animateOffers) {
-      stageOffers();
-    } else {
-      state.scroll.querySelectorAll(".shop-offer").forEach((offer) => {
-        offer.dataset.staged = "1";
-        offer.style.opacity = "1";
-      });
-    }
+    const metas = sectionMeta();
+    const notifications = state.data.notifications;
+    patchChildren(state.tabs, metas.map(meta => ({ key: `tab:${meta.id}`, html: tabMarkup(meta, notifications) })));
+    patchChildren(state.scroll, metas.map(meta => sectionTree(meta, state.data.sections?.[meta.id] || [])));
+    applyViewState();
     updateCountdowns();
-    updateActiveSection();
-    updateNewTags();
     trackViewedContent();
   }
 
-  function stageOffers() {
-    const offers = state.scroll?.querySelectorAll(".shop-offer") || [];
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting || entry.target.dataset.staged === "1")
-            return;
-          entry.target.dataset.staged = "1";
-          const index =
-            Number(entry.target.style.getPropertyValue("--offer-index")) || 0;
-          const offerEntrance = entry.target.animate(
-            [
-              { opacity: 0, transform: "translateY(28px) scale(.975)" },
-              { opacity: 1, transform: "translateY(0) scale(1)" },
-            ],
-            {
-              duration: 520,
-              delay: Math.min(index, 3) * 65,
-              easing: "cubic-bezier(.16,.8,.24,1)",
-              fill: "both",
-            },
-          );
-          offerEntrance.finished.then(() => {
-            entry.target.style.opacity = "1";
-            offerEntrance.cancel();
-          });
-          observer.unobserve(entry.target);
-        });
-      },
-      { root: state.scroll, threshold: 0.13 },
-    );
-    offers.forEach((offer) => observer.observe(offer));
+  function applyViewState() {
+    for (const meta of sectionMeta()) {
+      if (meta.collapsible) paintExpanded(meta.id);
+    }
+    paintActiveTab();
   }
 
-  async function refresh(options = {}) {
+  function setExpanded(id, expanded) {
+    if (expanded) state.expandedSections.add(id);
+    else state.expandedSections.delete(id);
+    paintExpanded(id);
+  }
+
+  function paintExpanded(id) {
+    const section = sectionNode(id);
+    const expanded = state.expandedSections.has(id);
+    section?.classList.toggle("is-expanded", expanded);
+    const button = section?.querySelector(".shop-expand");
+    if (!button) return;
+    button.setAttribute("aria-expanded", String(expanded));
+    button.textContent = expanded ? "Show less" : "Expand";
+  }
+
+  async function refresh({ preserveScroll = true } = {}) {
     if (state.loading) return state.loading;
     state.loading = (async () => {
       try {
@@ -655,8 +722,8 @@ export function initializeShop({
         applyWallet(userData, state.data.wallet, revision);
         if (userData) state.data.wallet = { coins: userData.coins, gems: userData.gems };
         state.clockOffset = new Date(state.data.serverNow).getTime() - Date.now();
-        render(options);
-        updateNewTags();
+        render();
+        if (!preserveScroll && state.scroll) state.scroll.scrollTop = 0;
         return state.data;
       } finally {
         state.loading = false;
@@ -665,96 +732,116 @@ export function initializeShop({
     return state.loading;
   }
 
-  function jumpTo(section) {
+  /* ---------- Section tabs and scroll spy. ---------- */
+
+  function pauseScrollSpy() {
+    state.spyPaused = true;
+    window.clearTimeout(state.spyResumeTimer);
+    // Released once scrolling has been quiet for a moment (scrollend is not universal).
+    state.spyResumeTimer = window.setTimeout(resumeScrollSpy, 180);
+  }
+
+  function resumeScrollSpy() {
+    window.clearTimeout(state.spyResumeTimer);
+    state.spyPaused = false;
+  }
+
+  function handleScroll() {
+    // While a tab jump animates, keep the clicked tab lit instead of tracking
+    // every section the scroll passes through.
+    if (state.spyPaused) return pauseScrollSpy();
+    if (state.scrollSpyFrame) return;
+    state.scrollSpyFrame = window.requestAnimationFrame(() => {
+      state.scrollSpyFrame = null;
+      updateActiveSection();
+    });
+  }
+
+  function jumpTo(section, { instant = false } = {}) {
     setActiveSection(section);
-    state.overlay
-      ?.querySelector(`#shop-section-${CSS.escape(String(section || "sales"))}`)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const target = sectionNode(state.activeSection);
+    if (!target) return;
+    pauseScrollSpy();
+    target.scrollIntoView({ behavior: instant ? "instant" : "smooth", block: "start" });
   }
 
   function spotlightOffer(offerId) {
-    const offer = Array.from(
-      state.scroll?.querySelectorAll("#shop-section-sales [data-shop-item-id]") || [],
-    ).find((item) => item.dataset.shopItemId === String(offerId));
-    if (!offer) {
-      jumpTo("sales");
-      return;
-    }
-    setActiveSection("sales");
+    const offer = [...(state.scroll?.querySelectorAll("[data-shop-item-id]") || [])]
+      .find(node => node.dataset.shopItemId === String(offerId));
+    if (!offer) return jumpTo("sales", { instant: true });
+    const id = offer.closest(".shop-section").id.replace("shop-section-", "");
+    if (sectionMeta().find(meta => meta.id === id)?.collapsible) setExpanded(id, true);
+    setActiveSection(id);
+    pauseScrollSpy();
     offer.scrollIntoView({ behavior: "instant", block: "center" });
-    offer.focus({ preventScroll: true });
+    const buy = offer.querySelector(".shop-buy-button:not(:disabled)");
+    buy?.focus({ preventScroll: true });
     offer.classList.add("is-spotlight");
     window.setTimeout(() => offer.classList.remove("is-spotlight"), 1800);
   }
 
   function setActiveSection(section) {
-    const nextSection = sectionMeta().some((meta) => meta.id === section)
-      ? section
-      : "sales";
-    if (state.activeSection === nextSection) return;
-    state.activeSection = nextSection;
+    state.activeSection = sectionMeta().some(meta => meta.id === section) ? section : sectionMeta()[0]?.id || null;
+    paintActiveTab();
+  }
+
+  function paintActiveTab() {
     let activeButton = null;
-    state.overlay?.querySelectorAll("[data-shop-jump]").forEach((button) => {
-      const active = button.dataset.shopJump === nextSection;
+    state.tabs?.querySelectorAll("[data-shop-jump]").forEach(button => {
+      const active = button.dataset.shopJump === state.activeSection;
+      if (button.classList.contains("is-active") === active) {
+        if (active) activeButton = button;
+        return;
+      }
       button.classList.toggle("is-active", active);
       if (active) {
         activeButton = button;
         button.setAttribute("aria-current", "location");
+        // Keep the active tab visible when the tab strip scrolls (narrow screens).
+        if (state.tabs.scrollWidth > state.tabs.clientWidth) {
+          state.tabs.scrollTo({ left: button.offsetLeft - (state.tabs.clientWidth - button.offsetWidth) / 2, behavior: "smooth" });
+        }
       } else button.removeAttribute("aria-current");
     });
-    const tabs = activeButton?.closest(".shop-tabs");
-    if (tabs && tabs.scrollWidth > tabs.clientWidth) {
-      tabs.scrollTo({
-        left:
-          activeButton.offsetLeft -
-          (tabs.clientWidth - activeButton.offsetWidth) / 2,
-        behavior: "smooth",
-      });
-    }
+    return activeButton;
   }
 
   function updateActiveSection() {
-    if (!state.scroll || !sectionMeta().length) return;
-    let active = sectionMeta()[0].id;
-    const threshold =
-      state.scroll.getBoundingClientRect().top +
-      Math.min(160, state.scroll.clientHeight * 0.24);
-    for (const meta of sectionMeta()) {
-      const section = state.scroll.querySelector(
-        `#shop-section-${CSS.escape(meta.id)}`,
-      );
-      if (section && section.getBoundingClientRect().top <= threshold)
-        active = meta.id;
+    const metas = sectionMeta();
+    if (!state.scroll || !metas.length) return;
+    let active = metas[0].id;
+    const threshold = state.scroll.getBoundingClientRect().top + Math.min(160, state.scroll.clientHeight * 0.24);
+    for (const meta of metas) {
+      if ((sectionNode(meta.id)?.getBoundingClientRect().top ?? Infinity) <= threshold) active = meta.id;
     }
-    if (
-      state.scroll.scrollTop + state.scroll.clientHeight >=
-      state.scroll.scrollHeight - 4
-    ) {
-      active = sectionMeta().at(-1).id;
-    }
-    setActiveSection(active);
+    if (state.scroll.scrollTop + state.scroll.clientHeight >= state.scroll.scrollHeight - 4) active = metas.at(-1).id;
+    if (active !== state.activeSection) setActiveSection(active);
   }
+
+  /* ---------- Open / close. ---------- */
 
   function open(section = "sales", offerId = null) {
     ensureShell();
+    const trigger = document.activeElement;
     state.open = true;
     void state.overlay.offsetWidth;
     state.overlay.classList.add("is-open");
     state.overlay.setAttribute("aria-hidden", "false");
     document.body.classList.add("shop-is-open");
+    mountWallet(state.overlay.querySelector(".shop-header-wallet"));
+    renderWalletBalances(userData);
+    state.focus.activate(trigger);
     playSound("shopOpen", 0.38);
     if (!state.timer) state.timer = window.setInterval(updateCountdowns, 1000);
-    return Promise.resolve(state.savingViews).then(() => refresh({ preserveScroll: false }))
-      .then(() => requestAnimationFrame(() => {
-        if (offerId) spotlightOffer(offerId);
-        else jumpTo(section);
-      }))
-      .catch((error) => {
-        state.scroll.innerHTML =
-          '<div class="shop-load-error"><strong>Shop unavailable.</strong><button type="button" class="pixel-menu-button reward-continue" aria-hidden="true" tabindex="-1" data-sound="cursor4">Try Again</button></div>';
-        state.scroll
-          .querySelector("button")
-          ?.addEventListener("click", () => void refresh());
+    const position = () => (offerId ? spotlightOffer(offerId) : jumpTo(section, { instant: true }));
+    // Content from the previous visit is placed right away and patched in place.
+    if (state.data) position();
+    return Promise.resolve(state.savingViews)
+      .then(() => refresh())
+      .then(() => { if (state.open) position(); })
+      .catch(error => {
+        state.scroll.innerHTML = '<div class="shop-load-error"><strong>Shop unavailable.</strong><button type="button" class="bb-button" data-sound="cursor4">Try Again</button></div>';
+        state.scroll.querySelector("button").addEventListener("click", () => void refresh().catch(retryError => reportError(retryError, "load")));
         reportError(error, "load");
       });
   }
@@ -765,18 +852,10 @@ export function initializeShop({
 
   async function getFeaturedSale() {
     if (!state.data) await refresh({ preserveScroll: false });
-    const sales = Array.isArray(state.data?.sections?.sales)
-      ? state.data.sections.sales
-      : [];
-    const offer =
-      sales.find((item) => item?.state?.available && !item?.state?.owned) ||
-      sales.find((item) => item?.state?.available) ||
-      null;
+    const sales = Array.isArray(state.data?.sections?.sales) ? state.data.sections.sales : [];
+    const offer = sales.find(item => item?.state?.available && !item?.state?.owned) || sales.find(item => item?.state?.available) || null;
     if (!offer) return null;
-    return {
-      offer,
-      nextRefreshAt: state.data?.rotations?.sales?.nextRefreshAt || null,
-    };
+    return { offer, nextRefreshAt: state.data?.rotations?.sales?.nextRefreshAt || null };
   }
 
   function close() {
@@ -788,6 +867,8 @@ export function initializeShop({
     state.overlay.classList.remove("is-open");
     state.overlay.setAttribute("aria-hidden", "true");
     document.body.classList.remove("shop-is-open");
+    releaseWallet(state.overlay.querySelector(".shop-header-wallet"));
+    state.focus.deactivate();
     playSound("cancel", 0.34);
     if (state.timer) window.clearInterval(state.timer);
     state.timer = null;
@@ -796,15 +877,15 @@ export function initializeShop({
 
   function updateCountdowns() {
     if (!state.open || !state.data) return;
+    const now = Date.now() + (state.clockOffset || 0);
     let expired = false;
     for (const kind of ["dailies", "sales"]) {
       const target = state.data.rotations?.[kind]?.nextRefreshAt;
-      state.overlay
-        .querySelectorAll(`[data-shop-countdown="${kind}"]`)
-        .forEach((node) => {
-          node.textContent = target ? formatCountdown(target, Date.now() + (state.clockOffset || 0)) : "--:--:--";
-        });
-      if (target && new Date(target).getTime() <= Date.now() + (state.clockOffset || 0)) expired = true;
+      const text = target ? formatCountdown(target, now) : "--:--:--";
+      state.overlay.querySelectorAll(`[data-shop-countdown="${kind}"]`).forEach(node => {
+        if (node.textContent !== text) node.textContent = text;
+      });
+      if (target && new Date(target).getTime() <= now) expired = true;
     }
     if (expired && !state.refreshingAtBoundary) {
       state.refreshingAtBoundary = true;
@@ -814,26 +895,29 @@ export function initializeShop({
     }
   }
 
+  /* ---------- Purchases and claims. ---------- */
+
   const { closeReveal, showRewardReveal } = createRewardPresentation({ state, updateWallet, onProfileInvalidate });
 
-  async function handleSuccess({ result, button, item, kind = "purchase", floating = false }) {
+  async function handleSuccess({ result, button, item, kind = "purchase", floating = false, bridge = null }) {
     if (result.duplicate || result.alreadyOwned) {
       updateWallet(result.wallet);
       onProfileInvalidate?.();
-      await refresh({ preserveScroll: true, animateOffers: false });
+      await refresh();
       return;
     }
     const card = button?.closest?.(".shop-offer");
-    const sourceRect = card
-      ?.querySelector(".shop-offer-visual")
-      ?.getBoundingClientRect();
+    const sourceRect = card?.querySelector(".shop-offer-visual")?.getBoundingClientRect();
     card?.classList.add("is-completing");
-    playSound(
-      isBigPurchase(item) ? "shopBigSuccess" : "shopConfirm",
-      isBigPurchase(item) ? 0.52 : 0.42,
-    );
-    await showRewardReveal({ result, item, kind, sourceRect, floating });
-    await refresh({ preserveScroll: true, animateOffers: false });
+    playSound(isBigPurchase(item) ? "shopBigSuccess" : "shopConfirm", isBigPurchase(item) ? 0.52 : 0.42);
+    try {
+      // The reveal takes over the confirm dialog's dim in the same frame it mounts.
+      await showRewardReveal({ result, item, kind, sourceRect, floating, seamless: !!bridge, onMounted: () => bridge?.release({ instant: true }) });
+    } finally {
+      // Repeatable offers keep their card node across the refresh.
+      card?.classList.remove("is-completing");
+    }
+    await refresh();
   }
 
   async function chooseCurrencyPack(currency, missing) {
@@ -850,13 +934,13 @@ export function initializeShop({
     }).join("");
     return purchaseDialog("Insufficient Funds", `<p class="purchase-shortfall">You need <span>${currencyIcon(currency)} <b data-shortfall>${missing.toLocaleString()}</b> more ${currency}.</span></p>
       <div class="purchase-packs">${cards || "No packs available."}</div>`, "", {
-        headerClose: true,
-        onPack: async button => {
-          const pack = packs.find(pack => pack.id === button.dataset.pack);
-          await reviewItem(pack, button, true);
-          return required - Number(state.data.wallet[currency]);
-        },
-      });
+      headerClose: true,
+      onPack: async button => {
+        const pack = packs.find(candidate => candidate.id === button.dataset.pack);
+        await reviewItem(pack, button, true);
+        return required - Number(state.data.wallet[currency]);
+      },
+    });
   }
 
   async function characterShortfall({ currency, missing }) {
@@ -868,110 +952,47 @@ export function initializeShop({
     }
   }
 
-  function wireOfferActions() {
-    state.scroll?.querySelectorAll('[data-shop-card-preview]').forEach(button => {
-      button.addEventListener('click', event => {
-        event.stopPropagation();
-        const item = findItem(button.dataset.shopCardPreview);
-        showPlayerCardPreview(item?.grants?.filter(grant => grant.kind === 'card') || []);
-      });
-    });
-    state.scroll?.querySelectorAll("[data-shop-action]").forEach((button) => {
-      const action = button.dataset.shopAction;
-      const card = button.closest("[data-shop-item-id]");
-      const review = async () => {
-        if (action) return button.click();
-        const item = findItem(button.dataset.itemId);
-        await purchaseDialog(item.name, escapeHtml(item.state.reason || getActionState(item).label));
-      };
-      card.addEventListener("click", event => {
-        if (!event.target.closest("button")) void review();
-      });
-      card.addEventListener("keydown", event => {
-        if (event.target === card && ["Enter", " "].includes(event.key)) {
-          event.preventDefault();
-          void review();
-        }
-      });
-      if (!action) return;
-      // Purchase/claim/checkout flows own their feedback, including async cues.
-      button.dataset.sound = "none";
-      button.addEventListener("click", async () => {
-        if (button.disabled || state.actionPending) return;
-        state.actionPending = true;
-        const offerId = String(button.dataset.offerId || "");
-        const itemId = String(button.dataset.itemId || "");
-        const item = findItem(itemId) || findItem(offerId);
-        try {
-          await reviewItem(item, button);
-        } finally {
-          state.actionPending = false;
-        }
-      });
-    });
-  }
-
   async function reviewItem(item, button, floating = false) {
     const { action, offerId } = getActionState(item);
+    const price = item.price;
     button.disabled = true;
     const original = button.innerHTML;
+    const showBusy = label => { button.innerHTML = `<span>${label}</span>`; };
+    let bridge = null;
     try {
-      const price = item.price;
-      const wallet = state.data.wallet;
-      const remaining = price?.type === "virtual" ? wallet[price.currency] - price.amount : null;
+      const remaining = price?.type === "virtual" ? state.data.wallet[price.currency] - price.amount : null;
       if (remaining !== null && remaining < 0) {
         await chooseCurrencyPack(price.currency, -remaining);
         return;
       }
-      const grants = item.grants || [];
-      const rewards = grants.map(grant => {
-        const label = grant.kind === "currency" ? `+${grant.amount.toLocaleString()} ${grant.name}` : grant.name;
-        const art = grant.kind === "currency" ? currencyRewardImage(grant.currency, grant.amount) : grant.shopImage || grant.image;
-        const tint = grant.kind === "currency"
-          ? `reward-tint-${safeCssToken(grant.currency)}`
-          : `shop-rarity-${safeCssToken(grant.rarity || item.rarity || "common")}`;
-        return `<li class="purchase-grant ${tint} purchase-grant-${safeCssToken(grant.kind)}"><div class="purchase-stage"><img src="${escapeHtml(art)}" alt=""></div><strong>${grant.kind === "currency" ? currencyIcon(grant.currency) : ""} ${escapeHtml(label)}</strong></li>`;
-      }).join("");
-      const confirmed = await purchaseDialog(action === "daily" ? "Confirm claim" : "Confirm purchase",
-        `${grants.length > 1 ? `<h3>${escapeHtml(item.name)}</h3>` : ""}<ul class="purchase-grants">${rewards}</ul>`,
-        `${action === "daily" ? "Claim" : "Buy"} ${priceMarkup(price)}`);
-      if (!confirmed) return;
+      // Free things are granted straight away; only spending asks first.
+      const free = action === "daily" || (action === "purchase" && isFree(price));
+      if (!free) {
+        bridge = await purchaseDialog("Confirm purchase", purchaseReviewMarkup(item), `Buy ${priceMarkup(price)}`, { holdOnConfirm: true });
+        if (!bridge) return;
+      }
       if (action === "daily") {
-        button.innerHTML = "<span>Opening...</span>";
-        const result = await fetchShopJson("/api/shop/claim-daily", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idempotencyKey: idempotencyKey("daily") }),
-        });
+        showBusy("Claiming...");
+        const result = await postShopJson("/api/shop/claim-daily", { idempotencyKey: idempotencyKey("daily") });
         await handleSuccess({ result, button, item, kind: "daily" });
-        return;
-      }
-      if (action === "purchase") {
-        const currency =
-          item?.price?.currency === "coins" ? "coins" : "gems";
-        const amount = Number(item?.price?.amount) || 0;
-        button.innerHTML = "<span>Forging...</span>";
-        const result = await fetchShopJson("/api/shop/purchase", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            offerId,
-            expectedPrice: amount,
-            expectedCurrency: currency,
-            idempotencyKey: idempotencyKey("purchase"),
-          }),
+      } else if (action === "purchase") {
+        showBusy(free ? "Claiming..." : "Buying...");
+        const result = await postShopJson("/api/shop/purchase", {
+          offerId,
+          expectedPrice: Number(price?.amount) || 0,
+          expectedCurrency: price?.currency === "coins" ? "coins" : "gems",
+          idempotencyKey: idempotencyKey("purchase"),
         });
-        await handleSuccess({ result, button, item, floating });
-        return;
-      }
-      if (action === "checkout") {
+        await handleSuccess({ result, button, item, floating, bridge });
+      } else if (action === "checkout") {
         if (state.data?.account?.guest || guest) {
-          const next = `${window.location.pathname}?shop=currency`;
-          window.location.href = `/signup?next=${encodeURIComponent(next)}`;
+          window.location.href = `/signup?next=${encodeURIComponent(`${window.location.pathname}?shop=currency`)}`;
           return;
         }
-        button.innerHTML = "<span>Opening...</span>";
+        showBusy("Opening...");
         try {
+          // The checkout panel opens synchronously with its own backdrop.
+          bridge?.release({ instant: true });
           await openCheckout(offerId, floating);
         } catch (error) {
           closeCheckout();
@@ -985,9 +1006,11 @@ export function initializeShop({
         await refresh().catch(refreshError => reportError(refreshError, "refresh"));
       }
     } finally {
+      bridge?.release();
       if (button.isConnected) {
         button.disabled = false;
         button.innerHTML = original;
+        if (document.activeElement === document.body) button.focus({ preventScroll: true });
       }
     }
   }
@@ -995,15 +1018,13 @@ export function initializeShop({
   function findItem(id) {
     const wanted = String(id || "");
     for (const items of Object.values(state.data?.sections || {})) {
-      const item = (items || []).find(
-        (candidate) =>
-          String(candidate?.id || "") === wanted ||
-          String(candidate?.offerId || "") === wanted,
-      );
+      const item = (items || []).find(candidate => String(candidate?.id || "") === wanted || String(candidate?.offerId || "") === wanted);
       if (item) return item;
     }
     return null;
   }
+
+  /* ---------- Stripe checkout. ---------- */
 
   async function openCheckout(offerId, floating) {
     ensureShell();
@@ -1023,16 +1044,11 @@ export function initializeShop({
     panel.classList.add("is-open");
     state.checkoutFocus?.activate();
     playSound("shopOpen", 0.28);
-    host.innerHTML =
-      '<div class="shop-checkout-loading"><span class="shop-loading-rune bb-battle-loader" aria-hidden="true"></span><strong>Opening checkout...</strong></div>';
-    const result = await fetchShopJson("/api/shop/checkout-session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        offerId,
-        idempotencyKey: idempotencyKey("checkout"),
-        returnPath: window.location.pathname,
-      }),
+    host.innerHTML = '<div class="shop-checkout-loading"><span class="shop-loading-rune bb-battle-loader" aria-hidden="true"></span><strong>Opening checkout...</strong></div>';
+    const result = await postShopJson("/api/shop/checkout-session", {
+      offerId,
+      idempotencyKey: idempotencyKey("checkout"),
+      returnPath: window.location.pathname,
     });
     if (attempt !== state.checkoutAttempt) return;
     state.checkoutSessionId = result.sessionId;
@@ -1054,20 +1070,13 @@ export function initializeShop({
   async function completeCheckout(sessionId) {
     if (state.completingSessionId === sessionId) return;
     state.completingSessionId = sessionId;
+    const terminalStatuses = ["failed", "expired", "refunded", "disputed"];
     try {
       let result = null;
       for (let attempt = 0; attempt < 12; attempt += 1) {
-        result = await fetchShopJson(
-          `/api/shop/checkout-status?sessionId=${encodeURIComponent(sessionId)}`,
-        );
-        if (
-          result?.order?.status === "fulfilled" ||
-          ["failed", "expired", "refunded", "disputed"].includes(
-            result?.order?.status,
-          )
-        ) {
-          break;
-        }
+        result = await fetchShopJson(`/api/shop/checkout-status?sessionId=${encodeURIComponent(sessionId)}`);
+        const status = result?.order?.status;
+        if (status === "fulfilled" || terminalStatuses.includes(status)) break;
         await delay(750);
       }
       if (result?.order?.status === "fulfilled") {
@@ -1082,7 +1091,7 @@ export function initializeShop({
       } else {
         closeCheckout();
         await refresh();
-        const terminal = ["failed", "expired", "refunded", "disputed"].includes(result?.order?.status);
+        const terminal = terminalStatuses.includes(result?.order?.status);
         shopToast(
           terminal ? "error" : "info",
           terminal ? "Payment not completed" : "Payment processing",
@@ -1122,10 +1131,12 @@ export function initializeShop({
     if (host) host.innerHTML = "";
   }
 
+  /* ---------- Background refresh and deep links. ---------- */
+
   // Refresh account state in the lobby too, including changes made on another device.
   function refreshNotifications() {
     if (state.open || document.visibilityState !== "visible") return;
-    return refresh({ preserveScroll: true }).catch(error => console.warn("[shop] Notification refresh failed", error));
+    return refresh().catch(error => console.warn("[shop] Notification refresh failed", error));
   }
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
@@ -1140,11 +1151,7 @@ export function initializeShop({
   if (returnedSession || requestedSection) {
     url.searchParams.delete("shop_checkout");
     url.searchParams.delete("shop");
-    window.history.replaceState(
-      {},
-      "",
-      `${url.pathname}${url.search}${url.hash}`,
-    );
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     window.setTimeout(async () => {
       await open(returnedSession ? "currency" : requestedSection || "sales");
       if (returnedSession) await completeCheckout(returnedSession);
@@ -1373,18 +1380,26 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     }
   }
 
-  function revealGrantMarkup(grant, index, showQuantity = true) {
+  // Multi-item reveals frame each reward like the info preview: type, artwork,
+  // name, rarity. Single rewards hide the frame and caption (the heading names
+  // them) so the artwork gets the full height.
+  function revealGrantMarkup(grant, index, { multi = false } = {}) {
     const currency = grant.kind === "currency" ? (grant.currency === "gems" ? "gems" : "coins") : null;
-    return `<div class="shop-reveal-grant shop-reveal-${safeCssToken(grant.kind)}" data-character="${escapeHtml(grant.character || "")}" style="--reveal-index:${index}"${currency ? ` data-reveal-currency="${currency}"` : ""}>
-      <span class="shop-reveal-art"><img ${grant.kind === "card" ? `data-animated-card-id="${escapeHtml(grant.id)}"` : ""} src="${escapeHtml(grant.kind === "currency" ? currencyRewardImage(grant.currency, grant.amount) : grant.kind === "card" ? playerCardImage(grant.id, { animate: false }) : grant.image)}" alt="${escapeHtml(grant.name)}" /></span>
-      ${currency && showQuantity ? `<strong class="shop-reveal-currency-amount">${currencyIcon(currency)} +${(Number(grant.amount) || 0).toLocaleString()} ${currency === "gems" ? "Gems" : "Coins"}</strong>` : ""}
+    const tint = !multi ? "" : currency ? ` reward-tint-${currency}` : grant.rarity ? ` shop-rarity-${safeCssToken(grant.rarity)}` : "";
+    const rarity = !currency && grant.rarity
+      ? `<span class="shop-reveal-rarity">${escapeHtml(grant.rarity)}</span>`
+      : '<span class="shop-reveal-rarity-slot" aria-hidden="true"></span>';
+    // A title's nameplate already shows its name.
+    const name = grant.kind === "title" ? "" : `<strong class="shop-reveal-name">${escapeHtml(grantLabel(grant, { signed: true }))}</strong>`;
+    return `<div class="shop-reveal-grant shop-reveal-${safeCssToken(grant.kind)}${tint}" data-character="${escapeHtml(grant.character || "")}" style="--reveal-index:${index}"${currency ? ` data-reveal-currency="${currency}"` : ""}>
+      <span class="shop-reveal-type">${escapeHtml(rewardTypeLabel(grant))}</span>
+      <span class="shop-reveal-art">${grantArtMarkup(grant, { reveal: true })}</span>
+      <span class="shop-reveal-caption">${name}${rarity}</span>
     </div>`;
   }
 
   function rewardTypeLabel(grant) {
-    if (grant?.kind === "currency") return "Currency";
-    if (grant?.kind === "skin") return `${grant.character || "Bro"} Skin`;
-    return ({ card: "Player Card", profileIcon: "Player Icon", character: "New Bro", mode: "Game Mode" }[grant?.kind] || "Reward");
+    return grantKind(grant).reward(grant || {});
   }
 
   function getRevealHeading(item, grants) {
@@ -1400,7 +1415,7 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     };
   }
 
-  async function showRewardReveal({ result, item, kind, sourceRect, startingWallet: walletBefore, floating = false }) {
+  async function showRewardReveal({ result, item, kind, sourceRect, startingWallet: walletBefore, floating = false, seamless = false, onMounted }) {
     closeReveal();
     const grants = resolveRewardGrants(result?.grants, item?.grants);
     const rarity = safeCssToken(item?.rarity || "rare");
@@ -1410,6 +1425,9 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     const priority = { profileIcon: 0, character: 1, skin: 1, mode: 1, card: 2 };
     collectibles.sort((a, b) => (priority[a.kind] ?? 1) - (priority[b.kind] ?? 1));
     const heading = getRevealHeading(item, grants);
+    // Currencies sit inline after the collectibles, one tile each.
+    const ordered = [...collectibles, ...currencies];
+    const multi = ordered.length > 1;
     const startingWallet = walletBefore || {
       coins: readWalletCount(
         state.overlay?.querySelector('[data-shop-wallet="coins"]'),
@@ -1425,10 +1443,12 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     );
     const reveal = document.createElement("div");
     reveal.className = `shop-reward-reveal reward-showcase shop-rarity-${rarity}${collectibles.length ? " has-collectibles" : " currency-only"}${kind === "trophy" ? " trophy-reward-reveal" : ""}`;
-    reveal.classList.toggle('single-card-reveal', collectibles.length === 1 && collectibles[0].kind === 'card' && currencies.length === 0);
+    reveal.classList.toggle("is-multi", multi);
+    reveal.classList.toggle("single-card-reveal", collectibles.length === 1 && collectibles[0].kind === "card" && currencies.length === 0);
     if (grants.length === 1 && currencies.length) {
       reveal.classList.add(`reward-tint-${safeCssToken(currencies[0].currency)}`);
     }
+    if (grants.length === 1 && grants[0].kind === "title") reveal.classList.add("single-title-reveal");
     const previousFocus = document.activeElement;
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (sourceRect) {
@@ -1450,23 +1470,25 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
         <span data-reveal-wallet-shell="gems"><img src="/assets/icons/gem.webp" alt="Gems" /><strong data-reveal-wallet="gems">${startingWallet.gems.toLocaleString()}</strong></span>
       </div>
       <section class="shop-reveal-panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(heading.name)}" tabindex="-1">
-        <header class="shop-reveal-heading"><h2>${grants.length === 1 && currencies.length ? currencyIcon(currencies[0].currency) : ""}${escapeHtml(heading.name)}</h2><p class="shop-reveal-subheader">${escapeHtml(heading.type)}</p></header>
-        <div class="shop-reveal-grants">
-          ${collectibles.length ? `<div class="shop-reveal-collectibles" style="--reward-columns:${Math.min(3, collectibles.length)}">${collectibles.map(revealGrantMarkup).join("")}</div>` : ""}
-          ${currencies.length ? `<div class="shop-reveal-currencies">${currencies.map((grant, index) => revealGrantMarkup(grant, collectibles.length + index, grants.length > 1)).join("")}</div>` : ""}
+        ${grants.length === 1 && grants[0].kind === "title" ? `<header class="shop-reveal-heading"><h2>New Title!</h2><p class="shop-reveal-subheader">Equip it from your profile</p></header>` : `<header class="shop-reveal-heading"><h2>${grants.length === 1 && currencies.length ? currencyIcon(currencies[0].currency) : ""}${escapeHtml(heading.name)}</h2><p class="shop-reveal-subheader">${escapeHtml(heading.type)}</p></header>`}
+        <div class="shop-reveal-grants" style="--reward-columns:${Math.min(4, ordered.length)}">
+          ${ordered.map((grant, index) => revealGrantMarkup(grant, index, { multi })).join("")}
         </div>
         <button type="button" class="pixel-menu-button reward-continue" aria-hidden="true" tabindex="-1" data-sound="cursor4" data-volume="0.28">Done</button>
       </section>
       ${Array.from({ length: 8 }, (_, index) => `<i class="shop-reveal-shard" style="--shard:${index}"></i>`).join("")}`;
     hydratePlayerCardMedia(reveal, { interactive: true });
     if (floating) reveal.classList.add("shop-floating-layer");
+    // Seamless reveals replace an already-dimmed screen, so skip the fade-in.
+    if (seamless) reveal.classList.add("is-seamless");
     (floating ? document.body : state.overlay).appendChild(reveal);
+    onMounted?.();
     const floatingFocus = floating ? createModalFocus(reveal) : null;
     floatingFocus?.activate();
     state.reveal = reveal;
     const continueButton = reveal.querySelector("button");
     continueButton.style.visibility = "hidden";
-    reveal.querySelector("[role=dialog]").focus();
+    reveal.querySelector("[role=dialog]").focus({ preventScroll: true });
     let resolveDismissed;
     const dismissed = new Promise((resolve) => {
       resolveDismissed = resolve;
@@ -1492,7 +1514,12 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
         event.preventDefault();
         event.stopImmediatePropagation();
         if (event.key === "Escape") dismiss();
-        else (reveal.dataset.ready !== "1" ? reveal.querySelector("[role=dialog]") : continueButton).focus();
+        else if (reveal.dataset.ready !== "1") reveal.querySelector("[role=dialog]").focus({ preventScroll: true });
+        else {
+          const buttons = [...reveal.querySelectorAll("button:not(:disabled)")];
+          const index = buttons.indexOf(document.activeElement);
+          buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus();
+        }
       }
     };
     window.addEventListener("keydown", handleKey, true);
@@ -1511,7 +1538,7 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
       continueButton.style.visibility = "";
       continueButton.removeAttribute("aria-hidden");
       continueButton.removeAttribute("tabindex");
-      if (reveal.dataset.dismissed !== "1") continueButton.focus();
+      if (reveal.dataset.dismissed !== "1") continueButton.focus({ preventScroll: true });
       await dismissed;
       await animations;
     } finally {
@@ -1520,8 +1547,8 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
       updateWallet(result?.wallet, true, false);
       if (state.reveal === reveal) closeReveal();
       if (previousFocus?.isConnected) {
-        const focusTarget = previousFocus.disabled ? previousFocus.closest('[tabindex="0"]') : previousFocus;
-        focusTarget?.focus();
+        // A busy buy button is disabled; reviewItem refocuses it once re-enabled.
+        if (!previousFocus.disabled) previousFocus.focus();
       }
     }
     await delay(reducedMotion ? 0 : 260);

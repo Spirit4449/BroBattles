@@ -1,17 +1,7 @@
-You can leave a battle without a separate quit penalty, but leaving does not erase the match. If your team loses while you are away, the loss and its normal trophy change still count.
+You can leave a battle without a separate quit penalty, but the match continues. If your team loses while you're away, the normal loss and trophy change still count.
 
-## Rejoin the same battle
+## Get back into a match
 
-Sign into the **same account** on any device and open the lobby. If the match is still running, the lobby offers a way back in. Rejoining restores your place in that match, including your current fighter state.
+Sign into the same account and open the lobby. If the battle is still running, use the rejoin option to return to your fighter. Only one connection can control that fighter; joining from another tab or device gives control to the newer connection.
 
-Only one game connection controls your fighter at a time. Joining the battle from a second device or tab hands control to that newer connection.
-
-## If your connection drops
-
-Reconnect as soon as you can. The match keeps moving for everyone else, and an open menu or background tab does not pause it. A short interruption may be recoverable; waiting until the match ends is not.
-
-If every human player leaves, the empty battle may close instead of continuing forever.
-
-## Before leaving on purpose
-
-When possible, finish the round—especially in a team mode. A disconnected fighter cannot protect a teammate or vault. If you only need to adjust sound or controls, open Settings during a safe moment and return to the arena.
+Reconnect promptly after a drop. The match doesn't pause while you're away, and an empty battle may close if every human player leaves. Guest access depends on the same temporary browser session, so save it with an account if you want to return on another device.

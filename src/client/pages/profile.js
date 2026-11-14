@@ -1,3 +1,5 @@
+import { renderTitle, renderTitleCollection } from "../views/titleView.js";
+import { renderFavoriteCharacter } from "../views/favoriteCharacterView.js";
 import { escapeHtml } from "../../shared/site/html.cjs";
 import { createPlayerCardTile, comparePlayerCardsByRarity } from "../views/playerCardTile.js";
 import { warmEquippedPlayerCard, disposePlayerCardMediaWithin } from "../views/playerCardAnimation.cjs";
@@ -47,6 +49,11 @@ async function fetchJson(url, options) {
 }
 
 function renderProfile(profile) {
+  renderTitle(document.getElementById("profile-equipped-title"), profile.selectedTitleId);
+  renderTitleCollection(document.getElementById("account-titles-grid"), profile, {
+    fetchJson, onSelected: () => renderProfile(profile), onError: error => setMessage(error.message, true),
+  });
+  renderFavoriteCharacter(document.getElementById("profile-favorite-character"), profile.favoriteCharacter);
   renderAccountAccess(
     document.querySelector(".account"),
     profile.guest === true,

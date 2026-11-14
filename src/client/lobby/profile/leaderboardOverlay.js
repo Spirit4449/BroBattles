@@ -1,3 +1,4 @@
+import { titleMarkup } from "../../views/titleView.js";
 // Trophy leaderboard overlay.
 import { escapeHtml, fetchLobbyJson, openOverlay } from "../ui";
 import { buildProfileIconAlt, buildProfileIconUrl } from "../../views/profileIconAssets.js";
@@ -45,7 +46,7 @@ function renderLeaderboardRows(rows, profilePopup) {
         </span>
         <span class="leaderboard-main">
           <span class="leaderboard-name">${escapeHtml(username)}</span>
-          <span class="leaderboard-character">${escapeHtml(charClass)} fighter</span>
+          <span class="leaderboard-character">${titleMarkup(row.selectedTitleId)}</span>
         </span>
       </span>
       <span class="leaderboard-wins" aria-label="${wins.toLocaleString()} wins">
@@ -58,7 +59,7 @@ function renderLeaderboardRows(rows, profilePopup) {
       </span>
     `;
     item.addEventListener("click", () => {
-      profilePopup?.open?.({ username });
+      profilePopup?.open?.({ username, source: "leaderboard" });
     });
     container.appendChild(item);
   });

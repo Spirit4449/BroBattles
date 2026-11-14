@@ -202,6 +202,26 @@ describe("Isolated playtest lifecycle", () => {
   const {clone}=require('../src/shared/maps/mapDocument');
   const {mapArena}=require('../src/shared/maps/arenas');
 
+  test('playtests use a chosen catalog skin without equipping the account and reject other characters skins', t => {
+    t.mock.method(console, 'log', () => {});
+    const service = new MapPlaytestService();
+    service.namespace = { sockets: new Map(), to() { return { emit() {}, compress() { return this; } }; }, in() { return { disconnectSockets() {} }; } };
+    t.after(() => { for (const token of service.sessions.keys()) service.remove(token); });
+    const { getCharacterSkins, getDefaultSkinId } = require('../src/server/services/cosmetics/skinsCatalog');
+    const skin = getCharacterSkins('ninja').find(s => s.id !== getDefaultSkinId('ninja'));
+    const user = { user_id: 99, name: 'SkinTester', selected_skin_id_by_char: { ninja: getDefaultSkinId('ninja') } };
+    const created = service.create(user, { document: defaults[0], character: 'ninja', skinId: skin.id });
+    const { room, gameData } = service.get(created.session, user);
+    const player = gameData.players.find(p => !p.isBot);
+    assert.equal(player.selected_skin_id, skin.id);
+    assert.equal(player.selected_skin_asset_url, skin.assetUrl);
+    assert.equal(player.selected_skin_game_assets.spritesheetUrl, skin.gameAssets.spritesheetUrl);
+    assert.equal(room.matchData.players[0].selected_skin_id, skin.id);
+    assert.equal(user.selected_skin_id_by_char.ninja, getDefaultSkinId('ninja'));
+    for (const skinId of ['missing-skin', getDefaultSkinId('thorg')]) {
+      assert.throws(() => service.create(user, { document: defaults[0], character: 'ninja', skinId }), e => e.status === 400);
+    }
+  });
   test('every duel map playtests as either formation using the same geometry and camera',t=>{
    t.mock.method(console,'log',()=>{});
    const service=new MapPlaytestService();service.namespace={sockets:new Map(),to(){return{emit(){},compress(){return this;}};},in(){return{disconnectSockets(){}};}};
@@ -276,5 +296,75 @@ describe("Editor access link", () => {
    assert.equal(created,0);
    const link=exportsForTest.createMapEditorLink({user:{isAdmin:true},mapId:3,mapLabel:'Serenity',teamSize:2,document:dom});
    assert.equal(link.href,'/map-editor?map=3&variant=2v2');assert.equal(link['aria-label'],'Edit Serenity');assert.equal(created,1);
+  });
+});
+
+describe('Map Studio nested dropdowns', () => {
+  test('maps are grouped by mode and only choosing a nested map changes the selection', () => {
+    const { parseHTML } = require('linkedom');
+    const { createClientModuleGraph } = require('./helpers/clientModule');
+    const { document, window } = parseHTML('<html><body></body></html>');
+    window.innerWidth = 1200;
+    window.innerHeight = 800;
+    window.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 100, right: 300, top: 120, bottom: 160 });
+    const graph = createClientModuleGraph({ globals: { document, window, MutationObserver: window.MutationObserver } });
+    const { createMapModeSelect } = graph.load('src/client/editor/mapModeSelect.js');
+    const options = require('../src/shared/maps').mapDefaults.map(map => ({ value: String(map.id), label: map.label, modeVariantId: map.modeVariantId }));
+    const changes = [];
+    const picker = createMapModeSelect({ options, value: options[0].value, onChange: mapId => changes.push(mapId), className: '' });
+    document.body.append(picker.element);
+    const trigger = picker.element.querySelector('button');
+    trigger.dispatchEvent(Object.assign(new window.Event('click'), { detail: 0 }));
+    const list = picker.element.querySelector('[role=listbox]');
+    assert.deepEqual([...list.children].map(row => row.textContent), ['Duels', 'Bank Bust']);
+    const bank = list.querySelector('[data-value="bank-bust"]');
+    bank.click();
+    assert.equal(trigger.getAttribute('aria-expanded'), 'true');
+    assert.deepEqual(changes, []);
+    const panel = picker.element.querySelector('.studio-nested-menu');
+    const bankMaps = options.filter(map => map.modeVariantId === 'bank-bust-3v3');
+    assert.deepEqual([...panel.querySelectorAll('[role=option]')].map(row => row.textContent), bankMaps.map(map => map.label));
+    panel.querySelector('[role=option]').click();
+    assert.equal(picker.value, bankMaps[0].value);
+    assert.deepEqual(changes, [bankMaps[0].value]);
+    assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+    assert.equal(picker.element.querySelector('.bb-pixel-select-value').textContent, bankMaps[0].label);
+    picker.setValue(options[0].value);
+    assert.equal(picker.value, options[0].value);
+    assert.equal(list.querySelector('[aria-selected=true]').dataset.value, 'duels');
+  });
+
+  test('hovering each character lists all its skins and picking one updates the character and closes the menu', () => {
+    const { parseHTML } = require('linkedom');
+    const { createClientModuleGraph } = require('./helpers/clientModule');
+    const catalog = require('../src/shared/catalogs/skinsCatalog.json');
+    const { document, window } = parseHTML('<html><body></body></html>');
+    window.innerWidth = 1200;
+    window.innerHeight = 800;
+    window.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 500, right: 600, top: 120, bottom: 160 });
+    const graph = createClientModuleGraph({ globals: { document, window, MutationObserver: window.MutationObserver } });
+    const { createCharacterSkinSelect } = graph.load('src/client/editor/characterSkinSelect.js');
+    const options = Object.keys(catalog.characters).map(value => ({ value, label: value }));
+    const changes = [];
+    const picker = createCharacterSkinSelect({ options, value: 'ninja', skinId: catalog.characters.ninja.defaultSkinId,
+      onChange: (character, skin) => changes.push([character, skin]), className: '' });
+    document.body.append(picker.element);
+    const trigger = picker.element.querySelector('button');
+    trigger.dispatchEvent(Object.assign(new window.Event('click'), { detail: 0 }));
+    const panel = picker.element.querySelector('.studio-nested-menu');
+    for (const row of picker.element.querySelector('[role=listbox]').children) {
+      row.dispatchEvent(new window.Event('pointerenter'));
+      assert.equal(panel.hidden, false);
+      const skins = catalog.characters[row.dataset.value].skins;
+      assert.deepEqual([...panel.querySelectorAll('[role=option]')].map(option => option.textContent), skins.map(skin => skin.name));
+    }
+    const row = picker.element.querySelector('[data-value=thorg]');
+    row.dispatchEvent(new window.Event('pointerenter'));
+    const skin = catalog.characters.thorg.skins.at(-1);
+    panel.querySelector('[role=option]:last-child').click();
+    assert.equal(picker.value, 'thorg');
+    assert.deepEqual(changes, [['thorg', skin.id]]);
+    assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+    assert.equal(picker.element.querySelector('[role=listbox]').hidden, true);
   });
 });

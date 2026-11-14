@@ -66,7 +66,7 @@
         type="button"
         aria-label="Spectate previous player"
       >
-        &#8249;
+        <span class="bb-arrow bb-arrow-left" aria-hidden="true"></span>
       </button>
       <div class="spectate-current">
         <img class="spectate-current-icon" src="/assets/icons/spectate.webp" alt="" />
@@ -79,7 +79,7 @@
         type="button"
         aria-label="Spectate next player"
       >
-        &#8250;
+        <span class="bb-arrow bb-arrow-right" aria-hidden="true"></span>
       </button>
     </aside>
 
@@ -156,9 +156,9 @@
                 </span>
                 <span class="controls-movement-or">OR</span>
                 <span class="keyboard-cluster" aria-hidden="true">
-                  <span class="spacer"></span><kbd data-binding="upAlt">&uarr;</kbd
-                  ><span class="spacer"></span> <kbd data-binding="leftAlt">&larr;</kbd
-                  ><kbd data-binding="downAlt">&darr;</kbd><kbd data-binding="rightAlt">&rarr;</kbd>
+                  <span class="spacer"></span><kbd data-binding="upAlt"><span class="bb-arrow bb-arrow-up bb-arrow-sm" aria-hidden="true"></span></kbd
+                  ><span class="spacer"></span> <kbd data-binding="leftAlt"><span class="bb-arrow bb-arrow-left bb-arrow-sm" aria-hidden="true"></span></kbd
+                  ><kbd data-binding="downAlt"><span class="bb-arrow bb-arrow-down bb-arrow-sm" aria-hidden="true"></span></kbd><kbd data-binding="rightAlt"><span class="bb-arrow bb-arrow-right bb-arrow-sm" aria-hidden="true"></span></kbd>
                 </span>
               </span>
             </div>

@@ -17,7 +17,7 @@ export function applyWallet(user, wallet, expectedRevision = revision) {
   const balance = { coins: Number(user.coins) || 0, gems: Number(user.gems) || 0 };
   for (const currency of ["coins", "gems"]) {
     const counter = globalThis.document?.getElementById(currency === "coins" ? "coin-count" : "gem-count");
-    if (counter) counter.textContent = String(balance[currency]);
+    if (counter) counter.textContent = balance[currency].toLocaleString();
   }
   for (const listener of listeners) listener(balance, user);
   return true;

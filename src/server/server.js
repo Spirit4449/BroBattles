@@ -105,6 +105,12 @@ app.use(cookieParser(COOKIE_SECRET));
 // Trust only explicitly named proxies; direct connections ignore forwarded headers.
 app.set("trust proxy", process.env.TRUST_PROXY ? process.env.TRUST_PROXY.split(",").map(x => x.trim()).filter(Boolean) : false);
 
+const auth = makeAuthHelpers(db, { SIGNED_COOKIE_OPTS, DISPLAY_COOKIE_OPTS });
+app.locals.authSessions = auth.sessions;
+// Static middleware can serve the lobby without reaching the page routes.
+app.get(["/", "/index.html", "/game.html"],
+  require("./routes/modules/pageRoutes").createBanPageGuard({ db, requireCurrentUser: auth.requireCurrentUser }));
+
 // Static and dev middleware
 if (!IS_PROD) {
   const webpack = require("webpack");
@@ -129,9 +135,6 @@ if (!IS_PROD) {
     setHeaders: require('./middleware/staticCache').setStaticCacheHeaders,
   }));
 }
-
-const auth = makeAuthHelpers(db, { SIGNED_COOKIE_OPTS, DISPLAY_COOKIE_OPTS });
-app.locals.authSessions = auth.sessions;
 
 // Bootstrap sockets early and attach to app.locals
 const matchResults = require("./services/match/matchResultService").createMatchResultService({ db, journalDir: process.env.MATCH_RESULT_DIR || path.join(ROOT_DIR, "data", "match-results") });
@@ -160,13 +163,14 @@ app.use(
   createAbuseHttpMiddleware({
     abuseControl,
     db,
-    resolveUser: auth.requireCurrentUser,
+    resolveUser: (req, res) => auth.requireCurrentUser(req, res, { allowBanned: true }),
   }),
 );
 
 // Register routes
 registerEconomyRoutes({ app, db, auth, io });
 registerAdminRoutes({
+  io,
   app,
   db,
   auth,

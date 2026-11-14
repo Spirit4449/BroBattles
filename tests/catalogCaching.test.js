@@ -46,6 +46,7 @@ test("cosmetic and shop catalogs load once, index by id, and reload after invali
     "profileIconsCatalog.json",
     "shopCatalog.json",
     "skinsCatalog.json",
+    "titlesCatalog.json",
   ]);
 
   const before = shopCatalog.getShopCatalog();

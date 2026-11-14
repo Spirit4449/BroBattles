@@ -36,6 +36,12 @@ const socket = io(editorSession ? '/map-playtest' : '/', {
   forceNew: false,
 });
 
+// A restriction ends lobby/game access while keeping the HTTP support session.
+socket.on("auth:banned", () => window.location.replace("/banned"));
+socket.on("connect_error", error => {
+  if (error?.message === "Account banned") window.location.replace("/banned");
+});
+
 // Traced debug tabs expose the socket so the headless probe can drive the
 // lobby through the same events the UI emits.
 if (netTraceSpec) window.__BB_NET_TRACE_SOCKET__ = socket;

@@ -1,7 +1,11 @@
+import { pixelArrow } from '../ui/pixelArrow.js';
 import { diffUnsaved, discardChanges } from '../editor/unsavedChanges';
 import Phaser from 'phaser/dist/phaser-arcade-physics.min.js';
 import '../editor/mapEditor.css';
-import '../site/shell.js';
+import { openSettings } from '../site/shell.js';
+import skinsCatalog from '../../shared/catalogs/skinsCatalog.json';
+import { createMapModeSelect } from '../editor/mapModeSelect.js';
+import { createCharacterSkinSelect } from '../editor/characterSkinSelect.js';
 import { createPixelSelect } from '../ui/pixelSelect.js';
 import { preloadMapDocument, syncMapDocument } from '../game/maps/documentRuntime';
 import { releaseRendererContext, rendererContextOf } from '../game/scene/releaseRenderer.js';
@@ -26,13 +30,15 @@ function syncToolbarSelect(id, { rebuild = false } = {}) {
     control = null;
   }
   if (!control && input.options.length) {
-    control = createPixelSelect({
-      options: [...input.options].filter(option => !option.hidden && !option.disabled).map(option => ({ value: option.value, label: option.textContent })),
+    control = (id === 'map-select' ? createMapModeSelect : id === 'playtest-character' ? createCharacterSkinSelect : createPixelSelect)({
+      skinId: $('playtest-skin').value,
+      options: [...input.options].filter(option => !option.hidden && !option.disabled).map(option => ({ value: option.value, label: option.textContent, modeVariantId: option.dataset.modeVariantId })),
       value: input.value,
       label: input.getAttribute('aria-label'),
       className: `studio-toolbar-select ${id === 'map-select' ? 'studio-map-select' : 'is-compact'}`,
-      onChange(value) {
+      onChange(value, skinId) {
         input.value = value;
+        if (skinId) { $('playtest-skin').value = skinId; $('playtest-skin').dispatchEvent(new Event('change', { bubbles: true })); }
         input.dispatchEvent(new Event('change', { bubbles: true }));
       },
     });
@@ -226,8 +232,8 @@ function renderScenery(panel){
     const card=node('div',undefined,{class:'layer-card'});layers.append(card);
     const head=node('div',undefined,{class:'layer-head'});head.append(node('strong',`${i+1}. ${friendlyName(layer.id)}`));card.append(head);
     const move=offset=>transaction(()=>{const list=scenery.layers;const [item]=list.splice(i,1);list.splice(i+offset,0,item);},'Layer moved');
-    const up=button(head,'↑',()=>move(-1));up.disabled=i===0;up.title='Draw further back';
-    const down=button(head,'↓',()=>move(1));down.disabled=i===scenery.layers.length-1;down.title='Draw nearer';
+    const up=button(head,'',()=>move(-1));up.append(pixelArrow('up','sm'));up.setAttribute('aria-label','Draw further back');up.disabled=i===0;up.title='Draw further back';
+    const down=button(head,'',()=>move(1));down.append(pixelArrow('down','sm'));down.setAttribute('aria-label','Draw nearer');down.disabled=i===scenery.layers.length-1;down.title='Draw nearer';
     const del=button(head,'✕',()=>transaction(()=>{scenery.layers.splice(i,1);},'Layer removed'),'danger');del.title='Remove layer';del.disabled=scenery.layers.length===1;
     card.append(node('img',undefined,{src:layer.url,alt:'',class:'layer-thumb'}));
     const grid=node('div',undefined,{class:'fields'});card.append(grid);
@@ -590,7 +596,7 @@ async function setPreview(value,row=null){
   }
   scene.pointerUp();setBusy(true);
   try{
-    const result=await request('/api/admin/map-playtests',{method:'POST',body:JSON.stringify({document:documentData,modeVariantId:mapArena(map()).modeId==='duels'?$('playtest-formation').value:null,bots:$('playtest-kind').value==='bots',infiniteSupers:$('infinite-supers').checked,debugHitboxes:$('debug-hitboxes').checked,character:$('playtest-character').value,spawn:row?.kind==='spawn'?{point:row.value}:null})});
+    const result=await request('/api/admin/map-playtests',{method:'POST',body:JSON.stringify({document:documentData,modeVariantId:mapArena(map()).modeId==='duels'?$('playtest-formation').value:null,bots:$('playtest-kind').value==='bots',infiniteSupers:$('infinite-supers').checked,debugHitboxes:$('debug-hitboxes').checked,character:$('playtest-character').value,skinId:$('playtest-skin').value,spawn:row?.kind==='spawn'?{point:row.value}:null})});
     playtestSession=result.session;
     preview=true;keyboard.clear();game.scene.pause('studio');document.body.classList.add('preview');
     playtestFrame=node('iframe',undefined,{id:'playtest-frame',title:'Live game playtest',src:`/map-editor/playtest?session=${result.session}&match=${result.matchId}`,allow:'autoplay; fullscreen'});
@@ -677,12 +683,12 @@ async function showUnsavedChanges(){
 function download(){const {document:exported,files:pending}=exportDocument(documentData);const blob=new Blob([JSON.stringify(exported,null,2)+'\n'],{type:'application/json'});const url=URL.createObjectURL(blob);const link=node('a',undefined,{href:url,download:`map-${documentData.id}.json`});link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);status('Exported the full map document.');if(pending.size){const info=node('div');info.append(node('p','JSON does not include uploaded image files. Manually replace these game files when using this export:'));for(const file of pending)info.append(node('p','public'+file));showDialog('Images needed for this export',info,null,'Got it');}}
 function importDialog(){if(busy)return;const content=node('div');content.append(node('p','Paste a complete versioned map document, or select an exported JSON file. Import replaces the whole map and can be undone.'));const input=node('input',undefined,{type:'file',accept:'.json,application/json'});const text=node('textarea',undefined,{'aria-label':'Map document JSON',spellcheck:'false'});input.onchange=async()=>{if(input.files[0])text.value=await input.files[0].text();};content.append(input,text);
   showDialog('Import map document',content,async()=>{let doc;try{doc=upgradeDuelMap(JSON.parse(text.value));}catch{throw Error('Invalid JSON.');}const errors=validateDocument(doc);if(errors.length)throw Error(errors.slice(0,12).join('\n'));if(doc.id!==documentData.id)throw Error('The imported map ID must match the open map. Use New map to create a separate map.');documentData=doc;selectedId=null;selectedIds.clear();commit('Document imported');await syncHistoryScene();});}
-async function refreshMaps(){const result=await request('/api/admin/maps');mapList=result.maps;$('map-select').replaceChildren(...mapList.map(m=>node('option',`${m.label} · ${arenaFor(m.modeVariantId)?.label||m.modeVariantId}`,{value:m.id})));if(documentData)$('map-select').value=documentData.id;syncToolbarSelect('map-select',{rebuild:true});}
+async function refreshMaps(){const result=await request('/api/admin/maps');mapList=result.maps;$('map-select').replaceChildren(...mapList.map(m=>node('option',m.label,{value:m.id,'data-mode-variant-id':m.modeVariantId})));if(documentData)$('map-select').value=documentData.id;syncToolbarSelect('map-select',{rebuild:true});}
 function newMapDialog(){if(busy)return;const content=node('div');const values={id:Math.max(...mapList.map(m=>m.id))+1,label:'New map',modeVariantId:map().modeVariantId};
   content.append(node('p','Create a separate map, starting as a copy of this one: platforms, art and scenery. Duel maps support both 1v1 and 2v2 and keep this map’s arena profile.'));
   field(content,'Map ID',values.id,v=>values.id=v,{min:1});field(content,'Map name',values.label,v=>values.label=v);
   field(content,'Game mode',values.modeVariantId,v=>values.modeVariantId=v,{options:arenaIds().map(id=>[id,arenaFor(id).label])});
-  showDialog('Create map',content,async()=>{if(mapList.some(m=>m.id===values.id))throw Error('Map ID already exists.');const doc=retargetMap(documentData,values.modeVariantId);doc.id=values.id;doc.label=values.label;doc.metadata.key=`map-${doc.id}`;const errors=validateDocument(doc);if(errors.length)throw Error(errors.join('\n'));persistDraft();documentData=doc;revision=null;savedJSON='';history=new MapHistory(doc);selectedId=null;selectedIds.clear();commit('New map created locally. Move its platforms and spawns to suit the mode, then save to add it to the map catalog.');$('map-select').append(node('option',doc.label,{value:doc.id}));$('map-select').value=doc.id;syncToolbarSelect('map-select',{rebuild:true});await startScene();},'Create');}
+  showDialog('Create map',content,async()=>{if(mapList.some(m=>m.id===values.id))throw Error('Map ID already exists.');const doc=retargetMap(documentData,values.modeVariantId);doc.id=values.id;doc.label=values.label;doc.metadata.key=`map-${doc.id}`;const errors=validateDocument(doc);if(errors.length)throw Error(errors.join('\n'));persistDraft();documentData=doc;revision=null;savedJSON='';history=new MapHistory(doc);selectedId=null;selectedIds.clear();commit('New map created locally. Move its platforms and spawns to suit the mode, then save to add it to the map catalog.');$('map-select').append(node('option',doc.label,{value:doc.id,'data-mode-variant-id':doc.modeVariantId}));$('map-select').value=doc.id;syncToolbarSelect('map-select',{rebuild:true});await startScene();},'Create');}
 async function undo(redo=false){if(!history||busy)return;documentData=redo?history.redo():history.undo();selectedIds=new Set([...selectedIds].filter(id=>allRows(map()).some(r=>r.id===id)));selectedId=[...selectedIds].at(-1)||null;persistDraft();refreshSave();renderBrowser();renderInspector();await syncHistoryScene();status(redo?'Edit restored':'Edit undone');}
 const SHORTCUTS=[['Undo',['⌘/Ctrl','Z']],['Redo',['⌘/Ctrl','Shift','Z']],['Save',['⌘/Ctrl','S']],['Playtest / return',['Esc']],['Duplicate',['D']],['Delete',['Del']],['Select all',['⌘/Ctrl','A']],['Nudge 1 px / 16 px',['Arrows','Shift']],['Multi-select',['Shift','Click']],['Box-select',['Drag empty space']],['Pan',['Space','Drag']],['Pan (mouse)',['Right-drag']],['Zoom at cursor',['Scroll']],['Zoom in / out',['+','−']],['Fit world',['F']],['Game camera',['C']],['Artwork / collision handles',['Tab']],['Skip snapping',['⌘/Ctrl','Drag']],['Resize freely',['Shift','Drag handle']],['Centre on object',['Double-click row']]];
 function shortcutsDialog(){const list=node('dl',undefined,{class:'shortcut-list'});for(const[label,keys]of SHORTCUTS){const row=node('div'),keysEl=node('dd');for(const k of keys)keysEl.append(node('kbd',k));row.append(node('dt',label),keysEl);list.append(row);}showDialog('Keyboard shortcuts',list,null,'Got it');}
@@ -696,11 +702,17 @@ const menus=[...document.querySelectorAll('details.menu')];
 const closeMenus=except=>{for(const menu of menus)if(menu!==except)menu.open=false;};
 document.addEventListener('pointerdown',event=>closeMenus(menus.find(menu=>menu.contains(event.target))));
 for(const action of document.querySelectorAll('.menu-actions button'))action.addEventListener('click',()=>closeMenus());
+$('studio-settings').onclick = openSettings;
+for (const entry of Object.values(skinsCatalog.characters)) for (const skin of entry.skins) {
+  $('playtest-skin').add(new Option(skin.name, skin.id));
+}
+$('playtest-skin').value = skinsCatalog.characters[$('playtest-character').value].defaultSkinId;
 // Playtest settings are a per-browser preference.
-const PLAYTEST_KEY='bb-map-studio-playtest',playtestInputs={formation:$('playtest-formation'),kind:$('playtest-kind'),character:$('playtest-character'),debugHitboxes:$('debug-hitboxes'),infiniteSupers:$('infinite-supers')};
+const PLAYTEST_KEY='bb-map-studio-playtest',playtestInputs={formation:$('playtest-formation'),kind:$('playtest-kind'),character:$('playtest-character'),skin:$('playtest-skin'),debugHitboxes:$('debug-hitboxes'),infiniteSupers:$('infinite-supers')};
 function syncPlaytestSummary(){$('playtest-summary').textContent=[mapArena(map())?.modeId==='duels'&&playtestInputs.formation.selectedOptions[0]?.text,playtestInputs.kind.selectedOptions[0]?.text,playtestInputs.character.selectedOptions[0]?.text,playtestInputs.debugHitboxes.checked&&'hitboxes',playtestInputs.infiniteSupers.checked&&'infinite supers'].filter(Boolean).join(' · ');$('preview').title=`Playtest this draft (Esc) · ${$('playtest-summary').textContent}`;}
 try{const saved=JSON.parse(localStorage.getItem(PLAYTEST_KEY)||'{}');for(const[key,input]of Object.entries(playtestInputs))if(key in saved){if(input.type==='checkbox')input.checked=!!saved[key];else if([...input.options].some(o=>o.value===saved[key]))input.value=saved[key];}}catch{}
 for(const input of Object.values(playtestInputs))input.addEventListener('change',()=>{syncPlaytestSummary();try{localStorage.setItem(PLAYTEST_KEY,JSON.stringify(Object.fromEntries(Object.entries(playtestInputs).map(([k,i])=>[k,i.type==='checkbox'?i.checked:i.value]))));}catch{}});
+if (!skinsCatalog.characters[playtestInputs.character.value].skins.some(s => s.id === playtestInputs.skin.value)) playtestInputs.skin.value = skinsCatalog.characters[playtestInputs.character.value].defaultSkinId;
 syncPlaytestSummary();
 for (const id of ['playtest-formation', 'playtest-kind', 'playtest-character', 'grid']) syncToolbarSelect(id);
 // Bank Bust objects only exist on Bank Bust maps.
@@ -716,7 +728,7 @@ function nudge(dx,dy){
   // A spawn riding on a selected platform already moves with it.
   transaction(()=>{const base=clone(map());for(const row of rows){if(row.kind==='spawn'&&selectedIds.has(row.value.anchorId))continue;const original=allRows(base).find(r=>r.id===row.id),pt=mapPoint(original,base);Object.assign(row.value,snapMove(map(),row,pt.x+dx,pt.y+dy,0,true).value);}},'Selection nudged',{merge:true});
 }
-window.addEventListener('keydown',ev=>{if($('dialog').open||ev.target.closest?.('.bb-pixel-select'))return;const typing=/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName);const key=ev.key.toLowerCase(),ctrl=ev.metaKey||ev.ctrlKey;
+window.addEventListener('keydown',ev=>{if(window.__BB_SITE_DIALOG_OPEN||$('dialog').open||ev.target.closest?.('.bb-pixel-select'))return;const typing=/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName);const key=ev.key.toLowerCase(),ctrl=ev.metaKey||ev.ctrlKey;
   if(key==='escape'){ev.preventDefault();if(typing){ev.target.blur();return;}if(menus.some(m=>m.open)){closeMenus();return;}setPreview(!preview);return;}
   if(ctrl&&key==='s'){ev.preventDefault();if(!preview){ev.target.blur?.();save();}return;}
   if(typing)return;

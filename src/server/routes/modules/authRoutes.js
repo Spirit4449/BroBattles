@@ -2,7 +2,7 @@ const {
   completeSignupFromGuest,
   loginPermanentUser,
 } = require("../../services/auth/authAccountService");
-const { setBanHoldCookies } = require("../../services/auth/banHold");
+const { setBanHoldCookies, clearBanHoldCookies } = require("../../services/auth/banHold");
 const { isReservedAdminName } = require("../../services/auth/auth");
 
 function registerAuthRoutes({ app, db, requireCurrentUser }) {
@@ -63,6 +63,8 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
       });
       if (result?.payload?.banned) {
         setBanHoldCookies({
+          userId: result.payload.userId,
+          expiresAt: result.payload.banExpiresAt,
           req,
           res,
           reason: String(
@@ -86,17 +88,6 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
     try {
       const result = await loginPermanentUser({ app, db, req });
       if (!result.ok) {
-        if (result?.payload?.banned) {
-          setBanHoldCookies({
-            req,
-            res,
-            reason: String(
-              result?.payload?.reason ||
-                result?.payload?.error ||
-                "Your account has been banned.",
-            ),
-          });
-        }
         return res.status(result.statusCode || 401).json(result.payload || {});
       }
 
@@ -107,6 +98,13 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
         result.user.name,
         app.locals?.DISPLAY_COOKIE_OPTS || {},
       );
+
+      if (result.payload.banned) {
+        setBanHoldCookies({ req, res, userId: result.user.user_id,
+          expiresAt: result.user.ban_expires_at, reason: result.payload.reason });
+      } else {
+        clearBanHoldCookies(res);
+      }
 
       return res.status(result.statusCode || 200).json(result.payload || {});
     } catch (err) {

@@ -139,7 +139,7 @@ body {
 .auth-card .subtitle { margin-bottom:18px; }
 .verification-destination { display:flex; align-items:center; justify-content:center; gap:10px; min-width:0; }
 .verification-destination > :first-child { min-width:0; overflow-wrap:anywhere; font:14px/1.5 system-ui,sans-serif; }
-.verification-panel[hidden], .auth-card form[hidden], .auth-card .guest-info[hidden] { display:none!important; }
+.verification-panel[hidden], .auth-card form[hidden], .auth-card .guest-info[hidden], .auth-card .subtitle[hidden] { display:none!important; }
 @media(prefers-reduced-motion:reduce) { .verification-panel { animation:none!important; } }
 .verification-panel { position: relative; animation: verifyIn 220ms ease-out; }
 .verification-panel h2 { font-size: clamp(18px, 3.5vw, 24px); }
@@ -150,6 +150,42 @@ body {
 .code-inputs input:focus { outline:0; border-color:#7aa9e5; box-shadow:0 0 0 3px rgba(122,169,229,.22); }
 .text-button { margin-top:18px; border:0; color:#a9d4ff; background:transparent; text-decoration:underline; cursor:pointer; }
 .text-button:disabled { opacity:.55; cursor:wait; }
+
+.verification-panel .verification-destination { margin-top:24px; }
+.auth-card .verification-panel .email-edit.pixel-menu-button {
+  min-height:0;
+  height:21px;
+  padding:0 8px;
+  font-size:8px;
+  box-shadow:0 0 0 2px var(--bb-ink,#03060b), 0 3px 0 var(--bb-ink,#03060b), inset 0 2px #ffffff26;
+}
+.verification-panel .code-inputs { gap:10px; margin:26px 0 12px; }
+.verification-panel .code-inputs input {
+  flex:0 1 46px;
+  min-width:0;
+  padding:0;
+  border:2px solid #50739f;
+  border-top-color:#263b59;
+  border-left-color:#263b59;
+  border-radius:0;
+  background:linear-gradient(#081225,#10213b);
+  box-shadow:0 0 0 2px var(--bb-ink,#03060b), inset 0 3px 0 #020713, inset 0 -3px 0 #1c3451;
+  font-size:20px;
+  caret-color:var(--bb-gold,#ffd166);
+}
+.verification-panel .code-inputs input:focus {
+  border-color:var(--bb-gold,#ffd166);
+  background:#142b48;
+  box-shadow:0 0 0 2px var(--bb-ink,#03060b), inset 0 3px 0 #020713, inset 0 -3px 0 #254465;
+}
+.auth-card #resend-button {
+  display:table;
+  margin:0 auto 14px;
+  padding:10px 4px;
+  font:10px/1.6 var(--bb-font-display,"Press Start 2P",monospace);
+  text-underline-offset:4px;
+}
+.auth-card #resend-button:focus-visible { outline:2px solid var(--bb-gold,#ffd166); outline-offset:2px; }
 @keyframes verifyIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 
 .username-input-wrap {

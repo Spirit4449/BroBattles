@@ -1,3 +1,4 @@
+const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const {
   syncProfileIconOwnershipForUser,
 } = require("../cosmetics/profileIconOwnership");
@@ -56,10 +57,12 @@ async function buildStatusPayload({
   });
   const userNormalized = normalizeUserForStatus(user);
 
-  if (Number(userNormalized?.is_banned || 0) === 1) {
+  if (isAccountBanned(userNormalized)) {
     return {
       success: false,
       banned: true,
+      userId: userNormalized.user_id,
+      banExpiresAt: userNormalized.ban_expires_at,
       message: String(
         userNormalized?.ban_reason || "Your account has been banned.",
       ),

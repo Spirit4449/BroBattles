@@ -3,6 +3,48 @@ const assert = require('node:assert/strict');
 const { loadClientModule } = require('./helpers/clientModule');
 const { createLobbyFixture } = require('./helpers/lobbyFixture');
 
+describe('Ready restriction badges', () => {
+  test('renders both countdowns, updates in place, and hides each at expiry', () => {
+    const f = createLobbyFixture();
+    const { renderReadyRestrictions } = f.load('src/client/views/readyRestrictionView.js');
+    const now = Date.UTC(2026, 10, 12);
+    const state = { now, maintenanceUntil: new Date(now + 65000).toISOString(), suspendedUntil: now + 3661000 };
+    renderReadyRestrictions(f.document, state);
+    const maintenance = f.document.querySelector('[data-restriction="maintenance"]');
+    const suspension = f.document.querySelector('[data-restriction="suspension"]');
+    const streak = f.document.querySelector('.win-streak-control');
+    assert.equal(streak.parentElement.className, 'ready-status-row');
+    assert.equal(streak.nextElementSibling.className, 'ready-restrictions');
+    assert.match(maintenance.textContent, /Maintenance1m 05s left/);
+    assert.match(suspension.textContent, /Suspension1h 1m 1s left/);
+    assert.equal(maintenance.hidden, false);
+    assert.equal(maintenance.getAttribute('role'), 'timer');
+    renderReadyRestrictions(f.document, { ...state, now: now + 65000 });
+    assert.equal(maintenance.hidden, true);
+    assert.equal(suspension.hidden, false);
+    assert.match(suspension.textContent, /59m 56s left/);
+    assert.equal(f.document.querySelectorAll('.ready-restrictions').length, 1);
+    renderReadyRestrictions(f.document, { ...state, now: now + 3661000 });
+    assert.equal(f.document.querySelector('.ready-restrictions').hidden, true);
+    assert.equal(streak.parentElement.className, 'ready-button-wrap');
+    assert.equal(f.document.querySelector('.ready-status-row').hidden, true);
+  });
+
+  test('ignores inactive maintenance and chat-only suspensions, and handles removed maintenance', () => {
+    const f = createLobbyFixture();
+    const { renderReadyRestrictions, formatRestrictionRemaining } = f.load('src/client/views/readyRestrictionView.js');
+    const now = Date.UTC(2026, 10, 12);
+    renderReadyRestrictions(f.document, { now, maintenanceUntil: 'invalid' });
+    assert.equal(f.document.querySelector('.ready-restrictions'), null);
+    renderReadyRestrictions(f.document, { now, maintenanceUntil: new Date(now + 500).toISOString() });
+    assert.match(f.document.querySelector('.ready-restrictions').textContent, /1s left/);
+    renderReadyRestrictions(f.document, { now, maintenanceUntil: null });
+    assert.equal(f.document.querySelector('.ready-restrictions').hidden, true);
+    assert.equal(formatRestrictionRemaining((2 * 86400 + 3 * 3600 + 4 * 60) * 1000), '2d 3h 4m');
+    assert.equal(formatRestrictionRemaining(0), '0s');
+  });
+});
+
 describe('Ready and party state', () => {
   function fixture() {
     const f = createLobbyFixture({ url: 'https://game.test/party/7', globals: {
@@ -211,4 +253,54 @@ describe("Deferred lobby initialization", () => {
     assert.equal(attempts, 2);
   });
 
+});
+
+describe('Account restriction page', () => {
+  function page(expiry) {
+    const { parseHTML } = require('linkedom');
+    const fs = require('node:fs');
+    const { document } = parseHTML(fs.readFileSync('public/Errors/banned.html', 'utf8'));
+    document.cookie = `bb_ban_reason=${encodeURIComponent('<script>Test reason</script>')}; bb_ban_expires_at=${expiry || ''}`;
+    let time = 100000;
+    const intervals = [];
+    const redirects = [];
+    let calls = 0;
+    let response = { ok: false, json: async () => ({ banned: true }) };
+    const window = { setInterval: fn => intervals.push(fn), location: { replace: url => redirects.push(url) } };
+    const { createClientModuleGraph } = require('./helpers/clientModule');
+    const { initBanPage } = createClientModuleGraph().load('public/scripts/banned.js');
+    initBanPage({ document, window, now: () => time, fetch: async () => { calls++; return response; } });
+    return { document, intervals, redirects, get calls() { return calls; }, setTime(value) { time = value; },
+      setResponse(value) { response = value; }, async settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); } };
+  }
+  test('updates a temporary countdown and verifies access at expiry before navigating', async () => {
+    const f = page(165000);
+    assert.equal(f.document.getElementById('banTitle').textContent, 'Account Suspended');
+    assert.equal(f.document.getElementById('banRemaining').textContent, '1m 05s left');
+    assert.equal(f.document.getElementById('banReason').textContent, '<script>Test reason</script>');
+    assert.equal(f.document.getElementById('banReason').children.length, 0);
+    f.setTime(164500);
+    f.intervals[0]();
+    assert.equal(f.document.getElementById('banRemaining').textContent, '1s left');
+    f.setTime(165000);
+    f.intervals[0]();
+    await f.settle();
+    assert.equal(f.document.getElementById('banRemaining').textContent, 'Checking access…');
+    assert.equal(f.calls, 1);
+    assert.deepEqual(f.redirects, []);
+    f.setResponse({ ok: true, json: async () => ({}) });
+    await f.intervals[1]();
+    assert.deepEqual(f.redirects, ['/']);
+  });
+  test('permanent and invalid expiries stay timer-free; failed checks preserve the page', async () => {
+    for (const expiry of [null, 'invalid', Infinity]) {
+      const f = page(expiry);
+      assert.equal(f.document.getElementById('banTitle').textContent, 'Account Banned');
+      assert.equal(f.document.getElementById('banCountdown').hidden, true);
+      assert.equal(f.document.getElementById('banClock').children.length, 0);
+      f.setResponse({ ok: true, json: async () => { throw new Error('Offline'); } });
+      await f.intervals[0]();
+      assert.deepEqual(f.redirects, []);
+    }
+  });
 });

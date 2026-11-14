@@ -66,9 +66,17 @@ older response cannot overwrite a balance updated while the request was pending.
 Reward animation ticks are presentation-only; the acknowledged wallet remains
 the source for affordability checks.
 
+`lobby/walletView.js` moves the same coin/gem controls between the lobby header,
+Choose Your Bro, expanded character details, and Shop. Header slots form a stack:
+opening the currency shop from a character panel keeps that panel open, and
+closing each panel returns the wallet to the previous header. Other shared
+selection menus do not opt into the wallet. `styles/wallet.css` owns the chips,
+number spacing and compact header layouts; retain the shared
+counter IDs and shop animation targets when changing the presentation.
+
 ## Claims and presentation
 
-`createRewardPresentation` in `src/client/lobby/shop/shop.js` is shared by Shop and Trophy Road. The revised showcase removes circular reward halos, uses large cosmetic artwork, places currencies in a separate row, and keeps collectible reveals open until Done/Escape. The header wallet sits above the road blur, glows on impacts, and counts up as currency particles arrive. Reduced motion skips the flying particles and entrance motion. Claim errors stay inline on the road.
+`createRewardPresentation` in `src/client/lobby/shop/shop.js` is shared by Shop and Trophy Road. The revised showcase removes circular reward halos, uses large cosmetic artwork, and keeps collectible reveals open until Done/Escape. Multi-reward reveals show each reward (currencies included) as an inline rarity-framed tile, like the Shop info preview, sized to fit the viewport without scrolling; single rewards keep a full-height hero. The header wallet sits above the road blur, glows on impacts, and counts up as currency particles arrive. Reduced motion skips the flying particles and entrance motion. Claim errors stay inline on the road.
 Single player-card reveals center the card in a portrait box. The shared renderer uses the resize observer's untransformed dimensions, keeping the full card size and alignment after reveal entrance animations.
 
 A claim locks the user row and writes its unique tier receipt, all item grants and currency in one database transaction. Repeated/concurrent requests cannot duplicate rewards. A grant failure rolls back the receipt and wallet together. The UI celebrates only an acknowledged server success, serializes claims, and refreshes ownership after dismissal. Profile and skin selection remain explicit player actions.
@@ -209,7 +217,8 @@ transparent padding. Still posters use exactly the same placement as videos.
 Profile selection starts them on hover or keyboard focus and keeps them looping
 while visible. Hiding a tile restores the poster and pauses its retained decoder;
 removal releases it. Shop offers show their banner artwork, with an info button
-for a player-card preview that contains the full effect canvas. Reward reveals and battle-introduction frames loop
+on bundles and card offers that previews every reward, including the full
+player-card effect canvas. Reward reveals and battle-introduction frames loop
 automatically. Reduced-motion users receive the poster. The shared
 `src/client/views/playerCardAnimation.cjs` resolves still/animated artwork.
 The free `default` card is the static wood frame. The former animated silver
@@ -290,6 +299,26 @@ serializes those offers directly; adding a supported item or bundle needs no new
 client switch or product ID. `shopOfferRules.js` owns sale pricing, selection,
 standalone lookup and bundle valuation, shared by catalog lookup and commerce.
 
+Each catalog section also sets how it is displayed, so section changes need no
+client code:
+
+- `layout`: `grid` (default, 3/2/1 columns), `featured` (wide lead card, used by
+  Sales) or `list` (one column, used by Dailies).
+- `showRarity`: rarity badge, tint and rarity-coloured buy button.
+- `hideOwned`: hide owned/purchased offers and sort the rest by rarity, then
+  name. A non-rotating section left empty shows "Collection complete".
+- `rotation: "sales"` on a regular section: weekly rotation (see below).
+- `rows` (1–3): rows shown at every width. Add `collapsible: true` for an
+  Expand button; without it extra offers stay hidden (Profile's weekly rotation).
+
+On the client, `GRANT_KINDS` in `src/client/lobby/shop/shop.js` holds each grant
+kind's type label, name icon and reward label, and `grantArtMarkup` its artwork
+in dialogs and reveals. Rendering patches the DOM by offer, so a refresh only
+replaces cards whose content changed. Offers that cost nothing (dailies and free
+offers) are granted on click without a confirmation; paid offers still confirm. The admin Store renders
+its cards and live preview with the exported `offerMarkup` and `sectionTree`, so
+keep them pure functions of catalog data.
+
 To add an offer:
 
 1. Register cosmetic metadata and artwork in its cosmetic catalog first.
@@ -298,6 +327,8 @@ To add an offer:
    `bundle` for multiple rewards, or `currency-pack` for currency only. Provide
    just one standalone offer per cosmetic so legacy purchase routes and bundle
    valuation resolve the same price.
+   Bundle banners must picture everything in the pack, including the game's coin
+   or gem bag when currency is included (see [shop banners](../art/shop-banners.md#bundle-banners)).
 3. Use `lifetime` for a one-time virtual purchase or `unlimited` for repeatable
    purchases. Real-money offers currently support unlimited currency packs only;
    validation rejects unsupported purchase limits and eligibility rules.
@@ -332,7 +363,7 @@ Do not duplicate IDs across these lists. Active promotions appear only in Sales,
 including skins. Offers whose home section is Sales must be in one of the lists;
 when rotated out they cannot be purchased through a direct API request.
 
-The Profile shop offers Crystal Slime for 39 gems and Ember Crown and Moonblade
+Any section other than Sales with `rotation: "sales"` rotates weekly on the Sales schedule: each week shows the next `rows` × 3 of its offers in catalog order (rows default to 2), skipping offers promoted in Sales that week. Rotated-out offers cannot be purchased until they return. Only Dailies may use the `dailies` rotation. `getRotatingOfferIds` and `isOfferInRotation` in `shopOfferRules.js` own this for the shop, purchases and the admin preview. Profile uses it with two rows and no expansion. The Profile shop offers Crystal Slime for 39 gems and Ember Crown and Moonblade
 Skull for 59 gems each. Sky Duck and Berry Bomb cost 39 gems each; Robo Cat costs
 59 gems. All six profile icons also enter the weekly Sales rotation.
 Sky Adventure (55 gems) features Radiant Diamond, Sky Duck, and 300 coins;
@@ -372,3 +403,33 @@ character level are omitted from both profile overviews; the Bros grid still
 shows each unlocked character’s level.
 
 Shop cards preview their grants and price before purchase. Character unlocks use the unlock preview, and upgrades show the coin cost alongside the stat preview. A currency shortfall offers matching shop packs. Choosing a pack opens its own purchase review.
+
+## Profile favorite character
+
+Profiles show the most-used character across all recorded completed matches, with its portrait and battle count. Character aliases are combined; ties use alphabetical character-key order. Players with no completed matches see an empty state. Both self and public profile responses include `favoriteCharacter` (`{ character, matchesPlayed }` or `null`), calculated from match participants rather than the recent battle log.
+
+
+## Player titles
+
+`src/shared/catalogs/titlesCatalog.json` defines the nine exclusive launch titles,
+fixed text colors, gleam colors and collection metadata. None is granted by default.
+`shopCatalog.json` owns the authoritative gem prices (50–150 gems); title offers
+are in Profile, have lifetime purchase limits, and opt out of sale discounts.
+
+Apply `npm run migrate:apply -- titles` before starting the updated server. It adds
+`user_titles` and nullable `users.selected_title_id`, without granting or equipping
+anything. Ownership grants use the same transactional Shop service as other
+cosmetics, including bundles and future reward grants. Buying does not equip. Title-only reveals omit the repeated heading and offer only Done.
+
+`GET /titles/catalog` and authenticated `GET /titles/owned` expose the collection.
+`POST /titles/select` accepts `{ "titleId": "owned-id" }` or `{ "titleId": null }`
+to remove a title. Unknown and unowned choices are rejected. Both Profile interfaces
+provide selection; public profiles and battle introduction cards display the equipped
+title instead of the selected-character subtitle. No selection leaves that line empty.
+`src/client/views/titleView.js` shares the text renderer with Shop previews and reward
+reveals. Lettering has no glow and uses a continuous slow left-to-right color gleam.
+Reduced motion keeps static two-tone lettering. Collection price labels use
+the shared gem asset and pixel display font. The inline pen uses the shared profile edit control;
+the collection reuses profile-icon tile frames, selection tags and rarity styles,
+with separate Owned and Locked groups and blue gem prices. Titles have a thin
+black text outline on every surface.

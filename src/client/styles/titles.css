@@ -1,0 +1,194 @@
+/* Every surface uses the same two-tone lettering and left-to-right highlight. */
+.bb-player-title {
+  display: inline-block;
+  position: relative;
+  color: var(--title-color);
+  background: linear-gradient(110deg,
+    color-mix(in srgb, var(--title-color) 85%, #172035) 0%,
+    var(--title-color) 25%,
+    color-mix(in srgb, var(--title-gleam) 65%, white) 44%,
+    color-mix(in srgb, var(--title-gleam) 65%, white) 52%,
+    var(--title-color) 70%,
+    color-mix(in srgb, var(--title-color) 85%, #172035) 100%) 100% 0 / 200% 100% repeat-x;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  animation: title-gleam 12s linear infinite;
+  font-family: var(--bb-font-display, inherit);
+  font-weight: 700;
+  text-transform: none;
+  max-width: 100%;
+  line-height: 1.7;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+@keyframes title-gleam {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bb-player-title { animation: none; background-position: 50% 0; }
+}
+
+/* Frames, selection, hover and rarity come from the shared cosmetic tile CSS. */
+.title-collection-grid.profile-icon-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--bb-space-4);
+}
+.title-collection-grid .title-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px;
+  text-align: left;
+  cursor: pointer;
+}
+.title-choice-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 58px;
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 11px;
+  background: var(--bb-bg-deep);
+}
+.title-choice .profile-icon-details { display: grid; gap: 4px; padding: 9px 3px 5px; margin-top: auto; }
+.title-choice small { color: var(--bb-text-muted); font-family: var(--bb-font-display); font-size: 8px; line-height: 1.8; }
+.title-choice small.profile-icon-requirement { color: var(--bb-gold); }
+.title-collection-grid .title-choice:disabled { cursor: default; opacity: 1; filter: none; }
+.title-choice .profile-icon-selected-badge { position: absolute; bottom: 3px; right: 3px; }
+
+.profile-title-row {
+  position: relative;
+  width: fit-content;
+  max-width: none;
+  min-width: 0;
+  min-height: 24px;
+  margin-inline: auto;
+  display: grid;
+  place-items: center;
+}
+.profile-title-row .profile-title-edit {
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  min-height: 0;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+.profile-title-row .profile-title-edit[hidden] { display: none; }
+.profile-title-edit:focus-visible { outline: 2px solid var(--bb-border-highlight); outline-offset: 3px; }
+
+.shop-title-preview {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  text-align: center;
+  font-size: 12px;
+}
+.shop-reveal-title .shop-reveal-art, .purchase-grant-title .purchase-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  font-size: clamp(14px, 2vw, 20px);
+  text-align: center;
+}
+.shop-product-title .shop-banner-art { display: none; }
+.shop-product-title .shop-offer-visual { background: radial-gradient(ellipse at center, rgba(var(--rarity-rgb), .12), #0b1020 75%); }
+
+.title-choice small.title-price { display: flex; align-items: center; gap: 6px; }
+.title-price > img { width: 20px; height: 20px; object-fit: contain; image-rendering: pixelated; }
+.title-price .title-source { margin-left: auto; color: var(--bb-text-muted); font-size: 7px; }
+
+.bb-player-title {
+  filter: drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000) drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000);
+}
+.profile-title-row .bb-player-title { white-space: nowrap; }
+.profile-hero-copy { width: max-content; max-width: 100%; }
+.profile-title-row #profile-hero-class { font-size: clamp(8px, .9vw, 10px); letter-spacing: 0; }
+.title-choice .profile-icon-details small,
+.title-choice .profile-icon-details small span { font-family: var(--bb-font-display); font-size: 9px; }
+.profile-loadout-modal .title-choice .title-price,
+.title-choice .profile-icon-details .title-price { color: #8edfff; }
+:is(.profile-card-showcase, .profile-title-row) button .profile-edit-badge > img { width: 19px; height: 19px; }
+#profile-titles-grid, #account-titles-grid { display: grid; gap: 20px; }
+.title-none { position: relative; font-family: var(--bb-font-display); font-size: 10px; }
+.title-none::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 43%;
+  height: 1px;
+  background: currentColor;
+}
+/* Dim the frame and details without filtering the animated lettering. */
+.title-choice.is-locked .title-choice-art { background: none; }
+.title-choice.is-locked .title-choice-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--bb-bg-deep);
+  filter: brightness(.58) saturate(.7);
+}
+.title-choice.is-locked .profile-icon-details { filter: brightness(.58) saturate(.7); }
+.title-choice.is-locked:hover .title-choice-art::before,
+.title-choice.is-locked:hover .profile-icon-details { filter: brightness(.8) saturate(.85); }
+/* Single title unlock: big headline, then the nameplate as the hero, no dead space. */
+.reward-showcase.single-title-reveal .shop-reveal-panel { width: min(560px, calc(100vw - 32px)); max-width: 560px; }
+.reward-showcase.single-title-reveal .shop-reveal-heading { padding-bottom: 6px; }
+.reward-showcase.single-title-reveal .shop-reveal-subheader { font-size: 12px; letter-spacing: .12em; }
+.reward-showcase.single-title-reveal .shop-reveal-grant { padding: 18px 0 6px; }
+.reward-showcase.single-title-reveal .shop-reveal-art {
+  height: auto;
+  padding: 14px 6px;
+  font-size: clamp(17px, 3.4vw, 26px);
+}
+.reward-showcase.single-title-reveal .title-presentation-box {
+  min-height: 112px;
+  padding: 30px 22px;
+  line-height: 1.3;
+  box-shadow: 0 0 0 4px var(--bb-ink, #030810), inset 0 0 0 5px #1b2b43, 0 0 36px rgba(var(--rarity-rgb), .28);
+}
+@media (max-width: 600px) {
+  .reward-showcase.single-title-reveal .title-presentation-box { min-height: 90px; padding: 22px 14px; }
+}
+
+/* The same inset black title plaque in purchase reviews and reward reveals. */
+.title-presentation-box {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 76px;
+  padding: 22px 16px;
+  border: 2px solid var(--bb-border-highlight, #86b7ed);
+  border-radius: 0;
+  background: #060912;
+  box-shadow: 0 0 0 4px var(--bb-ink, #030810), inset 0 0 0 5px #1b2b43;
+  text-align: center;
+}

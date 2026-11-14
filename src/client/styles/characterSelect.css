@@ -639,48 +639,6 @@
   margin-left: auto;
 }
 
-.character-details-wallet > span {
-  min-width: 76px;
-  height: 34px;
-  display: grid;
-  grid-template-columns: 18px auto;
-  grid-template-rows: 10px 13px;
-  align-items: center;
-  column-gap: 5px;
-  padding: 4px 7px 4px 6px;
-  box-sizing: border-box;
-  border: 2px solid #203452;
-  border-radius: 0;
-  background:
-    linear-gradient(135deg, rgba(5, 14, 27, 0.78), rgba(18, 24, 43, 0.88)),
-    #0a1120;
-  box-shadow:
-    0 3px 0 rgba(2, 5, 11, 0.78),
-    inset 0 2px rgba(255, 255, 255, 0.07);
-}
-
-.character-details-wallet small {
-  grid-column: 2;
-  color: #9eb2cd;
-  font: 700 7px/1 "Press Start 2P", monospace;
-  letter-spacing: 0.04em;
-}
-
-.character-details-wallet img {
-  grid-row: 1 / span 2;
-  width: 17px;
-  height: 17px;
-  object-fit: contain;
-  image-rendering: pixelated;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
-}
-
-.character-details-wallet strong {
-  grid-column: 2;
-  color: #f9fbff;
-  font: 700 9px/1 "Press Start 2P", monospace;
-}
-
 .character-details-title-wrap {
   min-width: 0;
 }
@@ -2120,9 +2078,9 @@
 }
 
 .cs-arrow {
-  width: 40px;
-  height: 40px;
-  opacity: 0.85;
+  --bb-arrow-px: 4px;
+  color: var(--bb-gold);
+  filter: drop-shadow(0 4px 0 var(--bb-ink));
 }
 
 .cs-next-wrap {
@@ -2307,24 +2265,19 @@
   }
 }
 
-/* Currency balances use a single icon-and-number row at every breakpoint. */
-.character-details-wallet > span { grid-template-rows: auto; }
-.character-details-wallet img, .character-details-wallet strong { grid-row: 1; }
-
 /* Stepped 2px-pixel triangle arrows match the chunky pixel UI. */
+/* The shared pixel arrow (public/assets/ui/arrows). */
 .character-details-skin-stepper::before {
   content: "";
-  width: 10px;
+  width: 20px;
   height: 18px;
   background: currentColor;
-  clip-path: polygon(
-    0 0, 2px 0, 2px 2px, 4px 2px, 4px 4px, 6px 4px, 6px 6px, 8px 6px, 8px 8px,
-    10px 8px, 10px 10px, 8px 10px, 8px 12px, 6px 12px, 6px 14px, 4px 14px,
-    4px 16px, 2px 16px, 2px 18px, 0 18px
-  );
+  -webkit-mask: url("/assets/ui/arrows/arrow-right.svg") center / 100% 100% no-repeat;
+  mask: url("/assets/ui/arrows/arrow-right.svg") center / 100% 100% no-repeat;
 }
 .character-details-skin-stepper:first-child::before {
-  transform: rotate(180deg);
+  -webkit-mask-image: url("/assets/ui/arrows/arrow-left.svg");
+  mask-image: url("/assets/ui/arrows/arrow-left.svg");
 }
 
 .character-details-skin-name-text,
@@ -2614,4 +2567,17 @@ body .cs-unlock-confirm .cs-confirm-actions { display: grid; grid-template-colum
 }
 @media (prefers-reduced-motion: reduce) {
   .character-upgrade-halo { animation: none; transform: translate(-50%, -50%); transition: none; }
+}
+
+/* Fit the name and badge within the original compact selector height. */
+.character-details-skin-name-box {
+  height: 40px;
+  row-gap: 4px;
+  padding-block: 4px;
+  font-size: 7px;
+}
+.character-details-skin-name-box strong { line-height: 1.2; }
+.character-details-skin-name-box .character-details-skin-lock {
+  width: 11px;
+  height: 11px;
 }

@@ -3,6 +3,127 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { createLobbyFixture } = require('./helpers/lobbyFixture');
 
+test('one wallet follows the bro picker, details and shop, then returns through the open panels', async () => {
+  const user = { name: 'Owner', char_class: 'ninja', char_levels: { ninja: 1 }, coins: 2450, gems: 180 };
+  const f = createLobbyFixture({ globals: { fetch: async url => ({ ok: true, json: async () =>
+    url.endsWith('/bootstrap') ? { wallet: { coins: user.coins, gems: user.gems }, sections: {}, sectionMeta: [] } : { ownedSkinIds: [] } }) } });
+  const api = f.load('src/client/lobby/profile/characterSelectController.js');
+  const shop = f.load('src/client/lobby/shop/shop.js').initializeShop({ userData: user });
+  const wallet = f.document.getElementById('lobby-wallet');
+  const coinButton = wallet.querySelector('#coin-resource-button');
+  coinButton.addEventListener('click', () => void shop.open('currency'));
+  api.initializeCharacterSelect(user);
+  await f.settle();
+
+  const expectWalletIn = selector => {
+    assert.ok(f.document.querySelector(selector).contains(wallet), `wallet belongs in ${selector}`);
+    assert.equal(f.document.querySelectorAll('#lobby-wallet').length, 1);
+    assert.equal(f.document.querySelectorAll('#coin-count').length, 1);
+    assert.equal(f.document.querySelectorAll('#gem-count').length, 1);
+  };
+  expectWalletIn('[data-wallet-home]');
+  api.openCharacterSelect();
+  expectWalletIn('.popup-header');
+  f.document.querySelector('[data-char="ninja"]').click();
+  expectWalletIn('.character-details-header');
+  coinButton.click();
+  await f.settle();
+  expectWalletIn('.shop-header');
+  assert.equal(f.document.querySelector('.character-details-overlay').getAttribute('aria-hidden'), 'false');
+  f.load('src/client/lobby/wallet.mjs').applyWallet(user, { coins: 2300, gems: 200 });
+  expectWalletIn('.shop-header');
+  assert.equal(wallet.querySelector('#coin-count').textContent, '2,300');
+  await shop.close();
+  expectWalletIn('.character-details-header');
+  assert.equal(wallet.querySelector('#gem-count').textContent, '200');
+  f.document.querySelector('[aria-label="Close character details"]').click();
+  expectWalletIn('.popup-header');
+  f.document.querySelector('[aria-label="Close picker"]').click();
+  expectWalletIn('[data-wallet-home]');
+
+  api.openCharacterSelect();
+  const shell = f.load('src/client/ui/selectionPopupShell.js').getSharedSelectionPopupShell();
+  shell.mount({ titleText: 'Choose a map', contentNode: f.document.createElement('div') });
+  expectWalletIn('[data-wallet-home]');
+  assert.equal(shell.headerBar.querySelector('.selection-wallet-slot').hidden, true, 'other shared pickers do not acquire a wallet');
+  shell.hide();
+});
+
+test('profile report flag excludes self and leaderboard profiles and submits with retry protection', async () => {
+  const requests = [];
+  let fail = true;
+  const f = createLobbyFixture({ globals: {
+    crypto: require('node:crypto').webcrypto,
+    fetch: async (url, options) => {
+      requests.push({ url, body: JSON.parse(options.body) });
+      return { ok: !fail, json: async () => fail ? { error: 'Please retry later.' } : { id: 7 } };
+    },
+  } });
+  const { syncProfileReportButton } = f.load('src/client/lobby/profile/profileReport.js');
+  const profile = { userId: 42, username: 'OtherPlayer' };
+  const button = () => f.document.getElementById('profile-report-btn');
+  syncProfileReportButton(profile, false, 'leaderboard');
+  assert.equal(button().hidden, true);
+  syncProfileReportButton(profile, true);
+  assert.equal(button().hidden, true);
+  syncProfileReportButton(profile, false);
+  assert.equal(button().hidden, false, 'ordinary profile openings reset leaderboard exclusion');
+  button().click();
+  const dialog = f.document.getElementById('profile-report-dialog');
+  assert.ok(dialog.hasAttribute('open'));
+  assert.equal(dialog.querySelector('.profile-report-target').textContent, 'Reporting OtherPlayer');
+  const dropdown = dialog.querySelector('.bb-pixel-select-trigger');
+  f.event(dropdown, 'click', { detail: 0 });
+  const other = dialog.querySelector('[data-value="other"]');
+  other.click();
+  const message = dialog.querySelector('textarea');
+  message.value = 'Here is what happened during our match.';
+  f.event(message, 'input');
+  f.event(dialog.querySelector('form'), 'submit');
+  await f.settle();
+  assert.equal(dialog.querySelector('[role="alert"]').textContent, 'Please retry later.');
+  assert.equal(message.value, 'Here is what happened during our match.');
+  fail = false;
+  f.event(dialog.querySelector('form'), 'submit');
+  f.event(dialog.querySelector('form'), 'submit');
+  await f.settle();
+  assert.equal(requests.length, 2, 'double submission while saving is ignored');
+  assert.equal(requests[0].url, '/api/support/reports');
+  assert.equal(requests[0].body.reason, 'other');
+  assert.equal(requests[0].body.targetUserId, 42);
+  assert.equal(requests[1].body.submissionKey, requests[0].body.submissionKey, 'retry uses the same key');
+  assert.match(dialog.querySelector('[role="status"]').textContent, /Report sent/);
+  assert.equal(dialog.querySelector('textarea'), null);
+  dialog.querySelector('form button').click();
+  assert.equal(f.document.getElementById('profile-report-dialog'), null);
+});
+
+test('leaderboard profile openings carry the report exclusion', async () => {
+  const opened = [];
+  const f = createLobbyFixture({ globals: { fetch: async () => ({ ok: true, json: async () => ({ leaderboard: [{ username: 'RankedPlayer' }] }) }) } });
+  await f.load('src/client/lobby/profile/leaderboardOverlay.js').openLeaderboardOverlay({ open: options => opened.push(options) });
+  f.document.querySelector('.leaderboard-row').click();
+  assert.deepEqual(opened.map(item => ({ ...item })), [{ username: 'RankedPlayer', source: 'leaderboard' }]);
+});
+
+test('report Escape closes the reason list before the dialog and permits reopening', () => {
+  const f = createLobbyFixture({ globals: { crypto: require('node:crypto').webcrypto } });
+  f.load('src/client/lobby/profile/profileReport.js').syncProfileReportButton({ userId: 42, username: 'OtherPlayer' }, false);
+  const button = f.document.getElementById('profile-report-btn');
+  button.click();
+  const dialog = f.document.getElementById('profile-report-dialog');
+  Object.defineProperty(dialog, 'open', { get() { return this.hasAttribute('open'); } });
+  f.event(dialog.querySelector('.bb-pixel-select-trigger'), 'click', { detail: 0 });
+  assert.equal(dialog.querySelector('[role="listbox"]').hidden, false);
+  f.event(f.window, 'keydown', { key: 'Escape' });
+  assert.equal(dialog.querySelector('[role="listbox"]').hidden, true);
+  assert.equal(dialog.isConnected, true);
+  f.event(f.window, 'keydown', { key: 'Escape' });
+  assert.equal(dialog.isConnected, false);
+  button.click();
+  assert.ok(f.document.getElementById('profile-report-dialog'));
+});
+
 test('skin picker saves owned choices once, previews locked choices and rolls back failed saves without closing', async () => {
   const catalog = structuredClone(require('../src/shared/catalogs/skinsCatalog.json'));
   const skins = catalog.characters.gloop.skins;
@@ -512,4 +633,68 @@ test('slime reduces showcase travel speed and expires back to normal', () => {
   const multiplier = require('../src/shared/effectRules').getEffectModifiers('gloopSlimeSlow').speedMult;
   assert.ok(normal > 0);
   assert.ok(Math.abs(slowed / normal - multiplier) < 0.001, 'distance traveled reflects the actual slime multiplier');
+});
+
+test('favorite character combines historical aliases, ignores unknown characters and resolves ties consistently', async () => {
+  const { getFavoriteCharacter } = require('../src/server/services/match/favoriteCharacter');
+  const db = { runQuery: async (_sql, params) => {
+    assert.deepEqual(params, [42]);
+    return [
+      { char_class: 'wizard', matchesPlayed: '3' },
+      { char_class: 'ozzy', matchesPlayed: 5 },
+      { char_class: 'ninja', matchesPlayed: 8 },
+      { char_class: 'removed-character', matchesPlayed: 99 },
+    ];
+  } };
+  assert.deepEqual(await getFavoriteCharacter(db, 42), { character: 'ninja', matchesPlayed: 8 });
+  assert.equal(await getFavoriteCharacter({ runQuery: async () => [] }, 42), null);
+});
+
+test('favorite character view renders usage and clears stale favorites for new players', () => {
+  const { parseHTML } = require('linkedom');
+  const { loadClientModule } = require('./helpers/clientModule');
+  const { document } = parseHTML('<html><body><div id="favorite" class="profile-metric-card"></div></body></html>');
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { renderFavoriteCharacter } = createClientModuleGraph({ globals: { document } }).load('src/client/views/favoriteCharacterView.js');
+  const container = document.getElementById('favorite');
+  renderFavoriteCharacter(container, { character: 'gloop', matchesPlayed: 12 });
+  assert.equal(container.querySelector('strong').textContent, 'Gloop');
+  assert.match(container.title, /12 battles played/);
+  assert.match(container.querySelector('img').src, /gloop/);
+  renderFavoriteCharacter(container, null);
+  assert.equal(container.querySelector('img'), null);
+  assert.match(container.title, /Finish a battle/);
+  assert.equal(container.querySelector("strong").textContent, "None yet");
+});
+
+test('title collection only equips owned titles and keeps the confirmed selection after a failed save', async () => {
+  const { parseHTML } = require('linkedom');
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { document } = parseHTML('<html><body><div id="titles"></div><div id="display"></div></body></html>');
+  const api = createClientModuleGraph({ globals: { document } }).load('src/client/views/titleView.js');
+  const titles = require('../src/shared/catalogs/titlesCatalog.json').titles;
+  const profile = { ownedTitleIds: [titles[0].id], selectedTitleId: null };
+  const grid = document.getElementById('titles');
+  const saves = [];
+  let fail = false;
+  api.renderTitleCollection(grid, profile, { fetchJson: async (_url, options) => {
+    saves.push(JSON.parse(options.body));
+    if (fail) throw new Error('Save failed');
+    return { success: true, selectedTitleId: saves.at(-1).titleId };
+  }, onSelected: id => api.renderTitle(document.getElementById('display'), id) });
+  assert.equal(grid.querySelector(`[data-title-id="${titles[1].id}"]`).hasAttribute('disabled'), false);
+  grid.querySelector(`[data-title-id="${titles[0].id}"]`).click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(profile.selectedTitleId, titles[0].id);
+  assert.equal(document.getElementById('display').querySelector('.bb-player-title').childNodes[0].textContent, titles[0].name);
+  fail = true;
+  grid.querySelector('[data-title-id=""]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(profile.selectedTitleId, titles[0].id, 'failed removal keeps the confirmed title');
+  fail = false;
+  grid.querySelector('[data-title-id=""]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(profile.selectedTitleId, null);
+  assert.equal(document.getElementById('display').textContent, '');
+  assert.equal(profile.ownedTitleIds.length, 1);
 });

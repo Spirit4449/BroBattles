@@ -150,7 +150,7 @@ The admin panel calls the runtime configuration service, which updates in-memory
 | `movementPhysics.json` | Run speed 260px/s; ground/air acceleration 3000/3300px/s²; gravity 990px/s²; jump speed parameter 490px/s; dash 600px/s (straight down 840), burst 160ms, cooldown 5000ms, coast up to 850ms |
 | `ducking.js` | Body height ×0.55; movement ×0.25; damage taken ×0.8; minimum hold 50ms; reentry delay 100ms |
 | `characterStats.js` | Level cap 10; levels 2–5 add 500 HP / 100 damage / 200 special damage per level; levels 6–10 add 400 / 80 / 100; next-level coin costs 200, 400, 800, 1600, 2400, 3300, 4500, 6100, 8200 |
-| `gameModes.catalog.json`: Bank Bust | Vault starts with 50,000 coins; 1 damage strips 1 coin; a banked death-drop coin is worth 50; purchases cannot take a vault below 7,500; low warning at 25%; match 210s; respawn 3500ms; respawn shield 3000ms; unlock 250 peak trophies |
+| `gameModes.catalog.json`: Bank Bust | Vault starts with 20,000 coins; 1 damage strips 1 coin; a banked death-drop coin is worth 25; purchases cannot take a vault below 1,500; low warning at 25%; match 210s; respawn 3500ms; respawn shield 3000ms; unlock 750 peak trophies |
 | `bankBust/BankBustGameMode.js`: `VAULT_BUST_FINISH_DELAY_MS` | Match runs on 1800ms after a vault is emptied, so the bust plays before `game:over` |
 | `bankBust/state.js`: loose gold | Cap 5; value 1,250 coins each; pickup radius 42px; spawn interval 3600ms; arrives over 1300ms, uncollectible until down; coin event retention 1800ms |
 | `bankBust/state.js`: centre crate | 15,000 health; holds 7,500 coins spilled as 5 piles; first drop 45s in; 50s between drops; announced 8s ahead; despawns after 30s |

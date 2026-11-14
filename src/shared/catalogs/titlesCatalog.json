@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "titles": [
+    {
+      "id": "brooo",
+      "name": "Brooo...",
+      "color": "#b887ff",
+      "gleamColor": "#e0c6ff",
+      "rarity": "legendary",
+      "cost": {
+        "gems": 150
+      }
+    },
+    {
+      "id": "unbothered",
+      "name": "Unbothered",
+      "color": "#5de0d2",
+      "gleamColor": "#c5fff8",
+      "rarity": "rare",
+      "cost": {
+        "gems": 50
+      }
+    },
+    {
+      "id": "bro-with-benefits",
+      "name": "Bro With Benefits",
+      "color": "#56df98",
+      "gleamColor": "#c0ffda",
+      "rarity": "rare",
+      "cost": {
+        "gems": 50
+      }
+    },
+    {
+      "id": "too-clean",
+      "name": "Too Clean",
+      "color": "#8edfff",
+      "gleamColor": "#edfbff",
+      "rarity": "rare",
+      "cost": {
+        "gems": 75
+      }
+    },
+    {
+      "id": "built-different",
+      "name": "Built Different",
+      "color": "#2fe7ff",
+      "gleamColor": "#c4fbff",
+      "rarity": "epic",
+      "cost": {
+        "gems": 100
+      }
+    },
+    {
+      "id": "certified-menace",
+      "name": "Certified Menace",
+      "color": "#ff536f",
+      "gleamColor": "#ffc5cf",
+      "rarity": "epic",
+      "cost": {
+        "gems": 100
+      }
+    },
+    {
+      "id": "professional-problem",
+      "name": "Professional Problem",
+      "color": "#d273ff",
+      "gleamColor": "#f4d4ff",
+      "rarity": "epic",
+      "cost": {
+        "gems": 100
+      }
+    },
+    {
+      "id": "main-character",
+      "name": "Main Character",
+      "color": "#ffd45b",
+      "gleamColor": "#fff5c9",
+      "rarity": "legendary",
+      "cost": {
+        "gems": 150
+      }
+    },
+    {
+      "id": "clutch-king",
+      "name": "Clutch King",
+      "color": "#a88aff",
+      "gleamColor": "#e1d7ff",
+      "rarity": "legendary",
+      "cost": {
+        "gems": 150
+      }
+    }
+  ]
+}

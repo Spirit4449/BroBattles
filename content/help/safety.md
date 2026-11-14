@@ -1,25 +1,15 @@
-Play fairly. Do not cheat, harass players, impersonate others, or share anyone's private information.
+Don't cheat, harass or impersonate other players, or share someone's private information. Keep passwords, verification codes, and payment details out of chat.
 
-Use the **Safety** category in [Contact support](/help/contact) to report a concern. Include the relevant username, approximate time, and a short description. Do not post reports publicly or include unnecessary personal information.
+## Report a concern
 
-Streamer mode conceals username labels on your screen. It does not change your account name for other players, and it cannot conceal names someone types into a message.
+Choose **Safety** in [Contact us](/help/contact). Include the player's username, roughly when it happened, and what you saw. If you're not sure whether something was a bug, an ability, or cheating, describe it as best you can. Support may not be able to share another player's account details or the outcome.
 
-Bro Battles is intended for players aged 13 and older. Younger players must not use the game. Players under the age of majority need a parent or guardian's permission as described in the [Terms](/terms).
+If you think your own restriction is a mistake, contact support with your username and the notice you saw. Don't use another account to get around a restriction.
 
-## Make a useful report
+## Streaming and account safety
 
-Tell us what happened, who was involved, and roughly when. If you are unsure whether you saw an exploit, a connection problem, or an unfamiliar ability, say that too. One focused report is easier to investigate than several copies.
+**Streamer mode** in Settings hides known username labels on your display. It doesn't rename players for everyone else or hide names typed in chat. Check anything else on screen, including messages and support pages, before sharing it.
 
-Keep reports private. Do not encourage other players to harass a person you report. Support may not be able to share another player's account details or the outcome of a moderation investigation.
+If you think someone has accessed your account, contact support. Nobody needs your password or verification code to investigate or give you a reward.
 
-## Suspensions or account restrictions
-
-Read the notice shown by the game. If you believe a restriction was applied incorrectly, contact support with your username and the relevant context. Do not create replacement accounts to evade a restriction.
-
-## Safer streaming
-
-Streamer mode hides player labels on your display. It does not rename your account for other players or remove names from free-text messages. Check the scene you are sharing before going live, especially if it includes chat, support conversations, or browser developer tools.
-
-## Suspected account theft
-
-Stop sharing access, sign out of shared devices where possible, and contact support. Do not trust anyone claiming they need your password to investigate a report or deliver a prize.
+Bro Battles is intended for players aged 13 and older. Players under the age of majority need a parent or guardian's permission; see the [Terms](/terms).

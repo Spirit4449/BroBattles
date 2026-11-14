@@ -10,6 +10,11 @@ and award.
 
 ## Battle HUD layout
 
+The battle intro keeps a responsive center gap between the player cards for the
+countdown. Its FIGHT cue uses blue lettering with an orange outline to echo the
+wordmark, with a compact entrance zoom so the text stays readable over the arena.
+These presentation styles live in `public/styles/game.css`.
+
 `public/game.html` groups the team rosters, match clock, Bank Bust vault panels,
 and mode notices in `#battle-top-hud`. The shared grid in
 `src/client/styles/battlePixelHud.css` owns their placement: vaults flank the
@@ -170,7 +175,9 @@ Profile hero cards loop when visible and restart from time zero each time a
 profile is opened, including when the same card/video element is reused.
 Selection cards start on their first hover/focus and keep looping after the
 pointer/focus leaves (while visible).
-Shop offers containing cards have an info button opening a native preview dialog.
+Bundles and shop offers containing cards have an info button opening a native preview
+dialog (`showRewardPreview`) listing everything the offer grants: player cards
+animate, other rewards show their artwork with a name and type caption.
 The preview uses the canonical `bb-popup` header, square frame tokens,
 `bb-close` control, and shared popup dismissal motion from `ui-system.css`.
 Each preview card shows its rarity beneath the art. Closing a preview immediately
@@ -613,6 +620,20 @@ Gloop spars with Thorg, who retreats while hurt and slimed. Gloop prioritizes hi
 
 Showcase run animation, footstep cadence, and dust cadence follow simulated movement speed, including slime slows. Attack and super animations retain their normal timing.
 
+## Ready restriction badges
+
+The shell's existing runtime clock renders `views/readyRestrictionView.js` above
+Ready in the lobby, without a separate floating maintenance banner.
+Maintenance uses the runtime expiry and server clock offset;
+Suspension uses the account's matchmaking suspension from `/status` (chat-only
+restrictions do not appear here). Both can appear together, update once per second,
+and hide individually at expiry. Countdown text includes days for long restrictions.
+The pixel clock hand ticks while active; reduced motion keeps it still.
+While restrictions are visible, the win streak moves into the same row on their
+left. Restriction badges match the streak's original height and brown-and-gold
+pixel frame; the streak's appearance stays the same. It returns to its usual position above
+Ready after expiry.
+
 ## Party settings
 
 Party settings reuse the main Settings `site-setting` cards and checkbox styling.
@@ -623,3 +644,24 @@ portrait. This is a presentation setting, not network payload redaction; combat
 still uses the real selection. It follows team changes and roster updates.
 Apply `npm run migrate:apply -- party-hidden-bros` for the additive
 `parties.hide_enemy_bros` column. Older schemas disable the new control.
+
+## Rarity labels
+
+`public/styles/ui-system.css` gives displayed rarity labels a shared square,
+ink-framed badge with white pixel text and a solid rarity-colored fill. This
+covers shop offers, collection cards and icons, skin details, card preview
+captions, and admin offer previews. Rarity classes supply `--bb-rarity-fill`;
+keep new rarity labels consistent with this shared treatment.
+
+## Pixel arrows
+
+Every arrow in the UI is one of four pixel SVGs in `public/assets/ui/arrows/`
+(`arrow-right`, `arrow-left`, `arrow-up`, `arrow-down`). Use the `.bb-arrow`
+class from `public/styles/ui-system.css` rather than a text glyph: build it with
+`pixelArrow(direction, size)` from `src/client/ui/pixelArrow.js`, or
+`arrowHtml()` from `src/shared/site/html.cjs` in server-rendered pages. The
+arrow is a mask tinted by `currentColor`; `bb-arrow-sm` and `bb-arrow-lg` change
+the size of one art pixel, and links and buttons nudge their arrow one art pixel
+on hover. Pseudo-element arrows (chat jump-to-latest, skin steppers) mask the
+same files. Markdown arrows (`→`) in help and news render as the pixel arrow.
+The site header's navigation carets are intentionally separate.

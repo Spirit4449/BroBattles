@@ -1,3 +1,4 @@
+const { getFavoriteCharacter } = require("../../services/match/favoriteCharacter");
 const bcrypt = require("bcrypt");
 const NAME_CHANGE_COST = 50;
 const { getAllCharacters, resolveCharacterKey, canonicalCharacterKey, parseCharacterLevels } = require("../../../shared/characters/characterStats.js");
@@ -17,6 +18,7 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
   async function buildProfileViewForUser(userRow) {
     const profileIconState = await syncProfileIconOwnershipForUser(db, userRow);
     const cardState = await syncPlayerCardOwnershipForUser(db, userRow);
+    const titleState = await require("../../services/cosmetics/titleOwnership").getTitleOwnership(db, userRow);
     const matchesRows = await db.runQuery(
       "SELECT COUNT(*) AS total FROM match_participants WHERE user_id = ?",
       [userRow.user_id],
@@ -85,6 +87,7 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       nextNameChangeAt: userRow.next_name_change_at || null,
       trophies: Number(userRow.trophies) || 0,
       charClass,
+      favoriteCharacter: await getFavoriteCharacter(db, userRow.user_id),
       profileIconId: profileIconState.selectedProfileIconId || null,
       charLevels,
       avgCharLevel: avgLevel,
@@ -92,6 +95,8 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       wins,
       winStreak: await getCurrentWinStreak(db, userRow.user_id),
       highestWinStreak: Number(userRow.highest_win_streak) || 0,
+      selectedTitleId: titleState.selectedTitleId,
+      ownedTitleIds: titleState.ownedTitleIds,
       selectedCardId: cardState.selectedCardId || null,
       ownedCardIds: cardState.ownedCardIds || [],
       selectedProfileIconId: profileIconState.selectedProfileIconId || null,
@@ -157,7 +162,9 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
           gems: profile.gems,
           trophies: profile.trophies,
           charClass: profile.charClass,
+          favoriteCharacter: profile.favoriteCharacter,
           profileIconId: profile.profileIconId,
+          selectedTitleId: profile.selectedTitleId,
           selectedCardId: profile.selectedCardId || null,
           charLevels: profile.charLevels,
           avgCharLevel: profile.avgCharLevel,

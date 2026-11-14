@@ -1,4 +1,5 @@
-import { KEY_SLOTS, assignBinding, eventKeyCode, keyLabel } from './keyBindings.mjs';
+import { KEY_SLOTS, assignBinding, eventKeyCode } from './keyBindings.mjs';
+import { renderKeyLabel } from './controlsGuide.mjs';
 import { getSettings, saveSettings, subscribeSettings } from './preferences';
 export function remapKeys(dialog) {
   const details=document.createElement('details');details.className='site-key-remap';
@@ -6,7 +7,7 @@ export function remapKeys(dialog) {
   const hint=document.createElement('p');hint.textContent='Select a key, then press its replacement. Escape cancels. Mouse: left-click to attack, right-click for special.';details.append(hint);
   const error=document.createElement('p');error.className='site-remap-status';error.setAttribute('role','status');
   const buttons=new Map();let active=null;let feedbackTimer;
-  const update=()=>{for(const [slot,button] of buttons){button.textContent=active===slot?'Press a key…':keyLabel(getSettings().keys[slot]);button.classList.remove('is-in-use');}};
+  const update=()=>{for(const [slot,button] of buttons){if(active===slot)button.textContent='Press a key…';else renderKeyLabel(button,getSettings().keys[slot]);button.classList.remove('is-in-use');}};
   const cancel=()=>{error.textContent='';error.className='site-remap-status';active=null;delete dialog.dataset.remapping;update();};
   for(const [slot,label] of KEY_SLOTS.filter(([slot])=>!slot.endsWith('Alt')&&slot!=='dash')){const row=document.createElement('div');row.className='site-key-row';const name=document.createElement('span');name.textContent=label;const button=document.createElement('button');button.type='button';button.className='pixel-menu-button';button.setAttribute('aria-label',`Remap ${label}`);button.onclick=()=>{active=slot;dialog.dataset.remapping='true';error.textContent='';update();};buttons.set(slot,button);row.append(name,button);details.append(row);}
   const capture=event=>{

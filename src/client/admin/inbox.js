@@ -1,5 +1,6 @@
 // Feedback and support inboxes. Conversations reuse the in-game chat look
 // (bb-chat-* classes from styles/chat.css): player on the left, staff on the right.
+import { pixelArrow } from "../ui/pixelArrow.js";
 import { $, node, button, fetchJson, formatAdminDate, timeAgo, titleCase, setAvatar, showToast } from "./common";
 
 const CATEGORIES = ["bug", "idea", "gameplay", "account", "purchase", "safety", "privacy", "other"];
@@ -43,10 +44,11 @@ export function initInbox(root, kind) {
   });
   const category = node("select", null, "inbox-category");
   category.setAttribute("aria-label", "Category");
-  for (const value of ["", ...CATEGORIES]) category.append(Object.assign(node("option", value ? titleCase(value) : "All categories"), { value }));
+  for (const value of ["", ...CATEGORIES, ...(kind === "support" ? ["reports"] : [])]) category.append(Object.assign(node("option", value ? titleCase(value) : "All categories"), { value }));
   category.addEventListener("change", () => { state.category = category.value; state.page = 1; loadList(); });
   const refresh = button("Refresh", "", () => { loadList(); if (state.selectedId) loadThread(state.selectedId, { keepScroll: true }); });
-  toolbar.append(title, node("span", null, "spacer"), statusStrip, category, refresh);
+  // New feedback has no topic, so only support requests filter by category.
+  toolbar.append(title, node("span", null, "spacer"), statusStrip, ...(kind === "support" ? [category] : []), refresh);
 
   // ---- Layout ----
   const layout = node("div", null, "inbox-layout");
@@ -75,7 +77,12 @@ export function initInbox(root, kind) {
     const subject = node("span", item.subject, "inbox-subject");
     const preview = node("span", item.preview || "", "inbox-preview");
     const tags = node("span", null, "inbox-tags");
-    tags.append(node("span", item.category, "tag"), node("span", STATUS_LABEL[item.status] || item.status, `tag tag-status-${item.status}`));
+    if (item.category !== "feedback") tags.append(node("span", item.category, "tag"));
+    tags.append(node("span", STATUS_LABEL[item.status] || item.status, `tag tag-status-${item.status}`));
+    if (item.reportSummary) {
+      const { totalReports, uniqueReporters } = item.reportSummary;
+      tags.append(node("span", `${totalReports} report${totalReports === 1 ? "" : "s"} on player · ${uniqueReporters} reporter${uniqueReporters === 1 ? "" : "s"}`, "tag tag-report-count"));
+    }
     if (item.messageCount > 1) tags.append(node("span", `${item.messageCount} messages`, "muted"));
     body.append(top, subject, preview, tags);
     card.append(avatar, body);
@@ -96,8 +103,12 @@ export function initInbox(root, kind) {
       list.replaceChildren(...data.items.map(itemCard));
       if (!data.items.length) list.append(node("p", "Nothing here. Nice.", "muted pad"));
       const pages = Math.max(1, Math.ceil(data.total / 20));
-      const prev = button("‹", "icon-button", () => { state.page -= 1; loadList(); });
-      const next = button("›", "icon-button", () => { state.page += 1; loadList(); });
+      const prev = button(null, "icon-button", () => { state.page -= 1; loadList(); });
+      const next = button(null, "icon-button", () => { state.page += 1; loadList(); });
+      prev.append(pixelArrow("left"));
+      next.append(pixelArrow("right"));
+      prev.setAttribute("aria-label", "Previous page");
+      next.setAttribute("aria-label", "Next page");
       prev.disabled = state.page <= 1;
       next.disabled = state.page >= pages;
       pager.replaceChildren(prev, node("span", `Page ${state.page} of ${pages}`), next);
@@ -147,7 +158,7 @@ export function initInbox(root, kind) {
     list.querySelectorAll(".inbox-item").forEach((el) => el.classList.toggle("is-active", Number(el.dataset.requestId) === id));
     if (!keepScroll) thread.classList.add("is-loading");
     try {
-      const { request, messages } = await fetchJson(`/api/admin/${kind}/${id}`);
+      const { request, messages, reportReview } = await fetchJson(`/api/admin/${kind}/${id}`);
       if (state.selectedId !== id) return;
       const card = list.querySelector(`[data-request-id="${id}"]`);
       card?.classList.remove("is-unread");
@@ -156,10 +167,10 @@ export function initInbox(root, kind) {
       const shell = node("div", null, "bb-chat-shell inbox-chat");
       const header = node("div", null, "bb-chat-header");
       const heading = node("div", null, "inbox-chat-heading");
-      heading.append(node("h2", request.subject, "bb-chat-title"), node("div", `#${request.id} · ${titleCase(request.category)} · ${request.version || ""} · opened ${formatAdminDate(request.created_at, true)}`, "bb-chat-subtitle"));
+      heading.append(node("h2", request.subject, "bb-chat-title"), node("div", [`#${request.id}`, request.category !== "feedback" && titleCase(request.category), request.version, `opened ${formatAdminDate(request.created_at, true)}`].filter(Boolean).join(" · "), "bb-chat-subtitle"));
       const actions = node("div", null, "bb-chat-header-actions");
       const player = button(null, "inbox-player", () => openPlayer(request.userId));
-      player.title = "Open this player's account";
+      player.title = request.category === "reports" ? "Open the reporter's account" : "Open this player's account";
       player.append(setAvatar(Object.assign(node("img"), { alt: "" }), { userIcon: request.userIcon }), node("span", request.userName || `#${request.userId}`));
       const statusRow = node("div", null, "segmented");
       const statusButtonsRow = ["open", "in_progress", "closed"].map((status) => {
@@ -172,6 +183,7 @@ export function initInbox(root, kind) {
       header.append(heading, actions);
 
       const log = node("div", null, "bb-chat-messages");
+      if (reportReview) log.append(reportReviewPanel(reportReview, id));
       let lastDay = "";
       for (const message of messages) {
         const day = dayLabel(message.created_at);
@@ -185,7 +197,7 @@ export function initInbox(root, kind) {
       }
       shell.append(header, log);
 
-      if (kind === "support") shell.append(composer(id, statusButtonsRow));
+      if (kind === "support") shell.append(composer(id));
       else shell.append(node("p", "Feedback is one-way, so it can't be replied to. Mark it In progress or Closed once it's handled.", "inbox-note"));
       thread.replaceChildren(shell);
       log.scrollTop = log.scrollHeight;
@@ -195,32 +207,71 @@ export function initInbox(root, kind) {
     } finally { thread.classList.remove("is-loading"); }
   }
 
-  function composer(id, statusButtonsRow) {
+  function reportReviewPanel(review, selectedId) {
+    const panel = node("section", null, "report-review");
+    panel.setAttribute("aria-label", "Reported player history");
+    const heading = node("div", null, "report-review-heading");
+    const identity = node("div");
+    identity.append(node("span", "Reported player", "report-review-eyebrow"), node("h3", `${review.targetName} · #${review.targetUserId}`));
+    const account = button("Open player account", "", () => openPlayer(review.targetUserId));
+    account.disabled = !review.targetExists;
+    if (!review.targetExists) account.title = "This account no longer exists";
+    heading.append(identity, account);
+    const stats = node("dl", null, "report-review-stats");
+    for (const [label, value] of [["Saved reports", review.totalReports], ["Reporters", review.uniqueReporters], [`Last ${review.windowDays} days`, review.recentReports], [`Registered (${review.windowDays}d)`, review.recentMemberReporters]]) {
+      const stat = node("div");
+      stat.append(node("dt", label), node("dd", Number(value).toLocaleString()));
+      stats.append(stat);
+    }
+    const suggestion = node("div", null, "report-review-suggestion");
+    suggestion.dataset.recommendation = review.recommendation.code;
+    const suggestionHead = node("div", null, "report-review-suggestion-head");
+    const advisory = node("span", "Advisory", "report-review-advisory");
+    advisory.title = `Based on ${review.reviewThreshold} distinct registered reporters within ${review.windowDays} days. No automatic punishment.`;
+    suggestionHead.append(node("span", "Suggested action", "report-review-eyebrow"), advisory);
+    suggestion.append(suggestionHead, node("h4", review.recommendation.title), node("p", review.recommendation.explanation));
+    stats.title = 'Counts cover saved reports. Registered means distinct registered reporters in the recent window.';
+    panel.append(heading, suggestion, stats);
+    if (review.history.length) {
+      const history = node("details", null, "report-review-history");
+      history.append(node("summary", `Latest ${review.history.length} report${review.history.length === 1 ? "" : "s"}`));
+      const items = node("div", null, "report-review-history-items");
+      for (const item of review.history) {
+        const entry = button(null, "report-review-history-item", () => loadThread(item.id));
+        entry.disabled = String(item.id) === String(selectedId);
+        entry.append(node("strong", `#${item.id} · ${item.reason}`), node("span", `${item.reporterName || `Account #${item.reporterId}`} · ${formatAdminDate(item.created_at, true)} · ${STATUS_LABEL[item.status] || item.status}`));
+        items.append(entry);
+      }
+      history.append(items);
+      panel.append(history);
+    }
+    return panel;
+  }
+
+  function composer(id) {
     const box = node("form", null, "bb-chat-composer");
     const row = node("div", null, "bb-chat-input-row");
-    const text = node("textarea", null, "bb-chat-textarea");
-    text.placeholder = "Write a reply… (Enter to send, Shift+Enter for a new line)";
+    const text = node("input", null, "inbox-reply-input");
+    text.type = "text";
+    text.name = "message";
+    text.setAttribute("aria-label", "Reply message");
+    text.placeholder = "Write a reply…";
     text.maxLength = 4000;
-    text.rows = 3;
     const send = node("button", "Send", "bb-chat-send");
     send.type = "submit";
     row.append(text, send);
-    const options = node("label", null, "inbox-close-option");
-    const closeAfter = Object.assign(node("input"), { type: "checkbox" });
-    options.append(closeAfter, node("span", "Close the request after sending"));
-    box.append(row, options);
+    box.append(row);
     let key = submissionKey();
     text.addEventListener("input", () => { key = submissionKey(); });
-    text.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); box.requestSubmit(); } });
     box.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (send.disabled) return;
       const message = text.value.trim();
       if (message.length < 5) return showToast("Replies need at least 5 characters", true);
       send.disabled = true;
       try {
         await fetchJson(`/api/admin/support/${id}/messages`, { method: "POST", body: { message, submissionKey: key } });
-        if (closeAfter.checked) await fetchJson(`/api/admin/support/${id}/status`, { method: "POST", body: { status: "closed" } });
-        showToast(closeAfter.checked ? "Reply sent and request closed" : "Reply sent");
+        showToast("Reply sent");
         await loadThread(id, { keepScroll: true });
         loadList();
       } catch (error) {

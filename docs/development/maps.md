@@ -22,7 +22,7 @@ Admins can open Map Studio using the Edit map action inside the lobby map select
 
 Admin map cards place the Edit map action in the top-left corner of the preview. Hitbox debugging is controlled inside Map Studio; the lobby does not set or pass that preference to the editor.
 
-The toolbar’s map, formation, opponents and character selectors reuse the Settings pixel dropdowns, including keyboard navigation.
+The toolbar’s map, formation, opponents and character selectors reuse the Settings pixel dropdowns, including keyboard navigation. The map selector lists modes first; hover a mode (or press Right) to open its maps in a matching dropdown beside it. Selecting a map loads it while preserving unsaved edits as a draft. Hover a character to open its skins beside the list; click a skin to select it for the playtest. Keyboard users can press Right on a character, move through skins with Up/Down, and press Enter to select (Left returns to characters). All catalog skins are available for admin playtests, independently of account ownership. The browser remembers the character and skin. The toolbar Settings button opens the shared game settings; settings are also available inside a playtest.
 
 ### Editing controls
 
@@ -285,14 +285,13 @@ players descending onto its top. Saved overrides retain their authored positions
 
 Map 2 is displayed as **Sky Soil** (formerly Mangrove Meadow). The stable
 `mangrove-meadow` key and asset keys remain compatible with existing matches.
-`public/assets/sky-soil/` contains separate sky, distant mountain and nearer
-forest-ridge layers plus an integrated sandstone, moss and root island base. The whole main island renders as one pixel-finished, world-fixed
-`island-base` scenery image. The original `p0`–`p3` rows retain their collision
-surfaces and IDs with `alpha: 0`, eliminating visible joins. The saved layout
-uses a matching master with its lower pillar. All art layers use hard pixel
-grids, limited palettes, lossless textures and nearest filtering. The mountain layers
-use different parallax factors with interleaved clouds; High/Super High adds
-distance fog, drifting mist, sunlight rays, glow, motes and platform lighting.
-The former side islands are removed. The lobby uses a flattened mountain view. The unified island uses a world-fixed `arena` scenery layer;
-it is decorative and adds no collision. Both the built-in and saved map keep
-these layers. Current art prompts are in `public/assets/sky-soil/README.md`.
+`public/assets/sky-soil/` holds the art. The backdrop uses Codex-generated BB
+islands pixelated onto a true grid (`scripts/art/sky-soil/compose-backdrop.cjs`).
+It has a smooth sky with blurred distant islands, hazed far islands, an animated
+cloud sea (`cloud-sea` layer part) and near framing islands with animated
+waterfall parts. Sky clouds come only from the clouds feature. The main island
+renders as one world-fixed `island-base` scenery image (`stack: "arena"`,
+decorative, no collision), drawn in code on the small platform's 2-world-px
+grid and palette (`main-platform.cjs`). The original `p0`–`p3` rows keep their
+collision surfaces and IDs with `alpha: 0`. Art notes are in
+`public/assets/sky-soil/README.md`.

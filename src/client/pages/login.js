@@ -98,7 +98,7 @@ form.addEventListener("submit", async (e) => {
       showSuccess("Logged in! Redirecting…");
       // quick pause so cookies settle and users see feedback
       setTimeout(() => {
-        window.location.href = safeNext;
+        window.location.href = data.banned && safeNext === "/" ? "/banned" : safeNext;
       }, 500);
       return;
     }

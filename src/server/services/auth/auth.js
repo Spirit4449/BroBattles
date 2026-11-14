@@ -1,3 +1,4 @@
+const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const {
   DEFAULT_CHARACTER,
   defaultCharacterList,
@@ -75,40 +76,22 @@ function makeAuthHelpers(db, cookieOpts) {
     return [await createGuestAndSetCookies(res), "new"];
   }
 
-  async function requireCurrentUser(req, res) {
-    if (Object.prototype.hasOwnProperty.call(req || {}, "abuseResolvedUser")) {
-      const cachedUser = req.abuseResolvedUser || null;
-      if (cachedUser && Number(cachedUser.is_banned || 0) === 1) {
-        req.authBanned = cachedUser;
-        setBanHoldCookies({
-          req,
-          res,
-          reason: String(
-            cachedUser?.ban_reason || "Your account has been banned.",
-          ),
-        });
-        try {
-          res.clearCookie("user_id", SIGNED_COOKIE_OPTS);
-          res.clearCookie("display_name", DISPLAY_COOKIE_OPTS);
-        } catch (_) {}
-        return null;
-      }
-      return cachedUser;
-    }
-
-    const user = await sessions.resolve(req.signedCookies?.user_id);
-    if (user && Number(user.is_banned || 0) === 1) {
+  // Most callers require gameplay access. Support explicitly accepts a valid
+  // session even when the account is restricted.
+  async function requireCurrentUser(req, res, { allowBanned = false } = {}) {
+    const user = Object.prototype.hasOwnProperty.call(req || {}, "abuseResolvedUser")
+      ? req.abuseResolvedUser || null
+      : await sessions.resolve(req.signedCookies?.user_id);
+    if (user && isAccountBanned(user)) {
       req.authBanned = user;
       setBanHoldCookies({
         req,
         res,
-        reason: String(user?.ban_reason || "Your account has been banned."),
+        userId: user.user_id,
+        expiresAt: user.ban_expires_at,
+        reason: String(user.ban_reason || "Your account has been banned."),
       });
-      try {
-        res.clearCookie("user_id", SIGNED_COOKIE_OPTS);
-        res.clearCookie("display_name", DISPLAY_COOKIE_OPTS);
-      } catch (_) {}
-      return null;
+      return allowBanned ? user : null;
     }
     return user;
   }
