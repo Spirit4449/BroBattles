@@ -46,6 +46,25 @@ test("many successful upgrades never consume the upgrade or shared allowance", a
   assert.equal((await request(200, "/buy")).res.statusCode, 429);
 });
 
+test("admin requests never consume gameplay allowances or trigger suspensions", async () => {
+  const { HTTP_BUCKETS } = require("../src/server/services/moderation/abusePolicy");
+  const { request, user } = setup();
+  const paths = ["/api/admin/user-search", "/api/admin/user-update", "/api/admin/runtime",
+    "/api/admin/shop/refresh", "/api/admin/map-editor/save-file"];
+  for (let i = 0; i < 350; i++) {
+    assert.equal((await request(200, paths[i % paths.length])).reachedRoute, true);
+  }
+  assert.equal(user.http_offense_level, undefined);
+  assert.equal(user.mm_suspended_until, undefined);
+  for (let i = 0; i < HTTP_BUCKETS.strict.limit; i++) {
+    assert.equal((await request(200, "/buy")).reachedRoute, true);
+  }
+  assert.equal((await request(200, "/buy")).res.statusCode, 429);
+  // An existing gameplay suspension must not lock the console either.
+  for (const path of paths) assert.equal((await request(200, path)).reachedRoute, true);
+  assert.equal((await request(200, "/buy")).res.body.type, "mm_suspended");
+});
+
 test("equipping counts apart from the shared allowance and outlasts it", async () => {
   const { HTTP_BUCKETS } = require("../src/server/services/moderation/abusePolicy");
   const { request } = setup();

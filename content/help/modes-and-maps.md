@@ -1,32 +1,19 @@
-The mode decides how you win. The map decides where the fight happens. Pick both in the lobby before you ready up.
+Choose a playable mode and map in the lobby. The mode determines how you win; the map determines the routes and platforms you'll fight on.
 
 ## Duels
 
-Duels is an elimination battle in **1v1 or 2v2**. Both formats share the same four maps; the format changes the number of players. Knock out the other side before your team is eliminated. There are no respawns, so surviving and helping a teammate escape can matter as much as chasing one more hit.
-
-If a Duel stays tied, sudden death pushes the action toward a finish.
+Duels is a 1v1 or 2v2 elimination battle. Knock out the other side before your team is eliminated. There are no respawns, so keeping yourself and your teammate alive matters. If a Duel stays tied, sudden death pushes the fight toward a finish.
 
 ## Bank Bust
 
-Bank Bust unlocks at 250 peak trophies and is a **3v3 objective battle**. Empty the enemy vault before they empty yours. Players respawn, so a knockout costs time and space rather than ending your match.
+Bank Bust is a 3v3 battle with respawns. Empty the enemy vault while protecting yours. If time runs out before either vault is destroyed, the team with more coins in its vault wins.
 
-Everything in the mode runs on one number: the coins in your vault. Gold you pick up goes into it, enemy hits knock coins out of it, and turrets and walls are paid for out of it. A vault with no coins left is destroyed, and if the clock runs out first the team with more coins still in the bank wins.
+Collected gold goes into your vault; enemy attacks knock coins out of it. Turrets and walls also cost vault coins, so weigh a purchase against what your team needs to defend. A purchase is refused if it would take the vault below its reserve.
 
-That makes every purchase a real decision, because the coins you spend on defence are the same coins the other team is trying to take. You can never spend your way to a loss — a purchase is refused if it would drop your vault below its reserve mark — but you can spend yourself thin. A strong team changes gears: defend when your vault is draining, then push when the other side is recovering.
+A coin crate is announced and drops on the middle platform every 50 seconds. Either team can break it and collect the spilled coins. On Iron Junction, use the main lane, overhead catwalks, or lower tunnel to cross the map. Walls block players on both teams, but your team can shoot through its own walls. The balcony perch above a vault gives attackers a shot through the hatch; a wall at the hatch can block that approach.
 
-Every 50 seconds a locked crate of coins is announced and then drops on the platform in the middle of the map. Either team can attack it, and when it breaks its coins spill out for anyone to grab, so landing the last hit only gets you the first run at them. It is worth far more than loose gold, both teams are told before it lands, and there are several of them in a match, so winning one fight over it helps without deciding the game.
+You can select Bank Bust after reaching 250 peak trophies. You can also play it in a party whose owner has unlocked it; that doesn't permanently unlock it for you.
 
-Iron Junction gives you three ways across. The **main lane** runs from the top of your base over a long catwalk to the hill in the middle. The **catwalks** overhead are reached by the short ledge climbs beside your base and beside the hill; they own the sightlines, your mine and your turret, and the gap between your balconies drops straight onto your vault. The **floor** runs flat from stair to stair, over the hill, and a **tunnel** beneath it links the shafts on either side of the hill, so you can cross under the fight. Each base has a wall slot on all three, so you choose which door to shut.
+## Other modes and maps
 
-Above each vault, a small **perch** on the balcony lets an attacker fire straight down through the hatch at it. Built walls block every player, your own team included, but only stop enemy shots: your team can fire through its own walls. A defender can shut that angle with the tall wall slot on the edge of the hatch.
-
-## Learning a map
-
-Each arena has its own platforms, gaps, routes, and places to recover. In your first few rounds, notice:
-
-- where you can change height quickly;
-- which platforms give you room to dodge;
-- where a missed jump becomes dangerous; and
-- the shortest safe route back to your team or objective.
-
-Modes marked **Coming soon** can be previewed in the lobby, but they cannot enter matchmaking yet.
+Modes marked **Coming Soon** can be previewed but cannot be played, even after reaching their trophy milestone. When learning a map, look for ways to change height, places to dodge, and a safe route back to your teammate or objective.

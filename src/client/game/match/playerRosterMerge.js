@@ -55,6 +55,7 @@ export function mergeInitialRosterPlayer(rosterPlayer, livePlayer) {
     name: rosterPlayer.name,
     team: rosterPlayer.team,
     char_class: rosterPlayer.char_class,
+    selected_title_id: rosterPlayer.selected_title_id,
     // The HTTP roster is the asset manifest used during Phaser preload.
     // Keep these fields stable if the room snapshot has an older selection.
     selected_skin_id:

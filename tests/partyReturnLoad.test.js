@@ -164,6 +164,7 @@ describe("Fresh account status", () => {
     vm.runInNewContext(fs.readFileSync(require.resolve('../src/server/services/match/statusPayloadService'), 'utf8'), {
       module, console: { warn: (...args) => warnings.push(args), error() {} },
       require: name => {
+        if (name.endsWith('/moderation/accountBan')) return require('../src/shared/moderation/accountBan');
         if (name === './battleLog') return { getCurrentWinStreak: () => load('streak') };
         if (name.endsWith('/profileIconOwnership')) return { syncProfileIconOwnershipForUser: () => load('icons') };
         if (name.endsWith('/skinOwnership')) return { syncSkinOwnershipForUser: () => load('skins') };
@@ -228,6 +229,19 @@ describe("Fresh account status", () => {
     const f = fixture({ user: { user_id: 1, is_banned: 1, ban_reason: 'Banned' } });
     assert.equal((await f.build()).banned, true);
     assert.deepEqual(f.started, []);
+  });
+
+  test('temporary restrictions use the banned payload before expiry and normal status afterwards', async () => {
+    const user = { user_id: 1, is_banned: 1, ban_reason: 'Cooldown', ban_expires_at: new Date(Date.now() + 60000) };
+    const f = fixture({ user });
+    const restricted = await f.build();
+    assert.equal(restricted.banned, true);
+    assert.equal(restricted.message, 'Cooldown');
+    assert.equal(restricted.banExpiresAt, user.ban_expires_at);
+    assert.deepEqual(f.started, []);
+    user.ban_expires_at = new Date(Date.now() - 1);
+    assert.equal((await f.build()).banned, undefined);
+    assert.ok(f.started.includes('party'));
   });
 
   test('status does not reuse previous membership or ownership responses', async () => {

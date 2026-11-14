@@ -5,8 +5,10 @@ const manifest = require('../../../../content/manifest.json');
 const HELP_ROOT = path.resolve(__dirname, "../../../../content/help");
 const MODEL = 'gemini-2.5-flash-lite';
 
+const { plainComponents } = require('../../../shared/site/markdownComponents.cjs');
+
 function plainText(markdown) {
-  return String(markdown || '')
+  return plainComponents(markdown)
     .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
     .replace(/[`*_>#-]/g, ' ')
     .replace(/\s+/g, ' ')

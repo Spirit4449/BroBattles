@@ -1,27 +1,26 @@
-- **Move:** A/D or Left/Right. Jump with W or Up; duck/drop with S or Down.
-- **Dash:** Space plus a direction. Without directional input, dash the way you face. Dash has a cooldown and does not grant invulnerability.
-- **Attack:** left mouse button or J. For attacks you can aim, hold the button and move the mouse.
-- **Special:** right mouse button or I when your ability is ready.
-- **Show cursor:** press Escape. Click the arena to capture it again.
+## Keyboard and mouse
 
-Open **Settings → Controls** for keyboard bindings. Arrow alternatives and Space dash stay fixed. Use Settings to adjust mouse sensitivity, sound, or automatic cursor hiding.
+- **Move:** {key:A} {key:D}, or {key:Left} {key:Right}. Jump with {key:W} or {key:Up}; duck or drop with {key:S} or {key:Down}.
+- **Dash:** {key:Space} plus a direction. With no direction held, you dash the way you face.
+- **Attack:** {mouse:left} or {key:J}. For aimable attacks, hold the button and move the mouse.
+- **Special:** {mouse:right} or {key:I} when your ability is ready.
+- **Release the cursor:** {key:Esc}. Click the arena to capture it again.
 
-With auto-hide off, your cursor stays visible until you click the arena. Opening Settings releases the cursor, but the online match continues.
+> [!TIP]
+> Dash has a cooldown and doesn't make you invulnerable. Use it to get out of the way, not to push through a hit.
 
-## Make aiming feel right
+Open {path:Settings > Controls} to change supported keyboard bindings. Duplicate bindings are rejected; the arrow-key alternatives and Space dash stay fixed. Resetting settings restores the defaults.
 
-Open **Settings → Mouse sensitivity**. The default is 1×. A lower value makes relative mouse aiming more gradual; a higher value responds to smaller movements. It does not change your character's movement speed or the operating system's cursor speed.
+## Touch controls
 
-Change it a little at a time, then try it in a battle. If aiming starts to feel strange, use **Reset to defaults**.
+On a supported touch device, use the stick on the left to move. The buttons on the right control attack, jump, special, dash, and duck. Tap attack or special to aim at the nearest opponent, or drag the button to aim manually. The special button fills as it charges; the dash button shows its cooldown.
 
-## Why did the cursor disappear?
+Battle chat and the in-game Settings button are hidden on touch devices, so adjust settings in the lobby before playing.
 
-The arena captures your mouse so aiming can continue without hitting the edge of the browser. Press **Escape** to release it. Opening Settings also releases it; click the arena when you want to resume.
+## Cursor, sensitivity, and sound
 
-With **Auto-hide cursor** disabled, the cursor stays visible when the battle begins and when you use movement keys. Clicking the arena still captures it for combat.
+The arena captures your mouse so you can aim without hitting the edge of the screen. Escape or opening Settings releases it. With **Auto-hide cursor** off, movement keys won't capture it; clicking the arena still will.
 
-## Missing sound or music?
+Adjust **Mouse sensitivity** in Settings if aiming feels too fast or slow. SFX controls effects and interface sounds, while Background volume controls music. If you hear nothing, also check your browser tab and device volume.
 
-SFX controls attacks and interface sounds; Background volume controls music. Check both sliders, your browser tab's mute state, and your device output. Browsers may require a click before they allow audio.
-
-Online matches do not pause when a menu is open or you switch tabs. Find a safe moment before adjusting controls.
+An online match keeps going while Settings or chat is open.

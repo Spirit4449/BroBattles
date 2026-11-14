@@ -255,3 +255,34 @@ test('player card routes validate ids and ownership before selecting', async () 
   await select({ body: { cardId } }, ok);
   assert.deepEqual([ok.statusCode, ok.body, selected], [200, { success: true, selectedCardId: cardId }, [cardId]]);
 });
+
+test('titles start empty, reject unowned or unknown selections, and allow equip and removal', async () => {
+  const { registerTitlesRoutes } = require('../src/server/routes/modules/titlesRoutes');
+  const { getTitlesCatalog } = require('../src/server/services/cosmetics/titlesCatalog');
+  const routes = new Map();
+  const user = { user_id: 7, selected_title_id: null };
+  const owned = [];
+  const db = { async runQuery(sql, params) {
+    if (sql.startsWith('SELECT title_id')) return owned.map(title_id => ({ title_id }));
+    if (sql.startsWith('UPDATE users SET selected_title_id')) { user.selected_title_id = params[0]; return {}; }
+    throw new Error(`Unexpected SQL: ${sql}`);
+  } };
+  registerTitlesRoutes({ app: { get: (url, handler) => routes.set(url, handler), post: (url, handler) => routes.set(url, handler) }, db,
+    requireCurrentUser: async () => user });
+  async function call(url, body) {
+    const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
+    await routes.get(url)({ body }, res);
+    return res;
+  }
+  assert.deepEqual((await call('/titles/owned')).body.ownedTitleIds, []);
+  const title = getTitlesCatalog().titles[0];
+  assert.equal((await call('/titles/select', { titleId: title.id })).statusCode, 403);
+  assert.equal((await call('/titles/select', { titleId: 'missing' })).statusCode, 400);
+  assert.equal((await call('/titles/select', {})).statusCode, 400);
+  owned.push(title.id);
+  assert.equal((await call('/titles/select', { titleId: title.id })).body.selectedTitleId, title.id);
+  assert.equal(user.selected_title_id, title.id);
+  assert.equal((await call('/titles/select', { titleId: null })).body.selectedTitleId, null);
+  assert.equal(user.selected_title_id, null);
+  assert.deepEqual(owned, [title.id], 'removing a title preserves ownership');
+});

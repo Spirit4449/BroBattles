@@ -6,25 +6,34 @@
       "id": "sales",
       "name": "Sales",
       "icon": "/assets/shop/icons/sales-v2.webp",
-      "rotation": "sales"
+      "rotation": "sales",
+      "layout": "featured",
+      "showRarity": true
     },
     {
       "id": "dailies",
       "name": "Dailies",
       "icon": "/assets/shop/icons/dailies-v2.webp",
-      "rotation": "dailies"
+      "rotation": "dailies",
+      "layout": "list"
     },
     {
       "id": "skins",
       "name": "Skins",
       "icon": "/assets/shop/icons/skins-hanger.webp",
+      "showRarity": true,
+      "hideOwned": true,
+      "rows": 2,
       "collapsible": true
     },
     {
       "id": "profile",
       "name": "Profile",
       "icon": "/assets/shop/icons/profile-v2.webp",
-      "collapsible": true
+      "rotation": "sales",
+      "showRarity": true,
+      "hideOwned": true,
+      "rows": 2
     },
     {
       "id": "currency",
@@ -574,7 +583,7 @@
       "id": "card-ozzy-spell",
       "section": "profile",
       "kind": "item",
-      "name": "Ozzy’s Spell",
+      "name": "Ozzy\u2019s Spell",
       "description": "An animated rare battle card.",
       "rarity": "rare",
       "banner": "/assets/shop/banners/ozzy-spell-card.webp",
@@ -609,6 +618,204 @@
         {
           "kind": "card",
           "id": "radiant-silver"
+        }
+      ]
+    },
+    {
+      "id": "title-brooo",
+      "kind": "item",
+      "section": "profile",
+      "name": "Brooo...",
+      "description": "An exclusive player title. Equip it in your profile.",
+      "rarity": "legendary",
+      "banner": "/assets/shop/banners/daily-gems-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 150
+      },
+      "purchaseLimit": "lifetime",
+      "saleDiscountPercent": 0,
+      "grants": [
+        {
+          "kind": "title",
+          "id": "brooo"
+        }
+      ]
+    },
+    {
+      "id": "title-unbothered",
+      "kind": "item",
+      "section": "profile",
+      "name": "Unbothered",
+      "description": "An exclusive player title. Equip it in your profile.",
+      "rarity": "rare",
+      "banner": "/assets/shop/banners/daily-gems-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 50
+      },
+      "purchaseLimit": "lifetime",
+      "saleDiscountPercent": 0,
+      "grants": [
+        {
+          "kind": "title",
+          "id": "unbothered"
+        }
+      ]
+    },
+    {
+      "id": "title-bro-with-benefits",
+      "kind": "item",
+      "section": "profile",
+      "name": "Bro With Benefits",
+      "description": "An exclusive player title. Equip it in your profile.",
+      "rarity": "rare",
+      "banner": "/assets/shop/banners/daily-gems-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 50
+      },
+      "purchaseLimit": "lifetime",
+      "saleDiscountPercent": 0,
+      "grants": [
+        {
+          "kind": "title",
+          "id": "bro-with-benefits"
+        }
+      ]
+    },
+    {
+      "id": "title-too-clean",
+      "kind": "item",
+      "section": "profile",
+      "name": "Too Clean",
+      "description": "An exclusive player title. Equip it in your profile.",
+      "rarity": "rare",
+      "banner": "/assets/shop/banners/daily-gems-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 75
+      },
+      "purchaseLimit": "lifetime",
+      "saleDiscountPercent": 0,
+      "grants": [
+        {
+          "kind": "title",
+          "id": "too-clean"
+        }
+      ]
+    },
+    {
+      "id": "title-built-different",
+      "kind": "item",
+      "section": "profile",
+      "name": "Built Different",
+      "description": "An exclusive player title. Equip it in your profile.",
+      "rarity": "epic",
+      "banner": "/assets/shop/banners/daily-gems-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 100
+      },
+      "purchaseLimit": "lifetime",
+      "saleDiscountPercent": 0,
+      "grants": [
+        {
+          "kind": "title",
+          "id": "built-different"
+        }
+      ]
+    },
+    {
+      "id": "title-certified-menace",
+      "kind": "item",
+      "section": "profile",
+      "name": "Certified Menace",
+      "description": "An exclusive player title. Equip it in your profile.",
+      "rarity": "epic",
+      "banner": "/assets/shop/banners/daily-gems-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 100
+      },
+      "purchaseLimit": "lifetime",
+      "saleDiscountPercent": 0,
+      "grants": [
+        {
+          "kind": "title",
+          "id": "certified-menace"
+        }
+      ]
+    },
+    {
+      "id": "title-professional-problem",
+      "kind": "item",
+      "section": "profile",
+      "name": "Professional Problem",
+      "description": "An exclusive player title. Equip it in your profile.",
+      "rarity": "epic",
+      "banner": "/assets/shop/banners/daily-gems-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 100
+      },
+      "purchaseLimit": "lifetime",
+      "saleDiscountPercent": 0,
+      "grants": [
+        {
+          "kind": "title",
+          "id": "professional-problem"
+        }
+      ]
+    },
+    {
+      "id": "title-main-character",
+      "kind": "item",
+      "section": "profile",
+      "name": "Main Character",
+      "description": "An exclusive player title. Equip it in your profile.",
+      "rarity": "legendary",
+      "banner": "/assets/shop/banners/daily-gems-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 150
+      },
+      "purchaseLimit": "lifetime",
+      "saleDiscountPercent": 0,
+      "grants": [
+        {
+          "kind": "title",
+          "id": "main-character"
+        }
+      ]
+    },
+    {
+      "id": "title-clutch-king",
+      "kind": "item",
+      "section": "profile",
+      "name": "Clutch King",
+      "description": "An exclusive player title. Equip it in your profile.",
+      "rarity": "legendary",
+      "banner": "/assets/shop/banners/daily-gems-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 150
+      },
+      "purchaseLimit": "lifetime",
+      "saleDiscountPercent": 0,
+      "grants": [
+        {
+          "kind": "title",
+          "id": "clutch-king"
         }
       ]
     }

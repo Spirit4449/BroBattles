@@ -10,7 +10,8 @@ describe("Rewards and wallet", () => {
 
   describe("Reward reveal and flight", () => {
 
-    const { resolveRewardGrants } = loadClientModule(require.resolve('../src/client/views/rewardPresentation.js'));
+    // The module imports the shared currency art helper, so load its real dependency graph.
+    const { resolveRewardGrants } = require('./helpers/clientModule').createClientModuleGraph().load(require.resolve('../src/client/views/rewardPresentation.js'));
 
     test('reward reveals use receipt grants after rotation or catalog changes', () => {
       const display = [{ kind: 'currency', currency: 'coins', amount: 75, name: 'Coins' }, { kind: 'card', id: 'old-card' }];

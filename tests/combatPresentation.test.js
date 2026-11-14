@@ -38,18 +38,24 @@ describe("Draven confirmed impacts", () => {
       '../shared/flipLock': { lockPlayerFlip: () => () => {} },
       '../shared/animationState.js': { markOneShotAnimation() {}, playSpriteAnimation() {}, resolveSpriteAnimationKey() {} },
       '../../scene/renderLayers': { RENDER_LAYERS: { PLAYER: 30 } },
-      '../../powerups/shieldBubble': load('src/client/game/powerups/shieldBubble.js', {}),
+      '../../powerups/shieldBubble': load('src/client/game/powerups/shieldBubble.js', {
+        './pixelShapes': load('src/client/game/powerups/pixelShapes.js', {}),
+      }),
     }, { Phaser: { BlendModes: { ADD: 1 }, Math: { Between: a => a, FloatBetween: a => a,
       Clamp: (v, min, max) => Math.max(min, Math.min(max, v)), Easing: { Cubic: { Out: v => v } } } } });
     for (const isOwner of [true, false]) for (const ending of ['complete', 'interrupt', 'destroy', 'shutdown', 'match-end']) {
       const timers = [];
-      const shape = () => ({ active: true, circles: [], reflections: [],
+      const shape = () => ({ active: true, rects: [],
         setDepth(v) { this.depth = v; }, setBlendMode() {},
-        clear() { this.circles = []; this.reflections = []; },
+        clear() { this.rects = []; },
         fillStyle() {}, lineStyle() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, fillPath() {}, strokePath() {}, fillEllipse() {},
-        fillCircle(x, y, radius) { this.circles.push({ x, y, radius }); },
-        strokeCircle(x, y, radius) { this.circles.push({ x, y, radius }); },
-        arc(...args) { this.reflections.push(args); },
+        fillCircle() {}, strokeCircle() {}, arc() {},
+        fillRect(x, y, w, h) { this.rects.push({ x, y, w, h }); },
+        center() {
+          const minX = Math.min(...this.rects.map(r => r.x)), maxX = Math.max(...this.rects.map(r => r.x + r.w));
+          const minY = Math.min(...this.rects.map(r => r.y)), maxY = Math.max(...this.rects.map(r => r.y + r.h));
+          return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+        },
         destroy() { this.active = false; } });
       const player = Object.assign(new EventEmitter(), { active: true, x: 100, y: 200 });
       const scene = { events: new EventEmitter(), time: { now: 0, delayedCall(delay, callback) { timers.push({ delay, callback }); } },
@@ -57,13 +63,13 @@ describe("Draven confirmed impacts", () => {
       api.perform(scene, player, [], [], 'draven', 1, isOwner);
       const shield = player._dravenInfernoShield;
       assert.ok(shield.active);
-      assert.ok(shield.circles.length > 0);
-      assert.ok(shield.reflections.length > 0);
+      assert.ok(shield.rects.length > 0);
       assert.ok(shield.depth > 30);
       if (!isOwner) { player.x += 40; player.y -= 20; }
       timers.find(timer => timer.delay === 16).callback();
-      assert.equal(shield.circles[0].x, player.x);
-      assert.equal(shield.circles[0].y, player.y);
+      // The stepped shell is centred on Draven to within a couple of grid cells.
+      assert.ok(Math.abs(shield.center().x - player.x) <= 4);
+      assert.ok(Math.abs(shield.center().y - player.y) <= 4);
       if (ending === 'match-end') {
         player._matchEnded = true;
         // Move away from the cast anchor so a surviving hover tick is observable.

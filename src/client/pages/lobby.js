@@ -44,6 +44,7 @@ import { pixelSprite } from "../friends/pixelArt.js";
 import { bodyDisplayUrl, buildCharacterSkinBodyUrl } from "../views/skinAssets.js";
 
 import { initializeShop } from "../lobby/shop/shop.js";
+import { renderWalletBalances } from "../lobby/walletView.js";
 import "../styles/levelBadge.css";
 import "../styles/characterSelect.css";
 import "../styles/index.css";
@@ -98,7 +99,7 @@ function syncProfileFriendButton(profile, viewingSelf) {
   const name = String(profile?.username || "");
   const relation = viewingSelf ? "self" : friendsController.relationshipFor(name);
   btn.hidden = relation === "self" || relation === "unavailable" || !!profile?.guest;
-  btn.disabled = relation !== "none" && relation !== "incoming";
+  btn.disabled = relation === "outgoing";
   btn.dataset.relation = relation;
   const label = relation === "friends" ? "Friends"
     : relation === "outgoing" ? "Request Pending"
@@ -107,8 +108,14 @@ function syncProfileFriendButton(profile, viewingSelf) {
   const icon = relation === "friends" || relation === "incoming" ? "check"
     : relation === "outgoing" ? "envelope" : "invite";
   btn.innerHTML = `${pixelSprite(icon, 2, "profile-friend-icon")}<span>${label}</span>`;
+  btn.title = relation === "friends" ? `Remove ${name} as a friend` : "";
   btn.onclick = async () => {
     btn.disabled = true;
+    if (relation === "friends") {
+      await friendsController.removeFriend(name);
+      syncProfileFriendButton(profile, viewingSelf);
+      return;
+    }
     const result = await friendsController.addFriend({ username: name });
     syncProfileFriendButton(profile, viewingSelf);
     if (!result) btn.disabled = false;
@@ -488,8 +495,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     onWalletChange: (wallet) => {
       userData.coins = wallet.coins;
       userData.gems = wallet.gems;
-      if (coinCount) coinCount.textContent = String(wallet.coins);
-      if (gemCount) gemCount.textContent = String(wallet.gems);
+      renderWalletBalances(wallet);
       profileController.updateWallet(wallet);
     },
     onProfileInvalidate: () => {
@@ -517,6 +523,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       profilePopup?.close?.();
       void shop.open("profile");
     });
+  document.addEventListener("bb:open-title-shop", event => {
+    profilePopup?.close?.();
+    void shop.open("profile", event.detail.offerId);
+  });
+  const titleOffer = new URL(window.location.href).searchParams.get("titleOffer");
+  if (titleOffer?.startsWith("title-")) void shop.open("profile", titleOffer);
   if (usernameButton) {
     usernameButton.addEventListener("click", () => {
       if (profilePopup?.open) {
@@ -558,8 +570,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     characterBodyElement.classList.remove("random");
   } catch {}
-  coinCount.textContent = userData.coins;
-  gemCount.textContent = userData.gems;
+  renderWalletBalances(userData);
   trophyCount.textContent = userData.trophies || 0;
   animatePostMatchRewardsIfPresent(
     coinCount,

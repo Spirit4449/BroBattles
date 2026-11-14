@@ -1,5 +1,5 @@
+const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const bcrypt = require("bcrypt");
-const { getBanHoldFromRequest } = require("./banHold");
 const { failure } = require("../serviceResult");
 const { isReservedAdminName } = require("./auth");
 
@@ -46,21 +46,6 @@ async function completeSignupFromGuest(context) {
 }
 
 async function loginPermanentUser({ app, db, req }) {
-  const hold = getBanHoldFromRequest(req);
-  if (hold) {
-    return {
-      ok: false,
-      statusCode: 403,
-      payload: {
-        success: false,
-        error: "This browser is temporarily blocked.",
-        banned: true,
-        reason: hold.reason,
-        redirect: "/banned",
-      },
-    };
-  }
-
   const username =
     typeof req.body?.username === "string" ? req.body.username.trim() : "";
   const password =
@@ -70,22 +55,10 @@ async function loginPermanentUser({ app, db, req }) {
     return failure(400, { success: false, error: "Username and password are required." });
   }
 
-  let rows = [];
-  try {
-    rows = await db.runQuery(
-      "SELECT user_id, name, password, is_banned, ban_reason FROM users WHERE name = ? AND expires_at IS NULL LIMIT 1",
-      [username],
-    );
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") {
-      rows = await db.runQuery(
-        "SELECT user_id, name, password FROM users WHERE name = ? AND expires_at IS NULL LIMIT 1",
-        [username],
-      );
-    } else {
-      throw error;
-    }
-  }
+  const rows = await db.runQuery(
+    "SELECT user_id, name, password, is_banned, ban_expires_at, ban_reason FROM users WHERE name = ? AND expires_at IS NULL LIMIT 1",
+    [username],
+  );
   if (rows.length === 0) {
     return failure(401, { success: false, error: "Invalid username or password." });
   }
@@ -96,14 +69,17 @@ async function loginPermanentUser({ app, db, req }) {
   if (!ok) {
     return failure(401, { success: false, error: "Invalid username or password." });
   }
-  if (Number(user?.is_banned || 0) === 1) {
+  if (isAccountBanned(user)) {
     return {
-      ok: false,
-      statusCode: 403,
+      ok: true,
+      statusCode: 200,
+      user,
       payload: {
-        success: false,
-        error: String(user?.ban_reason || "Your account has been banned."),
+        success: true,
+        username: user.name,
         banned: true,
+        userId: user.user_id,
+        banExpiresAt: user.ban_expires_at,
         reason: String(user?.ban_reason || "Your account has been banned."),
         redirect: "/banned",
       },

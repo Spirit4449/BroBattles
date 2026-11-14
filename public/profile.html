@@ -20,6 +20,7 @@
       <main class="profile-grid">
         <section class="profile-card overview">
           <h2 id="profile-username">Loading...</h2>
+          <div id="profile-equipped-title"></div>
           <div class="profile-icon-row">
             <button
               id="change-icon-btn"
@@ -43,6 +44,7 @@
             <span>Trophies</span>
             <strong id="profile-trophies">0</strong>
           </div>
+          <div id="profile-favorite-character" class="stat-row"></div>
           <div class="stat-row">
             <span>Total Matches</span>
             <strong id="profile-matches">0</strong>
@@ -56,6 +58,8 @@
             </button>
           </div>
         </section>
+
+
 
         <section class="profile-card profile-character-levels-card">
           <h2 data-bros-heading>Bros</h2>
@@ -137,6 +141,10 @@
             <span aria-hidden="true">×</span>
           </button>
         </div>
+        <h3>Titles</h3>
+        <p>Exclusive titles are available in the Shop. Choose an owned title below.</p>
+        <div id="account-titles-grid"></div>
+        <h3>Player Cards</h3>
         <div id="cards-grid" class="cards-grid"></div>
       </div>
     </div>

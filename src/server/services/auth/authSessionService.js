@@ -1,3 +1,4 @@
+const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const crypto = require('node:crypto');
 
 const COOKIE_NAME = 'user_id';
@@ -41,7 +42,7 @@ function createAuthSessionService({ db, cookieOptions }) {
     const token = crypto.randomBytes(32).toString('hex');
     const result = await db.withTransaction(async (_conn, q) => {
       const [user] = await q('SELECT * FROM users WHERE user_id=? FOR UPDATE', [userId]);
-      if (!user?.expires_at || new Date(user.expires_at).getTime() <= Date.now() || Number(user.is_banned || 0) === 1) {
+      if (!user?.expires_at || new Date(user.expires_at).getTime() <= Date.now() || isAccountBanned(user)) {
         return { ok:false, statusCode:409, payload:{error:'Your guest session has ended. Return to the lobby.'} };
       }
       const outcome = await complete(q, user);
@@ -106,7 +107,7 @@ function createAuthSessionService({ db, cookieOptions }) {
     try {
       return await db.withTransaction(async (_conn, q) => {
         const user = await resolve(token, q, true);
-        if (user && Number(user.is_banned || 0) !== 1) {
+        if (user && !isAccountBanned(user)) {
           socket.data.user = user;
           attachSocket(socket, token, user);
         }

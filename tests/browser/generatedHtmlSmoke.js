@@ -382,7 +382,7 @@ window.htmlSmoke = {
     const shop = initializeShop();
     try {
       await shop.open('sales');
-      const info = document.querySelector('[data-shop-card-preview="test-card-bundle"]');
+      const info = document.querySelector('[data-shop-preview="test-card-bundle"]');
       check(info && !info.disabled, 'owned card bundle has no preview button');
       info.click();
       const offerPreview = document.querySelector('dialog.player-card-preview');

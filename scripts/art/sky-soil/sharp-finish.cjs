@@ -1,6 +1,18 @@
 const fs=require('fs'),path=require('path'),sharp=require('../../../spritesheet-generator/node_modules/sharp');
 process.chdir(path.resolve(__dirname,'../../..'));
 const out='public/assets/sky-soil/',src='scripts/art/sky-soil/';
+// Discard detached specks; keep the single connected island.
+function keepLargest(data,width,height){
+const seen=new Uint8Array(width*height),queue=new Int32Array(width*height);let largest=[];
+for(let seed=0;seed<seen.length;seed++){
+if(seen[seed]||data[seed*4+3]===0)continue;
+let head=0,tail=1;queue[0]=seed;seen[seed]=1;
+while(head<tail){const v=queue[head++],x=v%width,y=Math.floor(v/width);
+for(const n of [x>0?v-1:-1,x<width-1?v+1:-1,y>0?v-width:-1,y<height-1?v+width:-1])if(n>=0&&!seen[n]&&data[n*4+3]){seen[n]=1;queue[tail++]=n;}}
+if(tail>largest.length)largest=Array.from(queue.subarray(0,tail));
+}
+seen.fill(0);for(const v of largest)seen[v]=1;for(let v=0;v<seen.length;v++)if(!seen[v])data[v*4+3]=0;
+}
 async function crisp(input,file){
 const {data,info}=await sharp(input).ensureAlpha().raw().toBuffer({resolveWithObject:true});
 for(let i=3;i<data.length;i+=4)data[i]=data[i]>=160?255:0;
@@ -15,22 +27,15 @@ const meta=await sharp(src+'sharp-sources/island.png').metadata();
 const width=meta.width,height=Math.round(width*680/1100),ratio=width/1100;
 const {data,info}=await sharp(src+'sharp-sources/island.png').resize(width,height,{kernel:'nearest'}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
 for(let i=3;i<data.length;i+=4)data[i]=data[i]>=160?255:0;
-// Discard detached generation specks; keep the single connected island.
-const seen=new Uint8Array(width*height),queue=new Int32Array(width*height);let largest=[];
-for(let seed=0;seed<seen.length;seed++){
-if(seen[seed]||data[seed*4+3]===0)continue;
-let head=0,tail=1;queue[0]=seed;seen[seed]=1;
-while(head<tail){const v=queue[head++],x=v%width,y=Math.floor(v/width);
-for(const n of [x>0?v-1:-1,x<width-1?v+1:-1,y>0?v-width:-1,y<height-1?v+width:-1])if(n>=0&&!seen[n]&&data[n*4+3]){seen[n]=1;queue[tail++]=n;}}
-if(tail>largest.length)largest=Array.from(queue.subarray(0,tail));
-}
-seen.fill(0);for(const v of largest)seen[v]=1;for(let v=0;v<seen.length;v++)if(!seen[v])data[v*4+3]=0;
+keepLargest(data,width,height);
 await sharp(data,{raw:info}).webp({lossless:true}).toFile(out+'island-sharp.webp');
 const saved=Buffer.from(data);
 for(let y=0;y<Math.round(165*ratio);y++)for(let x=Math.round(460*ratio);x<Math.round(640*ratio);x++){
 const dst=(y*width+x)*4;if(y<54*ratio){saved.fill(0,dst,dst+4);continue;}
 const sy=Math.round(15*ratio+(y-54*ratio)*150/111);data.copy(saved,dst,(sy*width+x)*4,(sy*width+x)*4+4);
 }
+// The pillar refit copies pixels after the first pass; clean again.
+keepLargest(saved,width,height);
 await sharp(saved,{raw:info}).webp({lossless:true}).toFile(out+'island-saved-sharp.webp');
 for(const file of ['src/shared/maps/2.json','data/maps/2.json']){
 const m=JSON.parse(fs.readFileSync(file));

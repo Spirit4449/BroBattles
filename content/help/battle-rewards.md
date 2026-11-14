@@ -1,19 +1,20 @@
-Finishing a battle can earn coins, gems, and a change to your trophy count. The result matters, and useful play—landing hits, dealing damage, and scoring knockouts—can improve your reward.
+Complete battles to earn rewards. Wins and losses affect trophies, while coins and gems can also come from your performance and items collected during the match. The end screen shows your result.
 
-## Wins and losses
+## Trophies and Trophy Road
 
-A win adds trophies. A loss removes some, but your trophy total never drops below zero. Strong play in a losing match can soften the trophy loss.
+Wins add trophies and losses remove them, but your total cannot fall below zero. Strong play can reduce a loss. Your **highest** trophy total determines which Trophy Road milestones you have reached, even if your current total later drops.
 
-Different modes have slightly different trophy ranges. Bank Bust generally moves more trophies than Duels because it is a longer team objective.
+Open Trophy Road and claim the rewards you've reached. Coins, gems, cosmetics, and Gloop at {trophies:2000} must be claimed. Mode access unlocks automatically, though modes marked Coming Soon are still unavailable. A party member can play a mode unlocked by the party owner without earning their own permanent unlock.
 
-## Coins and gems
+Trophies aren't spent. Coins pay for fighter upgrades; gems can unlock fighters and buy selected shop items.
 
-Every completed battle starts with a coin reward. Activity during the match can add more, and winners receive a larger bonus. Gems come from standout moments such as winning, scoring knockouts, or reaching high damage.
+## Win streaks
 
-You may also collect reward drops during a battle. Those are added to the result shown on the end screen.
+Consecutive wins across modes build your streak. A loss resets it; a draw leaves it unchanged. Starting with the win that reaches each tier, winning rewards gain these bonuses:
 
-## Trophy rewards
+> [!REWARD]
+> - **3 wins:** 25% more coins.
+> - **6 wins:** the coin bonus plus 15% more gems.
+> - **9 wins:** both bonuses plus double trophies.
 
-Your trophy track has rewards at regular milestones. Open it from your profile and claim any milestone your highest trophy count has reached. Most steps alternate between coins and gems, with larger bundles and cosmetic unlocks at major milestones. Gloop unlocks by claiming the 2,000-trophy reward. Mode access does not make Coming Soon modes playable.
-
-Trophies measure matchmaking progress; they are not a currency and cannot be spent. Coins are used for fighter upgrades, while gems can unlock fighters and selected shop items.
+The bonuses apply to wins, not losses or draws. Select the flame beside Ready to see your current benefits. Your profile also shows your highest streak.

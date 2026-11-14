@@ -1,3 +1,4 @@
+import { renderTitle } from "../../views/titleView.js";
 import { getSettings, subscribeSettings } from '../../site/preferences';
 import { updateControlsGuide } from '../../site/controlsGuide.mjs';
 // HUD controller for battle overlays, timer, keybind help, and team status.
@@ -178,7 +179,7 @@ export function createGameHudController({
 
     const charNameEl = document.createElement("div");
     charNameEl.className = "bs-card-character-name";
-    charNameEl.textContent = getCharacterDisplayName(player?.char_class || "default");
+    renderTitle(charNameEl, player?.selected_title_id);
 
     const spriteWrap = document.createElement("div");
     spriteWrap.className = "bs-card-sprite-wrap";

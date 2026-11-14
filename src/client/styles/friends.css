@@ -90,8 +90,11 @@
   display: block;
   width: 16px;
   height: 16px;
+  height: 14px;
   background: #fff;
-  clip-path: polygon(38% 0, 38% 13%, 25% 13%, 25% 25%, 13% 25%, 13% 38%, 0 38%, 0 63%, 13% 63%, 13% 75%, 25% 75%, 25% 88%, 38% 88%, 38% 100%, 50% 100%, 50% 69%, 100% 69%, 100% 31%, 50% 31%, 50% 0);
+  /* The shared pixel arrow (public/assets/ui/arrows). */
+  -webkit-mask: url("/assets/ui/arrows/arrow-left.svg") center / 100% 100% no-repeat;
+  mask: url("/assets/ui/arrows/arrow-left.svg") center / 100% 100% no-repeat;
 }
 
 .bb-friends-back:active:not(:disabled) {
@@ -606,12 +609,14 @@ body .profile-head-title-row .profile-friend-btn {
   box-shadow: 0 3px 0 #071019, inset 0 2px 0 #ffffff38;
 }
 
-body .profile-head-title-row .profile-friend-btn[data-relation="outgoing"] {
+body .profile-head-title-row .profile-friend-btn[data-relation="outgoing"],
+body .profile-head-title-row .profile-friend-btn[data-relation="outgoing"] ~ .profile-report-btn {
   background: linear-gradient(180deg, #72521e, #493312);
   color: #ffe29a;
 }
 
-body .profile-head-title-row .profile-friend-btn:is([data-relation="friends"], [data-relation="incoming"]) {
+body .profile-head-title-row .profile-friend-btn:is([data-relation="friends"], [data-relation="incoming"]),
+body .profile-head-title-row .profile-friend-btn:is([data-relation="friends"], [data-relation="incoming"]) ~ .profile-report-btn {
   background: linear-gradient(180deg, #287d50, #155235);
   color: #caffdc;
 }
@@ -754,4 +759,119 @@ body.matchmaking-exiting .bb-friends-wrap {
     1px 0 0 #4ade80;
   margin: 0 1px;
   image-rendering: pixelated;
+}
+
+/* Whole friend card opens the chat; only the avatar opens the profile. */
+.bb-friends-row.is-clickable {
+  cursor: pointer;
+}
+
+.bb-friends-row.is-clickable:focus-visible {
+  outline: 2px solid #7ed3ff;
+  outline-offset: -2px;
+}
+
+.bb-friends-indicators {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bb-friends-indicators .bb-friends-unread,
+.bb-friends-indicators .bb-friends-heart {
+  position: static;
+  transform: none;
+}
+
+.bb-friends-chat-avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  object-fit: cover;
+  border: 2px solid var(--bb-ink);
+  background: #0b1626;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+
+/* Chat header: avatar, name and last seen in one button-style box. */
+.bb-friends-chat-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bb-friends-chat-profile.is-link {
+  box-sizing: border-box;
+  height: 38px;
+  /* Overhang like the chroma buttons so the header keeps its height. */
+  margin: -3px 0;
+  gap: 8px;
+  padding: 0 14px 0 5px;
+  border: 2px solid var(--bb-ink);
+  background: rgba(14, 24, 44, 0.88);
+  cursor: pointer;
+  box-shadow:
+    0 3px 0 var(--bb-ink),
+    inset 0 2px rgba(255, 255, 255, 0.12);
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.bb-friends-chat-profile.is-link:hover {
+  filter: brightness(1.18);
+  transform: translateY(-1px);
+}
+
+.bb-friends-chat-profile.is-link:active {
+  transform: translateY(3px);
+  box-shadow: none;
+}
+
+.bb-friends-chat-profile.is-link:focus-visible {
+  outline: 2px solid #7ed3ff;
+  outline-offset: 2px;
+}
+
+.bb-friends-chat-profile.is-link .bb-chat-title {
+  font-size: 8px;
+  line-height: 1;
+}
+
+.bb-friends-chat-profile.is-link .bb-chat-header-status,
+.bb-friends-chat-profile.is-link .bb-chat-header-status .bb-chat-subtitle {
+  margin: 0;
+}
+
+.bb-friends-chat-profile.is-link .bb-chat-header-status {
+  height: auto;
+  margin-top: 3px;
+}
+
+.bb-friends-chat-profile.is-link .bb-chat-subtitle {
+  font-size: 6px;
+  line-height: 1;
+}
+
+.bb-friends-chat-avatar-wrap {
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.bb-friends-chat-avatar-wrap[hidden] {
+  display: none;
+}
+
+.bb-friends-chat-avatar-wrap::after {
+  right: -2px;
+  bottom: -2px;
+  width: 6px;
+  height: 6px;
+}
+
+.bb-friends-chat-profile.is-link .bb-friends-chat-avatar {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
 }

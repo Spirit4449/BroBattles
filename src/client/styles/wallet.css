@@ -1,0 +1,105 @@
+/* One wallet follows the active lobby / shop / character header. */
+.bb-wallet,
+.lobby-wallet-home {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.bb-wallet { gap: 9px; }
+
+/* Reward reveals supply their own animated counters above the dimmed panels. */
+body:has(.shop-reward-reveal) .bb-wallet { visibility: hidden; }
+
+body .bb-wallet .bb-wallet-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 125px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 2px solid #48617e;
+  border-radius: 0;
+  color: var(--bb-text);
+  background: linear-gradient(#17233a, #0b1424);
+  box-shadow: 0 3px #030813, inset 0 2px #ffffff12;
+  cursor: pointer;
+}
+
+body .bb-wallet .bb-wallet-chip img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+body .bb-wallet .bb-wallet-chip p {
+  min-width: 50px;
+  margin: 0 0 0 auto;
+  text-align: right;
+  color: var(--bb-text);
+  font: 400 10px/1 var(--bb-font-display);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 1px 2px var(--bb-ink);
+}
+
+body .bb-wallet .bb-wallet-chip:is(:hover, :focus-visible) {
+  border-color: #94c2e6;
+  background: linear-gradient(#17233a, #0b1424);
+  box-shadow: 0 3px #030813, inset 0 2px #ffffff12;
+  filter: brightness(1.12);
+}
+
+.selection-wallet-slot { margin-left: auto; }
+
+body .popup-header.has-wallet {
+  justify-content: flex-start;
+  flex-basis: auto;
+  gap: 16px;
+  padding: 14px 18px;
+}
+
+.popup-header.has-wallet .popup-title {
+  min-width: 0;
+  font-size: clamp(12px, 1.6vw, 20px);
+}
+
+body .popup-header.has-wallet .close-popup {
+  position: static;
+  flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+  body :is(.popup-header.has-wallet, .character-details-header, .shop-header) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  body :is(.selection-wallet-slot, .character-details-wallet, .shop-header-wallet) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0;
+    justify-self: end;
+  }
+
+  body :is(.popup-header.has-wallet .close-popup, .character-details-close, .shop-close) {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    min-width: 0;
+    width: 36px;
+    height: 36px;
+  }
+
+  .bb-wallet { gap: 8px; }
+  body .bb-wallet .bb-wallet-chip { min-width: 110px; gap: 5px; }
+  body .bb-wallet .bb-wallet-chip img { width: 21px; height: 21px; }
+  body .bb-wallet .bb-wallet-chip p { min-width: 44px; font-size: 9px; }
+}
+
+@media (max-width: 430px) {
+  body .bb-wallet .bb-wallet-chip { padding-inline: 6px; gap: 4px; }
+}

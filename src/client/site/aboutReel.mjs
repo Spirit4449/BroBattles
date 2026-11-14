@@ -1,15 +1,16 @@
 // Only the public About page uses video; no game engine or socket is loaded.
-export const ABOUT_CLIPS = [
-  { key: 'duel', format: '01 / Duels · 2v2', title: 'The opening push' },
-  { key: 'crossfire', format: '02 / Duels · 2v2', title: 'The knockout finish' },
-];
+// Clips play start to finish, one after another, and loop back to the first.
+import clips from '../../shared/site/aboutClips.json';
+
+export const ABOUT_CLIPS = clips;
 
 export function initializeAboutReel(root = document.querySelector('[data-about-reel]')) {
   if (!root) return;
   const video = root.querySelector('video');
   const toggle = root.querySelector('[data-reel-toggle]');
-  const progress = root.querySelector('[data-reel-progress]');
   const status = root.querySelector('[data-reel-status]');
+  const format = root.querySelector('[data-reel-format]');
+  const segments = [...root.querySelectorAll('.about-reel-progress > span')];
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const connection = navigator.connection;
   let index = 0, inView = false, wantsPlay = !motion.matches && !connection?.saveData;
@@ -17,15 +18,19 @@ export function initializeAboutReel(root = document.querySelector('[data-about-r
 
   function renderToggle() {
     const playing = wantsPlay && !failed;
-    toggle.textContent = playing ? 'Ⅱ Pause' : '▶ Play highlights';
-    toggle.setAttribute('aria-label', playing ? 'Pause gameplay highlights' : 'Play gameplay highlights');
+    root.classList.toggle('is-playing', playing);
+    toggle.setAttribute('aria-label', playing ? 'Pause gameplay' : 'Play gameplay');
+  }
+  function renderProgress(fraction = 0) {
+    segments.forEach((segment, i) => segment.firstChild.style.transform = `scaleX(${i < index ? 1 : i === index ? fraction : 0})`);
   }
   function select(next, play = wantsPlay) {
     index = next;
     const clip = ABOUT_CLIPS[index];
     video.pause();
     video.poster = `/assets/site/gameplay/${clip.key}.jpg`;
-    progress.style.width = '0%';
+    format.textContent = clip.format;
+    renderProgress(0);
     failed = false; status.hidden = true;
     // No source is attached for motion/data-saving visitors until they play.
     video.removeAttribute('src');
@@ -49,11 +54,12 @@ export function initializeAboutReel(root = document.querySelector('[data-about-r
     wantsPlay = !wantsPlay; sync();
   });
   video.addEventListener('ended', () => { if (wantsPlay) select((index + 1) % ABOUT_CLIPS.length); });
-  video.addEventListener('timeupdate', () => { progress.style.width = `${video.duration ? Math.min(100, video.currentTime / video.duration * 100) : 0}%`; });
+  video.addEventListener('timeupdate', () => renderProgress(video.duration ? Math.min(1, video.currentTime / video.duration) : 0));
   video.addEventListener('error', () => {
     // A missing or unsupported clip keeps its poster and exposes a retry.
+    if (!video.getAttribute('src')) return;
     failed = true; video.pause(); renderToggle();
-    status.hidden = false; status.textContent = 'The highlight couldn’t load. Press play to retry.';
+    status.hidden = false; status.textContent = 'That clip couldn’t load. Press play to try again.';
   });
   const visibility = () => sync();
   const preference = () => { if (motion.matches || connection?.saveData) { wantsPlay = false; sync(); } };
@@ -73,5 +79,6 @@ export function initializeAboutReel(root = document.querySelector('[data-about-r
   window.addEventListener('pageshow', sync);
   window.__BB_PAGE_SCOPE__?.onDispose(dispose);
   // Visibility observation initiates autoplay, avoiding an offscreen download.
+  renderProgress(0);
   renderToggle();
 }

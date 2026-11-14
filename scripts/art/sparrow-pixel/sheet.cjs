@@ -23,9 +23,13 @@ const OUT_DIR = path.join(ROOT, 'output/sparrow-pixel/sheet');
 
 // Code animations, by frame-name prefix in animations.json.
 const ANIMATIONS = { idle: require('./idle.cjs').FRAMES, ...require('./jump.cjs').FRAMES, attack: require('./attack.cjs').FRAMES, run: require('./run.cjs').FRAMES, die: require('./die.cjs').FRAMES, ...require('./duck-slide.cjs').FRAMES };
-// Code-only animations with no legacy cell (the angled shots), packed in rows
+// Code-only animations with no legacy cell (angled shots, dashes), packed in rows
 // added below the legacy grid.
-const EXTRA = Object.fromEntries(Object.entries(require('./attack.cjs').SETS).filter(([prefix]) => prefix !== 'attack'));
+const EXTRA = {
+  ...Object.fromEntries(Object.entries(require('./attack.cjs').SETS).filter(([prefix]) => prefix !== 'attack')),
+  // Directional dashes (dash.cjs), named as the shared dash animations.
+  ...require('./dash.cjs').FRAMES,
+};
 
 // Square cell, centred on the hitbox: wide enough for the legacy dying pose, which
 // lies 78px out from the body centre once resized.

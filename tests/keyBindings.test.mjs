@@ -40,10 +40,14 @@ describe("Binding preferences", () => {
 
 describe("Controls guide", () => {
   test('guide updates labels and pressed-key tracking after remapping and reset',()=>{
-   const keys=['up','attack','special','leftAlt'].map(binding=>({dataset:{binding},classList:{remove(value){assert.equal(value,'is-pressed');}}}));
+   const ownerDocument={createElement:()=>({className:'',textContent:'',setAttribute(){}})};
+   const keys=['up','attack','special','leftAlt'].map(binding=>({dataset:{binding},ownerDocument,classList:{remove(value){assert.equal(value,'is-pressed');}},
+     replaceChildren(...children){this.children=children;this.textContent=children.map(child=>child.textContent).join('');}}));
    const root={querySelectorAll:()=>keys};
    updateControlsGuide(root,{keys:{...DEFAULT_BINDINGS,up:84,attack:75,special:49}});
-   assert.deepEqual(keys.map(k=>[k.textContent,k.dataset.code]),[['T','KeyT'],['K','KeyK'],['1','Digit1'],['←','ArrowLeft']]);
+   // Arrow keys show the shared pixel arrow with a spoken name.
+   assert.deepEqual(keys.map(k=>[k.textContent,k.dataset.code]),[['T','KeyT'],['K','KeyK'],['1','Digit1'],['left arrow','ArrowLeft']]);
+   assert.match(keys[3].children[0].className,/bb-arrow-left/);
    updateControlsGuide(root,{keys:DEFAULT_BINDINGS});
    assert.deepEqual(keys.slice(0,3).map(k=>k.textContent),['W','J','I']);
    assert.equal(bindingEventCode(32),'Space');

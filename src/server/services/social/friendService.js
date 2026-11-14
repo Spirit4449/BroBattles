@@ -1,3 +1,4 @@
+const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const crypto = require("crypto");
 const { addPartyInvite, getInviteCooldownMs } = require("../party/partyInviteStore");
 const { DEFAULT_CHARACTER, resolveCharacterKey } = require("../../../shared/characters/characterStats.js");
@@ -164,7 +165,7 @@ function createFriendService({ db, io }) {
   }
 
   async function resolveTarget({ userId, username, friendCode, query }) {
-    const select = "SELECT user_id, name, char_class, selected_profile_icon_id, trophies, expires_at, is_banned FROM users";
+    const select = "SELECT user_id, name, char_class, selected_profile_icon_id, trophies, expires_at, is_banned, ban_expires_at FROM users";
     if (Number(userId) > 0) {
       return (await db.runQuery(`${select} WHERE user_id = ? LIMIT 1`, [Number(userId)]))[0] || null;
     }
@@ -289,7 +290,7 @@ function createFriendService({ db, io }) {
           AND m.status = 'completed'
           AND m.created_at > NOW() - INTERVAL ${SUGGESTION_WINDOW_DAYS} DAY
          JOIN users u
-           ON u.user_id = mp2.user_id AND u.expires_at IS NULL AND COALESCE(u.is_banned, 0) = 0
+           ON u.user_id = mp2.user_id AND u.expires_at IS NULL AND (COALESCE(u.is_banned, 0) = 0 OR u.ban_expires_at <= NOW())
          LEFT JOIN user_privacy_settings p ON p.user_id = u.user_id
         WHERE mp1.user_id = ?
           AND COALESCE(p.show_in_suggestions, 1) = 1
@@ -381,7 +382,7 @@ function createFriendService({ db, io }) {
     const otherId = Number(other.user_id);
     if (otherId === me) throw httpError(400, "That's you! Try a friend's code instead.");
     if (isGuestRow(other)) throw httpError(400, "That player needs an account before you can add them.");
-    if (Number(other.is_banned || 0) === 1) throw httpError(404, "We couldn't find a player with that name or code.");
+    if (isAccountBanned(other)) throw httpError(404, "We couldn't find a player with that name or code.");
     if (await areFriends(me, otherId)) throw httpError(409, `You and ${other.name} are already friends.`);
     if ((await countFriends(me)) >= MAX_FRIENDS) throw httpError(409, `Your friends list is full (${MAX_FRIENDS} max).`);
 

@@ -1,24 +1,60 @@
 const path = require("path");
-const { getBanHoldFromRequest } = require("../../services/auth/banHold");
+const { isAccountBanned } = require("../../../shared/moderation/accountBan");
+const { getBanHoldFromRequest, setBanHoldCookies } = require("../../services/auth/banHold");
+
+async function currentBanHold(req, res, { db, requireCurrentUser }) {
+  const user = await requireCurrentUser(req, res, { allowBanned: true });
+  if (isAccountBanned(user)) {
+    return { userId: user.user_id, reason: user.ban_reason, expiresAt: user.ban_expires_at };
+  }
+  return getBanHoldFromRequest(req, { db, res });
+}
+
+function createBanPageGuard(auth) {
+  return async (req, res, next) => {
+    try {
+      if (await currentBanHold(req, res, auth)) return res.redirect("/banned");
+      next();
+    } catch (error) {
+      console.error("[auth] restriction lookup failed", error);
+      res.status(503).send("Unable to check account access. Please retry.");
+    }
+  };
+}
 
 function registerPageRoutes({
   app,
   db,
   getOrCreateCurrentUser,
+  requireCurrentUser,
   pageRoot,
   distDir,
 }) {
-  function redirectIfBanHold(req, res) {
-    const hold = getBanHoldFromRequest(req);
-    if (!hold) return false;
-    if (req.path === "/banned") return false;
-    return res.redirect("/banned");
+  const auth = { db, requireCurrentUser };
+  async function redirectIfBanHold(req, res) {
+    try {
+      const hold = await currentBanHold(req, res, auth);
+      if (!hold) return false;
+      res.redirect("/banned");
+      return true;
+    } catch (error) {
+      console.error("[auth] restriction lookup failed", error);
+      res.status(503).send("Unable to check account access. Please retry.");
+      return true;
+    }
   }
 
-  app.get("/banned", (req, res) => {
-    const hold = getBanHoldFromRequest(req);
-    if (!hold) return res.redirect("/");
-    res.sendFile(path.join(pageRoot, "Errors", "banned.html"));
+  app.get("/banned", async (req, res) => {
+    try {
+      const hold = await currentBanHold(req, res, auth);
+      if (!hold) return res.redirect("/");
+      setBanHoldCookies({ req, res, userId: hold.userId, reason: hold.reason, expiresAt: hold.expiresAt });
+      res.set("Cache-Control", "no-store");
+      res.sendFile(path.join(pageRoot, "Errors", "banned.html"));
+    } catch (error) {
+      console.error("[auth] restriction lookup failed", error);
+      res.status(503).send("Unable to check account access. Please retry.");
+    }
   });
 
   app.get("/partyfull", (req, res) => {
@@ -33,12 +69,11 @@ function registerPageRoutes({
   app.get("/signed-out", (req, res) => {
     res.sendFile(path.join(pageRoot, "Errors", "signed-out.html"));
   });
-  app.get("/signup", (req, res) => {
-    if (redirectIfBanHold(req, res)) return;
+  app.get("/signup", async (req, res) => {
+    if (await redirectIfBanHold(req, res)) return;
     res.sendFile(path.join(pageRoot, "signup.html"));
   });
-  app.get("/login", (req, res) => {
-    if (redirectIfBanHold(req, res)) return;
+  app.get("/login", async (req, res) => {
     res.sendFile(path.join(pageRoot, "login.html"));
   });
   app.get("/profile", (_req, res) => {
@@ -46,7 +81,7 @@ function registerPageRoutes({
   });
 
   app.get("/", async (req, res) => {
-    if (redirectIfBanHold(req, res)) return;
+    if (await redirectIfBanHold(req, res)) return;
     try {
       const [user] = await getOrCreateCurrentUser(req, res, {
         autoCreate: true,
@@ -64,7 +99,7 @@ function registerPageRoutes({
   });
 
   app.get("/party/:partyid", async (req, res) => {
-    if (redirectIfBanHold(req, res)) return;
+    if (await redirectIfBanHold(req, res)) return;
     try {
       await getOrCreateCurrentUser(req, res, {
         autoCreate: true,
@@ -83,7 +118,7 @@ function registerPageRoutes({
   });
 
   app.get("/game/:matchid", async (req, res) => {
-    if (redirectIfBanHold(req, res)) return;
+    if (await redirectIfBanHold(req, res)) return;
     try {
       const rows = await db.runQuery(
         "SELECT status FROM matches WHERE match_id = ? LIMIT 1",
@@ -104,4 +139,4 @@ function registerNotFoundRoute({ app, pageRoot }) {
   });
 }
 
-module.exports = { registerPageRoutes, registerNotFoundRoute };
+module.exports = { registerPageRoutes, registerNotFoundRoute, createBanPageGuard };

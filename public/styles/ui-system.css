@@ -320,7 +320,7 @@ input:-webkit-autofill:focus {
   .sonner__btn,
   .cs-btn,
   .game-notice-btn,
-  body.admin-page button,
+  body.admin-page button:not(.site-nav-wrap button),
   .status-action
 ) {
   appearance: none;
@@ -355,7 +355,7 @@ input:-webkit-autofill:focus {
   .sonner__btn,
   .cs-btn,
   .game-notice-btn,
-  body.admin-page button,
+  body.admin-page button:not(.site-nav-wrap button),
   .status-action
 ):hover:not(:disabled) {
   filter: brightness(1.12) saturate(1.06);
@@ -376,7 +376,7 @@ input:-webkit-autofill:focus {
   .sonner__btn,
   .cs-btn,
   .game-notice-btn,
-  body.admin-page button,
+  body.admin-page button:not(.site-nav-wrap button),
   .status-action
 ):active:not(:disabled) {
   filter: brightness(0.97);
@@ -398,7 +398,7 @@ input:-webkit-autofill:focus {
   .sonner__btn,
   .cs-btn,
   .game-notice-btn,
-  body.admin-page button,
+  body.admin-page button:not(.site-nav-wrap button),
   .status-action
 ):active:not(:disabled) > * {
   translate: 0 2px;
@@ -734,6 +734,15 @@ body.profile-page-body .cards-modal.hidden .cards-modal-panel {
   pointer-events: none !important;
 }
 
+/* A native dialog's ::backdrop (and its blur) is not a child of the dialog, so
+   the dialog's own fade never reaches it; fade it on the same timing. */
+dialog.bb-popup[open]::backdrop {
+  animation: bb-popup-backdrop-in var(--bb-popup-motion) ease both;
+}
+dialog.bb-popup.bb-popup-closing[open]::backdrop {
+  animation: bb-popup-backdrop-out var(--bb-popup-motion) ease both;
+}
+
 .bb-popup-closing .cs-confirm {
   animation: bb-popup-panel-out var(--bb-popup-motion) var(--bb-ease) both !important;
 }
@@ -847,6 +856,52 @@ body.profile-page-body .cards-modal.hidden .cards-modal-panel {
   font-size: var(--bb-text-xs);
   line-height: 1.15;
   text-transform: uppercase;
+}
+
+.bb-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The one pixel arrow (public/assets/ui/arrows), tinted by currentColor.
+   --bb-arrow-px sets the size of one art pixel; keep it a whole number. */
+.bb-arrow {
+  --bb-arrow-px: 2px;
+  display: inline-block;
+  flex: none;
+  width: calc(var(--bb-arrow-px) * 10);
+  height: calc(var(--bb-arrow-px) * 9);
+  background: currentColor;
+  vertical-align: middle;
+  -webkit-mask: var(--bb-arrow-shape) center / 100% 100% no-repeat;
+  mask: var(--bb-arrow-shape) center / 100% 100% no-repeat;
+  transition: translate var(--bb-motion-fast) steps(2, end);
+}
+.bb-arrow-right { --bb-arrow-shape: url("/assets/ui/arrows/arrow-right.svg"); }
+.bb-arrow-left { --bb-arrow-shape: url("/assets/ui/arrows/arrow-left.svg"); }
+.bb-arrow-up,
+.bb-arrow-down {
+  width: calc(var(--bb-arrow-px) * 9);
+  height: calc(var(--bb-arrow-px) * 10);
+}
+.bb-arrow-up { --bb-arrow-shape: url("/assets/ui/arrows/arrow-up.svg"); }
+.bb-arrow-down { --bb-arrow-shape: url("/assets/ui/arrows/arrow-down.svg"); }
+.bb-arrow-sm { --bb-arrow-px: 1px; }
+.bb-arrow-lg { --bb-arrow-px: 3px; }
+/* Links and buttons nudge their arrow one art pixel toward where it points. */
+:is(a, button):is(:hover, :focus-visible) > .bb-arrow-right { translate: var(--bb-arrow-px) 0; }
+:is(a, button):is(:hover, :focus-visible) > .bb-arrow-left { translate: calc(var(--bb-arrow-px) * -1) 0; }
+:is(a, button):is(:hover, :focus-visible) > .bb-arrow-up { translate: 0 calc(var(--bb-arrow-px) * -1); }
+:is(a, button):is(:hover, :focus-visible) > .bb-arrow-down { translate: 0 var(--bb-arrow-px); }
+@media (prefers-reduced-motion: reduce) {
+  .bb-arrow { transition: none; }
 }
 
 button.bb-chat-close.bb-chat-close {
@@ -1043,9 +1098,9 @@ body.profile-page-body .profile-form[hidden] {
 }
 
 /* Matching edit controls for the profile portrait and player card. */
-.profile-card-showcase .profile-edit-badge {
-  width: 28px;
-  height: 28px;
+:is(.profile-card-showcase, .profile-title-row) .profile-edit-badge {
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1061,27 +1116,28 @@ body.profile-page-body .profile-form[hidden] {
     box-shadow var(--bb-motion-fast) ease;
 }
 
-.profile-card-showcase .profile-edit-badge > img {
+:is(.profile-card-showcase, .profile-title-row) .profile-edit-badge > img {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   object-fit: contain;
+  image-rendering: pixelated;
   border: 0;
   border-radius: 0;
   box-shadow: none;
   filter: none;
 }
 
-.profile-card-showcase button:is(:hover, :focus-visible):not(:disabled) .profile-edit-badge {
+:is(.profile-card-showcase, .profile-title-row) button:is(:hover, :focus-visible):not(:disabled) .profile-edit-badge {
   filter: brightness(1.12) saturate(1.06);
   box-shadow: var(--bb-control-shadow), 0 0 20px rgba(61, 145, 235, 0.6);
 }
 
-.profile-card-showcase button:active:not(:disabled) .profile-edit-badge {
+:is(.profile-card-showcase, .profile-title-row) button:active:not(:disabled) .profile-edit-badge {
   box-shadow: var(--bb-control-shadow-pressed);
 }
 
-.profile-card-showcase .profile-edit-badge[hidden],
+:is(.profile-card-showcase, .profile-title-row) .profile-edit-badge[hidden],
 .profile-card-showcase .profile-card-edit-trigger[hidden] {
   display: none;
 }
@@ -1090,6 +1146,8 @@ body.profile-page-body .profile-form[hidden] {
   opacity: 1;
   filter: none;
 }
+
+.profile-card-showcase .profile-card-edit-trigger { width: 22px; height: 22px; }
 
 /* Profile loadout: use the same square frames and pixel tags as the shop. */
 .profile-loadout-modal .profile-icon-group + .profile-icon-group {
@@ -2607,7 +2665,7 @@ body.profile-page-body .profile-form[hidden] {
 :is(.character-details-action, .bb-game-over-action, .profile-action-btn,
     .cs-btn, .party-request-submit, .party-request-return,
     .party-button:not(.party-search-button):not(.party-settings-button),
-    .shop-tabs button, .shop-reveal-panel > button)::before,
+    .shop-reveal-panel > button)::before,
 .shop-buy-button::after {
   background: var(--bb-chroma-button-trail), var(--bb-chroma-button-corners);
 }
@@ -3246,6 +3304,7 @@ body .shop-rarity-legendary {
 body .reward-tint-coins { --rarity-rgb: 255, 196, 57; }
 body .reward-tint-gems { --rarity-rgb: 74, 193, 255; }
 
+
 .player-card-preview.bb-popup {
   border: var(--bb-popup-border-width) solid var(--bb-popup-border-color);
   border-radius: var(--bb-radius-window);
@@ -3367,20 +3426,62 @@ body .reward-tint-gems { --rarity-rgb: 74, 193, 255; }
 @keyframes bb-streak-impact { 0%, 40% { box-shadow: 0 0 20px #ffd36a, inset 0 0 15px #ffb42f66; } 100% { box-shadow: 0 4px 0 var(--bb-ink); } }
 @media (prefers-reduced-motion: reduce) { .bb-streak-energy { display: none; } .bb-game-over-reward.is-streak-boosted { animation: none; } }
 
-/* Lobby header coin/gem counters: just the icon and number, no box. */
-body #navbar-right .currency-resource,
-body #navbar-right .currency-resource:is(:hover, :focus-visible) {
-  border: 0;
-  background: none;
-  box-shadow: none;
-}
-
-body #navbar-right .currency-resource:is(:hover, :focus-visible) {
-  filter: brightness(1.2);
-}
-
 /* The read receipt is an anchored popover, so give it a lighter frame than a full modal. */
 body .bb-chat-viewers-popup .bb-chat-viewers-card {
   border-width: 2px;
   box-shadow: 0 0 0 2px var(--bb-ink), 0 4px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* Rarity labels share the collection badge treatment on every screen. */
+body :is(.common, .shop-rarity-common, .skin-rarity-common, .rarity-common) {
+  --bb-rarity-fill: #58667a;
+}
+body :is(.rare, .shop-rarity-rare, .skin-rarity-rare, .rarity-rare) {
+  --bb-rarity-fill: #2867c4;
+}
+body :is(.epic, .shop-rarity-epic, .skin-rarity-epic, .rarity-epic) {
+  --bb-rarity-fill: #8546bc;
+}
+body :is(.legendary, .shop-rarity-legendary, .skin-rarity-legendary, .rarity-legendary) {
+  --bb-rarity-fill: #c47b16;
+}
+
+body .profile-card-rarity:is(.common, .rare, .epic, .legendary),
+body .shop-offer .shop-rarity-badge,
+body .character-details-inline-skin .character-details-skin-rarity,
+body .player-card-preview .reward-preview-rarity,
+body .reward-showcase .shop-reveal-rarity,
+body .rarity-tag.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  flex-shrink: 0;
+  padding: 6px 8px 5px;
+  border: 2px solid var(--bb-ink, #080e17);
+  border-radius: 0;
+  background: var(--bb-rarity-fill, #58667a);
+  background-clip: padding-box;
+  color: #fff;
+  -webkit-text-fill-color: #fff;
+  box-shadow: 0 3px 0 var(--bb-ink, #080e17);
+  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-size: 8px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  text-shadow: none;
+  filter: none;
+  animation: none;
+}
+
+/* Skin selectors retain their compact height with a smaller rarity badge. */
+body .character-details-inline-skin .character-details-skin-rarity {
+  padding: 3px 6px 2px;
+  font-size: 6px;
+  border-width: 1px;
+  box-shadow: 0 2px 0 var(--bb-ink, #080e17);
 }

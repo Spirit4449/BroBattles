@@ -1,25 +1,15 @@
-Create a party from the lobby, then share its link with your friends. You can also browse public parties when you want to meet a squad.
+Create a party in the lobby and share its link, or browse public parties to join other players. Permanent accounts can also invite online friends from the [Friends panel](/help/friends).
 
-Choose your character, then ready up. Party settings determine who can change selections. The party must fit the selected team size.
+## Party settings
 
-If matchmaking seems stuck, cancel once and check that everyone is connected and ready before trying again.
+The owner controls shared settings, including whether other members can change selections. Owners can make a party public and give it a name, or keep it private and handle join requests. A party must fit the selected team size: Duels offers 1v1 or 2v2, and Bank Bust is 3v3.
 
-## Pick the right team size
+The owner can also turn on **Hide enemy Bros**. Opposing human players' selected Bros and levels are hidden in the lobby and matchmaking preview until the match starts. Teammates and configured bots remain visible.
 
-Duels supports 1v1 and 2v2. The chosen mode must have enough room for the people in your party. If a selection cannot fit everyone, choose a larger variant or reduce the party size.
+To select a locked mode, the player making the selection needs to have unlocked it. A party owner who has unlocked a mode can queue with members who haven't; playing in that party doesn't permanently unlock it for them. Coming Soon modes remain unavailable.
 
-The party owner manages shared settings. Other members can change selections only when the party permissions allow it. Check **Party Settings** if a button seems unavailable.
+## If someone can't join or ready up
 
-## A friend cannot join
+Check that the link is for the current party, there's an open slot, and the owner has accepted any join request. Have a disconnected player reopen the lobby. Check everyone's connection and Ready status before searching again.
 
-Check that the link points to the current party and that it still has an open slot. A private or approval-based party may need its owner to accept a join request. An old link will not recreate a party that no longer exists.
-
-If someone is disconnected, have them reopen the lobby and check their connection. Avoid repeatedly clicking Ready while their roster entry is updating.
-
-## Leaving the queue
-
-Use the matchmaking cancel action if plans change. Opening a site page while queued asks to leave matchmaking first. Wait for the cancellation to finish before starting a different queue.
-
-## Playing as a squad
-
-In Duels, give your teammate another angle instead of following the same opponent in a straight line. In Bank Bust, decide who will raid and who will guard before everyone rushes forward. Use party chat for the plan, never for passwords or private details.
+You can cancel matchmaking if plans change. If you open a site page while queued, wait for the requested queue cancellation to finish first.

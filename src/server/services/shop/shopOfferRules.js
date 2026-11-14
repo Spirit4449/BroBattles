@@ -10,6 +10,45 @@ function getSaleOfferIds(catalog, rotation) {
   ])];
 }
 
+// Columns in the shop grid at desktop width; a rotating section shows `rows` of them.
+const ROTATION_COLUMNS = 3;
+const DEFAULT_ROTATION_ROWS = 2;
+
+// Any section other than Sales with `rotation: "sales"` rotates weekly on the
+// Sales schedule: each week shows the next rows × 3 of its offers, in catalog
+// order, skipping offers currently promoted in Sales.
+function isRotatingSection(section) {
+  return !!section && section.rotation === "sales" && section.id !== "sales";
+}
+
+function getSectionRotationSize(section) {
+  return (Number(section?.rows) || DEFAULT_ROTATION_ROWS) * ROTATION_COLUMNS;
+}
+
+function getRotatingOfferIds(catalog, rotation, sectionId, saleIds = getSaleOfferIds(catalog, rotation)) {
+  const section = (catalog?.sections || []).find(entry => entry?.id === sectionId);
+  const onSale = new Set(saleIds);
+  const offers = (catalog?.offers || []).filter(offer => offer?.section === sectionId && !onSale.has(offer.id));
+  if (!isRotatingSection(section)) return offers.map(offer => offer.id);
+  const size = getSectionRotationSize(section);
+  const count = Math.min(size, offers.length);
+  const offset = offers.length ? Math.abs(Number(rotation?.ordinal) || 0) * size % offers.length : 0;
+  return Array.from({ length: count }, (_, index) => offers[(offset + index) % offers.length].id);
+}
+
+// Whether a catalog offer is in the shop for the given sales rotation.
+function isOfferInRotation(catalog, offer, rotation) {
+  const saleIds = getSaleOfferIds(catalog, rotation);
+  if (saleIds.includes(offer?.id)) return true;
+  if (offer?.section === "sales") return false;
+  const section = (catalog?.sections || []).find(entry => entry?.id === offer?.section);
+  return !isRotatingSection(section) || getRotatingOfferIds(catalog, rotation, section.id, saleIds).includes(offer.id);
+}
+
+function getProfileOfferIds(catalog, rotation) {
+  return getRotatingOfferIds(catalog, rotation, "profile");
+}
+
 function getSalePrice(offer, catalog) {
   const percent = offer.saleDiscountPercent ?? (offer.kind === "bundle" ? 0 : Number(catalog?.rotation?.sales?.discountPercent) || 0);
   if (offer?.price?.type !== "virtual" || percent <= 0) return offer.price;
@@ -50,8 +89,8 @@ function buildOfferIndexes(catalog) {
 }
 
 function ownsGrant(ownership, grant) {
-  const collections = { skin: "skins", card: "cards", profileIcon: "profileIcons" };
+  const collections = { skin: "skins", card: "cards", profileIcon: "profileIcons", title: "titles" };
   return ownership?.[collections[grant?.kind]]?.has(String(grant.id)) || false;
 }
 
-module.exports = { getSaleOfferIds, getSalePrice, getBundleValue, buildOfferIndexes, ownsGrant };
+module.exports = { isRotatingSection, getSectionRotationSize, getRotatingOfferIds, isOfferInRotation, getProfileOfferIds, getSaleOfferIds, getSalePrice, getBundleValue, buildOfferIndexes, ownsGrant };

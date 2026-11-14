@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { createCatalogLoader, deepFreeze } = require("../../lib/catalogLoader");
 const cards = require("../cosmetics/playerCardsCatalog");
+const titles = require("../cosmetics/titlesCatalog");
 const profileIcons = require("../cosmetics/profileIconsCatalog");
 const skins = require("../cosmetics/skinsCatalog");
 
@@ -16,6 +17,7 @@ const CURRENCIES = new Set(["coins", "gems"]);
 const PRICE_TYPES = new Set(["virtual", "money"]);
 const PURCHASE_LIMITS = new Set(["lifetime", "unlimited"]);
 const FALLBACK_TIMEZONE = "America/New_York";
+const SECTION_LAYOUTS = ["grid", "featured", "list"];
 
 const rawLoader = createCatalogLoader({
   name: "shop",
@@ -61,7 +63,8 @@ function validateGrant(grant, location, errors) {
     errors.push(`${location}: unknown profile icon ${String(grant?.id || "")}`);
     return;
   }
-  if (!["currency", "skin", "card", "profileIcon"].includes(kind)) {
+  if (kind === "title" && !titles.getTitleById(grant?.id)) errors.push(`${location}: unknown title ${grant?.id}`);
+  if (!["currency", "skin", "card", "profileIcon", "title"].includes(kind)) {
     errors.push(`${location}: unsupported grant kind ${kind || "(empty)"}`);
   }
 }
@@ -88,6 +91,16 @@ function validateCatalog(raw) {
     if (!section?.name || typeof section.name !== "string") errors.push("sections require a name");
     if (!/^\/assets\/shop\/icons\/[a-z0-9-]+\.(webp|svg)$/.test(section?.icon || "") || !fs.existsSync(path.join(PUBLIC_PATH, String(section?.icon || "")))) errors.push("sections require a local shop icon");
     if (section?.rotation != null && !["sales", "dailies"].includes(section.rotation)) errors.push("sections have an unsupported rotation");
+    else if (section?.id === "sales" && section.rotation !== "sales") errors.push("sections.sales: rotation must be sales");
+    else if (section?.id === "dailies" && section.rotation !== "dailies") errors.push("sections.dailies: rotation must be dailies");
+    else if (section?.rotation === "dailies" && section.id !== "dailies") errors.push(`sections.${section?.id}: only Dailies can use the daily rotation`);
+    // Presentation options read by the client; see "Maintaining the Shop".
+    if (section?.layout != null && !SECTION_LAYOUTS.includes(section.layout)) errors.push(`sections.${section?.id}: layout must be one of ${SECTION_LAYOUTS.join(", ")}`);
+    for (const flag of ["showRarity", "hideOwned", "collapsible"]) {
+      if (section?.[flag] != null && typeof section[flag] !== "boolean") errors.push(`sections.${section?.id}: ${flag} must be true or false`);
+    }
+    if (section?.rows != null && ![1, 2, 3].includes(section.rows)) errors.push(`sections.${section?.id}: rows must be 1, 2 or 3`);
+    if (section?.collapsible && section?.rows == null) errors.push(`sections.${section?.id}: collapsible sections need rows`);
   }
   if (!sections.has("sales") || !sections.has("dailies")) errors.push("sections require sales and dailies");
   if (!Array.isArray(raw?.offers)) errors.push("offers must be an array");
@@ -241,6 +254,7 @@ function loadValidatedCatalog() {
     skins.getCatalogVersion(),
     cards.getCatalogVersion(),
     profileIcons.getCatalogVersion(),
+    titles.getCatalogVersion(),
   ];
   const key = versions.join(":");
   if (validated?.key === key) return validated;
@@ -291,6 +305,7 @@ function invalidateCatalog() {
   skins.invalidateSkinsCatalog();
   cards.invalidatePlayerCardsCatalog();
   profileIcons.invalidateProfileIconsCatalog();
+  titles.invalidateTitlesCatalog();
   validated = null;
 }
 
@@ -299,6 +314,7 @@ function getCosmeticCatalogs() {
     skins: getSkinsCatalog(),
     cards: getPlayerCardsCatalog(),
     profileIcons: getProfileIconsCatalog(),
+    titles: titles.getTitlesCatalog(),
   };
 }
 

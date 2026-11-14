@@ -41,6 +41,8 @@ describe("Action playback and locks", () => {
     assert.equal(played(all, { x: -1, y: -1 }), 'ninja-dashdiagonal');
     assert.equal(played(all, { x: 0, y: -1 }), 'ninja-dashup');
     assert.equal(played(['dashing'], { x: 0, y: -1 }), 'ninja-dashing', 'a skin drawn with one dash still dashes');
+    assert.equal(animation.directionalDashAnimation('sparrow', { x: 1, y: -1 }), 'dashdiagonal');
+    assert.equal(animation.directionalDashAnimation('sparrow', { x: 1, y: 1 }), 'dashright');
   });
 
   test('remote death wins over residual velocity and dash snapshots reset landed jumps', () => {

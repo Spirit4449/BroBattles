@@ -12,29 +12,23 @@
   <body class="status-page banned-page">
     <main class="status-card">
       <img class="status-logo" src="/assets/logos/logo-large.webp" alt="" />
-      <h1 class="status-title">Account Banned</h1>
-      <p class="status-copy">Access to this account has been restricted.</p>
-      <section class="status-detail" id="banReason">Reason unavailable.</section>
-      <p class="status-copy">If this is an error, contact support and include the reason shown above.</p>
+      <h1 class="status-title" id="banTitle">Account Banned</h1>
+      <p class="status-copy">This account cannot enter the lobby or play. You can still contact support and read replies while signed in.</p>
+      <section class="ban-countdown" id="banCountdown" hidden aria-label="Suspension countdown">
+        <div id="banClock" aria-hidden="true"></div>
+        <div class="ban-countdown-copy">
+          <strong id="banRemaining" role="timer" aria-live="off"></strong>
+        </div>
+      </section>
+      <section class="status-detail" aria-labelledby="banReasonLabel">
+        <h2 class="restriction-label" id="banReasonLabel">Reason</h2>
+        <p id="banReason">Reason unavailable.</p>
+      </section>
+      <nav class="status-actions" aria-label="Account support">
+        <a class="status-action" href="/help/contact">Contact Support</a>
+        <a class="status-action secondary" href="/help">Help Center</a>
+      </nav>
     </main>
-    <script>
-      (function () {
-        function getCookie(name) {
-          const key = `${encodeURIComponent(name)}=`;
-          const parts = document.cookie ? document.cookie.split(";") : [];
-          for (const part of parts) {
-            const trimmed = part.trim();
-            if (trimmed.startsWith(key)) {
-              return decodeURIComponent(trimmed.slice(key.length));
-            }
-          }
-          return "";
-        }
-
-        const reason = getCookie("bb_ban_reason") || "Abuse policy violation.";
-        const reasonEl = document.getElementById("banReason");
-        if (reasonEl) reasonEl.textContent = reason;
-      })();
-    </script>
+    <script type="module" src="/scripts/banned.js"></script>
   </body>
 </html>

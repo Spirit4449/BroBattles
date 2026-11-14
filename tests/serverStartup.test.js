@@ -38,6 +38,10 @@ describe("Application bootstrap", () => {
               const webhook = stack.findIndex(layer => layer.route?.path === '/api/payments/stripe/webhook');
               const json = stack.findIndex(layer => layer.name === 'jsonParser');
               assert.ok(webhook >= 0 && json > webhook, 'raw webhook must register before JSON parsing');
+              const pageGuard = stack.findIndex(layer => Array.isArray(layer.route?.path) && layer.route.path.includes('/index.html'));
+              const staticFiles = stack.findIndex(layer => layer.name === 'serveStatic');
+              const cookies = stack.findIndex(layer => layer.name === 'cookieParser');
+              assert.ok(pageGuard > cookies && staticFiles > pageGuard, 'account restriction guard must run after cookies and before static lobby HTML');
               for (const endpoint of ['/api/shop/bootstrap', '/api/shop/viewed', '/api/shop/claim-daily', '/api/shop/purchase', '/api/shop/checkout-session', '/api/shop/checkout-status']) {
                 assert.ok(stack.some(layer => layer.route?.path === endpoint), endpoint);
               }

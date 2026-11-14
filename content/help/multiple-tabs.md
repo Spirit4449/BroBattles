@@ -1,15 +1,5 @@
-Opening Bro Battles in more than one tab does not create extra progress, rewards, or party slots. Every tab signed into the same account is still the same player.
+Every tab signed into the same account is the same player. Opening another tab won't give you another party slot or extra rewards.
 
-## In the lobby
+Only one connection can control your Bro in a battle. If you join that battle from another tab or device, the newer connection takes over. Close the unused battle tab to save resources.
 
-Two lobby tabs can show the same account, but actions may arrive in an unexpected order. For example, one tab can display an older party selection after the other tab changes it. Keep one main lobby tab active when choosing a fighter, changing party settings, or readying up.
-
-## During a battle
-
-Only one tab or device can control your fighter. If the same account joins the live battle somewhere else, the newest battle connection takes over and the older one stops controlling that fighter.
-
-Running the arena twice also uses extra memory and network traffic. Close the unused battle tab for smoother play.
-
-## Does switching tabs pause the game?
-
-No. Online matches continue on the server. Browsers may slow a background tab, so return to the game tab promptly if you switch away. If the connection drops, use the lobby’s rejoin option while the match is still live.
+In the lobby, use one main tab for party settings and Ready. Another tab may briefly show an older selection. Switching away does not pause an online match, and browsers can slow down background tabs. If you disconnect, return to the lobby and use the rejoin option while the battle is still running.

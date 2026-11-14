@@ -7,7 +7,7 @@ export function createChatScrollController(messages, composer, button) {
     if (!below) pending = 0;
     composer.classList.toggle('has-messages-below', below);
     button.hidden = !below;
-    button.textContent = pending ? `↓ ${pending > 99 ? '99+' : pending} new` : '↓';
+    button.textContent = pending ? `${pending > 99 ? '99+' : pending} new` : '';
     button.setAttribute('aria-label', pending ? `${pending} new messages. Jump to latest` : 'Jump to latest messages');
   }
   function capture() {

@@ -241,7 +241,20 @@ export function createMatchmakingOverlay() {
     const arrival = document.createElement("div");
     arrival.className = "mm-arrival-fx";
     arrival.setAttribute("aria-hidden", "true");
-    arrival.innerHTML = '<i></i><i></i><i></i><i></i><i></i><i></i><span></span>';
+    arrival.innerHTML = '<i></i><i></i><i></i><span></span>';
+    // Random light threads keep the beam from reading as a solid pillar.
+    for (let i = 0; i < 7; i++) {
+      const streak = document.createElement("b");
+      streak.className = "mm-arrival-streak";
+      const side = i % 2 ? 1 : -1;
+      streak.style.setProperty("--streak-x", `${side * Math.round(3 + Math.random() * 26)}px`);
+      streak.style.setProperty("--streak-h", `${Math.round(50 + Math.random() * 120)}px`);
+      streak.style.setProperty("--streak-w", `${Math.random() < 0.35 ? 2 : 1}px`);
+      streak.style.setProperty("--streak-delay", `${Math.round(Math.random() * 300)}ms`);
+      streak.style.setProperty("--streak-dur", `${Math.round(240 + Math.random() * 260)}ms`);
+      streak.style.setProperty("--streak-rise", `${Math.round(18 + Math.random() * 50)}px`);
+      arrival.appendChild(streak);
+    }
 
     const img = document.createElement("img");
     const cls = p.char_class || DEFAULT_CHARACTER;

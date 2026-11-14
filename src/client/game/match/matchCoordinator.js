@@ -37,7 +37,7 @@ import {
 } from "./serverClock.js";
 
 const ROSTER_OWNED_FIELDS = new Set([
-  "name", "team", "char_class", "selected_skin_id",
+  "name", "team", "char_class", "selected_title_id", "selected_skin_id",
   "selected_skin_asset_url", "selected_skin_game_assets",
 ]);
 

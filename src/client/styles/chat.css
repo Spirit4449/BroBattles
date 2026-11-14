@@ -809,74 +809,35 @@
   min-width: 0;
 }
 .bb-chat-header-status .bb-chat-subtitle { margin: 6px 0 0; flex: 0 0 auto; }
-.bb-chat-typing {
-  display: flex;
-  align-items: center;
-  flex: 1 1 0;
-  height: 18px;
-  min-width: 0;
-  overflow: hidden;
-  padding: 0;
-  background: none;
-  border: 0;
-  box-shadow: none;
-  pointer-events: none;
-}
-.bb-chat-typing.is-idle { display: none; }
 .bb-chat-game-panel .bb-chat-header-status { display: none; }
-.bb-chat-typing-icons { display: none; }
-.bb-chat-typing-icon {
-  width: 18px;
-  height: 18px;
-  box-sizing: border-box;
-  border-radius: 0;
-  overflow: hidden;
-  border: 1px solid #53718c;
-  background: #102036;
-  box-shadow: 0 2px 0 #030a13;
-}
-.bb-chat-typing-icon + .bb-chat-typing-icon { margin-left: -4px; }
-.bb-chat-typing-icon img { width: 100%; height: 100%; object-fit: cover; }
-.bb-chat-typing-label {
+/* Header status line while someone types: blue pixel dot plus who. */
+.bb-chat-subtitle.is-typing {
   display: flex;
-  flex: 1 1 auto;
   align-items: center;
-  gap: 10px;
+  gap: 5px;
   min-width: 0;
+  max-width: 100%;
+  color: #7ed3ff;
 }
-.bb-chat-typing-text {
-  font: 11px/1.4 "Lato", sans-serif;
-  color: #9bb8ce;
-  white-space: nowrap;
+.bb-chat-header-status .bb-chat-subtitle.is-typing { flex: 1 1 auto; }
+.bb-chat-subtitle.is-typing .bb-chat-typing-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.bb-chat-typing-dots {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 4px;
-  height: 14px;
+.bb-chat-typing-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  background: #38bdf8;
+  animation: bb-chat-typing-pulse 900ms steps(2, end) infinite;
 }
-/* Same stepped three-pixel rhythm as matchmaking's searching slots. */
-.bb-chat-typing-dots i {
-  width: 4px;
-  height: 4px;
-  background: #b9d7e8;
-  box-shadow: 0 2px 0 #020710;
-  opacity: .35;
-  animation: bb-chat-typing-pixel 1.2s steps(1, end) infinite;
-}
-.bb-chat-typing-dots i:nth-child(2) { animation-delay: .2s; }
-.bb-chat-typing-dots i:nth-child(3) { animation-delay: .4s; }
-.bb-chat-typing.is-idle .bb-chat-typing-dots i { animation-play-state: paused; }
-@keyframes bb-chat-typing-pixel {
-  0%, 60%, 100% { opacity: .35; transform: translateY(0); }
-  20%, 40% { opacity: 1; transform: translateY(-3px); }
+@keyframes bb-chat-typing-pulse {
+  50% { opacity: .35; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bb-chat-typing { transition: none; }
-  .bb-chat-typing-dots i { animation: none; opacity: .7; }
+  .bb-chat-typing-dot { animation: none; }
 }
 
 .bb-chat-composer .bb-chat-textarea {
@@ -1494,6 +1455,16 @@
   font: 700 13px/1 "Lato", sans-serif;
   cursor: pointer;
 }
+/* Shared pixel arrow, drawn here so the button's label stays plain text. */
+.bb-chat-jump-latest::before {
+  content: "";
+  width: 9px;
+  height: 10px;
+  background: currentColor;
+  -webkit-mask: url("/assets/ui/arrows/arrow-down.svg") center / 100% 100% no-repeat;
+  mask: url("/assets/ui/arrows/arrow-down.svg") center / 100% 100% no-repeat;
+}
+.bb-chat-jump-latest:not(:empty) { gap: 6px; font: 8px/1 var(--bb-font-display); text-transform: uppercase; }
 .bb-chat-jump-latest[hidden] { display: none; }
 .bb-chat-jump-latest:hover { background: #245575; border-color: #b1e4ff; }
 .bb-chat-jump-latest:active { transform: translateY(2px); box-shadow: 0 0 0 2px #071322, 0 1px 0 #030a13; }
@@ -1516,21 +1487,6 @@
 .bb-chat-avatar.bb-chat-profile-link:hover,
 .bb-chat-viewer-avatar.bb-chat-profile-link:hover { filter: brightness(1.15); }
 
-/* A permanent clear strip above the composer keeps typing off the messages.
-   The indicator is positioned in that strip; idle/active never changes layout. */
-.bb-chat-lobby-panel .bb-chat-composer { margin-top: 24px; }
-.bb-chat-lobby-panel .bb-chat-typing {
-  position: absolute;
-  left: 12px;
-  right: 112px;
-  bottom: calc(100% + 5px);
-  height: 18px;
-  z-index: 3;
-}
-.bb-chat-game-panel .bb-chat-typing { display: none; }
-.bb-chat-lobby-panel .bb-chat-composer.has-messages-below::before {
-  bottom: calc(100% + 24px);
-}
 .bb-chat-lobby-panel .bb-chat-jump-latest { bottom: calc(100% + 2px); }
 
 .bb-chat-system-log {

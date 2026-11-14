@@ -99,16 +99,17 @@
   color: #f6c453;
 }
 
-/* Pixel pointer beside the chosen option. */
+/* The shared pixel arrow beside the chosen option. */
 .bb-pixel-select-list [role="option"][aria-selected="true"]::before {
   content: "";
   position: absolute;
-  left: 7px;
-  top: calc(50% - 4px);
-  width: 6px;
-  height: 8px;
+  left: 4px;
+  top: calc(50% - 4.5px);
+  width: 10px;
+  height: 9px;
   background: currentColor;
-  clip-path: polygon(0 0, 50% 0, 50% 25%, 100% 25%, 100% 75%, 50% 75%, 50% 100%, 0 100%);
+  -webkit-mask: url("/assets/ui/arrows/arrow-right.svg") center / 100% 100% no-repeat;
+  mask: url("/assets/ui/arrows/arrow-right.svg") center / 100% 100% no-repeat;
 }
 
 /* Smaller variant for the friends drawer. */

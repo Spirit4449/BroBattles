@@ -39,6 +39,7 @@ function registerRoutes({
     app,
     db,
     getOrCreateCurrentUser,
+    requireCurrentUser,
     pageRoot,
     distDir,
   });
@@ -79,6 +80,8 @@ function registerRoutes({
     requireCurrentUser,
     shopService,
   });
+
+  require("./modules/titlesRoutes").registerTitlesRoutes({ app, db, requireCurrentUser });
 
   registerProfileIconsRoutes({
     app,

@@ -344,7 +344,7 @@ export function holdWallSlidePose(sprite, { sliding = false, grounded = false, n
 // Dash directions use screen coordinates (negative Y points upward).
 export function directionalDashAnimation(character, direction) {
   if (direction?.x === 0 && direction?.y > 0) return "ducking";
-  if (!["thorg", "gloop", "ninja"].includes(String(character).toLowerCase()) ||
+  if (!["thorg", "gloop", "ninja", "sparrow"].includes(String(character).toLowerCase()) ||
       !Number.isFinite(direction?.x) || !Number.isFinite(direction?.y)) return "dashing";
   if (direction.y < 0) return direction.x ? "dashdiagonal" : "dashup";
   return direction.x ? "dashright" : "falling";

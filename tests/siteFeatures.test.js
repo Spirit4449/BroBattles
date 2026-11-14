@@ -14,12 +14,266 @@ describe("Public site and account workflows", () => {
     for(const fields of [{message:''},{message:'x'.repeat(4001)},{subject:'x'},{category:'admin'},{submissionKey:'<script>alert(1)</script>'}])assert.throws(()=>validateSubmission({...valid,...fields}));
     assert.equal(validateSubmission({...valid,message:'  <script>alert(1)</script>  '}).body,'<script>alert(1)</script>');
   });
+  test('feedback needs only a subject and message, while support still needs a topic', async t => {
+    const { makeAuthHelpers } = require('../src/server/services/auth/auth');
+    const { registerSiteRoutes } = require('../src/server/routes/modules/siteRoutes');
+    t.mock.method(require('../src/server/services/email/emailService'), 'startEmailWorker', () => {});
+    t.mock.method(require('../src/server/services/email/marketingService'), 'startMarketingWorker', () => {});
+    const user = { user_id: 12, name: 'Player', expires_at: null };
+    const inserts = [];
+    const query = async (sql, params) => {
+      if (sql.startsWith('SELECT u.*')) return [user];
+      if (sql.startsWith('SELECT id, kind FROM site_requests')) return [{ id: 5, kind: inserts.at(-1)?.params[1] }];
+      if (sql.startsWith('INSERT INTO site_requests')) inserts.push({ sql, params });
+      return { insertId: 5, affectedRows: 1 };
+    };
+    const db = { runQuery: query, withTransaction: fn => fn(null, query) };
+    const routes = new Map();
+    registerSiteRoutes({ app: { get: (path, fn) => routes.set(`GET ${path}`, fn), post: (path, fn) => routes.set(`POST ${path}`, fn), use() {} }, db, auth: makeAuthHelpers(db, { SIGNED_COOKIE_OPTS: {}, DISPLAY_COOKIE_OPTS: {} }) });
+    const post = async (route, body) => {
+      let status = 200;
+      const req = { method: 'POST', ip: 'local', signedCookies: { user_id: 'a'.repeat(64) }, query: {}, params: {}, body, get: name => name === 'sec-fetch-site' ? 'same-origin' : null };
+      await routes.get(route)(req, { cookie() {}, clearCookie() {}, set() { return this; }, status(code) { status = code; return this; }, json() {} });
+      return status;
+    };
+    const { category, ...withoutTopic } = valid;
+    assert.equal(await post('POST /api/feedback', withoutTopic), 200);
+    assert.deepEqual(inserts[0].params.slice(1, 3), ['feedback', 'feedback']);
+    assert.equal(await post('POST /api/support/requests', withoutTopic), 400);
+  });
   test('support ownership is checked before reads or writes',async()=>{
     const calls=[];const db={withTransaction:fn=>fn(null,async(sql,params)=>{calls.push({sql,params});return [];})};
     const service=createSiteSupportService(db);
     await assert.rejects(service.detail({user_id:12},false,99),{status:404});
     await assert.rejects(service.reply({user_id:12},false,99,valid),{status:404});
     assert.equal(calls.length,2);for(const call of calls){assert.match(call.sql,/user_id=\?/);assert.deepEqual(call.params,[99,12]);}
+  });
+  test('banned members remain signed in for support requests and replies', async t => {
+    const { makeAuthHelpers } = require('../src/server/services/auth/auth');
+    const { registerSiteRoutes } = require('../src/server/routes/modules/siteRoutes');
+    t.mock.method(require('../src/server/services/email/emailService'), 'startEmailWorker', () => {});
+    t.mock.method(require('../src/server/services/email/marketingService'), 'startMarketingWorker', () => {});
+    const user = { user_id: 12, name: 'Restricted', expires_at: null, is_banned: 1, ban_reason: 'Test ban' };
+    const writes = [];
+    const query = async (sql, params) => {
+      if (sql.startsWith('SELECT u.*')) return [user];
+      if (sql.startsWith('SELECT COUNT')) return [{ total: 1 }];
+      if (sql.startsWith('SELECT r.id')) return [{ id: 7, kind: 'support', subject: 'My appeal' }];
+      if (sql.startsWith('SELECT * FROM site_requests') || sql.startsWith('SELECT id, kind FROM site_requests WHERE id=?')) {
+        return Number(params[1]) === user.user_id && String(params[0]) === '7' ? [{ id: 7, user_id: 12, kind: 'support' }] : [];
+      }
+      if (sql.startsWith('SELECT id, kind')) return [{ id: 7, kind: 'support' }];
+      if (sql.startsWith('SELECT id FROM site_request_messages')) return [];
+      if (sql.startsWith('SELECT id, sender')) return [{ id: 1, sender: 'admin', body: 'We are reviewing your appeal.' }];
+      writes.push({ sql, params });
+      return { insertId: 7, affectedRows: 1 };
+    };
+    const db = { runQuery: query, withTransaction: fn => fn(null, query) };
+    const auth = makeAuthHelpers(db, { SIGNED_COOKIE_OPTS: {}, DISPLAY_COOKIE_OPTS: {} });
+    const routes = new Map();
+    registerSiteRoutes({ app: { get: (path, fn) => routes.set(`GET ${path}`, fn), post: (path, fn) => routes.set(`POST ${path}`, fn), use() {} }, db, auth });
+    async function request(route, { signedIn = true, id = '7' } = {}) {
+      let status = 200, payload;
+      const req = { method: route.split(' ')[0], ip: 'local', signedCookies: signedIn ? { user_id: 'a'.repeat(64) } : {},
+        query: {}, params: { id }, body: { ...valid, category: 'account' }, get: name => name === 'sec-fetch-site' ? 'same-origin' : null };
+      const res = { cookie() {}, clearCookie(name) { assert.notEqual(name, 'user_id'); }, set() { return this; },
+        status(code) { status = code; return this; }, json(value) { payload = value; } };
+      await routes.get(route)(req, res);
+      return { status, payload };
+    }
+    const session = await request('GET /api/site/session');
+    assert.equal(session.payload.member, true);
+    assert.equal(session.payload.username, user.name);
+    assert.equal(session.payload.unread, 1);
+    assert.equal((await request('POST /api/support/requests')).payload.id, 7);
+    assert.equal((await request('GET /api/support/requests')).payload.items[0].id, 7);
+    const detail = await request('GET /api/support/requests/:id');
+    assert.equal(detail.payload.messages[0].sender, 'admin');
+    assert.equal((await request('POST /api/support/requests/:id/messages')).payload.id, 7);
+    assert.equal(writes.find(entry => entry.sql.startsWith('INSERT INTO site_requests')).params[0], user.user_id);
+    assert.equal(writes.find(entry => entry.sql.includes('(request_id,sender,author_id')).params[2], user.user_id);
+    assert.equal((await request('GET /api/support/requests/:id', { id: '99' })).status, 404);
+    assert.equal((await request('POST /api/support/requests/:id/messages', { id: '99' })).status, 404);
+    assert.equal((await request('GET /api/support/requests', { signedIn: false })).status, 401);
+    assert.equal((await request('GET /api/admin/support')).status, 403);
+    assert.equal((await request('POST /api/feedback')).status, 401);
+  });
+  test('admin inbox bypasses request limits while preserving authorization and player limits', async t => {
+    const { registerSiteRoutes } = require('../src/server/routes/modules/siteRoutes');
+    t.mock.method(require('../src/server/services/email/emailService'), 'startEmailWorker', () => {});
+    t.mock.method(require('../src/server/services/email/marketingService'), 'startMarketingWorker', () => {});
+    t.mock.method(global, 'setInterval', () => ({ unref() {} }));
+    const user = { user_id: 1, name: 'Admin' };
+    let admin = user, queries = 0;
+    const query = async sql => {
+      queries++;
+      if (sql.startsWith('SELECT COUNT')) return [{ total: 0 }];
+      if (sql.startsWith('SELECT id, kind')) return [{ id: 7, kind: 'support' }];
+      if (sql.startsWith('SELECT')) return [];
+      return { affectedRows: 1, insertId: 7 };
+    };
+    const routes = new Map();
+    registerSiteRoutes({
+      app: { get: (path, fn) => routes.set(`GET ${path}`, fn), post: (path, fn) => routes.set(`POST ${path}`, fn), use() {} },
+      db: { runQuery: query, withTransaction: fn => fn(null, query) },
+      auth: { requireAdminUser: async () => admin, requireCurrentUser: async () => user, isGuest: () => false },
+    });
+    async function request(route, sameOrigin = true) {
+      const req = { method: route.split(' ')[0], ip: 'local', query: {}, params: { id: '7' },
+        body: { ...valid, status: 'closed', accepted: true, termsVersion: config.termsVersion, privacyVersion: config.privacyVersion },
+        get: name => name === 'sec-fetch-site' ? (sameOrigin ? 'same-origin' : 'cross-site') : null };
+      const res = { statusCode: 200, set() { return this; }, status(code) { this.statusCode = code; return this; }, json() {} };
+      await routes.get(route)(req, res);
+      return res.statusCode;
+    }
+    for (let i = 0; i < 150; i++) assert.equal(await request('GET /api/admin/support'), 200);
+    for (let i = 0; i < 20; i++) {
+      assert.equal(await request('POST /api/admin/support/:id/status'), 200);
+      assert.equal(await request('POST /api/admin/support/:id/messages'), 200);
+    }
+    // Console traffic consumed neither of the player-facing allowances.
+    assert.equal(await request('GET /api/legal/status'), 200);
+    assert.equal(await request('POST /api/legal/accept'), 200);
+    let playerWriteStatus;
+    for (let i = 0; i < 20 && playerWriteStatus !== 429; i++) playerWriteStatus = await request('POST /api/legal/accept');
+    assert.equal(playerWriteStatus, 429);
+    let playerReadStatus;
+    for (let i = 0; i < 150 && playerReadStatus !== 429; i++) playerReadStatus = await request('GET /api/legal/status');
+    assert.equal(playerReadStatus, 429);
+    assert.equal(await request('POST /api/admin/support/:id/status'), 200);
+    const before = queries;
+    assert.equal(await request('POST /api/admin/support/:id/status', false), 403);
+    admin = null;
+    assert.equal(await request('GET /api/admin/support'), 403);
+    assert.equal(await request('POST /api/admin/support/:id/messages'), 403);
+    assert.equal(queries, before, 'unauthorized admin actions never reach the database');
+  });
+  test('profile reports validate the target and save verified identity and reason in support', async () => {
+    const writes = [];
+    const db = {
+      runQuery: async (_sql, [id]) => id === 42 ? [{ user_id: 42, name: 'VerifiedName' }] : [],
+      withTransaction: fn => fn(null, async (sql, params) => {
+        writes.push({ sql, params });
+        if (sql.startsWith('SELECT id, kind')) return [{ id: 7, kind: 'support' }];
+        return { insertId: 7 };
+      }),
+    };
+    const service = createSiteSupportService(db);
+    const report = { targetUserId: 42, reason: 'cheating', message: 'Repeatedly moving through solid platforms.', submissionKey: valid.submissionKey, username: 'ForgedName', category: 'privacy' };
+    assert.deepEqual(await service.createReport({ user_id: 12 }, report), { id: 7 });
+    assert.deepEqual(writes[0].params.slice(0, 4), [12, 'support', 'reports', 'Report: VerifiedName (#42)']);
+    assert.equal(writes[2].params[1], 12, 'author comes from the session');
+    assert.match(writes[2].params[2], /Reported player: VerifiedName\nAccount ID: 42\nReason: Cheating or exploiting/);
+    assert.ok(writes[2].params[2].endsWith(report.message));
+    const count = writes.length;
+    for (const fields of [{ targetUserId: 12 }, { targetUserId: 999 }, { targetUserId: '42' }, { reason: 'made-up' }, { message: 'x' }, { message: 'x'.repeat(3501) }, { submissionKey: '<script>bad</script>' }]) {
+      await assert.rejects(service.createReport({ user_id: 12 }, { ...report, ...fields }), error => [400, 404].includes(error.status));
+    }
+    await assert.rejects(service.createReport({ user_id: 12 }, null), { status: 400 });
+    assert.equal(writes.length, count, 'invalid reports never write');
+    await assert.rejects(service.create({ user_id: 12 }, 'support', { ...valid, category: 'reports' }), { status: 400 }, 'ordinary submissions cannot forge reports');
+  });
+  test('admin Reports category filters the support inbox', async () => {
+    const calls = [];
+    const service = createSiteSupportService({ runQuery: async (sql, params) => {
+      calls.push({ sql, params });
+      return sql.includes('COUNT(*) AS total') ? [{ total: 1 }] : [{ id: 7, category: 'reports' }];
+    } });
+    const result = await service.list({ user_id: 1 }, true, { kind: 'support', category: 'reports' });
+    assert.equal(result.items[0].category, 'reports');
+    assert.deepEqual(calls[0].params, ['support', 'reports']);
+    assert.deepEqual(calls[1].params, ['player', 'support', 'reports', 0]);
+  });
+  test('report recommendations distinguish repeated reports, registered reporters, and stale history', () => {
+    const { reportRecommendation, REVIEW_POLICY } = require('../src/server/services/site/profileReportReview');
+    const threshold = REVIEW_POLICY.memberReportersForReview;
+    const saved = { totalReports: 100, uniqueReporters: 100, recentReports: 0, recentReporters: 0, recentMemberReporters: 0 };
+    assert.equal(reportRecommendation(saved).code, 'hold', 'old reports do not suggest a new penalty');
+    assert.equal(reportRecommendation({ ...saved, recentReports: 1, recentReporters: 1, recentMemberReporters: 1 }).code, 'hold');
+    const repeated = { ...saved, recentReports: threshold * 10, recentReporters: 1, recentMemberReporters: 1 };
+    assert.equal(reportRecommendation(repeated).code, 'investigate', 'one account cannot trigger the punishment suggestion with repeats');
+    assert.equal(reportRecommendation({ ...repeated, recentReporters: threshold * 10, recentMemberReporters: 0 }).code, 'investigate', 'guest volume alone cannot trigger the punishment suggestion');
+    assert.equal(reportRecommendation({ ...repeated, recentMemberReporters: threshold - 1 }).code, 'investigate');
+    const recommendation = reportRecommendation({ ...repeated, recentReporters: threshold, recentMemberReporters: threshold });
+    assert.equal(recommendation.code, 'consider_penalty');
+    assert.match(recommendation.explanation, /Confirm the evidence before acting/);
+  });
+  test('report histories use the reserved category and stable target ID, including old names', () => {
+    const { reportTargetId } = require('../src/server/services/site/profileReportReview');
+    const report = { kind: 'support', category: 'reports', subject: 'Report: OldName (#42)' };
+    assert.equal(reportTargetId(report), 42);
+    assert.equal(reportTargetId({ ...report, subject: 'Report: NewName (#42)' }), 42);
+    for (const fields of [{ kind: 'feedback' }, { category: 'other' }, { subject: 'Account ID: 42' }, { subject: 'Report: Name (#42) trailing text' }, { subject: 'Report: Name (#9007199254740992)' }]) {
+      assert.equal(reportTargetId({ ...report, ...fields }), null);
+    }
+  });
+  test('admin lists batch report counts by target and omit them from member responses', async () => {
+    const calls = [];
+    const rows = [
+      { id: 7, kind: 'support', category: 'reports', subject: 'Report: OldName (#42)' },
+      { id: 8, kind: 'support', category: 'reports', subject: 'Report: NewName (#42)' },
+      { id: 9, kind: 'support', category: 'reports', subject: 'Report: Different (#142)' },
+    ];
+    const db = { runQuery: async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql.includes('AS targetUserId')) return [
+        { targetUserId: '42', totalReports: '6', uniqueReporters: '2', recentReports: '4', recentReporters: '1', recentMemberReporters: '1', activeReports: '3' },
+        { targetUserId: '142', totalReports: '1', uniqueReporters: '1', recentReports: '1', recentReporters: '1', recentMemberReporters: '0', activeReports: '1' },
+      ];
+      if (sql.startsWith('SELECT COUNT')) return [{ total: rows.length }];
+      return structuredClone(rows);
+    } };
+    const service = createSiteSupportService(db);
+    const result = await service.list({ user_id: 1 }, true, { kind: 'support' });
+    assert.equal(calls.length, 3, 'one batched statistics query for the whole inbox page');
+    assert.deepEqual(calls[2].params, ['% (#42)', '% (#142)']);
+    assert.equal(result.items[0].reportSummary.totalReports, 6);
+    assert.deepEqual(result.items[0].reportSummary, result.items[1].reportSummary, 'renamed players share history');
+    assert.equal(result.items[2].reportSummary.totalReports, 1, 'IDs with shared digits stay separate');
+    calls.length = 0;
+    const member = await service.list({ user_id: 12 }, false, {});
+    assert.equal(calls.length, 2);
+    assert.ok(member.items.every(item => !Object.hasOwn(item, 'reportSummary')));
+  });
+  test('admin report detail includes target, counts, advisory recommendation and linked history only for admins', async () => {
+    const { REVIEW_POLICY } = require('../src/server/services/site/profileReportReview');
+    const threshold = REVIEW_POLICY.memberReportersForReview;
+    const request = { id: 7, user_id: 12, kind: 'support', category: 'reports', subject: 'Report: OldName (#42)' };
+    const queries = [];
+    const messages = [{ id: 1, sender: 'player', body: 'Reported player: OldName\nAccount ID: 42\nReason: Cheating or exploiting\n\nDetails.' }];
+    const db = { withTransaction: fn => fn(null, async (sql, params) => {
+      queries.push({ sql, params });
+      if (sql.startsWith('SELECT * FROM site_requests')) return [{ ...request }];
+      if (sql.startsWith('SELECT id, sender')) return structuredClone(messages);
+      if (sql.startsWith('SELECT name,')) return [{ name: 'Reporter' }];
+      if (sql.startsWith('SELECT user_id,')) return [{ user_id: 42, name: 'NewName' }];
+      if (sql.includes('AS targetUserId')) return [{ targetUserId: 42, totalReports: threshold + 2, uniqueReporters: threshold, recentReports: threshold, recentReporters: threshold, recentMemberReporters: threshold, activeReports: 1 }];
+      if (sql.startsWith('SELECT r.id')) return [
+        { id: 7, subject: request.subject, reporterId: 12, reporterName: 'Reporter', firstMessage: messages[0].body },
+        { id: 8, subject: 'Report: NewName (#42)', reporterId: 13, firstMessage: 'Unrecognized header\nReason: Hate speech' },
+      ];
+      return { affectedRows: 1 };
+    }) };
+    const service = createSiteSupportService(db);
+    const result = await service.detail({ user_id: 1 }, true, 7);
+    assert.equal(result.request.userId, 12, 'request author stays the reporter');
+    assert.equal(result.reportReview.targetUserId, 42, 'review targets the reported player');
+    assert.equal(result.reportReview.targetName, 'NewName');
+    assert.equal(result.reportReview.recommendation.code, 'consider_penalty');
+    assert.equal(result.reportReview.history[0].reason, 'Cheating or exploiting');
+    assert.equal(result.reportReview.history[1].reason, 'Unspecified', 'reason-like user text is not a trusted reason');
+    assert.equal(Object.hasOwn(result.reportReview.history[0], 'firstMessage'), false);
+    assert.deepEqual(queries.at(-1).params, ['% (#42)']);
+    assert.ok(queries.filter(query => !query.sql.startsWith('SELECT')).every(query => query.sql.startsWith('UPDATE site_requests SET admin_read_at')), 'review only marks the request read and never applies penalties');
+    queries.length = 0;
+    const member = await service.detail({ user_id: 12 }, false, 7);
+    assert.equal(Object.hasOwn(member, 'reportReview'), false);
+    assert.equal(queries.length, 3, 'member detail never queries other reports or target history');
+    request.category = 'account';
+    queries.length = 0;
+    const ordinary = await service.detail({ user_id: 1 }, true, 7);
+    assert.equal(Object.hasOwn(ordinary, 'reportReview'), false);
+    assert.equal(queries.length, 4, 'ordinary support detail does not load report statistics');
   });
   test('duplicate replies do not reopen a conversation or bump its timestamp',async()=>{
     const calls=[];const db={withTransaction:fn=>fn(null,async(sql)=>{calls.push(sql);if(sql.includes('FROM site_requests'))return [{id:1,kind:'support'}];if(sql.includes('FROM site_request_messages'))return [{id:5}];return {insertId:5,affectedRows:0};})};
@@ -47,6 +301,21 @@ describe("Public site and account workflows", () => {
     assert.equal(article('help','../../.env'),null);assert.equal(article('legal','anything'),null);assert.equal(article('help','missing'),null);
     const manifest=require('../content/manifest.json');for(const kind of ['news','help'])for(const item of manifest[kind])assert.ok(article(kind,item.slug).html.length>20);
     assert.match(article('legal','privacy').html,/support@brobattles.dev/);
+  });
+  test('article Markdown components render game chips and callouts, escape input, and search as plain words',()=>{
+    const MarkdownIt=require('markdown-it');
+    const {useMarkdownComponents,plainComponents}=require('../src/shared/site/markdownComponents.cjs');
+    const {parseHTML}=require('linkedom');
+    const md=useMarkdownComponents(new MarkdownIt({html:false}));
+    const {document}=parseHTML(`<main>${md.render('Open {path:Profile > Account > Change Name} for {gems:50} <img src=x onerror=1> and {key:Left}.\n\n> [!WARNING]\n> Never share your password.\n\n> Just a quote.')}</main>`);
+    assert.deepEqual([...document.querySelectorAll('.md-path > span:not(.bb-arrow):not(.bb-visually-hidden)')].map(step=>step.textContent),['Profile','Account','Change Name']);
+    assert.equal(document.querySelector('.md-currency.is-gems b').textContent,'50');
+    assert.ok(document.querySelector('kbd.md-key .bb-arrow-left'));
+    assert.equal(document.querySelector('img[onerror]'),null);
+    assert.equal(document.querySelectorAll('aside.md-callout.is-warning').length,1);
+    assert.equal(document.querySelector('aside.md-callout p').textContent,'Never share your password.');
+    assert.equal(document.querySelectorAll('blockquote').length,1);
+    assert.equal(plainComponents('Costs {gems:50} via {path:A > B}'),'Costs 50 gems via A then B');
   });
   test('help search index includes article contents and Gemini can only return known articles',async()=>{
     const documents=helpSearchDocuments();
@@ -86,23 +355,49 @@ describe("Public site and account workflows", () => {
     let html='';routes.get('/about')({}, {send:value=>html=value});
     const {document}=parseHTML(html);
     const stats=require('../src/shared/characters').characterStats;
+    // Each Bro has a tab and a panel with their real moves, plus level data
+    // for the upgrade demo that matches the shared stat tables.
+    const {getHealth,upgradePrice,LEVEL_CAP}=require('../src/shared/characters/characterStats');
+    const levels=JSON.parse(document.getElementById('about-fighter-data').textContent);
     for(const [key,value] of Object.entries(stats)) {
       const fighter=document.getElementById(`fighter-${key}`);
-      assert.equal(fighter.tagName,'DETAILS');
+      assert.equal(fighter.getAttribute('role'),'tabpanel');
+      assert.equal(document.getElementById(`tab-${key}`).getAttribute('aria-controls'),`fighter-${key}`);
       assert.ok(fighter.textContent.includes(value.attackDescription));
       assert.ok(fighter.textContent.includes(value.specialDescription));
+      assert.equal(levels[key].levels.length,LEVEL_CAP);
+      assert.equal(levels[key].levels.at(-1).health,getHealth(key,LEVEL_CAP));
+      assert.equal(levels[key].levels[0].price,upgradePrice(1));
     }
+    // One panel is active; the rest share its space (so the box never resizes) and stay inert.
+    assert.equal(document.querySelectorAll('[role="tabpanel"].is-active').length,1);
+    assert.equal(document.querySelectorAll('[role="tabpanel"][inert]').length,Object.keys(stats).length-1);
+    // Trophy Road lists real playable milestones in order; cosmetics come from the catalogs.
+    const counts=[...document.querySelectorAll('[data-road-step] .about-road-count')].map(node=>Number(node.textContent.replace(/\D/g,'')));
+    assert.ok(counts.length>1);
+    assert.deepEqual(counts,[...counts].sort((a,b)=>a-b));
+    // The road leaves out player cards (their art doesn't fit a small frame).
+    assert.equal(document.querySelectorAll('.about-road-art.reward-card').length,0);
+    // Every collection tile shows a real catalog item of its kind.
+    const pools=JSON.parse(document.getElementById('about-cosmetic-data').textContent);
+    const tiles=[...document.querySelectorAll('[data-cosmetics] [data-kind]')];
+    assert.ok(tiles.length>0);
+    for(const tile of tiles) assert.ok(pools[tile.dataset.kind].some(item=>item.name===tile.dataset.name),tile.dataset.name);
     const modes=require('../src/shared/catalogs/gameModes.catalog.json').modes;
     assert.deepEqual([...document.querySelectorAll('.about-mode')].map(node=>node.id),modes.filter(mode=>mode.implemented&&mode.queueable).map(mode=>`mode-${mode.id}`));
     for(const link of document.querySelectorAll('main a[href^="#"]')) assert.ok(document.querySelector(link.getAttribute('href')));
     const guide=parseHTML(article('help','modes-and-maps').html).document;
     for(const link of document.querySelectorAll('.about-mode a')) assert.ok(guide.getElementById(link.getAttribute('href').split('#')[1]));
+    // The reel plays every clip in turn with no picker; each has its video and poster.
+    const clips=require('../src/shared/site/aboutClips.json');
     assert.equal(document.querySelectorAll('[data-reel-clip]').length,0);
+    assert.equal(document.querySelectorAll('.about-reel-progress > span').length,clips.length);
+    for(const clip of clips) for(const ext of ['mp4','jpg']) assert.ok(require('node:fs').existsSync(require('node:path').join(__dirname,`../public/assets/site/gameplay/${clip.key}.${ext}`)),`${clip.key}.${ext}`);
     assert.equal(document.querySelector('video').getAttribute('preload'),'none');
     assert.equal(document.querySelector('video').hasAttribute('src'),false);
-    assert.equal(document.querySelectorAll('main a[href="/"]').length,1);
-    assert.equal(document.querySelectorAll('.about-crew a[href="/help/getting-started"]').length,1);
-    assert.equal(document.querySelectorAll('.arena-footer nav').length,3);
+    assert.ok(document.querySelectorAll('main a[href="/"]').length>=1);
+    assert.deepEqual([...document.querySelectorAll('.about-crew a')].map(link=>link.getAttribute('href')),['/']);
+    assert.equal(document.querySelectorAll('.site-footer nav').length,3);
   });
   test('help topics expose every article and keep search status separate from the input label',()=>{
     const {parseHTML}=require('linkedom');

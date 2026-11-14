@@ -1,5 +1,6 @@
 // Lobby party-slot presentation: spawn/exit animations, ready bursts,
 // selecting rings and status classes. Pure DOM; no party state.
+import '../../styles/slotEffects.css';
 
 const __lobbySpawnCleanupTimers = new WeakMap();
 const __lobbySpawnEndTimes = new WeakMap();
@@ -29,6 +30,21 @@ function ensureLobbySpawnEffect(slot) {
   core.className = "lobby-spawn-fx-core";
   effect.appendChild(core);
 
+  // Thin, randomly placed light threads break up the beam's silhouette so the
+  // arrival reads as crackling energy rather than a solid pillar.
+  for (let i = 0; i < 9; i++) {
+    const streak = document.createElement("span");
+    streak.className = "lobby-spawn-fx-streak";
+    const side = i % 2 ? 1 : -1;
+    streak.style.setProperty("--streak-x", `${side * Math.round(4 + Math.random() * 30)}px`);
+    streak.style.setProperty("--streak-h", `${Math.round(70 + Math.random() * 150)}px`);
+    streak.style.setProperty("--streak-w", `${Math.random() < 0.3 ? 3 : Math.random() < 0.6 ? 2 : 1}px`);
+    streak.style.setProperty("--streak-delay", `${Math.round(Math.random() * 320)}ms`);
+    streak.style.setProperty("--streak-dur", `${Math.round(240 + Math.random() * 280)}ms`);
+    streak.style.setProperty("--streak-rise", `${Math.round(20 + Math.random() * 60)}px`);
+    effect.appendChild(streak);
+  }
+
   const floor = document.createElement("span");
   floor.className = "lobby-spawn-fx-floor";
   effect.appendChild(floor);
@@ -54,7 +70,8 @@ function ensureLobbySpawnEffect(slot) {
     [54, 111, 7, 8, 180, 4, 420],
   ];
 
-  shardLayout.forEach(
+  // Every other entry: a sparse scatter reads as sparks, not a wall of boxes.
+  shardLayout.filter((_, index) => index % 2 === 0).forEach(
     ([x, y, width, height, delay, drift, duration], index) => {
       const shard = document.createElement("i");
       shard.className = "lobby-spawn-fx-shard";

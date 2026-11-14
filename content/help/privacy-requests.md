@@ -1,17 +1,7 @@
-To request access, correction, or deletion of personal information, use the **Privacy** category in [Contact support](/help/contact), or email **support@brobattles.dev**.
+To ask about access to, correction of, or deletion of your personal information, choose the **Privacy** category in [Contact us](/help/contact), or email **support@brobattles.dev** if you can't sign in.
 
-Tell us what you want us to check and which username is involved. Do not send passwords, card details, or identity documents unless support arranges a secure verification step.
+Include your username and what you'd like help with. For a correction, tell us which detail is wrong. Do not send your password, card details, or identity documents unless support has arranged a secure verification step.
 
-Requests are handled manually. We may need to verify ownership, and some records may need to be retained for legal, payment, or security reasons. See the [Privacy Policy](/privacy) for details.
+Requests are handled manually. Support may need to verify account ownership, and some records may need to be retained for legal, payment, or security reasons. See the [Privacy Policy](/privacy) for details.
 
-## Which request should I choose?
-
-Tell support whether you want to access information, correct a specific detail, request deletion, or ask about how information is used. A precise request helps avoid unnecessary follow-up questions.
-
-Deleting browser storage changes what is stored on your device; it is not the same as asking for deletion of server-side account records. Signing out also does not delete your account.
-
-## What happens next?
-
-Support reviews the request and may ask for proportionate information to verify ownership. Do not share another person's information or attempt to obtain their records. Some information can be withheld or retained where required to protect other people or meet legal obligations.
-
-If you no longer have account access, use the support email instead of creating multiple support tickets. We do not promise automatic deletion or instant removal from backups. The Privacy Policy explains the relevant limits and contact details.
+Clearing browser storage or signing out does not delete your server-side account. Clearing storage can also make a guest session inaccessible.

@@ -10,6 +10,7 @@ class CommerceFakeDb {
       users: new Map([[user.user_id, structuredClone(user)]]),
       skins: new Map([[user.user_id, new Set()]]),
       cards: new Map([[user.user_id, new Set(["default"])]]),
+      titles: new Map([[user.user_id, new Set()]]),
       icons: new Map([[user.user_id, new Set()]]),
       redemptions: [],
       views: [],
@@ -122,6 +123,13 @@ class CommerceFakeDb {
       return [...(this.state.skins.get(params[0]) || [])].map((skin_id) => ({
         skin_id,
       }));
+    }
+    if (sql.startsWith("SELECT title_id FROM user_titles")) {
+      return [...(this.state.titles.get(params[0]) || [])].map(title_id => ({ title_id }));
+    }
+    if (sql.startsWith("INSERT IGNORE INTO user_titles")) {
+      this.state.titles.get(params[0]).add(String(params[1]));
+      return { affectedRows: 1 };
     }
     if (sql.startsWith("SELECT card_id FROM user_cards")) {
       return [...(this.state.cards.get(params[0]) || [])].map((card_id) => ({
@@ -277,7 +285,10 @@ test("insufficient funds roll back the complete offer", async () => {
 
 test("Shuriken Strike charges its catalog gem price and never charges coins or equips itself", async () => {
   const price = require('../src/server/services/shop/shopCatalog').getShopCatalog().offers.find(offer => offer.id === 'card-shuriken-strike').price.amount;
-  const { db, service } = createFixture({ gems: price, coins: 123 });
+  const { db } = createFixture({ gems: price, coins: 123 });
+  const catalog = commerceCatalog();
+  catalog.offers.find(offer => offer.id === "card-shuriken-strike").section = "skins";
+  const service = createShopService({ db, catalogProvider: () => catalog });
   await service.purchaseVirtual({
     userId: 7,
     offerId: "card-shuriken-strike",
@@ -295,7 +306,11 @@ test('shop profile icons grant ownership at the displayed price without equippin
   for (const id of ['ember-crown', 'crystal-slime', 'moonblade-skull', 'sky-duck', 'berry-bomb', 'robo-cat']) {
     const offer = catalog.offers.find(entry => entry.id === `icon-${id}`);
     assert.ok(catalog.rotation.sales.promotedOfferIds.includes(offer.id));
-    const { db, service } = createFixture({ gems: offer.price.amount });
+    const { db } = createFixture({ gems: offer.price.amount });
+    const fixtureCatalog = commerceCatalog();
+    fixtureCatalog.rotation.sales.pinnedOfferIds.push(offer.id);
+    fixtureCatalog.rotation.sales.promotedOfferIds = fixtureCatalog.rotation.sales.promotedOfferIds.filter(id => id !== offer.id);
+    const service = createShopService({ db, catalogProvider: () => fixtureCatalog });
     const bootstrap = await service.buildBootstrap({ user_id: 7 });
     const displayed = [...bootstrap.sections.profile, ...bootstrap.sections.sales].find(entry => entry.id === offer.id);
     assert.ok(displayed);
@@ -351,7 +366,11 @@ test('rotating card offers charge the displayed sale price and keep the wood def
   const offers = catalog.offers.filter(offer => catalog.rotation.sales.promotedOfferIds.includes(offer.id) && offer.grants.length === 1 && offer.grants[0].kind === 'card');
   assert.ok(offers.length > 0);
   for (const offer of offers) {
-    const { db, service } = createFixture({ gems: offer.price.amount, coins: 123 });
+    const { db } = createFixture({ gems: offer.price.amount, coins: 123 });
+    const fixtureCatalog = commerceCatalog();
+    fixtureCatalog.rotation.sales.pinnedOfferIds.push(offer.id);
+    fixtureCatalog.rotation.sales.promotedOfferIds = fixtureCatalog.rotation.sales.promotedOfferIds.filter(id => id !== offer.id);
+    const service = createShopService({ db, catalogProvider: () => fixtureCatalog });
     const sale = (await service.buildBootstrap({ user_id: 7 })).sections.sales.find(item => item.id === offer.id);
     const price = sale?.price.amount ?? offer.price.amount;
     if (sale) {
@@ -443,6 +462,7 @@ test('purchase retries use their receipt after price changes but new requests re
   assert.equal(retry.duplicate, true);
   assert.equal(db.state.redemptions.length, 1);
   const next = catalog.offers.find(entry => entry.kind === 'item' && entry.id !== offer.id);
+  next.section = 'skins';
   await assert.rejects(service.purchaseVirtual({ ...request, offerId: next.id, expectedPrice: next.price.amount, expectedCurrency: 'coins', idempotencyKey: 'stale-currency-test' }), error => error.code === 'price_changed');
 });
 
@@ -596,4 +616,62 @@ test('checkout sends the embedded payment contract, saved price and order identi
   assert.equal(request.return_url, 'https://game.test/party/7?shop_checkout={CHECKOUT_SESSION_ID}');
   assert.equal(options.idempotencyKey, `bro-battles-shop:${order.order_id}`);
   assert.equal(result.clientSecret, 'client-secret');
+});
+
+test('title purchases charge the catalog gem price once and preserve equipment', async () => {
+  const { service, db } = createFixture({ gems: 1000 });
+  const offer = commerceCatalog().offers.find(offer => offer.grants[0]?.kind === 'title');
+  const before = db.state.users.get(7).gems;
+  db.state.users.get(7).selected_title_id = 'unbothered';
+  const purchases = await Promise.all(['title-purchase-1', 'title-purchase-2'].map(idempotencyKey =>
+    service.purchaseVirtual({ userId: 7, offerId: offer.id, idempotencyKey })));
+  assert.equal(purchases.filter(result => result.duplicate).length, 1);
+  assert.equal(db.state.users.get(7).gems, before - offer.price.amount);
+  assert.deepEqual([...db.state.titles.get(7)], [offer.grants[0].id]);
+  assert.equal(db.state.users.get(7).selected_title_id, 'unbothered');
+  assert.equal(purchases[0].grants[0].kind, 'title');
+  const bootstrap = await service.buildBootstrap({ user_id: 7 });
+  assert.equal(bootstrap.sections.profile.find(item => item.id === offer.id).state.owned, true);
+});
+
+test('insufficient gems never grant a title or debit the wallet', async () => {
+  const { service, db } = createFixture({ gems: 0 });
+  const offer = commerceCatalog().offers.find(offer => offer.grants[0]?.kind === 'title');
+  await assert.rejects(service.purchaseVirtual({ userId: 7, offerId: offer.id, idempotencyKey: 'title-too-poor' }));
+  assert.equal(db.state.users.get(7).gems, 0);
+  assert.equal(db.state.titles.get(7).size, 0);
+  assert.equal(db.state.redemptions.length, 0);
+});
+
+
+test('profile shop rotates weekly and rejects purchases after an offer rotates out', async () => {
+  const { catalog, service, user } = configurableFixture();
+  const first = await service.buildBootstrap(user);
+  assert.ok(first.sections.profile.length <= 6);
+  assert.equal(first.sectionMeta.find(section => section.id === 'profile').rotation, 'sales');
+  const selected = first.sections.profile.map(item => item.id);
+  await service.rotationService.forceRefresh('sales', user.user_id);
+  const second = await service.buildBootstrap(user);
+  assert.notDeepEqual(second.sections.profile.map(item => item.id), selected);
+  const rotatedOut = selected.find(id => ![...second.sections.profile, ...second.sections.sales].some(item => item.id === id));
+  assert.ok(rotatedOut);
+  await assert.rejects(service.purchaseVirtual({ userId: user.user_id, offerId: rotatedOut, idempotencyKey: 'rotated-out' }), error => error.code === 'offer_unavailable');
+});
+
+test('admin preview shows a draft to a new player, week by week, without touching purchases', async () => {
+  const { catalog, service, user, db } = configurableFixture();
+  const draft = JSON.parse(JSON.stringify(catalog));
+  const owned = await service.buildBootstrap(user);
+  const now = await service.buildAdminPreview(draft);
+  assert.deepEqual(now.sectionMeta, draft.sections);
+  assert.deepEqual(now.sections.sales.map(item => item.id), owned.sections.sales.map(item => item.id));
+  for (const items of Object.values(now.sections)) assert.ok(items.every(item => item.state.available && !item.state.owned && !item.state.purchased));
+  const redemptions = db.state.redemptions.length;
+  const shown = Object.values(now.sections).flat().find(item => draft.offers.some(offer => offer.id === item.id));
+  draft.offers.find(offer => offer.id === shown.id).name = 'Renamed in draft';
+  const renamed = await service.buildAdminPreview(draft);
+  assert.equal(Object.values(renamed.sections).flat().find(item => item.id === shown.id).name, 'Renamed in draft');
+  const later = await service.buildAdminPreview(draft, { weeks: 1, days: 1 });
+  assert.equal(later.rotations.sales.ordinal, now.rotations.sales.ordinal);
+  assert.equal(db.state.redemptions.length, redemptions);
 });

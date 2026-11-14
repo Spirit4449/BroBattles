@@ -107,9 +107,12 @@ export function createFriendsPanelController({
   panel.innerHTML = `
     <div class="bb-chat-header">
       <button type="button" data-sound="cancel" data-volume="0.3" class="bb-chat-mini-btn bb-friends-back" aria-label="Back to friends" title="Back" hidden><span class="bb-friends-back-icon" aria-hidden="true"></span></button>
-      <div class="bb-chat-heading">
-        <h2 class="bb-chat-title">Friends</h2>
-        <div class="bb-chat-header-status"><div class="bb-chat-subtitle"></div></div>
+      <div class="bb-friends-chat-profile">
+        <span class="bb-friends-avatar-wrap bb-friends-chat-avatar-wrap" hidden><img class="bb-friends-chat-avatar" alt="" /></span>
+        <div class="bb-chat-heading">
+          <h2 class="bb-chat-title">Friends</h2>
+          <div class="bb-chat-header-status"><div class="bb-chat-subtitle" aria-live="polite"></div></div>
+        </div>
       </div>
       <div class="bb-chat-header-actions">
         <button type="button" data-sound="cancel" data-volume="0.3" class="bb-chat-mini-btn bb-chat-close" aria-label="Close friends">×</button>
@@ -124,13 +127,7 @@ export function createFriendsPanelController({
     <div class="bb-chat-body bb-friends-chat" hidden>
       <div class="bb-chat-messages"></div>
       <div class="bb-chat-composer">
-        <div class="bb-chat-typing is-idle" aria-live="polite">
-          <div class="bb-chat-typing-label">
-            <span class="bb-chat-typing-text"></span>
-            <span class="bb-chat-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          </div>
-        </div>
-        <button type="button" class="bb-chat-jump-latest" hidden aria-label="Jump to latest messages">↓</button>
+        <button type="button" class="bb-chat-jump-latest" hidden aria-label="Jump to latest messages"></button>
         <div class="bb-chat-input-row">
           <textarea class="bb-chat-textarea" rows="1" maxlength="500" placeholder="Write a message..."></textarea>
           <button type="button" class="bb-chat-send">Send</button>
@@ -168,6 +165,9 @@ export function createFriendsPanelController({
 
   const ui = {
     title: panel.querySelector(".bb-chat-title"),
+    chatAvatar: panel.querySelector(".bb-friends-chat-avatar"),
+    chatAvatarWrap: panel.querySelector(".bb-friends-chat-avatar-wrap"),
+    chatProfile: panel.querySelector(".bb-friends-chat-profile"),
     subtitle: panel.querySelector(".bb-chat-subtitle"),
     back: panel.querySelector(".bb-friends-back"),
     close: panel.querySelector(".bb-chat-close"),
@@ -177,8 +177,6 @@ export function createFriendsPanelController({
     content: panel.querySelector(".bb-friends-content"),
     chat: panel.querySelector(".bb-friends-chat"),
     messages: panel.querySelector(".bb-friends-chat .bb-chat-messages"),
-    typing: panel.querySelector(".bb-friends-chat .bb-chat-typing"),
-    typingText: panel.querySelector(".bb-friends-chat .bb-chat-typing-text"),
     textarea: panel.querySelector(".bb-friends-chat .bb-chat-textarea"),
     send: panel.querySelector(".bb-friends-chat .bb-chat-send"),
     badge: launcher.querySelector(".bb-chat-badge:not(.bb-friends-request-badge)"),
@@ -399,9 +397,21 @@ export function createFriendsPanelController({
   }
 
   // Clicking the avatar or the name opens the player's profile.
-  function userRow(user, { subtitle, actions = [], dot = true, subtitleClass = "" } = {}) {
+  // With onClick the whole card is the target and only the avatar opens the profile.
+  function userRow(user, { subtitle, actions = [], dot = true, subtitleClass = "", onClick = null } = {}) {
     const row = document.createElement("div");
     row.className = "bb-friends-row";
+    if (onClick) {
+      row.classList.add("is-clickable");
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      row.addEventListener("click", () => onClick());
+      row.addEventListener("keydown", (event) => {
+        if (event.target !== row || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        onClick();
+      });
+    }
     const av = document.createElement("div");
     av.className = `bb-friends-avatar-wrap ${dot ? statusClass(user.status) : ""}`;
     const img = document.createElement("img");
@@ -420,7 +430,7 @@ export function createFriendsPanelController({
       label.textContent = friendPresenceLabel(user);
       label.title = friendPresenceTitle(user);
     }
-    bindChatProfile(text.querySelector(".bb-friends-name"), user.name, openProfile);
+    if (!onClick) bindChatProfile(text.querySelector(".bb-friends-name"), user.name, openProfile);
     const actionsEl = document.createElement("div");
     actionsEl.className = "bb-friends-actions";
     for (const action of actions) if (action) actionsEl.appendChild(action);
@@ -518,15 +528,6 @@ export function createFriendsPanelController({
     }, 1000);
   }
 
-  async function confirmRemove(friend) {
-    const ok = await showUiConfirm({
-      title: "Remove friend",
-      message: `Remove ${friend.name} from your friends?`,
-      confirmLabel: "Remove",
-    });
-    if (ok && (await act("/friends/remove", { friendId: friend.userId }, "Could not remove friend"))) await refresh();
-  }
-
   function renderFriends() {
     if (!state.friends.length) {
       const wrap = emptyArt(
@@ -547,28 +548,31 @@ export function createFriendsPanelController({
     const addRows = (list) => {
       for (const friend of list) {
         const unread = Number(state.unread[friend.userId]) || 0;
-        const chat = iconButton("chat", `Chat with ${friend.name}`, "is-chat", () => setView("chat", friend.userId));
+        const indicators = document.createElement("div");
+        indicators.className = "bb-friends-indicators";
         if (state.reactionFrom.has(friend.userId)) {
           const heart = document.createElement("span");
           heart.className = "bb-friends-heart";
           heart.title = `${friend.name} reacted to your message`;
           heart.innerHTML = `<img src="/assets/heart-filled.svg" alt="" width="10" height="10" />`;
-          chat.appendChild(heart);
+          indicators.appendChild(heart);
         }
         if (unread) {
           const dot = document.createElement("span");
           dot.className = "bb-friends-unread";
           dot.textContent = unread > 9 ? "9+" : String(unread);
-          chat.appendChild(dot);
+          indicators.appendChild(dot);
         }
         const invite = inParty && friend.status === "online" && friend.acceptsPartyInvites !== false
           ? inviteButton(friend)
           : null;
-        const remove = iconButton("trash", `Remove ${friend.name}`, "is-danger", () => void confirmRemove(friend));
-        ui.content.appendChild(userRow(friend, {
+        const row = userRow(friend, {
           subtitleClass: statusClass(friend.status),
-          actions: [invite, chat, remove],
-        }));
+          actions: [indicators.childElementCount ? indicators : null, invite],
+          onClick: () => setView("chat", friend.userId),
+        });
+        row.setAttribute("aria-label", `Chat with ${friend.name}`);
+        ui.content.appendChild(row);
       }
     };
     if (online.length) {
@@ -801,6 +805,20 @@ export function createFriendsPanelController({
     chatScroll.restore(snap, { force: mine, added: mine ? 0 : 1 });
   }
 
+  // Header status line; "Typing" replaces the presence while the friend types.
+  function syncChatStatus() {
+    const friend = friendById(state.chatFriendId);
+    if (state.friendTyping) {
+      ui.subtitle.innerHTML = `<span class="bb-chat-typing-dot" aria-hidden="true"></span>Typing`;
+      ui.subtitle.title = `${friend?.name || "Friend"} is typing`;
+      ui.subtitle.className = "bb-chat-subtitle is-typing";
+      return;
+    }
+    ui.subtitle.textContent = friendPresenceLabel(friend);
+    ui.subtitle.title = friendPresenceTitle(friend);
+    ui.subtitle.className = `bb-chat-subtitle ${statusClass(friend?.status)}`;
+  }
+
   function render() {
     const inChat = state.view === "chat";
     const friend = inChat ? friendById(state.chatFriendId) : null;
@@ -810,13 +828,27 @@ export function createFriendsPanelController({
     ui.content.hidden = inChat;
     panel.classList.toggle("is-chatting", inChat);
     ui.title.textContent = inChat ? friend?.name || "Chat" : "Friends";
-    ui.subtitle.textContent = inChat
-      ? friendPresenceLabel(friend)
-      : state.guest
+    ui.chatAvatarWrap.hidden = !inChat || !friend;
+    ui.chatAvatarWrap.className = `bb-friends-avatar-wrap bb-friends-chat-avatar-wrap ${inChat ? statusClass(friend?.status) : ""}`;
+    const profileLink = inChat && !!friend;
+    ui.chatProfile.classList.toggle("is-link", profileLink);
+    ui.chatProfile.tabIndex = profileLink ? 0 : -1;
+    if (profileLink) {
+      ui.chatProfile.setAttribute("role", "button");
+      ui.chatProfile.setAttribute("aria-label", `View ${friend.name}'s profile`);
+    } else {
+      ui.chatProfile.removeAttribute("role");
+      ui.chatProfile.removeAttribute("aria-label");
+    }
+    if (inChat && friend) ui.chatAvatar.src = buildAvatarUrl(friend.charClass, friend.profileIconId);
+    if (inChat) syncChatStatus();
+    else {
+      ui.subtitle.textContent = state.guest
         ? "Registered players only"
         : `${state.friends.filter((f) => f.status !== "offline").length} online`;
-    ui.subtitle.title = inChat ? friendPresenceTitle(friend) : "";
-    ui.subtitle.className = `bb-chat-subtitle ${inChat ? statusClass(friend?.status) : ""}`;
+      ui.subtitle.title = "";
+      ui.subtitle.className = "bb-chat-subtitle";
+    }
     // History stays readable when the friend has turned messages off.
     const canMessage = !inChat || friend?.acceptsMessages !== false;
     ui.textarea.disabled = !canMessage;
@@ -919,9 +951,7 @@ export function createFriendsPanelController({
   function setFriendTyping(isTyping) {
     window.clearTimeout(state.friendTypingTimer);
     state.friendTyping = isTyping;
-    const friend = friendById(state.chatFriendId);
-    ui.typingText.textContent = isTyping ? `${friend?.name || "Friend"} is typing` : "";
-    ui.typing.classList.toggle("is-idle", !isTyping);
+    if (state.view === "chat") syncChatStatus();
     if (isTyping) state.friendTypingTimer = window.setTimeout(() => setFriendTyping(false), TYPING_STALE_MS);
   }
 
@@ -936,6 +966,17 @@ export function createFriendsPanelController({
   backdrop.addEventListener("click", () => setOpen(false));
   ui.close.addEventListener("click", () => setOpen(false));
   ui.back.addEventListener("click", () => setView("friends"));
+  // Chat header avatar and name open the friend's profile.
+  const openChatProfile = () => {
+    const friend = state.view === "chat" ? friendById(state.chatFriendId) : null;
+    if (friend) openProfile(friend.name);
+  };
+  ui.chatProfile.addEventListener("click", openChatProfile);
+  ui.chatProfile.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openChatProfile();
+  });
   ui.tabs.addEventListener("click", (event) => {
     const view = event.target.closest("[data-view]")?.dataset.view;
     if (view) setView(view);
@@ -1064,8 +1105,7 @@ export function createFriendsPanelController({
     }
     if (state.view === "chat") {
       const friend = friendById(state.chatFriendId);
-      ui.subtitle.textContent = friendPresenceLabel(friend);
-      ui.subtitle.title = friendPresenceTitle(friend);
+      if (friend) syncChatStatus();
     }
   }, 30_000);
 
@@ -1091,6 +1131,20 @@ export function createFriendsPanelController({
       return "none";
     },
     addFriend: (target) => sendRequest(target),
+    // Profile modal: asks first, resolves true once removed.
+    async removeFriend(name) {
+      const key = String(name || "").trim().toLowerCase();
+      const friend = state.friends.find((f) => f.name.toLowerCase() === key);
+      if (!friend) return false;
+      const ok = await showUiConfirm({
+        title: "Remove friend",
+        message: `Remove ${friend.name} from your friends?`,
+        confirmLabel: "Remove",
+      });
+      if (!ok || !(await act("/friends/remove", { friendId: friend.userId }, "Could not remove friend"))) return false;
+      await refresh();
+      return true;
+    },
     // Called with recent teammates who just came online, batched.
     onFriendsOnline(listener) {
       onlineListeners.add(listener);

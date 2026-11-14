@@ -187,7 +187,7 @@
       },
       "defaultVariantId": "bank-bust-3v3",
       "settings": {
-        "vaultStartingCoins": 10000,
+        "vaultStartingCoins": 20000,
         "deathDropVaultCoins": 25,
         "purchaseFloorCoins": 1500,
         "lowCoinsRatio": 0.25,

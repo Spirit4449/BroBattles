@@ -1,4 +1,5 @@
 import { createModalFocus } from "./modalFocus.js";
+import { mountWallet, releaseWallet } from "../lobby/walletView.js";
 
 const TITLE_SEQUENCE = Symbol.for("bro-battles.selection-title-sequence");
 let __sharedShell = null;
@@ -25,6 +26,10 @@ export function getSharedSelectionPopupShell() {
   title.id = titleId;
   title.textContent = "Choose";
 
+  const walletSlot = document.createElement("div");
+  walletSlot.className = "selection-wallet-slot";
+  walletSlot.hidden = true;
+
   const closeButton = document.createElement("button");
   closeButton.className = "close-popup bb-close pixel-menu-button";
   closeButton.type = "button";
@@ -36,6 +41,7 @@ export function getSharedSelectionPopupShell() {
     contentNode: null,
     backgroundNode: null,
     closeAttrKeys: [],
+    showWallet: false,
   };
 
   const doClose = () => {
@@ -57,6 +63,7 @@ export function getSharedSelectionPopupShell() {
   });
 
   headerBar.appendChild(title);
+  headerBar.appendChild(walletSlot);
   headerBar.appendChild(closeButton);
   popup.appendChild(headerBar);
   overlay.appendChild(popup);
@@ -69,8 +76,14 @@ export function getSharedSelectionPopupShell() {
     closeButtonText,
     contentNode,
     backgroundNode,
+    showWallet = false,
   } = {}) => {
     state.onClose = typeof onClose === "function" ? onClose : null;
+    state.showWallet = showWallet;
+    walletSlot.hidden = !showWallet;
+    headerBar.classList.toggle("has-wallet", showWallet);
+    if (!showWallet) releaseWallet(walletSlot);
+    else if (!overlay.classList.contains("is-hidden")) mountWallet(walletSlot);
 
     if (zIndex != null) overlay.style.zIndex = String(zIndex);
     else overlay.style.removeProperty("z-index");
@@ -131,6 +144,7 @@ export function getSharedSelectionPopupShell() {
     if (wasDetached) void overlay.offsetWidth;
     overlay.classList.remove("is-hidden");
     overlay.setAttribute("aria-hidden", "false");
+    if (state.showWallet) mountWallet(walletSlot);
     focus.activate();
     return api;
   };
@@ -138,6 +152,7 @@ export function getSharedSelectionPopupShell() {
   const hide = () => {
     overlay.classList.add("is-hidden");
     overlay.setAttribute("aria-hidden", "true");
+    releaseWallet(walletSlot);
     focus.deactivate();
     return api;
   };

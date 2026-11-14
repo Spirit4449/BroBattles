@@ -15,7 +15,7 @@ function registerStatusRoutes({
 }) {
   app.post("/status", async (req, res) => {
     try {
-      const hold = getBanHoldFromRequest(req);
+      const hold = await getBanHoldFromRequest(req, { db, res });
       if (hold) {
         return res.status(403).json({
           success: false,
@@ -36,15 +36,10 @@ function registerStatusRoutes({
         setBanHoldCookies({
           req,
           res,
+          userId: payload.userId,
+          expiresAt: payload.banExpiresAt,
           reason: String(payload?.message || "Your account has been banned."),
         });
-        try {
-          res.clearCookie("user_id", req.app.locals?.SIGNED_COOKIE_OPTS || {});
-          res.clearCookie(
-            "display_name",
-            req.app.locals?.DISPLAY_COOKIE_OPTS || {},
-          );
-        } catch (_) {}
         return res.status(403).json(payload);
       }
       res.json(payload);

@@ -37,6 +37,7 @@ Apply older SQL in chronological order after checking existing schema. Do not bl
 | `friends` | Users and matches; adds friend codes, social tables and the matches-created index |
 | `name-changes` | Users; adds nullable `users.next_name_change_at` for the paid monthly rename cooldown |
 | `friend-last-seen` | Users; adds nullable `users.last_seen_at` for persistent friend activity history |
+| `temporary-bans` | Users with abuse-control fields; adds nullable `users.ban_expires_at` for automatic account suspension expiry |
 | `privacy-settings` | Users; creates `user_privacy_settings` for friend request, message, invite, last-seen, receipt and suggestion privacy |
 
 The helper's list order is not a dependency order: run `signup-marketing` before `email-polish`. Trophy Road's non-currency backfill calls application services; running its SQL alone is insufficient. Friends also adds columns/indexes outside its SQL file. Verify each environment independently; this documentation makes no claim about its applied state.
@@ -53,7 +54,7 @@ Use the actual SQL in [migrations](../../migrations/) for definitions rather tha
 | Party chat | Messages, replies, reactions and reads; `2026-04-11_party_chat.sql` |
 | Join requests | Per-party/account request state; `2026-04-14_party_join_requests.sql` |
 | Cosmetics | Profile icons and skins in their April migrations; cards are a base-schema prerequisite |
-| Moderation | Offense/suspension/ban fields and abuse events; `2026-04-15_abuse_controls.sql` |
+| Moderation | Offense/suspension/ban fields and abuse events; `2026-04-15_abuse_controls.sql` and `2026-11-12_temporary_bans.sql` |
 | Shop | Rotation, redemptions, orders, webhook receipts and ledger; `2026-08-31_shop_commerce.sql` |
 | Bots | Temporary `match_bot_participants`; `2026-09-03_adaptive_bots.sql` also backfills queue trophy ratings |
 | Battle history | Winner, summary, participant stats/rewards; `2026-09-03_match_battle_log.sql` |

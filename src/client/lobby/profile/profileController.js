@@ -1,3 +1,5 @@
+import { renderTitle, renderTitleCollection } from "../../views/titleView.js";
+import { renderFavoriteCharacter } from "../../views/favoriteCharacterView.js";
 import { applyWallet, subscribeWallet, walletRevision } from "../wallet.mjs";
 import { renderReadyWinStreak } from "../../views/winStreakView.mjs";
 import { createPlayerCardTile, comparePlayerCardsByRarity } from "../../views/playerCardTile.js";
@@ -15,6 +17,7 @@ import {
 import { renderBattleLog } from "../../views/battleLogView.js";
 import { renderCharacterLevelGrid } from "../../views/profileCharacterLevelsView.js";
 import { sonner } from "../../ui/sonner.js";
+import { syncProfileReportButton } from './profileReport.js';
 import { playSound } from "../../ui/uiSounds.js";
 import { escapeHtml, profileFetchJson } from '../ui';
 import { resolveCharacterKey, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
@@ -31,6 +34,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     loadingPromise: null,
     viewingSelf: true,
     viewingUsername: null,
+    source: null,
   };
 
   function setProfilePopupMessage(text, isError = false) {
@@ -43,6 +47,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
   function renderProfilePopupStats() {
     const profile = lobbyProfileState.profile;
     if (!profile) return;
+    renderFavoriteCharacter(document.getElementById("profile-favorite-character"), profile.favoriteCharacter);
 
     const resolveSelectedCard = () => {
       const cards = Array.isArray(lobbyProfileState.catalog?.cards)
@@ -78,7 +83,19 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       renderReadyWinStreak(document.getElementById("ready-win-streak"), profile.winStreak);
     }
     setText("profile-hero-name", profile.username || "-");
-    setText("profile-hero-class", resolveCharacterKey(profile.charClass));
+    renderTitle(document.getElementById("profile-hero-class"), profile.selectedTitleId);
+    const titleEdit = document.getElementById("profile-title-edit");
+    if (titleEdit) titleEdit.hidden = !lobbyProfileState.viewingSelf;
+    if (lobbyProfileState.viewingSelf) {
+      renderTitleCollection(document.getElementById("profile-titles-grid"), profile, {
+        fetchJson: profileFetchJson,
+        onSelected: id => {
+          if (getUserData()) getUserData().selected_title_id = id;
+          renderProfilePopupStats();
+        },
+        onError: error => sonner("Could not equip title", error.message, "error"),
+      });
+    }
     const heroAvatar = document.getElementById("profile-hero-avatar");
     if (heroAvatar) {
       heroAvatar.src = buildProfileIconUrl(
@@ -131,6 +148,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       title.textContent = `${profile.username || "Player"} Profile`;
     }
     onProfileRendered?.(profile, lobbyProfileState.viewingSelf);
+    syncProfileReportButton(profile, lobbyProfileState.viewingSelf, lobbyProfileState.source);
     const accountPanel = document.getElementById("profile-account-panel");
     if (accountPanel) {
       accountPanel.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
@@ -160,8 +178,8 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     const gemCount = document.getElementById("gem-count");
     const trophyCount = document.getElementById("trophy-count");
     if (lobbyProfileState.viewingSelf) {
-      if (coinCount) coinCount.textContent = String(Number(profile.coins) || 0);
-      if (gemCount) gemCount.textContent = String(Number(profile.gems) || 0);
+      if (coinCount) coinCount.textContent = (Number(profile.coins) || 0).toLocaleString();
+      if (gemCount) gemCount.textContent = (Number(profile.gems) || 0).toLocaleString();
       if (trophyCount)
         trophyCount.textContent = String(Number(profile.trophies) || 0);
     }
@@ -484,14 +502,16 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     const openLoadoutModal = (mode = "icons") => {
       if (!lobbyProfileState.viewingSelf || !loadoutOverlay) return;
       const showIcons = mode === "icons";
+      const showTitles = mode === "titles";
+      document.getElementById("profile-titles-panel")?.classList.toggle("is-hidden", !showTitles);
       if (loadoutTitle) {
-        loadoutTitle.textContent = showIcons
+        loadoutTitle.textContent = showTitles ? "Select Title" : showIcons
           ? "Edit Profile Icon"
           : "Select Battle Card";
       }
       if (iconsPanel) iconsPanel.classList.toggle("is-hidden", !showIcons);
-      if (cardsPanel) cardsPanel.classList.toggle("is-hidden", showIcons);
-      loadoutOverlay.dataset.loadoutMode = showIcons ? "icons" : "cards";
+      if (cardsPanel) cardsPanel.classList.toggle("is-hidden", mode !== "cards");
+      loadoutOverlay.dataset.loadoutMode = mode;
       loadoutOverlay.classList.remove("hidden");
       loadoutOverlay.setAttribute("aria-hidden", "false");
     };
@@ -513,6 +533,9 @@ export function createProfileController({ getUserData, onProfileRendered }) {
 
     const open = async (options = {}) => {
       accountSettings.close();
+      lobbyProfileState.source = options.source || null;
+      const reportButton = document.getElementById('profile-report-btn');
+      if (reportButton) reportButton.hidden = true;
       const targetUsername = String(options?.username || "").trim();
       lobbyProfileState.viewingSelf =
         !targetUsername || targetUsername === String(getUserData()?.name || "");
@@ -592,6 +615,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       }
     });
 
+    document.getElementById("profile-title-edit")?.addEventListener("click", () => openLoadoutModal("titles"));
     avatarTrigger?.addEventListener("click", () => {
       openLoadoutModal("icons");
     });

@@ -1,3 +1,4 @@
+const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const {
   ABUSE_LOG_DECISIONS,
   ABUSE_DECAY_WINDOW_MS,
@@ -75,6 +76,7 @@ function createAbuseControlService({ db, io }) {
                 mm_suspended_until,
                 http_decay_anchor_at,
                 is_banned,
+                ban_expires_at,
                 banned_at,
                 ban_reason,
                 socket_id
@@ -109,6 +111,7 @@ function createAbuseControlService({ db, io }) {
               mm_suspended_until,
               http_decay_anchor_at,
               is_banned,
+              ban_expires_at,
               banned_at,
               ban_reason,
               socket_id
@@ -172,6 +175,7 @@ function createAbuseControlService({ db, io }) {
     await db.runQuery(
       `UPDATE users
           SET is_banned = 1,
+              ban_expires_at = NULL,
               banned_at = ?,
               ban_reason = ?
         WHERE user_id = ?`,
@@ -216,7 +220,7 @@ function createAbuseControlService({ db, io }) {
       allowed: false,
       type: "ban",
       message: "Your account has been banned.",
-      clearAuth: true,
+      clearAuth: false,
       banned: true,
     };
   }
@@ -225,12 +229,12 @@ function createAbuseControlService({ db, io }) {
     const now = Date.now();
     const state = await getState(userId);
     if (!state) return { allowed: true, bypassed: true };
-    if (Number(state.is_banned || 0) === 1) {
+    if (isAccountBanned(state)) {
       return {
         allowed: false,
         type: "ban",
         message: "Your account has been banned.",
-        clearAuth: true,
+        clearAuth: false,
       };
     }
 
@@ -340,12 +344,12 @@ function createAbuseControlService({ db, io }) {
     const now = Date.now();
     const state = await getState(userId);
     if (!state) return { allowed: true, bypassed: true };
-    if (Number(state.is_banned || 0) === 1) {
+    if (isAccountBanned(state)) {
       return {
         allowed: false,
         type: "ban",
         message: "Your account has been banned.",
-        clearAuth: true,
+        clearAuth: false,
       };
     }
 
@@ -434,12 +438,12 @@ function createAbuseControlService({ db, io }) {
 
     const state = await getState(userId);
     if (!state) return { allowed: true };
-    if (Number(state.is_banned || 0) === 1) {
+    if (isAccountBanned(state)) {
       return {
         allowed: false,
         type: "ban",
         message: "Your account has been banned.",
-        clearAuth: true,
+        clearAuth: false,
       };
     }
 
@@ -515,12 +519,12 @@ function createAbuseControlService({ db, io }) {
 
       const state = await getState(userId);
       if (state) {
-        if (Number(state.is_banned || 0) === 1) {
+        if (isAccountBanned(state)) {
           return {
             allowed: false,
             type: "ban",
             message: "Your account has been banned.",
-            clearAuth: true,
+            clearAuth: false,
           };
         }
 
@@ -587,7 +591,7 @@ function createAbuseControlService({ db, io }) {
     const state = await getState(userId);
     if (!state) return null;
     return {
-      isBanned: Number(state.is_banned || 0) === 1,
+      isBanned: isAccountBanned(state),
       mmSuspendedUntilMs: parseMs(state.mm_suspended_until),
       chatSuspendedUntilMs: parseMs(state.chat_suspended_until),
       banReason: String(state.ban_reason || "").trim() || null,

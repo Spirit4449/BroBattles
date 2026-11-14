@@ -1,0 +1,6 @@
+[
+  { "key": "last-stand", "title": "Last stand", "format": "Duels · 2v2", "map": "Serenity" },
+  { "key": "vault-raid", "title": "Vault raid", "format": "Bank Bust · 3v3", "map": "Iron Junction" },
+  { "key": "sky-brawl", "title": "Sky brawl", "format": "Duels · 2v2", "map": "Sky Soil" },
+  { "key": "face-off", "title": "Face-off", "format": "Duels · 1v1", "map": "Lushy Peaks" }
+]

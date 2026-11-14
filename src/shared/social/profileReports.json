@@ -1,0 +1,8 @@
+[
+  { "value": "harassment", "label": "Harassment or bullying" },
+  { "value": "hate", "label": "Hate speech" },
+  { "value": "cheating", "label": "Cheating or exploiting" },
+  { "value": "inappropriate_profile", "label": "Inappropriate name or profile" },
+  { "value": "spam", "label": "Spam or scams" },
+  { "value": "other", "label": "Other" }
+]

@@ -1,13 +1,15 @@
-Skins give a fighter a different look. They do **not** add damage, health, speed, or a hidden gameplay advantage.
+Skins change how a Bro looks without changing their combat stats. Profile icons, player cards, and titles are cosmetic too.
 
-## Finding and equipping skins
+## Equip a skin
 
-Open a fighter’s skin picker to see the looks available for that character. Select a skin you own, then return to the lobby. Your choice is saved per fighter, so switching characters does not erase it.
+Open a Bro's skin picker, select a look you own, and return to the lobby. Your selection is saved for that Bro. The picker shows which skins are locked and how to get them.
 
-Some skins come with a fighter, while others may appear in the shop or through special unlocks. The skin picker shows whether a look is available and how it can be obtained.
+## Customize your profile
 
-## A skin is missing
+Open your profile and use its edit controls to choose an owned icon, player card, or title. Player cards appear in battle introductions, and an equipped title appears on your profile and battle card. Buying a title doesn't equip it automatically; select it in your collection. You can also remove an equipped title.
 
-First, confirm that you are signed into the account that unlocked it. Reopen the lobby after a purchase and check the correct fighter’s skin picker.
+Some cosmetics come from Trophy Road and others from the [Shop](/help/shop). Claim Trophy Road rewards before trying to equip them. Your profile's favorite Bro is calculated from your completed matches, rather than chosen by hand.
 
-If an owned skin still does not appear, [contact support](/help/contact) with your username, the skin name, and any order reference. Never send card details or your password.
+## Missing something?
+
+Check that you're signed into the account that earned or bought it, then reopen the lobby and check the correct collection. If it's still missing, [contact support](/help/contact) with your username, item name, and any order reference. Don't send passwords or card details.

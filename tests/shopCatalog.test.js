@@ -100,6 +100,20 @@ describe("Catalog validation and pricing", () => {
   });
 
 
+  test('section presentation options are validated', () => {
+    const catalog = structuredClone(getShopCatalog());
+    catalog.sections[0].layout = 'carousel';
+    catalog.sections[1].rows = 9;
+    catalog.sections[2].hideOwned = 'yes';
+    catalog.sections[3].collapsible = true;
+    delete catalog.sections[3].rows;
+    const errors = validateCatalog(catalog);
+    for (const expected of ['layout must be one of', 'rows must be 1, 2 or 3', 'hideOwned must be true or false', 'collapsible sections need rows']) {
+      assert.ok(errors.some(error => error.includes(expected)), expected);
+    }
+    assert.deepEqual(validateCatalog(structuredClone(getShopCatalog())), []);
+  });
+
   test('malformed sale settings report errors instead of crashing validation', () => {
     for (const value of [null, {}, 2, 'bad']) {
       const catalog = structuredClone(getShopCatalog());
@@ -134,6 +148,37 @@ describe("Catalog validation and pricing", () => {
     assert.deepEqual(getSalePrice(offer, catalog), offer.price);
     offer.saleDiscountPercent = 40;
     assert.equal(getSalePrice(offer, catalog).amount, 60);
+  });
+
+  test('any weekly section shows rows × 3 offers, skips current sales and only sells what is shown', () => {
+    const { getRotatingOfferIds, isOfferInRotation } = require('../src/server/services/shop/shopOfferRules');
+    const offers = Array.from({ length: 8 }, (_, index) => ({ id: `t${index}`, section: 'titles' }));
+    const catalog = {
+      sections: [{ id: 'sales', rotation: 'sales' }, { id: 'titles', rotation: 'sales', rows: 1 }, { id: 'currency' }],
+      offers: [...offers, { id: 'pack', section: 'currency' }],
+      rotation: { sales: { pinnedOfferIds: ['t0'], promotedOfferIds: [], promotedCount: 0 } },
+    };
+    const week = getRotatingOfferIds(catalog, { ordinal: 0 }, 'titles');
+    assert.equal(week.length, 3);
+    assert.ok(!week.includes('t0'));
+    const next = getRotatingOfferIds(catalog, { ordinal: 1 }, 'titles');
+    assert.notDeepEqual(next, week);
+    const hidden = offers.map(offer => offer.id).find(id => id !== 't0' && !week.includes(id));
+    assert.equal(isOfferInRotation(catalog, catalog.offers.find(offer => offer.id === hidden), { ordinal: 0 }), false);
+    assert.equal(isOfferInRotation(catalog, catalog.offers.find(offer => offer.id === week[0]), { ordinal: 0 }), true);
+    assert.equal(isOfferInRotation(catalog, catalog.offers.find(offer => offer.id === 't0'), { ordinal: 0 }), true);
+    assert.equal(isOfferInRotation(catalog, catalog.offers.find(offer => offer.id === 'pack'), { ordinal: 0 }), true);
+    catalog.sections[1].rows = 3;
+    assert.equal(getRotatingOfferIds(catalog, { ordinal: 0 }, 'titles').length, 7);
+  });
+
+  test('only Dailies may use the daily rotation and Sales must keep its own', () => {
+    const fixture = JSON.parse(JSON.stringify(getShopCatalog()));
+    fixture.sections.find(section => section.id === 'profile').rotation = 'dailies';
+    assert.ok(validateCatalog(fixture).some(error => /only Dailies can use the daily rotation/.test(error)));
+    const sales = JSON.parse(JSON.stringify(getShopCatalog()));
+    delete sales.sections.find(section => section.id === 'sales').rotation;
+    assert.ok(validateCatalog(sales).some(error => /sections\.sales: rotation must be sales/.test(error)));
   });
 });
 

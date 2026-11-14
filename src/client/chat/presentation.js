@@ -223,7 +223,7 @@ function makeChatShell({
       <div class="bb-chat-heading">
         <h2 class="bb-chat-title">Chat (/)</h2>
         <div class="bb-chat-header-status">
-          <div class="bb-chat-subtitle">Party only</div>
+          <div class="bb-chat-subtitle" aria-live="polite">Party only</div>
         </div>
       </div>
       <div class="bb-chat-header-actions">
@@ -234,14 +234,7 @@ function makeChatShell({
     <div class="bb-chat-body">
       <div class="bb-chat-messages"></div>
       <div class="bb-chat-composer">
-        <div class="bb-chat-typing is-idle" aria-live="polite">
-          <div class="bb-chat-typing-icons"></div>
-          <div class="bb-chat-typing-label">
-            <span class="bb-chat-typing-text"></span>
-            <span class="bb-chat-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          </div>
-        </div>
-        <button type="button" class="bb-chat-jump-latest" hidden aria-label="Jump to latest messages">↓</button>
+        <button type="button" class="bb-chat-jump-latest" hidden aria-label="Jump to latest messages"></button>
         <div class="bb-chat-reply-banner hidden"></div>
         <div class="bb-chat-input-row">
           <textarea class="bb-chat-textarea" rows="1" maxlength="500" placeholder="Write a message..."></textarea>
@@ -284,9 +277,6 @@ function makeChatShell({
     closeBtn: panel.querySelector(".bb-chat-close"),
     clearReplyBtn: panel.querySelector(".bb-chat-reply-cancel"),
     replyBanner: panel.querySelector(".bb-chat-reply-banner"),
-    typingEl: panel.querySelector(".bb-chat-typing"),
-    typingIconsEl: panel.querySelector(".bb-chat-typing-icons"),
-    typingTextEl: panel.querySelector(".bb-chat-typing-text"),
   };
 }
 function renderPartyChatMessage(

@@ -1,13 +1,16 @@
+import { pixelArrow } from "../ui/pixelArrow.js";
+import { isAccountBanned } from "../../shared/moderation/accountBan";
 import "../styles/chat.css";
 import "../styles/admin.css";
 import "../site/shell.js";
 import { maintenanceClock, maintenanceRemaining } from "../../shared/site/maintenance";
-import { LEVEL_CAP, STANDARD_LEVEL_CAP, DEFAULT_CHARACTER, parseCharacterLevels } from "../../shared/characters/characterStats";
+import { LEVEL_CAP, STANDARD_LEVEL_CAP, DEFAULT_CHARACTER, parseCharacterLevels, getCharacterDisplayName } from "../../shared/characters/characterStats";
 import { characterDefinitions } from "../../shared/characters";
 import { wireFullscreenToggles } from "../ui/fullscreen.js";
-import { $, node, button, fmt, signed, titleCase, currencyIcon, setAvatar, fetchJson, formatAdminDate, timeAgo, setStatus, showToast } from "../admin/common";
-import { initStore, isStoreDirty } from "../admin/shop";
+import { $, node, button, fmt, signed, titleCase, currencyIcon, setAvatar, fetchJson, formatAdminDate, timeAgo, setStatus, showToast, confirmDialog } from "../admin/common";
+import { initStore, isStoreDirty, setStorePlayerOpener, onStoreDirtyChange } from "../admin/shop";
 import { initInbox, refreshInboxBadges, setInboxPlayerOpener } from "../admin/inbox";
+import { createInventoryEditor } from "../admin/playerInventory";
 
 wireFullscreenToggles();
 
@@ -20,10 +23,18 @@ const PAGE_SIZE = 20;
 const state = { runtime: null, selectedUser: null, levelDraft: {}, view: "overview" };
 const viewInit = { store: initStore, feedback: (root) => initInbox(root, "feedback"), support: (root) => initInbox(root, "support") };
 const initialized = new Set();
+let inventoryEditor = null;
+let playerStats = null;
+let streakSaving = false;
 
 // ---- Navigation ----
-function switchView(view) {
-  if (state.view === "players" && view !== "players" && !confirmLeavePlayer()) return false;
+async function switchView(view, { updateHash = true } = {}) {
+  if (!VIEWS.includes(view)) view = "overview";
+  // Leaving Players keeps the open player unless it has unsaved edits the admin discards.
+  if (state.view === "players" && view !== "players" && state.selectedUser && isPlayerDirty()) {
+    if (!await confirmLeavePlayer()) return false;
+    resetPlayer();
+  }
   state.view = view;
   document.querySelectorAll("[data-view]").forEach((el) => { el.hidden = el.dataset.view !== view; });
   document.querySelectorAll("[data-nav]").forEach((el) => el.setAttribute("aria-pressed", String(el.dataset.nav === view)));
@@ -32,7 +43,22 @@ function switchView(view) {
     viewInit[view](document.querySelector(`[data-view="${view}"] > div`));
   }
   $("#adminMain").scrollTop = 0;
+  if (updateHash) syncHash();
   return true;
+}
+
+// The address bar mirrors the open section (and player), so reloads and
+// shared links land in the same place: #store, #players/42.
+function syncHash() {
+  const hash = state.view === "players" && state.selectedUser ? `#players/${state.selectedUser.user_id}` : `#${state.view}`;
+  if (location.hash !== hash) history.replaceState(null, "", hash);
+}
+
+async function openFromHash() {
+  const [view, id] = location.hash.replace(/^#/, "").split("/");
+  if (view === "players" && /^[0-9]+$/.test(id || "")) return openPlayer(Number(id));
+  if (VIEWS.includes(view)) return switchView(view);
+  return switchView("overview");
 }
 
 // ---- Overview ----
@@ -67,6 +93,20 @@ function renderRecentMatches(list) {
     li.append(node("strong", `Match #${match.match_id}`), node("span", `${match.mode} · ${match.map}`, "muted"), node("span", match.status, `tag tag-${match.status}`), node("span", timeAgo(match.created_at), "row-meta"));
     host.append(li);
   }
+}
+
+function renderShopSummary(shop) {
+  const host = $("#shopSummary");
+  host.replaceChildren();
+  const add = (label, value, className = "") => host.append(node("dt", label), node("dd", value, className));
+  if (!shop) return add("Status", "Unavailable");
+  const problems = shop.catalogErrors?.length || 0;
+  add("Catalog", shop.error ? shop.error : problems ? `${problems} problem${problems === 1 ? "" : "s"}. The shop is off until fixed.` : "Healthy", shop.error || problems ? "bad-text" : "good-text");
+  add("Payments", shop.payment?.enabled ? "Stripe on" : "Stripe off", shop.payment?.enabled ? "good-text" : "");
+  if (shop.rotations?.sales) add("Next sale reset", formatAdminDate(shop.rotations.sales.nextRefreshAt, true));
+  if (shop.rotations?.dailies) add("Next daily reset", formatAdminDate(shop.rotations.dailies.nextRefreshAt, true));
+  const orders = shop.recentOrders || [];
+  add("Latest order", orders[0] ? `${timeAgo(orders[0].created_at)} · ${orders[0].status}` : "None yet");
 }
 
 async function loadGrants() {
@@ -105,7 +145,10 @@ async function handleBootstrap() {
     renderStats(data.stats);
     renderRecentUsers(data.recentUsers);
     renderRecentMatches(data.recentMatches);
+    renderShopSummary(data.shop);
     populateRuntimeForm(data.runtime);
+    savedRuntime = runtimeSnapshot();
+    updateRuntimeState();
     $("#adminName").textContent = data.admin?.name || "Admin";
     setStatus(`Dashboard loaded · ${formatAdminDate(new Date(), true)}`);
   } catch (err) {
@@ -196,7 +239,7 @@ function buildGrantForm(host, { getRecipients, onGranted }) {
     const recipients = getRecipients();
     const value = amounts();
     if (!recipients.length || !(value.coins || value.gems)) return;
-    if (recipients.length > 1 && !window.confirm(`${describeAmounts(value)} for each of ${recipients.length} players?`)) return;
+    if (recipients.length > 1 && !await confirmDialog({ title: `${mode.sign < 0 ? "Remove from" : "Grant to"} ${recipients.length} players?`, message: `${describeAmounts(value)} for each player.`, details: recipients.map((u) => u.name), confirmLabel: mode.sign < 0 ? "Remove" : "Grant", danger: mode.sign < 0 })) return;
     submit.disabled = true;
     try {
       const results = await grantCurrency(recipients, value, note.value.trim());
@@ -332,10 +375,12 @@ function playerRow(user) {
   names.append(node("strong", user.name), node("small", `#${user.user_id}`));
   who.append(names);
   const type = node("span", null, "cell");
-  type.append(node("span", user.is_banned ? "Banned" : user.expires_at ? "Guest" : "Account", `tag ${user.is_banned ? "tag-banned" : user.expires_at ? "" : "tag-account"}`));
+  type.append(node("span", isAccountBanned(user) ? user.ban_expires_at ? "Suspended" : "Banned" : user.expires_at ? "Guest" : "Account", `tag ${isAccountBanned(user) ? "tag-banned" : user.expires_at ? "" : "tag-account"}`));
   const status = node("span", null, "cell presence-cell");
   status.append(node("span", null, `presence presence-${user.status || "offline"}`), document.createTextNode(user.status || "offline"));
-  row.append(who, type, status, node("span", fmt(user.trophies), "cell"), node("span", timeAgo(user.updated_at), "cell muted"));
+  const lastSeen = node("span", user.last_seen_at ? timeAgo(user.last_seen_at) : "Unknown", "cell muted");
+  lastSeen.title = user.last_seen_at ? formatAdminDate(user.last_seen_at) : "No activity recorded";
+  row.append(who, type, status, node("span", fmt(user.trophies), "cell"), lastSeen);
   row.addEventListener("click", () => openPlayer(user.user_id));
   return row;
 }
@@ -351,8 +396,10 @@ async function searchPlayers() {
     if (!data.users.length) host.append(node("p", "No players found. Try another name or ID.", "muted pad"));
     $("#playerCount").textContent = `${fmt(data.total)} players`;
     const pager = $("#playerPager");
-    const prev = button("‹ Previous", "", () => { playerPage -= 1; searchPlayers(); });
-    const next = button("Next ›", "", () => { playerPage += 1; searchPlayers(); });
+    const prev = button(null, "", () => { playerPage -= 1; searchPlayers(); });
+    const next = button(null, "", () => { playerPage += 1; searchPlayers(); });
+    prev.append(pixelArrow("left", "sm"), " Previous");
+    next.append("Next ", pixelArrow("right", "sm"));
     prev.disabled = playerPage <= 1;
     next.disabled = playerPage * PAGE_SIZE >= data.total;
     pager.replaceChildren(prev, node("span", `Page ${playerPage} of ${Math.max(1, Math.ceil(data.total / PAGE_SIZE))}`), next);
@@ -443,7 +490,7 @@ function pendingChanges() {
   if (Object.keys(levels).length) changes.char_levels = levels;
   return changes;
 }
-const isPlayerDirty = () => Object.keys(pendingChanges()).length > 0;
+const isPlayerDirty = () => Object.keys(pendingChanges()).length > 0 || inventoryEditor?.isDirty() || streakSaving || (playerStats && !playerStats.error && $("#fieldStreak").value !== String(playerStats.winStreak));
 
 function describeChanges(changes) {
   const parts = Object.entries(changes).filter(([k]) => k !== "char_levels").map(([key, value]) => `${key.replace("char_class", "character")} → ${value}`);
@@ -457,30 +504,48 @@ function updateSaveBar() {
   $("#playerSaveSummary").textContent = parts.length ? `${parts.length} unsaved change${parts.length === 1 ? "" : "s"}: ${parts.join(" · ")}` : "";
 }
 
-function confirmLeavePlayer() {
-  return !state.selectedUser || !isPlayerDirty() || window.confirm("You have unsaved player changes. Leave without saving?");
+async function confirmLeavePlayer() {
+  if (!state.selectedUser || !isPlayerDirty()) return true;
+  return confirmDialog({ title: "Leave without saving?", message: `You have unsaved changes to ${state.selectedUser.name}.`, details: describeChanges(pendingChanges()), confirmLabel: "Discard changes", danger: true });
 }
 
 async function savePlayer() {
   const changes = pendingChanges();
   if (!state.selectedUser || !Object.keys(changes).length) return;
-  if ((changes.name || changes.coins !== undefined || changes.gems !== undefined) && !window.confirm(`Save these changes to ${state.selectedUser.name}?\n${describeChanges(changes).join("\n")}`)) return;
+  if ((changes.name || changes.coins !== undefined || changes.gems !== undefined) && !await confirmDialog({ title: `Save changes to ${state.selectedUser.name}?`, details: describeChanges(changes), confirmLabel: "Save" })) return;
   const save = $("#playerSave");
   save.disabled = true;
   try {
     const data = await fetchJson("/api/admin/user-update", { method: "POST", body: { userId: state.selectedUser.user_id, changes } });
     populatePlayer(data.user);
+    try { await refreshPlayerDetails(data.user.user_id, !inventoryEditor?.isDirty()); }
+    catch { showToast("Player saved. Reopen the player to refresh the details.", true); return; }
     showToast(`Saved ${data.user.name}`);
   } catch (error) {
     showToast(error.message || "Save failed", true);
   } finally { save.disabled = false; }
 }
 
+function renderPlayerSubtitle(user) {
+  const tags = [node("span", user.expires_at ? "Guest" : "Account", "player-meta-tag")];
+  const status = user.status || "offline";
+  const presence = node("span", null, "player-meta-tag");
+  presence.append(node("span", null, `presence presence-${status}`), document.createTextNode(titleCase(status)));
+  tags.push(presence);
+  if (isAccountBanned(user)) tags.push(node("span", user.ban_expires_at ? "Suspended" : "Banned", "player-meta-tag is-restricted"));
+  const joined = node("span", `Joined ${formatAdminDate(user.created_at, true)}`, "player-meta-tag");
+  joined.title = formatAdminDate(user.created_at);
+  const seen = node("span", `Last seen ${user.last_seen_at ? timeAgo(user.last_seen_at) : "unknown"}`, "player-meta-tag");
+  seen.title = user.last_seen_at ? formatAdminDate(user.last_seen_at) : "No activity recorded";
+  tags.push(joined, seen);
+  $("#playerSubtitle").replaceChildren(...tags);
+}
+
 function populatePlayer(user) {
   state.selectedUser = user;
   state.levelDraft = normalizedLevels(user);
   $("#userName").textContent = user.name;
-  $("#playerSubtitle").textContent = `#${user.user_id} · ${user.expires_at ? "Guest" : "Account"} · ${user.status || "offline"}${user.is_banned ? " · Banned" : ""} · joined ${formatAdminDate(user.created_at, true)}`;
+  renderPlayerSubtitle(user);
   setAvatar($("#playerAvatar"), user);
   renderBalances(user);
   $("#fieldName").value = user.name;
@@ -492,6 +557,64 @@ function populatePlayer(user) {
   renderLevels();
   updateSaveBar();
   inlineGrant?.update();
+  renderBanStatus(user);
+}
+
+function updateRestrictionForm() {
+  const temporary = $("#banType").value === "suspend";
+  $("#suspensionDurationField").hidden = !temporary;
+  $("#suspensionDuration").required = temporary;
+  $("#banPlayer").textContent = temporary ? "Suspend player" : "Ban player";
+}
+
+function renderBanStatus(user) {
+  const banned = isAccountBanned(user);
+  const temporary = banned && !!user.ban_expires_at;
+  $("#banStatus").textContent = banned
+    ? `${temporary ? `Suspended until ${formatAdminDate(user.ban_expires_at)}` : `Banned ${formatAdminDate(user.banned_at)}`} · ${user.ban_reason || "No reason recorded"}`
+    : user.ban_expires_at ? `Suspension expired ${formatAdminDate(user.ban_expires_at)}` : "This account is not restricted.";
+  $("#banReason").value = "";
+  $("#banPlayerForm").hidden = banned;
+  $("#unbanPlayer").hidden = !banned;
+  $("#unbanPlayer").textContent = temporary ? "Lift suspension" : "Unban player";
+  updateRestrictionForm();
+}
+
+function describeDuration(minutes) {
+  if (minutes % 1440 === 0) return `${minutes / 1440} day${minutes === 1440 ? "" : "s"}`;
+  if (minutes % 60 === 0) return `${minutes / 60} hour${minutes === 60 ? "" : "s"}`;
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
+const suspensionMinutes = () => Math.round((Number($("#suspensionDuration").value) || 0) * Number($("#suspensionUnit").value));
+
+async function changeRestriction(action) {
+  const user = state.selectedUser;
+  if (!user) return;
+  const reason = $("#banReason").value.trim();
+  const durationMinutes = suspensionMinutes();
+  if (action === "suspend" && !(durationMinutes >= 1 && durationMinutes <= 525600)) { showToast("Choose a suspension between 1 minute and 365 days", true); return; }
+  if (action !== "unban" && !reason) return;
+  const confirmed = action === "unban"
+    ? await confirmDialog({ title: `Lift the restriction for ${user.name}?`, message: `#${user.user_id} can play again right away.`, confirmLabel: "Lift restriction" })
+    : await confirmDialog({ title: `${action === "suspend" ? `Suspend ${user.name} for ${describeDuration(durationMinutes)}` : `Permanently ban ${user.name}`}?`, message: "Their active sessions are disconnected right away.", details: [`Player #${user.user_id}`, `Reason: ${reason}`], confirmLabel: action === "suspend" ? "Suspend" : "Ban", danger: true });
+  if (!confirmed) return;
+  $("#banPlayer").disabled = $("#unbanPlayer").disabled = true;
+  try {
+    const data = await fetchJson(`/api/admin/user-${action}`, { method: "POST", body: { userId: user.user_id, reason, ...(action === "suspend" ? { durationMinutes } : {}) } });
+    if (state.selectedUser?.user_id === user.user_id) {
+      Object.assign(state.selectedUser, { is_banned: data.user.is_banned, banned_at: data.user.banned_at, ban_expires_at: data.user.ban_expires_at, ban_reason: data.user.ban_reason });
+      renderBanStatus(state.selectedUser);
+      renderPlayerSubtitle(user);
+      try {
+        const details = await fetchJson(`/api/admin/users/${user.user_id}`);
+        if (state.selectedUser?.user_id === user.user_id) renderPlayerDetails(details.user, details.history);
+      } catch { /* The restriction changed; history refreshes when reopening the player. */ }
+    }
+    showToast(`${user.name}: ${action === "unban" ? "restriction lifted" : action === "suspend" ? "temporarily suspended" : "banned"}`);
+  } catch (error) {
+    showToast(error.message, true);
+  } finally { $("#banPlayer").disabled = $("#unbanPlayer").disabled = false; }
 }
 
 function detailList(title, rows) {
@@ -535,8 +658,54 @@ function renderPlayerDetails(user, history) {
   $("#playerDetails").replaceChildren(historyTable("Recent matches", history.matches), historyTable("Recent orders", history.orders), historyTable("Moderation events", history.moderation));
   $("#playerOverview").replaceChildren(
     detailList("Account & profile", [["Account type", user.expires_at ? "Guest" : "Permanent"], ["Created", formatAdminDate(user.created_at)], ["Updated", formatAdminDate(user.updated_at)], ["Guest expiry", formatAdminDate(user.expires_at)], ["Peak trophies", user.trophy_peak], ["Profile icon", user.selected_profile_icon_id], ["Player card", user.selected_card_id]]),
-    detailList("Moderation status", [["Banned", user.is_banned ? "Yes" : "No"], ["Ban reason", user.ban_reason], ["Banned at", formatAdminDate(user.banned_at)], ["Chat suspended until", formatAdminDate(user.chat_suspended_until)], ["Matchmaking suspended until", formatAdminDate(user.mm_suspended_until)]]),
+    detailList("Moderation status", [["Restricted", isAccountBanned(user) ? user.ban_expires_at ? "Temporarily suspended" : "Permanently banned" : "No"], ["Expires", formatAdminDate(user.ban_expires_at)], ["Ban reason", user.ban_reason], ["Banned at", formatAdminDate(user.banned_at)], ["Chat suspended until", formatAdminDate(user.chat_suspended_until)], ["Matchmaking suspended until", formatAdminDate(user.mm_suspended_until)]]),
   );
+}
+
+function renderPlayerStats(user, stats, preserveStreakDraft = false) {
+  const streakDraft = preserveStreakDraft && playerStats && !playerStats.error && $("#fieldStreak").value !== String(playerStats.winStreak) ? $("#fieldStreak").value : null;
+  playerStats = stats;
+  const host = $("#playerStats");
+  host.replaceChildren();
+  renderPlayerSubtitle(user);
+  $("#fieldStreak").disabled = $("#saveStreak").disabled = !stats || !!stats.error;
+  if (!stats || stats.error) { host.append(node("p", stats?.error || "Statistics unavailable", "muted")); return; }
+  const grid = node("div", null, "player-stats-grid");
+  for (const [label, value] of [["Matches", fmt(stats.totalMatches)], ["Wins", fmt(stats.wins)], ["Losses", fmt(stats.losses)], ["Draws", fmt(stats.draws)], ["Win rate", `${Number(stats.winRate).toFixed(1)}%`], ["Win streak", fmt(stats.winStreak)], ["Highest streak", fmt(user.highest_win_streak)]]) {
+    const card = node("div", null, "stat-card");
+    card.append(node("span", label), node("strong", value));
+    grid.append(card);
+  }
+  host.append(grid);
+  $("#fieldStreak").value = streakDraft ?? stats.winStreak;
+}
+
+async function refreshPlayerDetails(id, refreshInventory = false, preserveStreakDraft = true) {
+  const data = await fetchJson(`/api/admin/users/${id}`);
+  if (state.selectedUser?.user_id !== id) return;
+  renderPlayerDetails(data.user, data.history);
+  renderPlayerStats(data.user, data.stats, preserveStreakDraft);
+  for (const key of ["selected_skin_id_by_char", "selected_profile_icon_id", "selected_card_id", "highest_win_streak", "last_seen_at"]) state.selectedUser[key] = data.user[key];
+  setAvatar($("#playerAvatar"), state.selectedUser);
+  if (refreshInventory) inventoryEditor.set(id, data.inventory);
+}
+
+async function saveStreak(event) {
+  event.preventDefault();
+  const user = state.selectedUser;
+  if (!user || streakSaving || !$("#playerStreakForm").reportValidity()) return;
+  const streak = Number($("#fieldStreak").value);
+  if (streak === playerStats?.winStreak) return;
+  if (!await confirmDialog({ title: `Set ${user.name}’s streak to ${streak}?`, message: "This changes past shared battle results, including teammates’ and opponents’ records. Awarded currency and trophies stay unchanged.", confirmLabel: "Set streak", danger: true })) return;
+  streakSaving = true;
+  $("#saveStreak").disabled = true;
+  try {
+    const result = await fetchJson(`/api/admin/users/${user.user_id}/streak`, { method: "POST", body: { streak } });
+    try { await refreshPlayerDetails(user.user_id, false, false); }
+    catch { showToast(`Streak saved to ${streak}. Reopen the player to refresh the details.`, true); return; }
+    showToast(`Set streak to ${streak} · ${result.changedMatches} battle results changed`);
+  } catch (error) { showToast(error.message || "Unable to set streak", true); }
+  finally { streakSaving = false; $("#saveStreak").disabled = !playerStats || !!playerStats.error; }
 }
 
 async function refreshCurrencyHistory(id) {
@@ -547,8 +716,8 @@ async function refreshCurrencyHistory(id) {
 }
 
 async function openPlayer(id) {
-  if (state.selectedUser && state.selectedUser.user_id !== id && !confirmLeavePlayer()) return;
-  if (state.view !== "players" && !switchView("players")) return;
+  if (state.selectedUser && state.selectedUser.user_id !== id && !await confirmLeavePlayer()) return;
+  if (state.view !== "players" && !await switchView("players", { updateHash: false })) return;
   const generation = ++detailGeneration;
   setStatus(`Loading player #${id}…`);
   try {
@@ -556,28 +725,69 @@ async function openPlayer(id) {
     if (generation !== detailGeneration) return;
     populatePlayer(data.user);
     renderPlayerDetails(data.user, data.history);
+    renderPlayerStats(data.user, data.stats);
+    inventoryEditor.set(data.user.user_id, data.inventory);
     $("#playerDirectory").hidden = true;
     $("#playerWorkspace").hidden = false;
     selectPlayerTab("currency");
     $("#adminMain").scrollTop = 0;
     setStatus(`${data.user.name} · #${data.user.user_id}`);
+    syncHash();
   } catch (error) {
-    if (generation === detailGeneration) showToast(error.message, true);
+    if (generation === detailGeneration) { showToast(error.message, true); syncHash(); }
   }
 }
 
-function closePlayer() {
-  if (!confirmLeavePlayer()) return;
+function resetPlayer() {
   state.selectedUser = null;
   $("#playerWorkspace").hidden = true;
   $("#playerDirectory").hidden = false;
   $("#playerSaveBar").hidden = true;
+}
+
+async function closePlayer() {
+  if (!await confirmLeavePlayer()) return;
+  resetPlayer();
+  syncHash();
   searchPlayers();
 }
 
 // ---- Runtime ----
+function runtimeProblems() {
+  const problems = [];
+  for (const [selector, label] of [["#rewardCoinMultiplier", "Coin multiplier"], ["#rewardGemMultiplier", "Gem multiplier"]]) {
+    const value = Number($(selector).value);
+    if (!(value > 0 && value <= 10)) problems.push(`${label} must be above 0 and at most 10.`);
+  }
+  const floor = Number($("#rewardFloor").value), ceiling = Number($("#rewardCeiling").value);
+  if (!Number.isInteger(floor) || floor < 0) problems.push("Coin floor must be a whole number of at least 0.");
+  if (!Number.isInteger(ceiling) || ceiling < 1) problems.push("Coin ceiling must be a whole number of at least 1.");
+  if (floor > ceiling) problems.push("Coin floor can't be above the ceiling.");
+  const until = $("#maintenanceUntil").value;
+  if (until && new Date(until).getTime() <= Date.now()) problems.push("Maintenance must end in the future. Clear the time to turn it off.");
+  return problems;
+}
+
+function runtimeSnapshot() {
+  return JSON.stringify(["#maintenanceUntil", "#announcementField", "#rewardCoinMultiplier", "#rewardGemMultiplier", "#rewardFloor", "#rewardCeiling"].map((selector) => $(selector).value));
+}
+let savedRuntime = "";
+
+function updateRuntimeState() {
+  const dirty = runtimeSnapshot() !== savedRuntime;
+  const problems = runtimeProblems();
+  $("#runtimeProblems").replaceChildren(...problems.map((problem) => node("li", problem)));
+  $("#runtimeProblems").hidden = !problems.length;
+  const save = $("#runtimeForm button[type=submit]");
+  save.disabled = !dirty || problems.length > 0;
+  $("#runtimeState").textContent = dirty ? "Unsaved changes" : "All changes saved";
+  $("#runtimeState").classList.toggle("is-dirty", dirty);
+  $("#announcementCount").textContent = `${$("#announcementField").value.length}/500`;
+}
+
 async function handleRuntimeSave(event) {
   event.preventDefault();
+  if (runtimeProblems().length) return updateRuntimeState();
   const payload = {
     maintenanceUntil: $("#maintenanceUntil").value ? new Date($("#maintenanceUntil").value).toISOString() : null,
     announcements: $("#announcementField").value,
@@ -590,12 +800,15 @@ async function handleRuntimeSave(event) {
     state.runtime = data.runtime;
     populateRuntimeForm(state.runtime);
     showToast("Runtime settings saved");
+    savedRuntime = runtimeSnapshot();
+    updateRuntimeState();
   } catch (err) {
     showToast(err.message || "Save failed", true);
   }
 }
 
 async function clearMaintenance() {
+  if (!await confirmDialog({ title: "End maintenance now?", message: "Matchmaking opens again for every player right away.", confirmLabel: "End maintenance" })) return;
   const clear = $("#clearMaintenance");
   const save = $("#runtimeForm button[type=submit]");
   clear.disabled = save.disabled = true;
@@ -603,6 +816,8 @@ async function clearMaintenance() {
     const data = await fetchJson("/api/admin/runtime", { method: "POST", body: { maintenanceUntil: null } });
     state.runtime = data.runtime;
     $("#maintenanceUntil").value = "";
+    savedRuntime = runtimeSnapshot();
+    updateRuntimeState();
     showToast("Maintenance turned off. Matchmaking enabled.");
   } catch (error) {
     showToast(error.message || "Could not turn off maintenance", true);
@@ -623,8 +838,16 @@ function wireKeyboard() {
   });
 }
 
+function populateCharacterSelect() {
+  const choose = $("#fieldClass");
+  choose.replaceChildren(...CHARACTERS.map((id) => Object.assign(node("option", getCharacterDisplayName(id)), { value: id })));
+}
+
 function init() {
+  populateCharacterSelect();
   setInboxPlayerOpener(openPlayer);
+  setStorePlayerOpener(openPlayer);
+  onStoreDirtyChange((dirty) => $('[data-nav="store"]').classList.toggle("has-changes", dirty));
   inlineGrant = buildGrantForm($("#inlineGrant"), { getRecipients: () => (state.selectedUser ? [state.selectedUser] : []) });
   wireGrantDialog();
   wireKeyboard();
@@ -634,8 +857,9 @@ function init() {
     const until = state.runtime?.maintenanceUntil;
     const active = maintenanceRemaining(until) > 0;
     const el = $("#maintenanceCountdown");
-    el.textContent = active ? `◷ ${maintenanceClock(until)} remaining` : "Matchmaking enabled";
+    el.textContent = active ? `Maintenance · ${maintenanceClock(until)} left` : "Matchmaking is open";
     el.classList.toggle("is-active", active);
+    $("#clearMaintenance").disabled = !active;
   }, 1000);
 
   $("#userSearchForm").addEventListener("submit", (event) => { event.preventDefault(); clearTimeout(searchTimer); playerPage = 1; searchPlayers(); });
@@ -643,12 +867,11 @@ function init() {
   $("#jumpForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const query = $("#jumpSearch").value.trim();
-    if (!confirmLeavePlayer()) return;
-    if (state.view !== "players" && !switchView("players")) return;
-    state.selectedUser = null;
+    if (!await confirmLeavePlayer()) return;
+    if (state.view !== "players" && !await switchView("players")) return;
+    resetPlayer();
+    syncHash();
     $("#userSearch").value = query;
-    $("#playerWorkspace").hidden = true;
-    $("#playerDirectory").hidden = false;
     playerPage = 1;
     await searchPlayers();
     const rows = document.querySelectorAll("#playerResults .player-row");
@@ -660,10 +883,21 @@ function init() {
   $("#openGrant").addEventListener("click", () => openGrantDialog());
   $("#refreshGrants").addEventListener("click", loadGrants);
   $("#backToPlayers").addEventListener("click", closePlayer);
+  $("#banType").addEventListener("change", updateRestrictionForm);
+  $("#banPlayerForm").addEventListener("submit", (event) => { event.preventDefault(); changeRestriction($("#banType").value); });
+  $("#unbanPlayer").addEventListener("click", () => changeRestriction("unban"));
+  setInterval(() => {
+    const user = state.selectedUser;
+    if (user?.ban_expires_at && !isAccountBanned(user) && !$("#unbanPlayer").hidden) renderBanStatus(user);
+  }, 1000);
   $("#userEditForm").addEventListener("input", updateSaveBar);
   $("#userEditForm").addEventListener("submit", (event) => { event.preventDefault(); savePlayer(); });
   $("#playerSave").addEventListener("click", savePlayer);
+  inventoryEditor = createInventoryEditor($("#playerInventory"), { onSaved: id => refreshPlayerDetails(id, true) });
+  $("#playerStreakForm").addEventListener("submit", saveStreak);
   $("#runtimeForm").addEventListener("submit", handleRuntimeSave);
+  $("#runtimeForm").addEventListener("input", updateRuntimeState);
+  $("#runtimeForm").addEventListener("change", updateRuntimeState);
   document.querySelectorAll("[data-levels-all]").forEach((el) => el.addEventListener("click", () => {
     for (const character of CHARACTERS) {
       const current = state.levelDraft[character] ?? 0;
@@ -674,12 +908,14 @@ function init() {
     updateSaveBar();
   }));
   document.querySelectorAll("[data-nav]").forEach((el) => el.addEventListener("click", () => switchView(el.dataset.nav)));
+  document.querySelectorAll("[data-nav-link]").forEach((el) => el.addEventListener("click", () => switchView(el.dataset.navLink)));
   document.querySelectorAll("[data-player-tab]").forEach((el) => el.addEventListener("click", () => selectPlayerTab(el.dataset.playerTab)));
   window.addEventListener("beforeunload", (event) => {
     if ((state.selectedUser && isPlayerDirty()) || isStoreDirty()) { event.preventDefault(); event.returnValue = ""; }
   });
 
-  switchView("overview");
+  window.addEventListener("hashchange", openFromHash);
+  openFromHash();
   searchPlayers();
   handleBootstrap();
   loadGrants();

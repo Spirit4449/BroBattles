@@ -15,6 +15,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const sharp = require('../../spritesheet-generator/node_modules/sharp');
+const { ringPoints: circlePoints } = require('./pixel-cards/lib.cjs');
 
 const ROOT = path.resolve(__dirname, '../..');
 const ID = 'arena-crown';
@@ -29,8 +30,8 @@ const INSTALL = process.argv.includes('--install');
 const B = 2;
 const GRID_W = 88 * B; // trace cells across the card art
 const SCALE = 2; // video px per trace cell (4 video px per art pixel)
-const MARGIN_X = 12; // art px of room for effects around the card
-const MARGIN_Y = 18;
+const MARGIN_X = 18; // art px of room for effects around the card
+const MARGIN_Y = 24;
 const FPS = 24;
 const SECONDS = 8;
 const FRAMES = FPS * SECONDS;
@@ -201,7 +202,9 @@ const windowed = (t, a, b) => t >= a && t < b ? (t - a) / (b - a) : -1;
 //  4.0-6.0  sparkle storm around the whole frame
 //  5.0-5.7  second, quicker crown frost
 //  5.8-7.0  gems light up clockwise around the frame
-//  always   gold dust, falling glitter and twinkles
+//  2.45-4.6 coronation: gold starburst, rings and a shower of spinning coins
+//  always   gold dust, falling glitter and twinkles, a halo of gold orbs
+//           circling above the crown, a breathing glow round behind the crown and a glint across it
 const easeOut = (u) => 1 - (1 - u) ** 3;
 const easeInOut = (u) => (u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2);
 function ringPoints(r, square) {
@@ -276,6 +279,28 @@ function buildAnimation(base, FW, FH) {
   const dust = Array.from({ length: 26 }, () => ({ x: rand() < 0.5 ? -2 - rand() * 9 : W + 1 + rand() * 9, y: rand() * (H + 24), speed: 2.5 + rand() * 4, t0: rand(), hi: rand() < 0.3 }));
   const glitter = Array.from({ length: 22 }, () => ({ x: 4 + rand() * (W - 8), t0: 5.6 + rand() * 1.8, speed: 9 + rand() * 8, life: 0.8 + rand() * 0.6, sway: rand() * 6 }));
 
+  // ----- legendary extras -----
+  const TAU = Math.PI * 2;
+  const G = (n) => idx('gold', n), I = (n) => idx('ice', n), WH = idx('white', 0);
+  const CORONATION = 2.45;
+  const gemX = crownGem ? crownGem.cx : crownCx, gemY = crownGem ? crownGem.cy : 12;
+  // Halo of gold orbs circling just above the crown.
+  const HALO = { cx: crownCx, cy: crownTop - 6, rx: 20, ry: 4 };
+  // Aura behind the crown.
+  // Glow hugging the crown's silhouette: clear pixels within 3 of the crown.
+  const auraCells = [];
+  for (let y = -4; y < crownBase - 4; y++) for (let x = CROWN.x0 - 4; x <= CROWN.x1 + 4; x++) {
+    if (y >= 0 && y < H && x >= 0 && x < W && opaque(x, y)) continue;
+    let d = 9;
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (crownSet.has((y + dy) * W + x + dx) && y + dy >= 0) d = Math.min(d, Math.max(Math.abs(dx), Math.abs(dy)));
+    if (d <= 3) auraCells.push({ x, y, d });
+  }
+  const coins = Array.from({ length: 120 }, () => {
+    const a = -Math.PI * 0.08 - rand() * Math.PI * 0.84 + (rand() < 0.25 ? Math.PI : 0), v = 30 + rand() * 95;
+    return { vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.9, life: 1.3 + rand() * 1.0, coin: rand() < 0.45, spin: rand() * 4, id: Math.floor(rand() * 1e6), tint: rand() < 0.7 ? 'gold' : 'ice' };
+  });
+  const hashN = (a, b, c) => { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+
   const frames = [];
   for (let f = 0; f < FRAMES; f++) {
     const ts = (f / FRAMES) * SECONDS;
@@ -332,6 +357,39 @@ function buildAnimation(base, FW, FH) {
     if (burstW >= 0) {
       const pulseBy = burstW < 0.15 ? 1 : burstW < 0.45 ? 2 : burstW < 0.7 ? 1 : 0;
       if (pulseBy) for (const [x, y] of crownCells) forCell(x, y, (i) => lift(i, pulseBy));
+    }
+
+    // Crown glow: a glint sweeps across it every 2 s and the gem breathes.
+    const breath = (Math.sin(ts * TAU / 2) + 1) / 2;
+    {
+      const gp = (ts % 2) / 2;
+      if (gp < 0.4) {
+        const line = -10 + (gp / 0.4) * (CROWN.x1 - CROWN.x0 + crownBase + 20);
+        for (const [x, y] of crownCells) { const d = Math.abs((x - CROWN.x0) + (crownBase - y) * 0.6 - line); if (d < 2.5) forCell(x, y, (i) => lift(i, d < 1 ? 2 : 1)); }
+      }
+      if (crownGem && breath > 0.5) for (const i of crownGem.cells) lift(i, 1);
+    }
+
+    // Behind the card: aura and the far half of the halo.
+    const reach = breath > 0.66 ? 3 : breath > 0.25 ? 2 : 1;
+    for (const a of auraCells) {
+      if (a.d > reach) continue;
+      if (a.d === reach && a.d > 1 && (a.x + a.y) % 2) continue;
+      const frosty = (ts > 0.6 && ts < 1.4) || (ts > 5.1 && ts < 5.6);
+      put(frame, CW, CH, a.x + ox, a.y + oy, frosty ? (a.d === 1 ? I(3) : I(2)) : a.d === 1 ? G(6) : a.d === 2 ? G(5) : G(4));
+    }
+    const fronts = [];
+    const drawAt = (front, x, y, k) => { if (front) fronts.push([x, y, k]); else put(frame, CW, CH, x + ox, y + oy, k); };
+    for (let k = 0; k < 5; k++) {
+      const a = ts / 2 * TAU + k * TAU / 5;
+      for (let j = 7; j >= 0; j--) {
+        const aj = a - j * 0.07;
+        const x = HALO.cx + Math.cos(aj) * HALO.rx, y = HALO.cy + Math.sin(aj) * HALO.ry;
+        drawAt(Math.sin(aj) > 0, x, y, j === 0 ? WH : G(j < 3 ? 6 : j < 6 ? 4 : 3));
+      }
+      const x = HALO.cx + Math.cos(a) * HALO.rx, y = HALO.cy + Math.sin(a) * HALO.ry, front = Math.sin(a) > 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) drawAt(front, x + dx, y + dy, G(6));
+      drawAt(front, x, y, WH);
     }
 
     // Compose the card.
@@ -413,6 +471,60 @@ function buildAnimation(base, FW, FH) {
     for (const { g, local } of chaseLit) {
       const s = local < 0.4 ? 1 : local < 0.9 ? 3 : local < 1.5 ? 4 : local < 1.9 ? 2 : 0;
       sparkle(frame, CW, CH, g.cx + ox + 2, g.cy + oy - 2, s, 'ice');
+    }
+    // Front half of the halo.
+    for (const [x, y, k] of fronts) put(frame, CW, CH, x + ox, y + oy, k);
+    // Coronation: a gold starburst, rings and a shower of spinning coins.
+    const cr = ts - CORONATION;
+    if (cr >= 0 && cr < 0.3) {
+      const u = cr / 0.3, R0 = 3 + easeOut(u) * 5 - u * u * 5;
+      for (let y = -9; y <= 9; y++) for (let x = -9; x <= 9; x++) { const d = Math.hypot(x, y); if (d <= R0) put(frame, CW, CH, gemX + x + ox, gemY + y + oy, d < R0 * 0.5 ? WH : d < R0 * 0.8 ? G(7) : G(6)); }
+    }
+    if (cr >= 0 && cr < 0.8) {
+      const u = cr / 0.8, grow = easeOut(Math.min(1, u / 0.2)), tail = Math.max(0, (u - 0.25) / 0.75);
+      for (const [dx, dy, len] of [[1, 0, 52], [-1, 0, 52], [0, -1, 36], [0, 1, 40], [1, -1, 24], [-1, -1, 24], [1, 1, 26], [-1, 1, 26]]) {
+        const L = len * grow;
+        for (let i = Math.floor(len * tail); i <= L; i++) {
+          const t = i / len;
+          if (t > 0.7 && i % 2) continue;
+          const k = t < 0.2 ? WH : t < 0.45 ? G(7) : t < 0.7 ? G(6) : G(4);
+          put(frame, CW, CH, gemX + dx * i + ox, gemY + dy * i + oy, k);
+          if (!dx || !dy) {
+            if (t < 0.6 && i > 2) for (const s2 of [-1, 1]) put(frame, CW, CH, gemX + dx * i + dy * s2 + ox, gemY + dy * i + dx * s2 + oy, t < 0.3 ? G(6) : G(4));
+            if (t < 0.3 && i > 4) for (const s2 of [-2, 2]) put(frame, CW, CH, gemX + dx * i + dy * s2 + ox, gemY + dy * i + dx * s2 + oy, G(3));
+          } else if (t < 0.5 && i > 1) { put(frame, CW, CH, gemX + dx * i + dx + ox, gemY + dy * i + oy, G(5)); put(frame, CW, CH, gemX + dx * i + ox, gemY + dy * i + dy + oy, G(5)); }
+        }
+      }
+      for (let k = 0; k < 8; k++) {
+        const a = (k + 0.5) * TAU / 8, len = 28 + (k % 3) * 6;
+        for (let i = Math.floor(len * tail); i <= len * grow; i++) { const t = i / len; if (t > 0.5 && i % 2) continue; put(frame, CW, CH, gemX + Math.cos(a) * i + ox, gemY + Math.sin(a) * i + oy, t < 0.35 ? G(7) : t < 0.7 ? I(3) : I(2)); }
+      }
+    }
+    if (cr >= 0 && cr < 0.95) {
+      const u = cr / 0.95, r1 = Math.round(3 + easeOut(u) * 56), r2 = Math.round(2 + easeOut(u) * 38);
+      const ring = (r, k, dither, shape) => (shape ? ringPoints(r, false) : circlePoints(r, 'circle')).forEach(([dx, dy], n) => { if (dither && n % 2) return; put(frame, CW, CH, gemX + dx + ox, gemY + dy + oy, k); });
+      ring(r1, u < 0.3 ? WH : G(6), u > 0.6);
+      if (u < 0.7) ring(r1 - 1, u < 0.3 ? G(7) : G(4), u > 0.4);
+      if (u < 0.45) ring(r1 - 2, G(3), true);
+      ring(r2, u < 0.3 ? I(4) : I(3), u > 0.5, true);
+      if (u < 0.55) ring(r2 - 1, I(1), u > 0.3, true);
+    }
+    if (cr >= 0) for (const c of coins) {
+      if (cr > c.life) continue;
+      const kk = 2.4, e = (1 - Math.exp(-kk * cr)) / kk;
+      const x = gemX + c.vx * e, y = gemY + c.vy * e + 16 * cr * cr;
+      const age = cr / c.life;
+      if (age > 0.6 && hashN(c.id, 0, Math.floor(cr * 10)) < (age - 0.6) * 2.5) continue;
+      if (c.coin) {
+        // A coin spins: full face, edge-on, full face.
+        const phase = Math.floor((cr * 8 + c.spin)) % 4;
+        const face = c.tint === 'gold' ? [G(7), G(5), G(3)] : [I(4), I(2), idx('gem', 1)];
+        if (phase === 1 || phase === 3) { put(frame, CW, CH, x + ox, y + oy, face[0]); put(frame, CW, CH, x + ox, y + 1 + oy, face[1]); }
+        else { put(frame, CW, CH, x + ox, y + oy, face[0]); put(frame, CW, CH, x + 1 + ox, y + oy, face[1]); put(frame, CW, CH, x + ox, y + 1 + oy, face[1]); put(frame, CW, CH, x + 1 + ox, y + 1 + oy, face[2]); }
+      } else {
+        const tw = hashN(c.id, 1, Math.floor(cr * 12)) < 0.3;
+        put(frame, CW, CH, x + ox, y + oy, tw ? WH : c.tint === 'gold' ? G(6) : I(3));
+      }
     }
     frames.push(frame);
   }

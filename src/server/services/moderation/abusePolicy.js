@@ -23,16 +23,13 @@ const HTTP_BUCKETS = {
 const HTTP_ROUTE_POLICIES = {
   "GET /username-availability": { bucket: "medium", enforceActiveSuspension: false },
   "POST /signup": { bucket: "strict" },
-  "POST /login": { bucket: "strict" },
+  "POST /login": { bucket: "strict", allowBanned: true },
   "POST /upgrade": { bucket: "strict", countFailuresOnly: true },
   "POST /buy": { bucket: "strict" },
   "POST /profile/change-username": { bucket: "strict" },
   "POST /profile/change-password": { bucket: "strict" },
-  "POST /api/admin/map-editor/save-file": { bucket: "strict" },
-  "POST /api/admin/user-search": { bucket: "strict" },
-  "POST /api/admin/user-update": { bucket: "strict" },
-  "POST /api/admin/runtime": { bucket: "strict" },
-  "POST /api/admin/shop/refresh": { bucket: "strict" },
+  // Admin endpoints enforce requireAdminUser in their route handlers and stay
+  // outside gameplay request counters and matchmaking suspensions.
   "POST /api/shop/claim-daily": { bucket: "strict" },
   "POST /api/shop/purchase": { bucket: "strict" },
   "POST /api/shop/checkout-session": { bucket: "strict" },

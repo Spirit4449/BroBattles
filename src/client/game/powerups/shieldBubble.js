@@ -1,40 +1,16 @@
-// Shared spherical shell for spawn protection and Draven's Inferno shield.
+import { PIXEL_FX_SIZE, fillPixelBlob, pixelBlobDepthAt, rasterizePixelBlob } from "./pixelShapes";
+
+// Shell depth in cells: the outline plus the glassy bands inside it.
+const RIM_CELLS = 4;
+const SHELL_CELLS = 7;
+const SHELL_SHADES = [0x7d8494, 0xb4bac6, 0xe4e8ef];
+
+// Shared pixel-art shell for spawn protection and Draven's Inferno shield,
+// rasterized onto the same world grid as the powerup membranes.
 export function drawShieldBubble(g, spr, { x, y, radius: r }, nowSec, remainingMs, reflections) {
   const breathe = 0.5 + 0.5 * Math.sin(nowSec * 2.4);
-  const shieldRadius = Math.max(22, r + 9 + breathe * 1.2);
+  const shieldRadius = Math.max(24, r + 11 + breathe * 1.2);
   const opacity = Math.min(1, remainingMs / 180);
-  // Shade the curved shell from upper-left light to lower-right shadow.
-  // Keep the center clear; most of the volume lives near the silhouette.
-  g.fillStyle(0xffffff, (0.1 + breathe * 0.015) * opacity);
-  g.fillCircle(x, y, shieldRadius);
-  const shellWidth = Math.min(23, shieldRadius * 0.44);
-  for (let segment = 0; segment < 48; segment += 1) {
-    const start = segment / 48 * Math.PI * 2;
-    const end = (segment + 1) / 48 * Math.PI * 2;
-    const light = (1 + Math.cos((start + end) / 2 - Math.PI * 1.25)) / 2;
-    const shade = Math.round(125 + 130 * light);
-    const shellColor = (shade << 16) | (shade << 8) | shade;
-    for (let band = 0; band < 4; band += 1) {
-      const outer = shieldRadius - band * shellWidth / 4;
-      const inner = outer - shellWidth / 4;
-      g.fillStyle(shellColor,
-        (0.18 + Math.abs(light - 0.5) * 0.72) *
-        (1 - band / 4) * opacity);
-      g.beginPath();
-      g.moveTo(x + Math.cos(start) * outer, y + Math.sin(start) * outer);
-      g.lineTo(x + Math.cos(end) * outer, y + Math.sin(end) * outer);
-      g.lineTo(x + Math.cos(end) * inner, y + Math.sin(end) * inner);
-      g.lineTo(x + Math.cos(start) * inner, y + Math.sin(start) * inner);
-      g.closePath();
-      g.fillPath();
-    }
-  }
-  g.lineStyle(9, 0xffffff, 0.09 * opacity);
-  g.strokeCircle(x, y, shieldRadius);
-  g.lineStyle(5.5, 0xbfc3cb, 0.68 * opacity);
-  g.strokeCircle(x, y, shieldRadius);
-  g.lineStyle(3.5, 0xffffff, (0.92 + breathe * 0.06) * opacity);
-  g.strokeCircle(x - 0.7, y - 0.9, shieldRadius);
 
   // Track rendered movement so local and interpolated remote players both
   // shift the reflection, easing it back into place when they stop.
@@ -51,22 +27,69 @@ export function drawShieldBubble(g, spr, { x, y, radius: r }, nowSec, remainingM
   shine.y = y;
   shine.time = nowSec;
   const drift = shine.dx * 0.2 - shine.dy * 0.12;
-  const reflection = (radius, start, end, width, alpha) => {
-    g.lineStyle(width, 0xffffff, alpha * opacity);
-    g.beginPath();
-    g.arc(x, y, radius, start + drift, end + drift);
-    g.strokePath();
+
+  const points = [];
+  for (let i = 0; i < 36; i += 1) {
+    const a = (i / 36) * Math.PI * 2;
+    points.push({ x: x + Math.cos(a) * shieldRadius, y: y + Math.sin(a) * shieldRadius });
+  }
+  const blob = rasterizePixelBlob(points, { ringCount: RIM_CELLS + SHELL_CELLS });
+  // One-cell dark line just outside the rim so the bubble reads on bright maps.
+  const outline = rasterizePixelBlob(points, { ringCount: 1, grow: PIXEL_FX_SIZE * 2 });
+  // 0 at the lower-right, 1 at the upper-left.
+  const lightAt = (cx, cy) => (1 + Math.cos(Math.atan2(cy - y, cx - x) - Math.PI * 1.25)) / 2;
+  const angleIn = (cx, cy, start, end) => {
+    let a = Math.atan2(cy - y, cx - x) - drift;
+    if (a < 0) a += Math.PI * 2;
+    return a >= start && a <= end;
   };
-  reflection(shieldRadius, Math.PI * 1.04, Math.PI * 1.7, 4.5, 1);
-  reflection(shieldRadius - 7, Math.PI * 1.12, Math.PI * 1.65, 8, 0.25);
-  reflection(shieldRadius - 6, Math.PI * 1.16, Math.PI * 1.59, 4, 0.95);
-  reflection(shieldRadius - 12, Math.PI * 1.24, Math.PI * 1.48, 2.5, 0.6);
-  reflection(shieldRadius - 4, Math.PI * 0.12, Math.PI * 0.37, 2.5, 0.65);
-  const shineX = x - shieldRadius * (0.3 + shine.dx * 0.09);
-  const shineY = y - shieldRadius * (0.47 + shine.dy * 0.07);
-  g.fillStyle(0xffffff, 0.65 * opacity);
-  g.fillEllipse(shineX, shineY, shieldRadius * 0.3, shieldRadius * 0.11);
+
+  // Mostly clear centre; the volume lives in banded shading near the rim.
+  fillPixelBlob(g, blob, 0xffffff, (0.12 + breathe * 0.02) * opacity, (d) => d > RIM_CELLS);
+  for (let band = 1; band <= SHELL_CELLS; band += 1) {
+    const depth = RIM_CELLS + band;
+    const fade = 1 - (band - 1) / SHELL_CELLS;
+    SHELL_SHADES.forEach((shade, level) => {
+      const alpha = (0.22 + Math.abs(level - 1) * 0.2) * fade * opacity;
+      fillPixelBlob(g, blob, shade, alpha, (d, cx, cy) =>
+        d === depth && Math.min(2, Math.floor(lightAt(cx, cy) * 3)) === level,
+      );
+    });
+  }
+
+  // Stepped rim, lit at the upper-left and shaded at the lower-right.
+  fillPixelBlob(g, outline, 0x1c2230, 0.4 * opacity, (d, cx, cy) =>
+    d === 1 && pixelBlobDepthAt(blob, cx, cy) === 0,
+  );
+  fillPixelBlob(g, blob, 0xc9ced8, 0.92 * opacity, (d) => d <= RIM_CELLS);
+  fillPixelBlob(g, blob, 0xffffff, (0.92 + breathe * 0.08) * opacity, (d, cx, cy) =>
+    d <= 2 && lightAt(cx, cy) > 0.35,
+  );
+  fillPixelBlob(g, blob, 0x5f6675, 0.6 * opacity, (d, cx, cy) =>
+    d <= 2 && lightAt(cx, cy) < 0.15,
+  );
+  fillPixelBlob(g, blob, 0xffffff, 0.5 * opacity, (d) => d === RIM_CELLS);
+
+  // Curved reflection streaks that slide around the shell with movement.
+  fillPixelBlob(g, blob, 0xffffff, 0.95 * opacity, (d, cx, cy) =>
+    d === RIM_CELLS + 2 && angleIn(cx, cy, Math.PI * 1.14, Math.PI * 1.6),
+  );
+  fillPixelBlob(g, blob, 0xffffff, 0.45 * opacity, (d, cx, cy) =>
+    d === RIM_CELLS + 3 && angleIn(cx, cy, Math.PI * 1.1, Math.PI * 1.66),
+  );
+  fillPixelBlob(g, blob, 0xffffff, 0.6 * opacity, (d, cx, cy) =>
+    d === RIM_CELLS + 1 && angleIn(cx, cy, Math.PI * 0.12, Math.PI * 0.36),
+  );
+
+  // Blocky specular glint, snapped to the grid.
+  const cell = PIXEL_FX_SIZE;
+  const snap = (value) => Math.round(value / cell) * cell;
+  const shineX = snap(x - shieldRadius * (0.4 + shine.dx * 0.09));
+  const shineY = snap(y - shieldRadius * (0.64 + shine.dy * 0.07));
+  const shineCells = Math.max(3, Math.round((shieldRadius * 0.26) / cell));
   g.fillStyle(0xffffff, 0.9 * opacity);
-  g.fillEllipse(shineX - shieldRadius * 0.025, shineY - shieldRadius * 0.012,
-    shieldRadius * 0.19, shieldRadius * 0.045);
+  g.fillRect(shineX + cell, shineY, shineCells * cell, cell);
+  g.fillRect(shineX, shineY + cell, cell, cell * 2);
+  g.fillStyle(0xffffff, 0.45 * opacity);
+  g.fillRect(shineX + cell, shineY + cell, Math.ceil(shineCells / 2) * cell, cell);
 }

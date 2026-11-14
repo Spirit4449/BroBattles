@@ -1,36 +1,23 @@
-Guests can jump in right away, but a guest account usually expires after about two hours. Sign up from that same session to keep its progress.
+You can try Bro Battles as a guest, but a guest account usually expires after about two hours. Create an account from that same browser session to keep its progress. Clearing cookies or switching browsers before signing up can leave you without access to the guest session.
 
-Choose a unique username and a password you do not use elsewhere. Signup also requires an email verification code; your guest session stays active until verification completes. Do not put your real name or contact information in your username.
+## Create an account
 
-## Trouble signing in?
+Choose a unique username, a password you don't use elsewhere, and an email address. Enter the verification code sent to your email to finish signup. Your guest session stays active while you verify. Don't use your real name or contact details as your username.
 
-Check your username and password. There is currently no automated email-based password recovery. Contact **support@brobattles.dev** for assistance; recovery depends on whether ownership can be established.
+## Email and password
 
-Never send your password. If you can sign in, use [My requests](/help/requests) to contact support.
+To add or change your email, open {path:Profile > Account}, enter the address, and verify it with the six-digit code. Codes expire after ten minutes. You can normally resend after one minute; check your spam folder if nothing arrives.
 
-## Guest account or permanent account?
+There is currently no automatic email password reset. If you can't sign in, email **support@brobattles.dev** with your username, when you last had access, and what happened. Support may need to verify ownership and cannot guarantee recovery.
 
-A guest is tied to a temporary browser session. It is useful for trying the game, but it is not a backup. A permanent account lets you sign in again with your username and password.
-
-Signing up while you are a guest converts that account. Do it in the same browser session so you save the progress you meant to keep.
-
-## Keep your account safe
-
-- Use a unique password and keep it private.
-- Check that you are on the genuine game site before signing in.
-- Sign out on shared computers. The account menu includes **Sign out**.
-- Avoid offers to trade accounts, generate free currency, or recover accounts in exchange for your password.
-
-## What to include in an access request
-
-Email support with the affected username, the approximate time you last had access, and a clear description of the problem. If the issue involves a purchase, an order reference can help. Do not send your password, complete card details, or unsolicited identity documents.
-
-Support cannot promise recovery without enough evidence that the account is yours. There is no automatic email reset yet, and changing browser settings will not reset a forgotten password.
-
-## Add an email address
-
-Open **Profile → Account → Add Email Address**, enter your email, and choose **Send code**. Enter the six-digit code from Bro Battles and choose **Verify email**. The code expires after ten minutes. You can resend after one minute. Check spam if it does not arrive. Email verification does not enable automatic password recovery.
+> [!WARNING]
+> Never send your password or verification code, not even to support.
 
 ## Change your name
 
-Permanent accounts can change their name from **Profile → Account → Change Name**. Each change costs **50 gems**. After changing your name, wait **one calendar month** before changing it again. The form shows when your next change is available. Choosing your name during signup is free.
+Open {path:Profile > Account > Change Name}. A change costs {gems:50}, and you must wait one calendar month before changing it again. The form shows your next eligible date.
+
+> [!NOTE]
+> Your signup name is free. Only later changes cost gems.
+
+Use a unique password, sign out on shared computers, and ignore offers of free currency or account recovery that ask for your credentials.
