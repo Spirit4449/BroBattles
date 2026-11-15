@@ -8,7 +8,10 @@ import { decodeWire } from "../../../shared/networkWire.js";
 // latency analysis happen offline in scripts/dev/net-report.mjs so they can
 // change without a client rebuild.
 import { readNetTraceSpec } from "../../lib/netTraceSpec";
-import { setShotTraceHook } from "../characters/shared/shotPrediction";
+import { setShotTraceHook, localShotTarget, displayedShotTargets } from "../characters/shared/shotPrediction";
+import { serverClock } from "./serverClock";
+import { createVictimScreenTracker, circleBoxGap, boxGap } from "./victimScreenTrace";
+import { insetBounds } from "../../../shared/characters/sparrowProjectile";
 
 const UPLOAD_MS = 2000;
 const DIAG_MS = 1000;
@@ -23,7 +26,7 @@ const ATTACK_EVENTS = new Set(["game:action", "game:special"]);
 const MAX_COMBAT_PER_BATCH = 600;
 
 export function installNetTrace({ socket, getLocal, getRemotes, getUsername, getSnapshotDiagnostics,
-  getCorrectionDiagnostics, getClockDiagnostics, serverNow, getCharacter, getEnemies, toScreen }) {
+  getCorrectionDiagnostics, getClockDiagnostics, serverNow, getCharacter, getEnemies, toScreen, getFlags }) {
   const spec = readNetTraceSpec();
   if (!spec || active) return null;
   const state = {
@@ -77,13 +80,35 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
       Number.isFinite(a.appliedDamage) ? a.appliedDamage : null, a.id ?? a.requestId ?? a.instanceId ?? null,
       a.accepted === false ? 0 : a.accepted === true ? 1 : null, a.reason ?? null]);
   };
-  const onHealth = (d) => combat([r1(performance.now()), "hp", d?.username ?? null, d?.health ?? null, d?.cause ?? null]);
+  // Victim screen truth (victimScreenTrace.js): enemy shots as drawn against
+  // this player's drawn body, and the hits this player takes.
+  const bestRtt = () => serverClock.bestSample?.()?.rtt ?? null;
+  const victim = createVictimScreenTracker({ row: combat, lead: (rewindMs) => ({
+    rtt2: bestRtt() == null ? null : bestRtt() / 2, playout: serverClock.playoutMs,
+    target: serverClock.enemyLeadMs?.(rewindMs) ?? null, uplink: serverClock.uplinkMs?.() ?? null }) });
+  state.victim = victim;
+  const lastHealth = new Map();
+  const onHealth = (d) => {
+    const t = performance.now();
+    combat([r1(t), "hp", d?.username ?? null, d?.health ?? null, d?.cause ?? null, d?.delivery ?? null, d?.pid ?? null, d?.by ?? null]);
+    const name = d?.username, previous = lastHealth.get(name);
+    lastHealth.set(name, d?.health);
+    if (name !== me() || d?.cause !== "combat" || !(d?.health < (previous ?? Infinity))) return;
+    let attachedGap = null;
+    if (d.delivery === "attached" && d.by) {
+      const attacker = displayedShotTargets().find((x) => x.name === d.by);
+      attachedGap = boxGap(attacker?.bounds, localShotTarget()?.bounds);
+    }
+    const rtt = bestRtt();
+    victim.hit(t, { delivery: d.delivery ?? null, by: d.by ?? null, pid: d.pid ?? null,
+      registeredAt: t - (rtt == null ? 0 : rtt / 2), attachedGap });
+  };
   const onSuper = (d) => { if (d?.username === me()) combat([r1(performance.now()), "sp", d.charge ?? null, d.maxCharge ?? null]); };
   const onSpecial = (d) => {
     const name = d?.username ?? d?.playerName ?? d?.name ?? null;
     if (name === me()) combat([r1(performance.now()), "rx", "player:special", name, null, null, d?.id ?? d?.requestId ?? null, null, null]);
   };
-  setShotTraceHook({ prediction: noteShotPrediction, withdrawn: noteShotWithdrawn });
+  setShotTraceHook({ prediction: noteShotPrediction, withdrawn: noteShotWithdrawn, enemyShot: noteEnemyShot });
   const originalEmit = socket.emit;
   socket.emit = function tracedEmit(event, payload, ...rest) {
     if (ATTACK_EVENTS.has(event)) {
@@ -100,7 +125,7 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
     "player:special": onSpecial,
     "game:correction": onCorrection,
     "game:start": () => event("start"),
-    "game:over": () => { event("over"); upload(); },
+    "game:over": () => { event("over"); victim.flush(performance.now()); upload(); },
     "player:dead": (d) => event("dead", { name: d?.username }),
     "player:respawn": (d) => event("respawn", { name: d?.username }),
     disconnect: (reason) => event("disconnect", { reason }),
@@ -126,6 +151,7 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
     const dt = state.lastFrameAt == null ? 0 : t - state.lastFrameAt;
     state.lastFrameAt = t;
     state.totals.frames++;
+    victim.sweep(t);
     if (state.frames.length >= MAX_FRAMES_PER_BATCH) return;
     const local = getLocal?.();
     const row = [r1(t), r1(dt), local ? r1(local.x) : null, local ? r1(local.y) : null,
@@ -159,7 +185,10 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
     if (!socket.connected) return;
     const batch = {
       seq: state.seq++, user: getUsername?.() || null, sentAt: r1(performance.now()),
-      serverNowAtSend: r1(serverNow?.(performance.now())), names: state.names.slice(),
+      serverNowAtSend: r1(serverNow?.(performance.now())),
+      // Date.now() - performance.now(): maps the server's victim timestamps
+      // (hit/near `vTs`, this client's Date.now()) onto these rows.
+      dateOffset: r1(Date.now() - performance.now()), names: state.names.slice(),
       frames: state.frames.splice(0), snaps: state.snaps.splice(0), decoded: state.decoded.splice(0),
       corrections: state.corrections.splice(0), keys: state.keys.splice(0), diag: state.diag.splice(0),
       events: state.events.splice(0), combat: state.combat.splice(0), character: getCharacter?.() || null,
@@ -194,8 +223,12 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
     },
   };
   event("install", { userAgent: navigator.userAgent, dpr: window.devicePixelRatio });
+  // The A/B switches this page actually runs with (lib/netFlags.js), so a run
+  // can prove a flag took effect.
+  try { event("flags", getFlags?.() || {}); } catch (_) { event("flags", { error: true }); }
 
   return () => {
+    victim.flush(performance.now());
     upload();
     cancelAnimationFrame(state.rafId);
     state.timers.forEach(clearInterval);
@@ -213,13 +246,24 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
 
 // A predicted hit the shooter drew against a displayed enemy. Repeated queries
 // for the same target within a few frames are one prediction.
-function noteShotPrediction(targetName) {
+// Rows: [t, "pred", target, request/projectile id, contact x, y, delivery].
+function noteShotPrediction(targetName, id = null, x = null, y = null, delivery = null) {
   if (!active || !targetName) return;
   const t = performance.now();
   const last = active.lastPrediction;
   if (last && last.name === targetName && t - last.t < 120) return;
   active.lastPrediction = { name: targetName, t };
-  active.combatRow?.([r1(t), "pred", String(targetName).slice(0, 40)]);
+  active.combatRow?.([r1(t), "pred", String(targetName).slice(0, 40), id == null ? null : String(id).slice(0, 60), r1(x), r1(y), delivery]);
+}
+
+// An enemy released shot as drawn this frame (shotPrediction.traceEnemyShot).
+function noteEnemyShot(id, shooter, character, x, y, radius, leadMs, rewindMs, held, age) {
+  if (!active?.victim || !Number.isFinite(x) || !Number.isFinite(y)) return;
+  const body = localShotTarget();
+  if (!body) return;
+  // Sparrow arrows hit the inset body on the server (and stop on it here).
+  const bounds = character === "sparrow" ? insetBounds(body.bounds) : body.bounds;
+  active.victim.note(performance.now(), id, shooter, character, circleBoxGap(x, y, radius, bounds), leadMs, rewindMs, held, age);
 }
 
 // A predicted hit the server did not confirm in time and the client took back.

@@ -18,10 +18,12 @@ import { serverClock } from "../../match/serverClock";
 //    window is withdrawn by fading, never by flying on.
 
 let viewMono = null;
+// The render delay (interpolation buffer) behind the snapshots, at viewMono.
+let viewDelayMs = null;
 // Production network tracing (match/netTrace.js) listens for predicted hits and
 // withdrawals here; null unless a traced tab installed it.
 let traceHook = null;
-let roster = { localUsername: null, opponentPlayersRef: null };
+let roster = { localUsername: null, opponentPlayersRef: null, localPlayer: null };
 // Plays a character's hit sound at a sprite; installed with the roster.
 let playHitSound = null;
 // Plays the shared hit feedback on a struck sprite; installed with the roster.
@@ -32,19 +34,25 @@ const predictedHits = [];
 const staticTargets = new Map();
 const blockerSources = new Map();
 
-// The render timeline's current time (server simulation clock).
-export function noteRemoteView(targetMono) {
-  if (Number.isFinite(targetMono)) viewMono = targetMono;
+// The render timeline's current time (server simulation clock), and how far
+// it is held behind the snapshots received (the render buffer).
+export function noteRemoteView(targetMono, delayMs = null) {
+  if (!Number.isFinite(targetMono)) return;
+  viewMono = targetMono;
+  viewDelayMs = Number.isFinite(delayMs) ? delayMs : null;
 }
 
+// `viewDelayMs` lets the server honour the render-buffer part of the rewind
+// whatever the delivery's cap on the network part (attackDelivery.js).
 export function withShotView(request) {
   if (!request || typeof request !== "object" || !Number.isFinite(viewMono)) return request;
-  return { ...request, viewMono };
+  return viewDelayMs == null ? { ...request, viewMono } : { ...request, viewMono, viewDelayMs };
 }
 
 export function trackShotTargets(context = {}) {
   roster = { localUsername: context.localUsername ?? roster.localUsername,
-    opponentPlayersRef: context.opponentPlayersRef ?? roster.opponentPlayersRef };
+    opponentPlayersRef: context.opponentPlayersRef ?? roster.opponentPlayersRef,
+    localPlayer: context.localPlayer ?? roster.localPlayer };
   if (context.playHitSound) playHitSound = context.playHitSound;
   if (context.playHitFeedback) playHitFeedback = context.playHitFeedback;
 }
@@ -90,6 +98,87 @@ export function isLocalShooter(name) {
   return !!name && name === roster.localUsername;
 }
 
+// A shot that can damage this player: fired by an opponent. Enemy released
+// shots are drawn ahead (CombatClock.enemyLeadMs) and stop on this player's
+// drawn body until the server's verdict.
+export function isEnemyShooter(name) {
+  return !!name && name !== roster.localUsername && !!roster.opponentPlayersRef?.[name];
+}
+
+// This player's own body as drawn, with the server's hit box.
+export function localShotTarget() {
+  const sprite = roster.localPlayer, character = sprite?._bbCharacter;
+  // A dead player's body takes no more shots (the server's do not hit it).
+  if (!roster.localUsername || !character || !sprite?.active || sprite.visible === false || sprite._deathPresentationActive) return null;
+  if (!Number.isFinite(sprite.x) || !Number.isFinite(sprite.y)) return null;
+  return { name: roster.localUsername, sprite, bounds: characterHitBounds(character, sprite.x, sprite.y,
+    { flip: !!sprite.flipX, ducking: !!sprite._ducking }) };
+}
+
+// This player's drawn body over the last second, recorded once a frame after
+// it moved (game.js calls noteLocalBodyFrame after sending the frame's input).
+// The server tests an enemy shot of age g against the frame this player drew
+// when the fully led flight was at g; while the lead is still ramping in (or
+// before the shot reached this screen at all, at close range) that frame is
+// in the past by the lead not yet shown (victimLagMs).
+const BODY_HISTORY_MS = 1000;
+const bodyHistory = [];
+export function noteLocalBodyFrame(now = performance.now()) {
+  const target = localShotTarget();
+  // Dead or respawning: the server restarts its history too.
+  if (!target) { bodyHistory.length = 0; return; }
+  bodyHistory.push({ t: now, x: target.sprite.x, y: target.sprite.y, bounds: target.bounds });
+  while (bodyHistory.length > 2 && bodyHistory[0].t < now - BODY_HISTORY_MS) bodyHistory.shift();
+}
+
+// The lead an enemy shot still lacks this frame: its target lead minus the
+// lead shown (negative shown leads start a flight in the hand).
+export function victimLagMs(targetLeadMs, shownLeadMs) {
+  const lag = (Number(targetLeadMs) || 0) - (Number(shownLeadMs) || 0);
+  return Number.isFinite(lag) ? Math.max(0, Math.min(BODY_HISTORY_MS, lag)) : 0;
+}
+
+function localBodyAt(lagMs, now) {
+  const live = localShotTarget();
+  if (!live) return null;
+  if (!(lagMs > 2) || !bodyHistory.length) return { ...live, origin: { x: live.sprite.x, y: live.sprite.y } };
+  const at = now - lagMs;
+  let frame = bodyHistory[0];
+  for (const entry of bodyHistory) { if (entry.t > at) break; frame = entry; }
+  return { name: live.name, sprite: live.sprite, bounds: frame.bounds, origin: { x: frame.x, y: frame.y } };
+}
+
+// Where a circle moving from a to b first meets this player's body as drawn
+// `lagMs` ago (now by default), or null. `spanMs`: the flight time the
+// segment covers; its earlier points were tested by the server against
+// correspondingly earlier frames, so a long segment (the first frame of a
+// shot, a catch-up) is split. `origin` is where the tested body was drawn:
+// an offset from it places the shot on the body as drawn now.
+export function localBodyContact(a, b, radius, { inset = false, lagMs = 0, spanMs = 0, now = performance.now() } = {}) {
+  if (![a?.x, a?.y, b?.x, b?.y].every(Number.isFinite)) return null;
+  const span = Number(spanMs) > 0 ? Math.min(BODY_HISTORY_MS, Number(spanMs)) : 0;
+  const pieces = span > 8 && bodyHistory.length ? Math.min(8, Math.ceil(span / 8)) : 1;
+  const r = Math.max(0, Number(radius) || 0);
+  for (let i = 1; i <= pieces; i++) {
+    const f0 = (i - 1) / pieces, f1 = i / pieces;
+    const target = localBodyAt((Number(lagMs) || 0) + (1 - f1) * span, now);
+    if (!target) return null;
+    const from = { x: a.x + (b.x - a.x) * f0, y: a.y + (b.y - a.y) * f0 }, to = { x: a.x + (b.x - a.x) * f1, y: a.y + (b.y - a.y) * f1 };
+    const hit = firstTargetContact(from, to, r, [target], { inset });
+    if (hit) return { ...hit, t: f0 + (f1 - f0) * hit.t, origin: target.origin };
+  }
+  return null;
+}
+
+// How long an enemy shot embedded in this player's body waits for the
+// server before it is withdrawn: the server tests that frame `leadMs` (the
+// lead shown at the contact) later, and its verdict takes a downlink.
+export const VICTIM_CONFIRM_MARGIN_MS = 100;
+export function victimHoldWindowMs(leadMs = 0) {
+  const best = serverClock.bestSample?.();
+  return Math.min(900, Math.max(0, Number(leadMs) || 0) + (best ? best.rtt / 2 : 75) + VICTIM_CONFIRM_MARGIN_MS);
+}
+
 // Enemies as this player currently sees them, with the server's hit boxes.
 export function displayedShotTargets() {
   const targets = [];
@@ -106,16 +195,17 @@ export function displayedShotTargets() {
 
 // Earliest displayed enemy a circle touches moving from a to b, or null.
 // `skip` holds names already struck by a piercing shot.
-export function predictShotContact(a, b, radius, { inset = false, skip = null } = {}) {
+// `traceId` (the projectile or request id) only labels production traces.
+export function predictShotContact(a, b, radius, { inset = false, skip = null, traceId = null } = {}) {
   if (![a?.x, a?.y, b?.x, b?.y].every(Number.isFinite)) return null;
   const contact = firstTargetContact(a, b, Math.max(0, Number(radius) || 0), displayedShotTargets(), { inset, skip });
-  if (traceHook && contact?.target?.name) traceHook.prediction?.(contact.target.name);
+  if (traceHook && contact?.target?.name) traceHook.prediction?.(contact.target.name, traceId, contact.x, contact.y, "released");
   return contact;
 }
 
 // Displayed targets an attached attack's shapes touch, skipping `skip`, each
 // with the point drawn as struck (the target's centre).
-export function predictAttachedContacts(shapes, { skip = null } = {}) {
+export function predictAttachedContacts(shapes, { skip = null, traceId = null } = {}) {
   if (!shapes?.length) return [];
   const hits = [];
   for (const target of displayedShotTargets()) {
@@ -125,7 +215,7 @@ export function predictAttachedContacts(shapes, { skip = null } = {}) {
     const reach = target.sprite ? 24 : 24 + (bounds.right - bounds.left) / 2;
     if (!shapes.some((shape) => shapeTouches(shape, bounds, { reach }))) continue;
     hits.push({ target, x: (bounds.left + bounds.right) / 2, y: (bounds.top + bounds.bottom) / 2 });
-    traceHook?.prediction?.(target.name);
+    traceHook?.prediction?.(target.name, traceId, hits[hits.length - 1].x, hits[hits.length - 1].y, "attached");
   }
   return hits;
 }
@@ -197,6 +287,19 @@ export function setShotTraceHook(hook) {
   traceHook = hook || null;
 }
 
+// Victim screen truth for production tracing (match/netTrace.js): each frame
+// an enemy released shot that can damage this player is drawn, its id,
+// shooter, the drawn collision circle, the lead it is drawn with, its view
+// rewind, whether it is held on this player's body and its flight age (server
+// age plus the lead shown; while held, the age its flight would have).
+// Callers check enemyShotTraced() first, so an untraced tab computes nothing.
+export function enemyShotTraced() {
+  return !!traceHook?.enemyShot;
+}
+export function traceEnemyShot(id, shooter, character, x, y, radius, leadMs, rewindMs, held, age = null) {
+  traceHook?.enemyShot?.(id, shooter, character, x, y, radius, leadMs, rewindMs, held, age);
+}
+
 // A predicted hit the shooter takes back because the server did not confirm it.
 export function noteShotWithdrawn(kind, id = null) {
   traceHook?.withdrawn?.(kind, id);
@@ -204,8 +307,9 @@ export function noteShotWithdrawn(kind, id = null) {
 
 export function resetShotPrediction() {
   viewMono = null;
-  roster = { localUsername: null, opponentPlayersRef: null };
+  roster = { localUsername: null, opponentPlayersRef: null, localPlayer: null };
   staticTargets.clear();
   blockerSources.clear();
+  bodyHistory.length = 0;
   predictedHits.length = 0;
 }

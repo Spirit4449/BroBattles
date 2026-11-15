@@ -9,11 +9,12 @@ const code = babel.transformSync(fs.readFileSync(require.resolve('../../src/clie
 }).code;
 
 module.exports = function loadServerClock({ performance, setTimeout = () => 0, clearTimeout = () => {},
-  setInterval = () => 0, clearInterval = () => {} } = {}) {
+  setInterval = () => 0, clearInterval = () => {}, flags = {} } = {}) {
   const exports = {};
   vm.runInNewContext(code, {
     exports,
-    require: name => (name.includes('sparrowReplication') ? require('../../src/shared/characters/sparrowReplication') : null),
+    require: name => (name.includes('sparrowReplication') ? require('../../src/shared/characters/sparrowReplication')
+      : name.includes('netFlags') ? { readNetFlags: () => ({ ...flags }) } : null),
     performance, setTimeout, clearTimeout, setInterval, clearInterval,
   });
   return exports;

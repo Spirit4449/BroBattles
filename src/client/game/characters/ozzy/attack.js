@@ -16,7 +16,9 @@ import { playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
 import { launchTravel, launchDurationMs } from "../../../../shared/combat/launchRamp";
-import { predictShotContact, predictAttachedContacts, shotBlockerContact, notePredictedHit } from "../shared/shotPrediction";
+import { predictShotContact, predictAttachedContacts, shotBlockerContact, notePredictedHit, isEnemyShooter, localBodyContact, localShotTarget, victimHoldWindowMs, victimLagMs, enemyShotTraced, traceEnemyShot } from "../shared/shotPrediction";
+import { releasedFlightAge } from "../shared/projectileReplication";
+import { serverClock } from "../../match/serverClock";
 import { ozzyChargeShapes } from "../../../../shared/characters/ozzyCharge";
 
 const FIREBALL = getResolvedCharacterAttackConfig("ozzy", "fireball");
@@ -349,17 +351,44 @@ function spawnOzzyFireballProjectile(
     const flights = scene._ozzyFlights ||= new Map();
     flights.set(attackId, burst);
     sprite.once?.("destroy", () => { if (flights.get(attackId) === burst) flights.delete(attackId); });
+    // An echoed release carries its server launch time: the ball is drawn by
+    // server age (an enemy's led so it reaches this player when the server
+    // does) instead of from when the packet arrived. An enemy's ball that
+    // reaches this player's drawn body waits there for the server's burst.
+    const ageState = {};
+    const hasLaunch = !predictHits && Number.isFinite(Number(payload?.launchMono));
+    const enemy = hasLaunch && isEnemyShooter(shooter);
+    const aged = hasLaunch && releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) !== null;
+    let victimFrom = enemy ? fireballDamageCenter({ x: launchX, y: launchY }, angle, 0) : null, victimFromAge = 0;
+    let victimHold = null, victimReleased = false, resume = null;
 
     travelTween = scene.tweens.add({
       targets: { t: 0 },
       t: 1,
       ease: "Linear",
-      duration: travelDuration,
+      // Aged flights end by age, not by this tween.
+      duration: aged ? travelDuration + 3000 : travelDuration,
       onUpdate: (tween) => {
         if (!sprite.active) return;
         const progress = Number(tween?.targets?.[0]?.t) || 0;
-        const flown = travelDuration * progress;
-        let travel = progress >= 1 ? range : Math.min(range, launchTravel(flown, FIREBALL));
+        // Real time since release while the clock cannot place the ball.
+        let flown = (aged ? travelDuration + 3000 : travelDuration) * progress;
+        const age = aged ? releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) : null;
+        if (age !== null) flown = Math.min(travelDuration, age);
+        const done = aged ? flown >= travelDuration : progress >= 1;
+        if (victimHold) {
+          const body = victimHold.body;
+          if (body?.active) { sprite.x = body.x + victimHold.offset.x; sprite.y = body.y + victimHold.offset.y; }
+          if (enemyShotTraced()) traceEnemyShot(attackId, shooter, "ozzy", sprite.x, sprite.y, FIREBALL_COLLISION_RADIUS, ageState.shown || 0, payload.viewRewindMs, 1, age);
+          if (performance.now() - victimHold.at <= victimHold.windowMs || victimHold.fading) return;
+          // No burst from the server: withdrawn like an unconfirmed prediction
+          // (a server burst during the fade still plays).
+          victimHold.fading = true;
+          trail?.stop();
+          scene.tweens.add({ targets: sprite, alpha: 0, duration: 150, onComplete: () => { travelTween?.stop(); if (sprite.active) sprite.destroy(); debugFollower?.destroy(); } });
+          return;
+        }
+        let travel = done ? range : Math.min(range, launchTravel(flown, FIREBALL));
         // A wall built against the caster stops the fireball, as on the server.
         const blockedAt = shotBlockerContact(shooter,
           { x: launchX + forwardX * lastTravel, y: launchY + forwardY * lastTravel },
@@ -373,9 +402,33 @@ function spawnOzzyFireballProjectile(
         const settle = 1 - correction * correction * (3 - 2 * correction);
         sprite.x = launchX + forwardX * travel + normalX * bobOffset + offsetX * settle;
         sprite.y = launchY + forwardY * travel + normalY * bobOffset + offsetY * settle;
+        if (resume) {
+          const k = Math.min(1, (performance.now() - resume.at) / 150), keep = 1 - k * k * (3 - 2 * k);
+          sprite.x += (resume.x - sprite.x) * keep; sprite.y += (resume.y - sprite.y) * keep;
+          if (k >= 1) resume = null;
+        }
+        if (enemy && enemyShotTraced()) {
+          const drawn = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
+          traceEnemyShot(attackId, shooter, "ozzy", drawn.x, drawn.y, FIREBALL_COLLISION_RADIUS, ageState.shown || 0, payload.viewRewindMs, 0, age);
+        }
+        if (victimFrom && !victimReleased) {
+          const victimTo = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
+          // Tested like the server will: against this player's body as drawn
+          // when the fully led ball was here (victimLagMs).
+          const targetLead = serverClock.enemyLeadMs?.(payload.viewRewindMs) || 0;
+          const touch = localBodyContact(victimFrom, victimTo, FIREBALL_COLLISION_RADIUS, { lagMs: victimLagMs(targetLead, ageState.shown || 0),
+            spanMs: flown - victimFromAge });
+          victimFrom = victimTo; victimFromAge = flown;
+          if (touch && blockedAt === null) {
+            const body = touch.target.sprite, origin = touch.origin || body;
+            victimHold = { body, at: performance.now(), windowMs: victimHoldWindowMs(Math.max(0, ageState.shown || 0)),
+              offset: { x: sprite.x - origin.x, y: sprite.y - origin.y } };
+            return;
+          }
+        }
         if (damageFrom) {
           const damageTo = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
-          const hit = predictShotContact(damageFrom, damageTo, FIREBALL_COLLISION_RADIUS);
+          const hit = predictShotContact(damageFrom, damageTo, FIREBALL_COLLISION_RADIUS, { traceId: attackId });
           damageFrom = damageTo;
           if (hit) {
             // A struck player is the centre of the burst, as on the server;
@@ -388,7 +441,7 @@ function spawnOzzyFireballProjectile(
             return;
           }
         }
-        if (blockedAt !== null) burst(sprite.x, sprite.y);
+        if (blockedAt !== null || (aged && done)) burst(sprite.x, sprite.y);
       },
       onComplete: () => burst(sprite.x, sprite.y),
     });
@@ -464,10 +517,16 @@ function predictSplash(at, delivery) {
 // The server reports where a fireball burst; a flight still in the air stops
 // and explodes there. Flights that already burst (the caster's prediction, or
 // the end of range) ignore it.
+// A burst on this player is drawn on their body as drawn now: the server's
+// point is where the thrower saw them.
 export function burstOzzyFireball(scene, data) {
   const burst = scene?._ozzyFlights?.get(String(data?.id));
-  const x = Number(data?.x), y = Number(data?.y);
+  let x = Number(data?.x), y = Number(data?.y);
   if (!burst || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const self = data?.target ? localShotTarget() : null;
+  if (self && self.name === data.target) {
+    x = (self.bounds.left + self.bounds.right) / 2; y = (self.bounds.top + self.bounds.bottom) / 2;
+  }
   burst(x, y);
   return true;
 }
@@ -533,7 +592,7 @@ export function chargeOzzyFireball(scene, owner, payload = {}) {
     update(elapsed) {
       if (payload.predict && elapsed > 0) {
         const pose = { x: owner.x, y: owner.y, flip: direction < 0 };
-        const [hit] = predictAttachedContacts(ozzyChargeShapes(pose, elapsed));
+        const [hit] = predictAttachedContacts(ozzyChargeShapes(pose, elapsed), { traceId: flightId });
         if (hit) {
           const at = { x: hit.x, y: hit.y };
           predictSplash(at, "attached");

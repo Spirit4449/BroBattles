@@ -4,6 +4,7 @@
 // fails until it exists).
 const { DEFAULT_CHARACTER } = require('../characters/characterStats.js');
 const effects = require('./runtime/effects/effectManager.js');
+const { getResolvedCharacterAttackConfig } = require('../characters/characterTuning.js');
 
 const healthFraction = (player) =>
   Math.max(0, Math.min(1, Number(player.health) / Math.max(1, Number(player.maxHealth))));
@@ -17,9 +18,9 @@ const healthFraction = (player) =>
  *   map colliders, `powerScaled` varies launch speed with drag distance.
  * - aim.rangeFromRuntime: prefer the attack runtime range over aim defaultRange.
  * - aim.errorScale: { factor, add, max } widens profile aim error.
- * - clearShot: 'trajectory' reuses the aim's cover check; { radius,
- *   radiusFromAttack } checks a straight line using that attack's collision
- *   radius (or `radius`); absent means the shot is never blocked by cover.
+ * - clearShot: 'trajectory' reuses the aim's cover check; { radius } checks a
+ *   straight line of that collision radius; absent means the shot is never
+ *   blocked by cover.
  * - pressureShots: may fire near (not at) a target that has no clean line.
  * - lobLimited: high arcs are rate-limited unless the target is above.
  * - serverOwnsAmmo(room): the character's combat engine consumes ammo itself.
@@ -38,7 +39,7 @@ const PROFILES = {
   ninja: {
     spacing: { fraction: 0.68, cap: 330, clearance: 145, height: 35 },
     aim: { bodyCenter: true },
-    clearShot: { radiusFromAttack: 'ninja-shuriken', radius: 18 },
+    clearShot: { radius: getResolvedCharacterAttackConfig('ninja', 'returningShuriken').collisionRadius },
     pressureShots: true,
     serverOwnsAmmo: (room) => !!room.ninjaCombatVersion,
     superRange: 340,

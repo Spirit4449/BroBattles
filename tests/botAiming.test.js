@@ -319,36 +319,3 @@ test('sparrow varies power by distance without penalizing upward aim and sends i
   }
 });
 
-test('ninja bot shurikens stop when their swept path crosses a wall', () => {
-  const {
-    createRuntimeAttack,
-    tickRuntimeAttack,
-  } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
-  const ninja = {
-    ...player('ninja'),
-    participantId: 'wall-test-ninja',
-    name: 'Ninja Bot',
-    isAlive: true,
-    isBot: true,
-  };
-  const attack = createRuntimeAttack(ninja, {
-    type: 'ninja-shuriken',
-    id: 'wall-test-shuriken',
-    x: 0,
-    y: 200,
-    direction: 1,
-    angle: 0,
-    forwardDistance: 500,
-    outwardDuration: 380,
-  }, 1000);
-  const wallRoom = {
-    FIXED_DT_MS: 200,
-    players: new Map([[ninja.participantId, ninja]]),
-    geometry: {
-      colliders: [{ left: 100, right: 110, top: 0, bottom: 400 }],
-    },
-  };
-
-  assert.equal(tickRuntimeAttack(wallRoom, attack, 1200), true);
-  assert.ok(attack.x > 110, 'the test crosses the entire wall in one server tick');
-});

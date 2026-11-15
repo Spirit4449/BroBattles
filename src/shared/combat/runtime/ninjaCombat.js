@@ -6,6 +6,7 @@ const {sweep}=require('../../characters/sparrowProjectile');
 const {participantId,getParticipant}=require('./participants');
 const {timing}=require('./sparrowCombat.js');
 const {clampDeliveryRewind}=require('../attackDelivery');
+const {traceShotGaps}=require('./shotTrace.js');
 const {requestIdentity,withinRequestRate,unavailableReason,isCharged,spendShot,rememberRequest,enemyShotTargets}=require('./shotRequests.js');
 function initialize(room){room.ninjaCombatVersion=model.VERSION;room._ninja={active:new Map(),pending:[],requests:new Map(),terminals:[]};}
 function emit(room,p,action){room.io.to(`game:${room.matchId}`).emit('game:action',{playerName:p.name,character:'ninja',action:{...action,ninjaCombatVersion:model.VERSION,ownerEcho:true,...timing(room)}});}
@@ -22,7 +23,8 @@ function request(room,p,data={},special=false){
     if(special)room.io.to(`game:${room.matchId}`).emit('player:special',{username:p.name,character:'ninja',aim:{angle}});
     const count=special?model.swarmConfig().count:1;
     const viewRewindMs=clampDeliveryRewind('released',data.viewRewindMs);
-    for(let i=0;i<count;i++)state.pending.push({owner:participantId(p),requestId:id,angle,index:special?i:null,viewRewindMs,
+    const viewRewindRequestedMs=Number(data.viewRewindMs)||0;
+    for(let i=0;i<count;i++)state.pending.push({owner:participantId(p),requestId:id,angle,index:special?i:null,viewRewindMs,viewRewindRequestedMs,
       due:room._tickId+Math.ceil((special?i*model.swarmConfig().releaseMs:0)/model.STEP_MS)});
   }
   const result={type:'ninja-result',requestId:id,accepted:!reason,reason:reason||'accepted',...ammo(p)};
@@ -51,8 +53,8 @@ function tick(room){
     if(cast.due>room._tickId){state.pending.push(cast);continue;}
     const id=`${p.name}:${cast.requestId}:${cast.index??0}`,projectile=model.launch(p,cast.angle,id,cast.index);
     projectile.launchMono=room._simulationMono;projectile.ownerName=p.name;
-    const entry={projectile,owner:cast.owner,requestId:cast.requestId,hits:new Set(),viewRewindMs:cast.viewRewindMs||0};state.active.set(id,entry);
-    emit(room,p,{type:'ninja-launch',requestId:cast.requestId,projectile});
+    const entry={projectile,owner:cast.owner,requestId:cast.requestId,hits:new Set(),viewRewindMs:cast.viewRewindMs||0,viewRewindRequestedMs:cast.viewRewindRequestedMs||0};state.active.set(id,entry);
+    emit(room,p,{type:'ninja-launch',requestId:cast.requestId,projectile,viewRewindMs:entry.viewRewindMs});
   }
   for(const entry of state.active.values()){
     const p=getParticipant(room,entry.owner),q=entry.projectile;if(!p) {state.active.delete(q.id);continue;}
@@ -63,7 +65,9 @@ function tick(room){
     for(const [index, segment] of segments.entries()){
       if(q.elapsed<60)continue;
       exposeDamageHitbox(room,q,{kind:'sweep',a:segment.a,b:segment.b,radius:q.cfg.collisionRadius},combatNow(room),String(index));
-      const contacts=enemyShotTargets(room,p,entry.viewRewindMs).map(t=>({...t,t:sweep(segment.a,segment.b,t.bounds,q.cfg.collisionRadius)}))
+      const shotTargets=enemyShotTargets(room,p,entry.viewRewindMs);
+      if(room._netTrace)traceShotGaps(room,{pid:q.id,attacker:p,a:segment.a,b:segment.b,radius:q.cfg.collisionRadius,age:q.elapsed,rewindMs:entry.viewRewindMs,targets:shotTargets});
+      const contacts=shotTargets.map(t=>({...t,t:sweep(segment.a,segment.b,t.bounds,q.cfg.collisionRadius)}))
         .filter(t=>t.t!==null&&!(segment.terrain&&t.t>=1)).sort((a,b)=>a.t-b.t||a.name.localeCompare(b.name));
       for(const hit of contacts){
         const key=`${segment.phase}:${hit.name}`;if(entry.hits.has(key))continue;entry.hits.add(key);
@@ -83,7 +87,7 @@ function tick(room){
 }
 function trusted(room,entry,payload){return !!entry&&room._ninja?.active.get(entry.projectile.id)===entry&&entry.contact?.instanceId===payload.instanceId&&entry.contact.target===payload.target;}
 function bootstrap(room){return {ninjaCombatVersion:room.ninjaCombatVersion,...timing(room),colliders:room.geometry?.colliders||[],
-  active:[...room._ninja.active.values()].map(e=>({projectile:e.projectile,requestId:e.requestId})),terminals:room._ninja.terminals};}
+  active:[...room._ninja.active.values()].map(e=>({projectile:e.projectile,requestId:e.requestId,viewRewindMs:e.viewRewindMs})),terminals:room._ninja.terminals};}
 function dispose(room) {
   const state = room._ninja;
   if (!state) return;

@@ -111,11 +111,7 @@
     "ninja-shuriken": {
       "character": "ninja",
       "actionFlow": {
-        "kind": "runtime-broadcast"
-      },
-      "attackType": "basic",
-      "runtime": {
-        "kind": "returning-projectile"
+        "kind": "server-runtime-only"
       }
     }
   },

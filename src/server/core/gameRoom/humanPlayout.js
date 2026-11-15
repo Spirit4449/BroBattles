@@ -67,6 +67,7 @@ function notePlayoutSample(player, clientTs, now = Date.now()) {
   while (offsets.length > SAMPLE_WINDOW || (offsets.length > 1 && offsets[0].at < now - OFFSET_WINDOW_MS)) offsets.shift();
   let minOffset = Infinity;
   for (const entry of offsets) if (entry.offset < minOffset) minOffset = entry.offset;
+  state.minOffset = minOffset;
   // At most `now`: this packet's own offset is in the window.
   let t = clientTs + minOffset;
   const samples = state.samples;
@@ -116,9 +117,46 @@ function publishedMotion(player, wallAt = Date.now()) {
   return current;
 }
 
+// The playout delay a human's own client adds to its enemy projectile lead
+// (shared/characters/sparrowReplication.js, CombatClock.enemyLeadMs): history
+// keys its positions this much after they were sent. Call after
+// publishedMotion has slewed the delay for this snapshot. The value changes
+// only when the delay moved by more than PLAYOUT_REPORT_STEP_MS, so the
+// snapshot delta encoder sends it rarely; undefined for bots and for humans
+// without a packet yet.
+const PLAYOUT_REPORT_STEP_MS = 2;
+function reportedPlayoutMs(player) {
+  const state = player?._playout;
+  if (!state || player.isBot) return undefined;
+  const delay = Math.max(0, Number(state.delay) || 0);
+  if (player._reportedPlayoutMs == null || Math.abs(delay - player._reportedPlayoutMs) > PLAYOUT_REPORT_STEP_MS) {
+    player._reportedPlayoutMs = Math.round(delay);
+  }
+  return player._reportedPlayoutMs;
+}
+
+// How the server keys this human's frames, for its own client's enemy
+// projectile lead: a frame the client drew at its Date.now() c is keyed in
+// position history at c + minOffset (+ the playout delay), minOffset being
+// clock skew plus the lowest recent uplink. Reported on the server's
+// monotonic clock (minus Date.now() - performance.now() here), so the client
+// can place its frames on that clock with its own Date/performance offset and
+// its clock sync. Resent when it moves by more than PLAYOUT_REPORT_STEP_MS.
+function reportedHistoryMs(player, wallOffset = Date.now() - performance.now()) {
+  const state = player?._playout;
+  if (!state || player.isBot || !Number.isFinite(state.minOffset)) return undefined;
+  const value = state.minOffset - wallOffset;
+  if (player._reportedHistoryMs == null || Math.abs(value - player._reportedHistoryMs) > PLAYOUT_REPORT_STEP_MS) {
+    player._reportedHistoryMs = Math.round(value);
+  }
+  return player._reportedHistoryMs;
+}
+
 module.exports = {
   MAX_PLAYOUT_MS,
+  reportedHistoryMs,
   notePlayoutSample,
   publishedMotion,
+  reportedPlayoutMs,
   restartPlayout,
 };

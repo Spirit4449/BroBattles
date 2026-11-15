@@ -7,8 +7,8 @@ import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/proj
 import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley, firstContact, sample, attachmentPoint } from '../../../../shared/characters/sparrowProjectile';
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { playPlayerSound } from '../../audio/playerAudio';
-import { isLocalShooter, predictShotContact, shotBlockersFor, confirmWindowMs, noteShotWithdrawn, notePredictedHit } from '../shared/shotPrediction';
-import { movingColliderMotion, observeSnapshotClock, displayedPlayer, ownerTeamLook, catchUpAmmo, bindSceneUpdates, exposeDiagnostics } from '../shared/projectileReplication';
+import { isLocalShooter, isEnemyShooter, localBodyContact, victimHoldWindowMs, victimLagMs, predictShotContact, shotBlockersFor, confirmWindowMs, noteShotWithdrawn, notePredictedHit, enemyShotTraced, traceEnemyShot } from '../shared/shotPrediction';
+import { movingColliderMotion, observeSnapshotClock, displayedPlayer, ownerTeamLook, catchUpAmmo, bindSceneUpdates, exposeDiagnostics, setRoomTerrain } from '../shared/projectileReplication';
 
 // Match and embedded previews own separate flights, clocks and teardown.
 export function createSparrowNetwork(options = {}) {
@@ -55,6 +55,8 @@ function configureSparrowNetwork(state) {
   if (version !== VERSION) return;
   colliders = state.collisionGeometry?.colliders || [];
   platformMotion = movingColliderMotion(colliders);
+  // The match's own network shares its terrain with the other released shots.
+  if (!options.clock) setRoomTerrain(colliders);
   ensureServerClockEpoch(state.epoch);
   replica.reset(state.epoch);
   replica.clock.observe(state, performance.now());
@@ -84,23 +86,28 @@ function addSprite(scene, projectile) {
   return entry;
 }
 // Where this frame's flight stops: the server's terrain sweep at the arrow's
-// own simulation time, and for the local shooter the enemies as drawn. Without
-// it an arrow flew on into a wall or body until the terminal arrived, then
-// jumped back. Terrain wins ties, as on the server.
-function flightContact(entry, p, point) {
-  const from = entry.flight || { x: p.x, y: p.y };
-  entry.flight = { x: point.x, y: point.y };
+// own simulation time, for the local shooter the enemies as drawn, and for an
+// enemy's arrow (drawn led, so it meets this player when the server does) this
+// player's own body. Without it an arrow flew on into a wall or body until the
+// terminal arrived, then jumped back. Terrain wins ties, as on the server.
+function flightContact(entry, p, point, enemy = false) {
+  const from = entry.flight || { x: p.x, y: p.y }, fromAge = entry.flightAge ?? 0;
+  entry.flight = { x: point.x, y: point.y }; entry.flightAge = point.age;
   let wall = null;
   const blockers = shotBlockersFor(p.ownerName);
   if (colliders.length || blockers.length) {
     advanceGeometry(platformMotion, p.launchMono + point.age);
     wall = firstContact(from, point, 0, blockers.length ? [...colliders, ...blockers] : colliders, []);
   }
-  const hit = isLocalShooter(p.ownerName) ? predictShotContact(from, point, p.radius, { inset: true }) : null;
+  const hit = isLocalShooter(p.ownerName) ? predictShotContact(from, point, p.radius, { inset: true, traceId: p.id })
+    // An enemy arrow is tested like the server will: against this player's
+    // body as drawn when the fully led arrow was here (victimLagMs).
+    : enemy ? localBodyContact(from, point, p.radius, { inset: true, spanMs: point.age - fromAge,
+      lagMs: victimLagMs(replica.clock.enemyLeadMs(p.viewRewindMs), point.victimLead) }) : null;
   if (hit && (!wall || hit.t < wall.t)) {
-    const at = attachmentPoint(hit, hit.bounds), body = hit.target.sprite;
-    return { x: at.x, y: at.y, target: hit.target.name, sprite: body,
-      offset: body ? { x: at.x - body.x, y: at.y - body.y } : null };
+    const at = attachmentPoint(hit, hit.bounds), body = hit.target.sprite, origin = hit.origin || body;
+    return { x: at.x, y: at.y, target: hit.target.name, sprite: body, victim: !isLocalShooter(p.ownerName),
+      lead: point.victimLead, offset: body ? { x: at.x - origin.x, y: at.y - origin.y } : null };
   }
   return wall && { x: wall.x, y: wall.y };
 }
@@ -174,7 +181,7 @@ function attachSparrowScene(scene, nextContext = {}) {
     for (const id of withdrawn) if (!replica.active.has(id)) withdrawn.delete(id);
     for (const [id, state] of replica.active) {
       if (withdrawn.has(id)) continue;
-      const p = state.projectile, point = replica.position(id, now);
+      const p = state.projectile, enemy = isEnemyShooter(p.ownerName), point = replica.position(id, now, enemy);
       if (!point || point.age < 0) continue;
       if (point.age >= p.maxLifetimeMs) { replica.active.delete(id); continue; }
       const entry = sprites.get(id) || addSprite(scene, p);
@@ -192,23 +199,33 @@ function attachSparrowScene(scene, nextContext = {}) {
         record({ type: 'reconcile', id, errorPx: Math.hypot(entry.correction.x, entry.correction.y) });
       }
       entry.revision = state.revision; entry.projectile = p; entry.lead = state.lead;
-      const contact = !entry.held && flightContact(entry, p, point);
+      const contact = !entry.held && flightContact(entry, p, point, enemy);
       if (contact) entry.held = { ...contact, rotation: Math.atan2(point.vy, point.vx), at: now };
-      if (contact?.target) notePredictedHit({ delivery: 'released', character: 'sparrow', target: { name: contact.target, sprite: contact.sprite } });
+      if (contact?.target && !contact.victim) notePredictedHit({ delivery: 'released', character: 'sparrow', target: { name: contact.target, sprite: contact.sprite } });
+      if (entry.held?.victim && now - entry.held.at > victimHoldWindowMs(entry.held.lead)) {
+        // The server did not hit this player with it: withdrawn like an
+        // unconfirmed prediction (it rarely is: the contact was tested as the
+        // server tests it).
+        if (entry.withdrawnAt == null) record({ type: 'victim-withdraw', id });
+        if (fadeOut(entry, now)) { sprites.delete(id); withdrawn.add(id); }
+        continue;
+      }
       if (entry.held) {
         // A predicted body hit the server has not confirmed in time is withdrawn.
-        if (entry.held.target && now - entry.held.at > confirmWindowMs()) {
+        if (entry.held.target && !entry.held.victim && now - entry.held.at > confirmWindowMs()) {
           if (entry.withdrawnAt == null) noteShotWithdrawn?.('sparrow', id);
           if (fadeOut(entry, now)) { sprites.delete(id); withdrawn.add(id); }
           continue;
         }
         placeHeld(entry);
+        if (enemy && enemyShotTraced()) traceEnemyShot(id, p.ownerName, 'sparrow', entry.sprite.x, entry.sprite.y, p.radius, point.victimLead, p.viewRewindMs, entry.held.victim ? 1 : 0, point.age);
         burningFx(scene, entry, now, true);
         continue;
       }
       const blend = entry.correction ? Math.max(0, 1 - (now - entry.correction.at) / (entry.correction.duration || 80)) : 0;
       entry.sprite.setPosition(point.x + (entry.correction?.x || 0) * blend, point.y + (entry.correction?.y || 0) * blend);
       entry.sprite.setRotation(Math.atan2(point.vy, point.vx));
+      if (enemy && enemyShotTraced()) traceEnemyShot(id, p.ownerName, 'sparrow', entry.sprite.x, entry.sprite.y, p.radius, point.victimLead, p.viewRewindMs, 0, point.age);
       burningFx(scene, entry, now);
 
     }
@@ -288,7 +305,11 @@ function handleSparrowPacket(scene, packet, nextContext) {
         targetSprite(existing?.projectile?.ownerName || action.ownerName) || { x: action.x, y: action.y },
         'sparrow-hit', { volume: 0.48 });
       if (existing && ['target', 'terrain'].includes(action.reason)) {
-        if (!existing.held) existing.sprite.setPosition(action.x, action.y);
+        // An arrow in this player lands on the body as drawn now (offsets are
+        // relative to where the shooter saw it), not where the server tested it.
+        const body = action.target === context.localUsername && action.targetOffset ? targetSprite(action.target) : null;
+        if (!existing.held) existing.sprite.setPosition(body?.active ? body.x + action.targetOffset.x : action.x,
+          body?.active ? body.y + action.targetOffset.y : action.y);
         burningFx(scene, existing, performance.now(), true);
       }
     }

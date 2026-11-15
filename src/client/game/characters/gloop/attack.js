@@ -11,7 +11,9 @@ import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
-import { predictShotContact, shotBlockersFor, notePredictedHit } from "../shared/shotPrediction";
+import { predictShotContact, shotBlockersFor, notePredictedHit, isEnemyShooter, localBodyContact, victimHoldWindowMs, victimLagMs, enemyShotTraced, traceEnemyShot } from "../shared/shotPrediction";
+import { releasedFlightAge, roomTerrain } from "../shared/projectileReplication";
+import { serverClock } from "../../match/serverClock";
 
 const NAME = "gloop";
 const SLIMEBALL = getResolvedCharacterAttackConfig(NAME, "slimeball");
@@ -160,11 +162,12 @@ export function spawnGloopSlimeballVisual(
     1,
     Number(payload.collisionRadius) || Number(SLIMEBALL.collisionRadius) || 28,
   );
-  const mapCollisionRects = getMapCollisionRects(
-    scene,
-    payload.mapCollisionRects,
-  );
-  const serverTerrain = Array.isArray(payload.mapCollisionRects) && payload.mapCollisionRects.length > 0;
+  // The room's static colliders: from the match bootstrap, or from an older
+  // server's release packet; failing both, the scene's map objects.
+  const roomRects = Array.isArray(payload.mapCollisionRects) && payload.mapCollisionRects.length
+    ? payload.mapCollisionRects : roomTerrain();
+  const mapCollisionRects = getMapCollisionRects(scene, roomRects);
+  const serverTerrain = Array.isArray(roomRects) && roomRects.length > 0;
   const worldBounds = resolveWorldBounds(scene);
   const cfg = {
     speed: Math.max(1, Number(payload.speed) || Number(SLIMEBALL.speed) || 390),
@@ -266,9 +269,40 @@ export function spawnGloopSlimeballVisual(
   let struck = null;
   const onSegment = predictHits ? (_from, s) => {
     const at = { x: s.x, y: s.y };
-    struck = predictShotContact(at, at, s.collisionRadius);
+    struck = predictShotContact(at, at, s.collisionRadius, { traceId: payload.id });
     return !!struck;
   } : null;
+  // An echoed release carries its server launch time: the ball is stepped to
+  // its server age (an enemy's led, so it reaches this player when the server
+  // does) instead of flying from when the packet arrived. An enemy's ball that
+  // reaches this player's drawn body waits there for the server's splat.
+  const ageState = {};
+  const hasLaunch = !predictHits && Number.isFinite(Number(payload.launchMono));
+  const enemy = hasLaunch && isEnemyShooter(ownerSprite?.username);
+  const aged = hasLaunch && releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) !== null;
+  let fed = 0, victimTouch = false, victimHold = null, victimReleased = false;
+  // Tested like the server will: against this player's body as drawn when
+  // the fully led ball was here (victimLagMs).
+  // A sub-step at drawn age a was tested against the frame (age this frame - a)
+  // before that one.
+  let flightAgeNow = null, segmentAge = 0;
+  const victimLag = () => victimLagMs(serverClock.enemyLeadMs?.(payload.viewRewindMs) || 0, ageState.shown || 0) +
+    (Number.isFinite(flightAgeNow) ? Math.max(0, flightAgeNow - segmentAge) : 0);
+  const onVictimSegment = enemy ? (_from, s) => {
+    if (!victimReleased && localBodyContact(s, s, s.collisionRadius, { lagMs: victimLag() })) victimTouch = true;
+    return false;
+  } : null;
+  const step = (ms, terrain) => {
+    if (!onVictimSegment) return advanceSlimeball(state, ms, terrain, onSegment);
+    // One physics step at a time, so the ball stops where it meets this player.
+    const impacts = [];
+    segmentAge = fed - ms;
+    for (let left = ms; left > 1e-6 && !state.done && !victimTouch; left -= 1000 / 120) {
+      segmentAge += Math.min(left, 1000 / 120);
+      impacts.push(...advanceSlimeball(state, Math.min(left, 1000 / 120), terrain, onVictimSegment));
+    }
+    return impacts;
+  };
   const update = (_, delta = 16) => {
     if (disposed) return;
     if (!ended) {
@@ -276,7 +310,38 @@ export function spawnGloopSlimeballVisual(
       const blockers = shotBlockersFor(ownerSprite?.username);
       const terrain = currentTerrain(scene, cfg.mapCollisionRects, serverTerrain);
       state.mapCollisionRects = blockers.length ? [...terrain, ...blockers] : terrain;
-      const impacts = advanceSlimeball(state, delta, state.mapCollisionRects, onSegment);
+      if (victimHold) {
+        // Drawn on this player's body until the server splats it there.
+        const body = victimHold.body;
+        if (body?.active) { state.x = body.x + victimHold.offset.x; state.y = body.y + victimHold.offset.y; }
+        if (enemyShotTraced()) traceEnemyShot(payload.id, ownerSprite?.username, "gloop", state.x, state.y, state.collisionRadius, ageState.shown || 0, payload.viewRewindMs, 1,
+          aged ? releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) : null);
+        if (performance.now() - victimHold.at <= victimHold.windowMs) return;
+        // No splat: withdrawn like an unconfirmed prediction.
+        victimHold = null; victimReleased = true; ended = true;
+        visual.finish({ onCharacter: true });
+        debug?.setVisible(false);
+        return;
+      }
+      let ms = delta, flightAge = null;
+      if (aged) {
+        const age = flightAge = flightAgeNow = releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy);
+        // Catch up at most three frames' worth at once (after a hold).
+        ms = age === null ? delta : Math.max(0, Math.min(age - fed, Math.max(delta, 1) * 3, 1000));
+      }
+      fed += ms;
+      const impacts = step(ms, state.mapCollisionRects);
+      if (victimTouch && !victimHold && !state.done) {
+        victimTouch = false;
+        const self = localBodyContact(state, state, state.collisionRadius, { lagMs: victimLag() });
+        const body = self?.target?.sprite, origin = self?.origin || body;
+        if (body) victimHold = { body, x: state.x, y: state.y, at: performance.now(),
+          windowMs: victimHoldWindowMs(Math.max(0, ageState.shown || 0)),
+          offset: { x: state.x - origin.x, y: state.y - origin.y } };
+      }
+      if (enemy && !state.done && enemyShotTraced()) {
+        traceEnemyShot(payload.id, ownerSprite?.username, "gloop", state.x, state.y, state.collisionRadius, ageState.shown || 0, payload.viewRewindMs, victimHold ? 1 : 0, flightAge);
+      }
       if (struck) {
         notePredictedHit({ delivery: "released", character: "gloop", target: struck.target });
         splat({ id: payload.id, target: struck.target.name });
@@ -363,7 +428,6 @@ export function performGloopSlimeball(instance, attackContext = null) {
     floorY: worldBounds.maxY,
     worldMinX: worldBounds.minX,
     worldMaxX: worldBounds.maxX,
-    mapCollisionRects: getMapCollisionRects(scene),
     slowDurationMs,
     slowSpeedMult,
     slowJumpMult,

@@ -1,6 +1,6 @@
 const { combatNow } = require("../clock");
 const attackRuntimeManager = require("../attackRuntimeManager.js");
-const { broadcastAction } = require("../characterActionRegistry.js");
+const { broadcastAction, stampRelease } = require("../characterActionRegistry.js");
 const {
   getResolvedCharacterSpecialConfig,
 } = require("../../../characters/characterTuning.js");
@@ -69,13 +69,15 @@ function activate(caster, now, room, payload = null, shot = null) {
     ) {
       return;
     }
+    const launchMono = attackRuntimeManager.releaseLaunchMono(room);
     attackRuntimeManager.registerAttackFromAction(
       room,
       caster,
       action,
       combatNow(room),
     );
-    broadcastAction(room, caster, action, combatNow(room));
+    // Clients draw the hand by server age from the server's launch point.
+    broadcastAction(room, caster, stampRelease(room, caster, { ...action }, launchMono), combatNow(room));
   };
 
   if (startup > 0) room.scheduleAction(release, startup);

@@ -41,6 +41,8 @@ function broadcastHealthUpdate(room, playerData, meta = {}) {
     duckBlocked: meta.duckBlocked === true,
     delivery: meta.delivery || null,
     gameId: room.matchId,
+    // Traced rooms only (damageResolver): attacker and projectile id.
+    ...(meta.by !== undefined ? { by: meta.by, pid: meta.pid ?? null } : null),
   });
   playerData._lastHealthBroadcastAt = Date.now();
 }

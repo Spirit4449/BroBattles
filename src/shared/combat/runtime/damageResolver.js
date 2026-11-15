@@ -5,9 +5,9 @@ const ninjaCombat = require('./ninjaCombat.js');
 const sparrowCombat = require('./sparrowCombat.js');
 const { isTrustedProjectileContact, isRuntimeContact } = require('./attackRuntimes/projectileLifecycle.js');
 const { deliveryOf } = require('../attackDelivery');
-const { positionAt } = require('./lagCompensation.js');
+const { positionAt, clientTimeAt } = require('./lagCompensation.js');
 const { wallBetween } = require('./attackRuntimes/geometry.js');
-const { getParticipant, participantId } = require('./participants');
+const { participantId } = require('./participants');
 const {
   NINJA_SWARM_HIT_DAMAGE,
   DUPLICATE_HIT_WINDOW_MS,
@@ -24,20 +24,6 @@ const { chargeSuperForHit } = require("./superCharge.js");
 const { CENTER_CRATE_TARGET } = require("./attackRuntimes/targets.js");
 const { combatNow } = require("./clock");
 
-// Client wall clocks are unsynchronised, so a client-reported Date.now() cannot
-// place a hit on the server's history. Clients send the shared server-clock
-// estimate (server performance.now() domain) instead; it is translated into the
-// Date.now() domain used by position history. Server-originated hits already use
-// the server's own Date.now(). Anything else is evaluated at arrival time.
-function resolveAttackTime(payload, { server = false, now = Date.now(), nowMono = performance.now() } = {}) {
-  if (server) {
-    return Number.isFinite(payload?.attackTime) ? payload.attackTime : now;
-  }
-  const mono = Number(payload?.attackServerMono);
-  if (Number.isFinite(mono)) return now - (nowMono - mono);
-  return now;
-}
-
 function handleHit(room, socketId, payload, { server = false, sparrowProjectile = null, ninjaProjectile = null, runtimeProjectile = null } = {}) {
   try {
     if (!payload || typeof payload !== "object") return;
@@ -51,23 +37,21 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       }
       return;
     }
-    // Clients may only report their own fall-out; every other hit comes from
-    // a server-owned attack runtime.
-    if (!server && attackerName !== targetName) return;
+    // Every hit comes from a server-owned attack runtime; clients never claim one.
+    if (!server) return;
 
     const attacker = Array.from(room.players.values()).find(
       (p) => p.name === attackerName,
     );
-    const trustedNinja = server && ninjaCombat.trusted(room, ninjaProjectile, payload);
+    const trustedNinja = ninjaCombat.trusted(room, ninjaProjectile, payload);
     if (attacker?.char_class === 'ninja' && attackerName !== targetName && !trustedNinja) return;
-    const trustedSparrow = server && sparrowCombat.isTrustedContact(room, sparrowProjectile, payload);
+    const trustedSparrow = sparrowCombat.isTrustedContact(room, sparrowProjectile, payload);
     const trustedProjectile = trustedNinja || trustedSparrow ||
-      (server && isTrustedProjectileContact(room, runtimeProjectile, payload));
-    const attachedContact = server && deliveryOf(runtimeProjectile?.runtimeKind) === 'attached' &&
+      isTrustedProjectileContact(room, runtimeProjectile, payload);
+    const attachedContact = deliveryOf(runtimeProjectile?.runtimeKind) === 'attached' &&
       isRuntimeContact(room, runtimeProjectile, payload);
     if (attacker?.char_class === 'sparrow' &&
         attackerName !== targetName && !trustedSparrow) return;
-    if (!server && (getParticipant(room, socketId) !== attacker || attacker?.isBot)) return;
     const target = Array.from(room.players.values()).find(
       (p) => p.name === targetName,
     );
@@ -165,19 +149,14 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       return;
     }
 
-    // Per-character range check with lag-compensated position rewind.
-    // The client reports attackTime (wall clock) so the server can look up
-    // both players' historical positions at the moment the hit was detected,
-    // rather than comparing against the latest (stale) known positions.
-    const attackTimeRaw = resolveAttackTime(payload, { server, now });
-    // Clamp to [now - HIT_STALENESS_MAX_MS, now] — reject absurdly old claims
-    // but still handle normal network round-trip delay gracefully.
+    // Per-character range check against position history at the time the
+    // runtime tested the contact (its `attackTime`, server clock).
+    const attackTimeRaw = Number.isFinite(payload.attackTime) ? payload.attackTime : now;
     let attackTimeClamped = attackTimeRaw;
     let aPos = null;
     let tPos = null;
     let dist = 0;
     let maxDist = room._getAttackMaxDist(attacker.char_class, attackType);
-    let attackWasFuture = false;
     if (trustedProjectile) {
       aPos = { x: attacker.x, y: attacker.y };
       tPos = targetObjective ? { x: targetObjective.x, y: targetObjective.y } : { x: target.x, y: target.y };
@@ -192,7 +171,6 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       aPos = room._getHistoricalPosition(attacker, attackTimeRaw);
       tPos = { x: Number(targetObjective.x) || 0, y: Number(targetObjective.y) || 0 };
       attackTimeClamped = Math.min(now, attackTimeRaw);
-      attackWasFuture = attackTimeRaw > now + 250;
       dist = Math.hypot(
         Number(aPos?.x || 0) - tPos.x,
         Number(aPos?.y || 0) - tPos.y,
@@ -207,7 +185,7 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
         maxDist = Math.max(maxDist, 2400);
       }
     } else {
-      ({ attackTimeClamped, aPos, tPos, dist, maxDist, attackWasFuture } =
+      ({ attackTimeClamped, aPos, tPos, dist, maxDist } =
         combatValidation.evaluateHitRange({
           attacker,
           target,
@@ -215,15 +193,6 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
           attackTimeRaw,
           now,
         }));
-    }
-    if (attackWasFuture) {
-      if (room.DEV_TIMING_DIAG) {
-        console.warn(
-          `[GameRoom ${room.matchId}] hit rejected: future attackTime attacker=${attacker.name} target=${targetObjective ? targetName : target.name} ` +
-            `type=${attackType} raw=${attackTimeRaw} now=${now}`,
-        );
-      }
-      return;
     }
     if (!isSelf && dist > maxDist) {
       if (room.DEV_TIMING_DIAG) {
@@ -407,7 +376,8 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       // Every viewer holds the struck fighter for the same delivery hitstop.
       const delivery = deliveryOf(runtimeProjectile?.runtimeKind) ||
         (sparrowProjectile || ninjaProjectile ? 'released' : null);
-      room._broadcastHealthUpdate(target, { cause: "combat", duckBlocked, delivery });
+      room._broadcastHealthUpdate(target, { cause: "combat", duckBlocked, delivery,
+        ...(room._netTrace ? traceHealthMeta(room, attacker, sparrowProjectile || ninjaProjectile || runtimeProjectile, delivery) : null) });
       if (target.health === 0 && old > 0) {
         console.log(
           `%c[GameRoom ${room.matchId}] Player ${target.name} was killed by ${attacker.name}`,
@@ -427,9 +397,31 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
   }
 }
 
+// Traced rooms only. `projectile` is the Sparrow attack, the Ninja entry or
+// the attack runtime instance that made the contact.
 function traceHit(room, attacker, targetName, target, attackType, appliedDamage, payload, projectile) {
+  const runtime = projectile?.runtimeKind ? projectile : null;
+  const shot = runtime ? null : projectile?.projectile || null;
+  const delivery = runtime ? deliveryOf(runtime.runtimeKind) || 'area' : shot ? 'released' : 'none';
+  const rewindMs = Number(projectile?.viewRewindMs) || 0;
+  const age = runtime ? runtime.elapsed : Number.isFinite(shot?.elapsed) ? shot.elapsed
+    : shot && Number.isFinite(shot.launchMono) ? room._simulationMono - shot.launchMono : null;
+  const tested = target ? positionAt(target, rewindMs) : null;
   room.traceCombatHit?.(attacker, targetName, { target, type: attackType, dmg: appliedDamage,
-    id: payload?.instanceId ?? projectile?.projectile?.id ?? null, rewindMs: projectile?.viewRewindMs ?? 0 });
+    id: payload?.instanceId ?? shot?.id ?? null, rewindMs, delivery,
+    kind: runtime ? runtime.runtimeKind : shot ? (projectile.clientRequestId != null ? 'sparrow' : 'ninja') : null,
+    req: runtime ? runtime.instanceId : projectile?.clientRequestId ?? projectile?.requestId ?? null,
+    pid: delivery === 'released' ? (shot ? shot.id : runtime.instanceId) : null, age,
+    rewindRequestedMs: projectile?.viewRewindRequestedMs, tested, from: attacker,
+    vTs: target && !target.isBot ? clientTimeAt(target, rewindMs) : null });
 }
 
-module.exports = { handleHit, resolveAttackTime };
+// Traced rooms only: lets the victim's trace tie a health update to the shot.
+function traceHealthMeta(room, attacker, projectile, delivery) {
+  if (!room._netTrace?.runs?.size) return null;
+  const runtime = projectile?.runtimeKind ? projectile : null;
+  const pid = delivery !== 'released' ? null : runtime ? runtime.instanceId : projectile?.projectile?.id;
+  return { by: attacker?.name || null, pid: pid == null ? null : String(pid) };
+}
+
+module.exports = { handleHit };

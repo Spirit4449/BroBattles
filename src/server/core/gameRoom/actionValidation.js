@@ -97,6 +97,7 @@ function sanitizeActionPayload(actionData) {
     // Stamped by the transport from the request's view time; any client value
     // was already overwritten (lagCompensation.stampViewRewind).
     "viewRewindMs",
+    "viewBufferMs",
   ];
   for (const key of passThroughNumeric) {
     if (Number.isFinite(Number(actionData[key]))) {

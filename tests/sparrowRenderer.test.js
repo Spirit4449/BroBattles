@@ -253,6 +253,60 @@ test('other players\' arrows are never stopped by bodies on this screen',()=>{
   f.api.resetSparrowNetwork();
 });
 
+// This player ('me', drawn at (300, 140)) is the target of an enemy's arrow
+// fired with a 100 ms view rewind.
+function victimView(f){
+  const me={active:true,visible:true,x:300,y:140,flipX:false,_bbCharacter:'ninja'};
+  const opponentPlayersRef={foe:{opponent:{active:true,x:100,y:100},character:'sparrow'}};
+  f.shots.trackShotTargets({localUsername:'me',opponentPlayersRef,localPlayer:me});
+  f.api.attachSparrowScene(f.scene,{localUsername:'me',localPlayer:me,opponentPlayersRef});
+  const p={...model.createVolley({x:100,y:100,width:150,height:150},model.resolveShot({angle:0,power:.5}),'foe:shot',0)[1],ownerName:'foe',viewRewindMs:100};
+  f.api.handleSparrowPacket(f.scene,{...f.packet({type:'sparrow-projectiles',requestId:'shot',projectiles:[p]}),playerName:'foe'},{});
+  const arrow=()=>f.created.find(s=>s.texture==='sparrow-arrow');
+  const box=()=>model.insetBounds(require('../src/shared/combat/shotContact').characterHitBounds('ninja',me.x,me.y));
+  return {me,p,arrow,box};
+}
+test('an enemy arrow is drawn ahead by its rewind, ramped in from where the server flies it',()=>{
+  const f=setup(),{p,arrow}=victimView(f);
+  f.tick(0);assert.ok(Math.abs(arrow().x-model.sample(p,0).x)<1e-6,'no jump on the first frame');
+  let previous=arrow().x;
+  for(let t=8;t<=120;t+=8){f.tick(t);assert.ok(arrow().x>=previous,'never runs backwards');previous=arrow().x;}
+  // Rewind 100 ms; this harness has no ping or playout report, so that is the lead.
+  assert.ok(Math.abs(arrow().x-model.sample(p,220).x)<1e-6);
+  f.api.resetSparrowNetwork();
+});
+test('an enemy arrow stops on this player as drawn and stays when the server says it hit them',()=>{
+  const f=setup(),{me,p,arrow,box}=victimView(f);
+  // Production tracing sees the arrow as drawn, with its lead, and its hold on this player.
+  const traced=[];f.shots.setShotTraceHook({enemyShot:(...a)=>traced.push(a)});
+  let t=0;for(;t<=300;t+=8){f.tick(t);assert.ok(arrow().x<=box().left+1e-6,`passed into this player at ${t}ms`);}
+  assert.ok(traced.length&&traced.every(a=>a[0]===p.id&&a[1]==='foe'&&a[2]==='sparrow'),'enemy arrow reported by id and shooter');
+  assert.equal(traced.at(-1)[8],1,'held on the body');assert.equal(traced.at(-1)[3],arrow().x);
+  assert.ok(traced.at(-1)[6]>0,'drawn with its lead');
+  f.shots.setShotTraceHook(null);
+  assert.ok(Math.abs(arrow().x-box().left)<1e-6,'rests on the body as drawn');
+  const stuck={x:arrow().x-me.x,y:arrow().y-me.y};
+  me.x+=20;f.tick(t+=8);
+  assert.ok(Math.abs(arrow().x-(me.x+stuck.x))<1e-6,'rides this player');
+  f.api.handleSparrowPacket(f.scene,{...f.packet({type:'sparrow-terminal',id:p.id,requestId:'shot',reason:'target',target:'me',
+    x:200,y:150,targetOffset:{x:-25,y:30},rotation:0,appliedDamage:850,visual:{scale:.22,embedMs:2000,special:false}}),playerName:'foe'},{});
+  for(const at of [t+16,t+400]){f.tick(at);assert.ok(Math.abs(arrow().x-(me.x+stuck.x))<1e-6);assert.equal(arrow().active,true);}
+  f.api.resetSparrowNetwork();
+});
+test('an enemy arrow held on this player is withdrawn in place when the server does not hit them',()=>{
+  const f=setup(),{arrow,box}=victimView(f);
+  let t=0;for(;!arrow()||Math.abs(arrow().x-box().left)>1e-6;t+=8)f.tick(t);
+  const heldAt=t-8,held={x:arrow().x,y:arrow().y};
+  // Lead (100) + an unknown half round trip (75) + margin.
+  const window=f.shots.victimHoldWindowMs(100);
+  for(;t<=heldAt+window;t+=8){f.tick(t);assert.equal(arrow().x,held.x);}
+  // Faded where it was, never flown on through the body or jumped.
+  for(;t<=heldAt+window+400;t+=8){f.tick(t);if(arrow().active)assert.equal(arrow().x,held.x);}
+  assert.equal(arrow().active,false,'withdrawn');
+  assert.ok(held.x<=box().left+1e-6);
+  f.api.resetSparrowNetwork();
+});
+
 test('owner arrows keep moving forward at full speed when the later server launch confirms them',()=>{
   const f=setup();
   const shot=model.resolveShot({angle:0,power:.5});

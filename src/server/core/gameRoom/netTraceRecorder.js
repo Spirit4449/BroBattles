@@ -315,6 +315,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     if (!s || !s.runs.size) return;
     maybeProfile(room);
     if (room._disposed) {
+      flushNear(room, true);
       for (const run of s.runs) run.rooms.delete(room);
       s.runs.clear();
       return;
@@ -363,6 +364,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     if (!s?.runs.size) return;
     s.loopDeltas.push(deltaMs);
     if (stepsThisFrame > s.maxSteps) s.maxSteps = stepsThisFrame;
+    if (s.near?.size) flushNear(room);
     if (deltaMs >= LOOP_STALL_MS || stepsThisFrame >= 4) {
       emitRoom(room, { kind: "stall", what: "loop", deltaMs: round(deltaMs), steps: stepsThisFrame, sleepMs,
         botsLastTickMs: s.botTickMs.length ? round(s.botTickMs[s.botTickMs.length - 1], 2) : null });
@@ -449,8 +451,51 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     emitRoom(room, { kind: "hit", a: attacker?.name || null, aTag, aChar: attacker?.char_class || null,
       aBot: !!attacker?.isBot, v: targetName, vTag, type: info.type || null, dmg: info.dmg ?? null,
       id: info.id == null ? null : String(info.id).slice(0, 40), rewindMs: round(Number(info.rewindMs)),
-      ok: info.ok !== false, reason: info.reason || null, sim: round(room._simulationMono), tick: room._tickId });
+      ok: info.ok !== false, reason: info.reason || null, sim: round(room._simulationMono), tick: room._tickId,
+      // How it was delivered and tested: runtime kind, request and projectile
+      // ids, projectile sim age, the rewind asked for (before delivery caps),
+      // the target where it was tested (rewound) and where it is now, and the
+      // attacker's position.
+      delivery: info.delivery || null, akind: info.kind || null,
+      req: info.req == null ? null : String(info.req).slice(0, 40), pid: info.pid == null ? null : String(info.pid).slice(0, 60),
+      ageMs: round(Number(info.age)), rewindReqMs: round(Number(info.rewindRequestedMs)),
+      tested: point(info.tested), vAt: point(target), aAt: point(info.from),
+      // The victim's own timestamp (its Date.now()) of the tested position:
+      // the report finds the victim's frame the server compared the shot with.
+      vTs: Number.isFinite(info.vTs) ? round(info.vTs) : null });
   }
+
+  // Released shots near a traced victim (each step's tested gap, closest
+  // approach kept per shot and victim): "near" records tell whether a shot
+  // that touched the victim's screen without a hit missed the tested body by
+  // a hair, by far, or stopped somewhere first. Written once the shot has not
+  // been tested against that victim for NEAR_IDLE_MS.
+  const NEAR_IDLE_MS = 400, NEAR_MAX_GAP_PX = 80;
+  function noteShotGap(room, { pid, attacker, target, gap, age, rewindMs, vTs, character }) {
+    const s = room._netTrace;
+    if (!s?.runs.size || pid == null || !Number.isFinite(gap) || gap > NEAR_MAX_GAP_PX) return;
+    const vTag = target?.socketId ? s.sockets.get(target.socketId) : null;
+    if (!vTag) return;
+    const near = (s.near ||= new Map());
+    const key = `${pid}|${target.name}`;
+    let n = near.get(key);
+    if (!n) near.set(key, (n = { pid: String(pid).slice(0, 60), a: attacker?.name || null, aChar: character || attacker?.char_class || null,
+      v: target.name, vTag, gap: Infinity, steps: 0 }));
+    n.last = now(); n.steps++;
+    if (gap < n.gap) Object.assign(n, { gap, ageMs: age, vTs, rewindMs, sim: room._simulationMono });
+  }
+  function flushNear(room, force = false) {
+    const near = room._netTrace?.near;
+    if (!near?.size) return;
+    const t = now();
+    for (const [key, n] of near) {
+      if (!force && t - n.last < NEAR_IDLE_MS) continue;
+      near.delete(key);
+      emitRoom(room, { kind: "near", pid: n.pid, a: n.a, aChar: n.aChar, v: n.v, vTag: n.vTag, gap: round(n.gap), ageMs: round(Number(n.ageMs)),
+        vTs: Number.isFinite(n.vTs) ? round(n.vTs) : null, rewindMs: round(Number(n.rewindMs)), sim: round(n.sim), steps: n.steps });
+    }
+  }
+  const point = (p) => (p && Number.isFinite(p.x) && Number.isFinite(p.y) ? [round(p.x), round(p.y)] : null);
 
   // Token-verified probe accounts may play trophy-locked modes (Bank Bust) as
   // fresh guests. Process-local and time-limited.
@@ -485,6 +530,8 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     notePhases,
     noteAction,
     noteHit,
+    noteShotGap,
+    flushNear,
     noteGlobal,
     markTracedUser,
     isTracedUser,

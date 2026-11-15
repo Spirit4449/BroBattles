@@ -71,15 +71,81 @@ function arrivalTrace(bursty, options = {}, sourceStall = false) {
   return b.getDiagnostics();
 }
 
-test("arrival jitter distinguishes network bunching from source stalls without changing default delay", () => {
-  const steady = arrivalTrace(false), bursty = arrivalTrace(true);
+test("arrival jitter distinguishes network bunching from source stalls; the legacy delay ignores it", () => {
+  const legacy = { delayMode: "spacing" };
+  const steady = arrivalTrace(false, legacy), bursty = arrivalTrace(true, legacy);
   assert.ok(steady.arrivalJitterEma < 0.001);
   assert.ok(bursty.arrivalJitterEma > 20);
   assert.ok(Math.abs(steady.interpDelayMs - bursty.interpDelayMs) < 0.001);
-  assert.ok(arrivalTrace(true, {}, true).arrivalJitterEma < 0.001);
-  const adaptive = arrivalTrace(true, { enableArrivalAdaptiveDelay: true });
-  assert.ok(adaptive.interpDelayMs > bursty.interpDelayMs);
-  assert.ok(adaptive.interpDelayMs <= 115);
+  assert.ok(arrivalTrace(true, legacy, true).arrivalJitterEma < 0.001);
+});
+
+// Feeds 30 Hz snapshots delivered `base + extra(i)` ms after their simulation
+// time and renders 60 Hz frames between them. Returns per-phase delays and
+// underrun counts.
+function renderLink(extra, { snapshots = 600, options = {}, interval = 1000 / 30 } = {}) {
+  const b = createSnapshotBuffer({ maxStateBuffer: 400, ...options });
+  if (options.setInterval) b.setSnapshotIntervalMs(options.setInterval);
+  const arrivals = [];
+  for (let i = 0; i < snapshots; i++) arrivals.push({ i, sim: i * interval, at: i * interval + 50 + extra(i) });
+  arrivals.sort((a, b) => a.at - b.at);
+  const delays = [], underruns = [];
+  let k = 0;
+  for (let t = 50; t < snapshots * interval; t += 1000 / 60) {
+    while (k < arrivals.length && arrivals[k].at <= t) {
+      const a = arrivals[k++];
+      b.ingestSnapshot(packet(a.i + 1, a.sim), a.at);
+    }
+    if (!b.hasData()) continue;
+    const frame = b.getInterpolationFrame(t);
+    delays.push({ t, delay: b.getDiagnostics().interpDelayMs });
+    if (frame.extrapolationMs > 0) underruns.push(t);
+  }
+  const delayAt = (t) => delays.find((d) => d.t >= t)?.delay;
+  return { delays, underruns, delayAt, buffer: b };
+}
+
+test("on a clean link the render delay converges near one snapshot interval", () => {
+  const interval = 1000 / 30;
+  const clean = renderLink(() => 0);
+  const settled = clean.delayAt(15000);
+  assert.ok(settled >= interval, `at least one interval (${settled})`);
+  assert.ok(settled < interval * 1.5, `well under two intervals (${settled})`);
+  assert.equal(clean.underruns.filter((t) => t > 5000).length, 0, "no underruns once settled");
+  // The legacy target keeps about two intervals on the same link.
+  const legacy = renderLink(() => 0, { options: { delayMode: "spacing" } });
+  assert.ok(legacy.delayAt(15000) > settled + interval / 2);
+  // The interval comes from the room (game:init) rather than the build.
+  const fast = renderLink(() => 0, { interval: 1000 / 60, snapshots: 1200, options: { setInterval: 1000 / 60 } });
+  assert.ok(fast.delayAt(15000) < settled - 1000 / 120, `a 60 Hz room renders closer (${fast.delayAt(15000)})`);
+  assert.ok(fast.buffer.getSnapshotIntervalMs() < interval);
+});
+
+test("late arrivals raise the delay quickly and it gives latency back slowly", () => {
+  // Clean for 8 s, then every 3rd snapshot 40 ms late for 6 s, then clean.
+  let seed = 3;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const jitter = Array.from({ length: 900 }, (_, i) => (i >= 240 && i < 420 && i % 3 === 0 ? 40 * random() + 20 : 0));
+  const link = renderLink((i) => jitter[i], { snapshots: 900 });
+  const clean = link.delayAt(7900);
+  const raised = link.delayAt(9000);
+  assert.ok(raised > clean + 20, `rose within a second of late arrivals (${clean} -> ${raised})`);
+  const lateUnderruns = link.underruns.filter((t) => t > 9000 && t < 14000).length;
+  const earlyUnderruns = link.underruns.filter((t) => t > 8000 && t < 9000).length;
+  assert.ok(lateUnderruns <= earlyUnderruns, "once raised, late snapshots stop underrunning");
+  const peak = Math.max(...link.delays.filter((d) => d.t > 8000 && d.t < 14500).map((d) => d.delay));
+  // After the late arrivals stop, the delay falls back gradually.
+  const change = (windowMs, sign) => Math.max(...link.delays.map((d) => {
+    const later = link.delayAt(d.t + windowMs);
+    return later == null ? 0 : sign * (later - d.delay);
+  }));
+  assert.ok(change(500, 1) > 2 * change(500, -1), "rises faster than it falls");
+  assert.ok(link.delayAt(29000) < clean + 1 && link.delayAt(29000) < peak - 20, "returns to the clean delay");
+  for (let i = 1; i < link.delays.length; i++) {
+    const step = link.delays[i].delay - link.delays[i - 1].delay;
+    // Never faster than real time in either direction: motion never reverses.
+    assert.ok(Math.abs(step) < 1000 / 60, `delay step ${step}`);
+  }
 });
 
 test("event packets do not change periodic cadence or jitter measurements", () => {
@@ -110,16 +176,28 @@ test("continuous precision crosses snapshot boundaries and exits without reversi
   let previous = -Infinity;
   for (let t = 1000; t < 2000; t += 1000 / 120) {
     const base = b.sampleAt(t);
-    const frame = sampleRemoteFrame(b, base, state, { attack: t < 1600, deltaMs: 1000 / 120 });
+    const frame = sampleRemoteFrame(b, base, state, { attack: t < 1600, deltaMs: 1000 / 120, legacyLead: true });
     const x = frame.aState.players.p.x + frame.alpha * (frame.bState.players.p.x - frame.aState.players.p.x);
     assert.ok(x > previous, `stalled or reversed at ${t}`);
     assert.ok(frame.targetMono - base.targetMono <= 12.001);
     previous = x;
   }
+  // By default attacking and airborne actors are drawn at the reported view
+  // time itself, so the server's rewind matches what the attacker saw.
+  const fresh = {};
+  for (let t = 1000; t < 1400; t += 1000 / 60) {
+    const base = b.sampleAt(t);
+    for (const options of [{ attack: true }, { airborne: true }]) {
+      assert.equal(sampleRemoteFrame(b, base, fresh, { ...options, deltaMs: 1000 / 60 }).targetMono, base.targetMono);
+    }
+  }
   b.reset(); b.ingestSnapshot(packet(1, 100), 110);
   assert.equal(sampleRemoteFrame(b, b.sampleAt(100), state).targetMono, 100);
   assert.equal(readNetworkExperiments("?netSmoothing=legacy").continuousSmoothing, undefined);
-  assert.equal(readNetworkExperiments("?netSmoothing=continuous&netArrivalDelay=1").enableArrivalAdaptiveDelay, true);
+  assert.equal(readNetworkExperiments("").delayMode, "arrival");
+  assert.equal(readNetworkExperiments("?netRenderDelay=legacy").delayMode, "spacing");
+  assert.equal(readNetworkExperiments("").legacyInputCadence, false);
+  assert.equal(readNetworkExperiments("?netInputCadence=legacy").legacyInputCadence, true);
 });
 
 function runLoop(t, coalesce, stall, finishAt = null) {
@@ -347,4 +425,107 @@ test('input wire saves geometry and FX repetition while reliably delivering new 
   now += 300; sync.sync({}, player, state);
   assert.equal(sent[4].reliable, true);
   assert.equal(sent[4].data.movementFxType, 'jump');
+});
+
+async function loadLocalInputSync(clock) {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const fs = require('node:fs'), vm = require('node:vm'), babel = require('@babel/core');
+  const filename = require.resolve('../src/client/game/scene/localInputSync.js');
+  const realRequire = createRequire(filename);
+  const exports = {};
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(filename, 'utf8'), {
+    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code, { exports, Date: { now: () => clock.now }, require(name) {
+    if (name.includes('localMovementCorrector')) return { localMovementCorrector: { getAck: () => 0, recordSent() {} } };
+    if (name.includes('netTestLogger')) return { noteClientInputSent() {}, noteClientIntentSent() {} };
+    return realRequire(name);
+  } });
+  return exports;
+}
+
+test('inputs go out once per rendered frame up to about 60 Hz, evenly spaced', async () => {
+  const clock = { now: 50000 };
+  const { createLocalInputSync, INPUT_SEND_INTERVAL_MS } = await loadLocalInputSync(clock);
+  const run = (refreshHz, frames, { frameCadence = true, readJitterMs = () => 0 } = {}) => {
+    const sentAt = [];
+    const socket = { compress() { return this; }, emit() { sentAt.push(loop.now); },
+      volatile: { compress() { return this; }, emit() { sentAt.push(loop.now); } } };
+    const loop = { now: 1000, delta: 1000 / refreshHz };
+    const sync = createLocalInputSync({ socket, getAmmoSyncState: () => ({ charges: 3 }),
+      getNetworkInputState: () => ({ grounded: true }), throttleMs: 16, frameCadence });
+    const player = { x: 1, y: 1, body: { velocity: { x: 0, y: 0 }, touching: { down: true } } };
+    for (let i = 0; i < frames; i++) {
+      loop.now = 1000 + i * 1000 / refreshHz;
+      // Date.now() is read partway through the frame's work.
+      clock.now = Math.floor(50000 + loop.now + readJitterMs(i));
+      sync.sync({ game: { loop } }, player, { handlePlayerMovement() {} });
+    }
+    return sentAt.slice(1).map((t, i) => t - sentAt[i]);
+  };
+  const busyFrames = (i) => (i % 2 ? 2.5 : 0);
+  // 60 Hz: every frame, even when the frame's work makes Date.now() read 14-15 ms.
+  const sixty = run(60, 120, { readJitterMs: busyFrames });
+  assert.ok(sixty.every((gap) => Math.abs(gap - 1000 / 60) < 0.01), 'a 60 Hz display sends every frame');
+  const legacy = run(60, 120, { frameCadence: false, readJitterMs: busyFrames });
+  assert.ok(Math.max(...legacy) > 30, 'the legacy throttle skipped frames and left double gaps');
+  // High-refresh displays stay near the cap with even spacing.
+  for (const hz of [90, 120, 144, 165, 240]) {
+    const gaps = run(hz, hz * 2);
+    const rate = 1000 / (gaps.reduce((a, b) => a + b, 0) / gaps.length);
+    assert.ok(rate <= 1000 / INPUT_SEND_INTERVAL_MS * 1.25, `${hz} Hz sends at most ~60 Hz (${rate.toFixed(1)})`);
+    assert.ok(rate >= 1000 / INPUT_SEND_INTERVAL_MS * 0.7, `${hz} Hz still sends often (${rate.toFixed(1)})`);
+    assert.ok(Math.max(...gaps) - Math.min(...gaps) < 0.01, `${hz} Hz spacing is even`);
+  }
+});
+
+test('a forced pre-attack flush publishes the simulated state without simulating again', async () => {
+  const clock = { now: 70000 };
+  const { createLocalInputSync } = await loadLocalInputSync(clock);
+  const sent = [];
+  const socket = { compress() { return this; }, emit(event, data) { sent.push(wire.decodeWire(data)); },
+    volatile: { compress() { return this; }, emit(event, data) { sent.push(wire.decodeWire(data)); } } };
+  const sync = createLocalInputSync({ socket, getAmmoSyncState: () => ({ charges: 3 }),
+    getNetworkInputState: () => ({ grounded: true }) });
+  const player = { x: 10, y: 20, body: { velocity: { x: 0, y: 0 }, touching: { down: true } } };
+  const loop = { now: 500, delta: 16.67 };
+  const scene = { game: { loop } };
+  let simulated = 0;
+  const handlePlayerMovement = () => {
+    simulated += 1;
+    // A keyboard attack fires from inside the frame's movement update.
+    if (simulated === 2) sync.flushNow(scene, player, { dead: false, gameEnded: false, handlePlayerMovement });
+  };
+  sync.sync(scene, player, { handlePlayerMovement });
+  loop.now += 16.67; clock.now += 17;
+  sync.sync(scene, player, { handlePlayerMovement });
+  assert.equal(simulated, 2, 'the flush did not run the movement update a second time');
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1].keyframe, true, 'the flush is reliable');
+  sync.flushNow(scene, player, { dead: true });
+  assert.equal(sent.length, 2, 'a dead player publishes nothing');
+});
+
+test("the player snapshot rate is a room setting with a keyframe about once a second", async () => {
+  const { default: constants } = await import("../src/shared/gameConstants.js");
+  const { snapshotEveryTicksFor, SNAPSHOT_EVERY_TICKS, SERVER_TICK_HZ, FIXED_DT_MS } = constants;
+  assert.equal(snapshotEveryTicksFor(undefined), SNAPSHOT_EVERY_TICKS);
+  assert.equal(snapshotEveryTicksFor("nonsense"), SNAPSHOT_EVERY_TICKS);
+  assert.equal(snapshotEveryTicksFor(SERVER_TICK_HZ), 1);
+  assert.equal(snapshotEveryTicksFor(SERVER_TICK_HZ / 2), 2);
+  assert.equal(snapshotEveryTicksFor(SERVER_TICK_HZ * 4), 1, "never more than one per tick");
+  const keyframesPerSecond = (everyTicks) => {
+    const sent = [];
+    const room = { matchId: 1, players: new Map(), _tickId: 0, _simulationMono: 0,
+      FIXED_DT_MS, SNAPSHOT_EVERY_TICKS: everyTicks,
+      io: { to: () => ({ compress() { return this; }, emit(_, p) { sent.push(wire.decodeWire(p)); } }) } };
+    const perSecond = SERVER_TICK_HZ / everyTicks;
+    for (let i = 0; i < perSecond * 4; i++) {
+      room._tickId += everyTicks; room._simulationMono += FIXED_DT_MS * everyTicks;
+      roomState.broadcastSnapshot(room, { tMono: room._simulationMono });
+    }
+    return sent.filter((p) => p.keyframe).length / 4;
+  };
+  const slow = keyframesPerSecond(2), fast = keyframesPerSecond(1);
+  assert.ok(Math.abs(slow - fast) <= 0.25, `keyframes per second ${slow} vs ${fast}`);
 });

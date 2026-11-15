@@ -33,6 +33,36 @@ describe("Attack contact and launch", () => {
       assert.equal(DELIVERIES.area.rewindCapMs, 0, 'warned areas favor the target');
     });
 
+    test('a delivery caps the network part of a rewind; the attacker\'s render buffer always counts', () => {
+      const { MAX_RENDER_DELAY_MS } = require('../src/shared/gameConstants');
+      const { stampViewRewind } = require('../src/shared/combat/runtime/lagCompensation.js');
+      const cap = DELIVERIES.attached.rewindCapMs;
+      const buffer = MAX_RENDER_DELAY_MS - 10;
+      // A slow connection: the whole rewind is the buffer plus more network
+      // latency than the cap. The buffer is honoured, the network part capped.
+      assert.equal(clampDeliveryRewind('attached', buffer + cap + 40, buffer), buffer + cap);
+      // Within the cap the whole rewind counts, which it did not when the cap
+      // included the buffer.
+      assert.equal(clampDeliveryRewind('attached', buffer + cap - 5, buffer), buffer + cap - 5);
+      // A claimed buffer never extends the rewind or exceeds the client maximum.
+      assert.equal(clampDeliveryRewind('attached', 30, buffer), 30);
+      assert.equal(clampDeliveryRewind('attached', 1e9, 1e9), MAX_RENDER_DELAY_MS + cap);
+      for (const bad of [-50, 'x', NaN, undefined]) assert.equal(clampDeliveryRewind('attached', 1e9, bad), cap);
+      for (const name of ['area', 'self']) assert.equal(clampDeliveryRewind(name, 200, buffer), 0, `${name} never rewinds`);
+
+      // The transport derives the buffer from the request, bounded by the rewind
+      // it measured, which the per-connection allowance still bounds.
+      const room = { _simulationMono: 10000, combatClock: { mono: () => 10000 } };
+      const lowRtt = { samples: [{ at: performance.now(), rtt: 5 }] };
+      const forged = stampViewRewind(room, { viewMono: 0, viewDelayMs: 1e9, viewBufferMs: 1e9 }, lowRtt);
+      assert.ok(forged.viewBufferMs <= forged.viewRewindMs && forged.viewBufferMs <= MAX_RENDER_DELAY_MS);
+      assert.ok(clampDeliveryRewind('attached', forged.viewRewindMs, forged.viewBufferMs) <= forged.viewRewindMs,
+        'a forged buffer cannot rewind past the connection allowance');
+      const honest = stampViewRewind(room, { viewMono: 10000 - 60, viewDelayMs: 45 }, lowRtt);
+      assert.deepEqual([honest.viewRewindMs, honest.viewBufferMs], [60, 45]);
+      assert.equal(stampViewRewind(room, { viewMono: 9900, viewDelayMs: '45' }).viewBufferMs, 0, 'numbers only');
+    });
+
     // The server's attached runtime and the attacker's client must test the same
     // volume at the same moment of the attack, or a drawn hit becomes a miss.
     function serverShapes(type, character, elapsedTimes, { flip = false } = {}) {

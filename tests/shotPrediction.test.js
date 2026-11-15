@@ -56,8 +56,10 @@ function arena({ enemyX = 330, centerY = 298, character = 'ozzy', clock = { now:
   const runDelayed = () => { for (const job of delayed.splice(0).sort((a, b) => a.ms - b.ms)) job.fn(); };
   return { shots, enemy, others, scene, caster, delayed, tweens, objects, runDelayed, sounds, impacts, feedback };
 }
+const loadProjectileReplication = require('./helpers/projectileReplicationModule');
 const common = (f, extra = {}) => name =>
   name.includes('shotPrediction') ? f.shots : name.includes('shotContact') ? require('../src/shared/combat/shotContact')
+    : name.includes('projectileReplication') ? (f.replication ||= loadProjectileReplication({ performance: { now: () => 0 } }))
     : name.includes('packetDedupe') ? packetDedupe : name.includes('characterTuning') ? tuning
       : name.includes('projectilePresentation') ? require('../src/shared/projectilePresentation')
         : name.includes('renderLayers') ? { RENDER_LAYERS: { ATTACKS: 20 } }
@@ -319,4 +321,31 @@ test('remote viewers burst a charging ball where the server says it hit', () => 
   assert.equal(impacts(f).length, 1);
   assert.equal(impacts(f)[0].x, 80);
   assert.equal(f.scene._ozzyCharges.size, 0, 'the charge is gone, so no release is drawn from it');
+});
+
+test('an enemy shot is tested against this player as drawn the lead it still lacks ago', () => {
+  let now = 0;
+  const shots = loadShotPrediction({ serverClock: loadServerClock({ performance: { now: () => now } }), performance: { now: () => now } });
+  const me = { active: true, visible: true, flipX: false, x: 300, y: 300, _bbCharacter: 'ozzy' };
+  shots.trackShotTargets({ localUsername: 'me', opponentPlayersRef: {}, localPlayer: me });
+  // Running right at 0.5 px/ms, one recorded frame every 16 ms.
+  for (; now <= 400; now += 16) { me.x = 300 + now * 0.5; shots.noteLocalBodyFrame(now); }
+  now -= 16;
+  const box = characterHitBounds('ozzy', 0, 0), y = 300 + (box.top + box.bottom) / 2;
+  // A shot crossing where this player stood 200 ms ago, behind them now.
+  const pastX = 300 + (now - 200) * 0.5 + (box.left + box.right) / 2;
+  const a = { x: pastX, y: y - 200 }, b = { x: pastX, y: y + 200 };
+  assert.equal(shots.localBodyContact(a, b, 4), null, 'misses the body as drawn now');
+  const hit = shots.localBodyContact(a, b, 4, { lagMs: 200, now });
+  assert.ok(hit, 'hits the body the server tests');
+  assert.ok(Math.abs(hit.origin.x - (300 + (now - 200) * 0.5)) <= 8, 'reports where that body was drawn');
+  assert.equal(hit.target.sprite, me, 'placed on the body as drawn now');
+  // A long segment (a shot's first frame) is tested piecewise: its middle
+  // against the frame half its span earlier.
+  const midX = 300 + (now - 300) * 0.5 + (box.left + box.right) / 2;
+  const c = { x: midX, y: y - 200 }, d = { x: midX, y: y + 200 };
+  assert.equal(shots.localBodyContact(c, d, 4, { lagMs: 100, now }), null);
+  assert.ok(shots.localBodyContact(c, d, 4, { lagMs: 100, spanMs: 400, now }), 'its middle was tested 300 ms back');
+  assert.equal(shots.victimLagMs(180, 60), 120);
+  assert.equal(shots.victimLagMs(180, 200), 0);
 });

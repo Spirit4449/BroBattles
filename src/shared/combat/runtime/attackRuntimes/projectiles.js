@@ -235,7 +235,8 @@ function burstSplash(room, attack, descriptor, attacker, at, now) {
     character: attacker.char_class,
     origin: { x: attacker.x, y: attacker.y },
     flip: !!attacker.flip,
-    action: { type, id: attack.instanceId, x: at.x, y: at.y, ownerEcho: true },
+    // `target`: the player struck, so they can draw the burst on their body as drawn.
+    action: { type, id: attack.instanceId, x: at.x, y: at.y, ownerEcho: true, ...(at.name ? { target: at.name } : {}) },
     t: now,
   });
 }

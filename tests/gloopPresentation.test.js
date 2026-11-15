@@ -75,6 +75,7 @@ describe("Slime presentation", () => {
       if(name.includes('gloopProjectile'))return require('../src/shared/characters/gloopProjectile');
       if(name.includes('characterTuning'))return {getResolvedCharacterAttackConfig:()=>({collisionRadius:28,visualScale:1.5})};
       if(name.includes('renderLayers'))return {RENDER_LAYERS:{ATTACKS:20}};
+      if(name.includes('projectileReplication'))return {roomTerrain:()=>null,releasedFlightAge:()=>null};
       return {};
     }});
     for(const trigger of ['body','shutdown']){

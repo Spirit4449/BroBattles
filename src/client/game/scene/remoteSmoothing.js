@@ -1,4 +1,8 @@
-// The lead approximates the average time advantage of the old alpha floors at
+// Legacy only (`netRemoteLead=legacy`): attacking and airborne actors were
+// drawn this far ahead of the render timeline. Attack requests report one
+// render time (`viewMono`) for every actor, so a per-actor lead made the server
+// rewind targets 9-12 ms further than they were drawn; it is off by default.
+// The lead approximated the average time advantage of the old alpha floors at
 // 30 Hz (floor² / 2 * 33.33 ms), but crosses snapshot boundaries continuously.
 export const REMOTE_SMOOTHING_CONFIG = Object.freeze({
   attackLeadMs: 12,
@@ -9,7 +13,14 @@ export const REMOTE_SMOOTHING_CONFIG = Object.freeze({
 export function readNetworkExperiments(search = "") {
   const params = new URLSearchParams(search);
   return {
-    enableArrivalAdaptiveDelay: params.get("netArrivalDelay") === "1",
+    // The pre-2026-11 render delay (2 x spacing + 2 x jitter, 45-115 ms)
+    // instead of the arrival-based one.
+    delayMode: params.get("netRenderDelay") === "legacy" ? "spacing" : "arrival",
+    // Draw attacking/airborne actors ahead of the timeline again (pairs with
+    // the server's BB_VIEW_REWIND_CLOCK=simulation).
+    legacyRemoteLead: params.get("netRemoteLead") === "legacy",
+    // The pre-2026-11 Date.now() input throttle instead of once per frame.
+    legacyInputCadence: params.get("netInputCadence") === "legacy",
   };
 }
 
@@ -59,8 +70,11 @@ export function remoteLifeState(life, aState, aPos, bState, bPos) {
   };
 }
 
+// Every actor is drawn at the frame's render time, the `viewMono` attack
+// requests report. The per-actor state only keeps an actor's time from going
+// backwards across buffer resets.
 export function sampleRemoteFrame(buffer, baseFrame, state, {
-  attack = false, airborne = false, deltaMs = 16.67, snap = false,
+  attack = false, airborne = false, deltaMs = 16.67, snap = false, legacyLead = false,
 } = {}) {
   if (!Number.isFinite(baseFrame?.targetMono)) return baseFrame;
   const generation = buffer.getGeneration();
@@ -70,7 +84,7 @@ export function sampleRemoteFrame(buffer, baseFrame, state, {
     state.lead = 0;
   }
   const config = REMOTE_SMOOTHING_CONFIG;
-  const desiredLead = attack ? config.attackLeadMs : airborne ? config.airborneLeadMs : 0;
+  const desiredLead = !legacyLead ? 0 : attack ? config.attackLeadMs : airborne ? config.airborneLeadMs : 0;
   const blend = 1 - Math.exp(-Math.max(0, deltaMs) / config.transitionMs);
   state.lead = (state.lead || 0) + (desiredLead - (state.lead || 0)) * blend;
   const target = baseFrame.targetMono + state.lead;
