@@ -7,6 +7,7 @@ const { circleAabbOverlap, getPlayerBounds } = require('./geometry.js');
 const { sweep } = require('../../../characters/sparrowProjectile');
 const { isDetachedProjectile } = require('./projectileLifecycle.js');
 const { poseAt } = require('../lagCompensation.js');
+const { traceRuntimeShot } = require('../shotTrace.js');
 
 // Attacks test targets where their attacker saw them: `viewRewindMs` is
 // already bounded by the attack's delivery (shared/combat/attackDelivery.js).
@@ -197,6 +198,7 @@ function hitCircleTargets(
     const lastHitAt = Number(attack.hitTimes[target.name]) || 0;
     if (repeatCooldownMs > 0 && now - lastHitAt < repeatCooldownMs) continue;
     const targetBounds = shotTargetBounds(attack, target, now);
+    if (room._netTrace) traceRuntimeShot(room, attack, attacker, target, { x: cx, y: cy }, null, radius, targetBounds);
     if (!circleAabbOverlap(cx, cy, radius, targetBounds)) continue;
     attack.hitSet?.add(target.name);
     attack.hitTimes[target.name] = now;
@@ -221,6 +223,7 @@ function circleTouch(room, attack, cx, cy, radius, now) {
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
     const bounds = shotTargetBounds(attack, target, now);
+    if (room._netTrace) traceRuntimeShot(room, attack, attacker, target, { x: cx, y: cy }, null, radius, bounds);
     if (!circleAabbOverlap(cx, cy, radius, bounds)) continue;
     const x = (bounds.left + bounds.right) / 2, y = (bounds.top + bounds.bottom) / 2;
     const distance = Math.hypot(x - cx, y - cy);
@@ -276,6 +279,7 @@ function capsuleTouch(room, attack, start, end, radius, now) {
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
     const bounds = shotTargetBounds(attack, target, now);
+    if (room._netTrace) traceRuntimeShot(room, attack, attacker, target, start, end, radius, bounds);
     if (sweep(start, end, bounds, radius) === null) continue;
     const x = (bounds.left + bounds.right) / 2, y = (bounds.top + bounds.bottom) / 2;
     const distance = Math.hypot(x - mid.x, y - mid.y);
@@ -301,7 +305,9 @@ function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
   }
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
-    if (sweep(start, end, shotTargetBounds(attack, target, now), radius) === null) continue;
+    const bounds = shotTargetBounds(attack, target, now);
+    if (room._netTrace) traceRuntimeShot(room, attack, attacker, target, start, end, radius, bounds);
+    if (sweep(start, end, bounds, radius) === null) continue;
     attack.hitSet?.add(target.name);
     emitServerHit(room, attack, target.name, { damage: attack.damage });
     emitHitAction(room, attack, descriptor, attacker, target, now);

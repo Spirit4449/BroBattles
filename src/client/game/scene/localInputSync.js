@@ -3,20 +3,45 @@ import { quantizeMovementPosition } from '../../../shared/physics/movementPrecis
 // gameScene/localInputSync.js
 // Emits game:input: the locally simulated position plus control state. A change
 // in control intent (direction, jump, duck, ...) bypasses the send throttle.
+//
+// Packets go out once per rendered frame, at most about 60 a second, gated on
+// the frame's own rAF timestamp. The old gate compared Date.now() read partway
+// through the frame against a 16 ms throttle, so on a 60 Hz display a frame
+// that happened to read 15 ms was skipped and left a 33 ms hole; the server's
+// playout delay (humanPlayout.js) follows the 90th percentile of those holes.
+// `netInputCadence=legacy` restores the old gate for comparisons.
 
 import { localMovementCorrector } from "../players/localMovementCorrector.js";
 import { noteClientInputSent, noteClientIntentSent } from "../../lib/netTestLogger.js";
 
 const RELIABLE_KEYFRAME_INTERVAL_MS = 250;
 const RELIABLE_KEYFRAME_DISTANCE_PX = 140;
+// The send cap. A frame counts as due when it lands within a tolerance of the
+// interval: half a frame, but at most a quarter of the interval, so 60-80 Hz
+// displays send every frame and 90-144 Hz ones every second frame.
+export const INPUT_SEND_INTERVAL_MS = 1000 / 60;
+
+// Whether a frame drawn at `frameNow` (`frameDeltaMs` after the previous one)
+// should publish, given the frame time of the last packet sent.
+export function inputFrameDue(frameNow, lastSentFrameAt, frameDeltaMs) {
+  if (!Number.isFinite(lastSentFrameAt) || !Number.isFinite(frameNow)) return true;
+  const elapsed = frameNow - lastSentFrameAt;
+  if (elapsed < 0) return true; // the frame clock restarted
+  const delta = Number(frameDeltaMs) > 0 ? Number(frameDeltaMs) : INPUT_SEND_INTERVAL_MS;
+  const tolerance = Math.min(delta / 2, INPUT_SEND_INTERVAL_MS / 4);
+  return elapsed >= INPUT_SEND_INTERVAL_MS - tolerance;
+}
 
 export function createLocalInputSync({
   socket,
   getAmmoSyncState,
   getNetworkInputState,
   throttleMs = 20,
+  // false: the legacy Date.now() throttle (`netInputCadence=legacy`).
+  frameCadence = true,
 }) {
   let lastMovementSent = 0;
+  let lastSentFrameAt = null;
   let lastReliableMovementSent = 0;
   let lastPlayerState = { x: 0, y: 0, flip: false, animation: null };
   let lastReliablePlayerState = null;
@@ -56,16 +81,21 @@ export function createLocalInputSync({
     !!a.ducking === !!b.ducking &&
     !!a.movementLocked === !!b.movementLocked;
 
-  function sync(
-    scene,
-    player,
-    { dead, gameEnded, handlePlayerMovement, force = false, reliable = false },
-  ) {
+  // Once per frame: simulate the local player, then publish if due.
+  function sync(scene, player, { dead, gameEnded, handlePlayerMovement, force = false, reliable = false }) {
     if (!player || dead || gameEnded) return;
-
     handlePlayerMovement(scene);
+    publish(scene, player, { force, reliable });
+  }
 
+  // Sends the state the frame loop last simulated. A forced flush (before an
+  // attack request) runs from inside the frame's movement update or from an
+  // input event, so it must never simulate again: that ran jump, dash, reload
+  // and effect timers twice in one frame.
+  function publish(scene, player, { force = false, reliable = false } = {}) {
     const now = Date.now();
+    const loopNow = Number(scene?.game?.loop?.now);
+    const frameNow = Number.isFinite(loopNow) && loopNow > 0 ? loopNow : now;
     const rawInput = getNetworkInputState ? getNetworkInputState() : null;
     const inputIntent = {
       direction: Number(rawInput?.direction) || 0,
@@ -82,7 +112,10 @@ export function createLocalInputSync({
       timestamp: now,
     };
     const intentChanged = !sameIntentState(inputIntent, lastIntentState);
-    if (!force && !intentChanged && now - lastMovementSent < throttleMs) return;
+    const due = frameCadence
+      ? inputFrameDue(frameNow, lastSentFrameAt, scene?.game?.loop?.delta)
+      : now - lastMovementSent >= throttleMs;
+    if (!force && !intentChanged && !due) return;
     const packetSequence = inputIntentSeq++;
     inputIntent.sequence = packetSequence;
 
@@ -203,6 +236,7 @@ export function createLocalInputSync({
       movementLocked: inputIntent.movementLocked,
     };
     lastMovementSent = now;
+    lastSentFrameAt = frameNow;
     if (includeAmmoState) {
       lastAmmoState = { ...ammoState };
       lastAmmoStateSentAt = now;
@@ -215,12 +249,9 @@ export function createLocalInputSync({
 
   return {
     sync,
-    flushNow(scene, player, state) {
-      return sync(scene, player, {
-        ...state,
-        force: true,
-        reliable: true,
-      });
+    flushNow(scene, player, state = {}) {
+      if (!player || state.dead || state.gameEnded) return;
+      return publish(scene, player, { force: true, reliable: true });
     },
   };
 }

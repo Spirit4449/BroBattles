@@ -18,7 +18,7 @@ import { buildScenery, preloadScenery } from '../game/maps/sceneryRuntime';
 import { installMovingPlatforms, passesThrough, platformClock, remoteRideOffset } from '../game/maps/movingPlatforms';
 import { installDisplayRatePhysics } from '../game/scene/displayRatePhysics';
 import { attachCharacterNetworks, discardCharacterPresentation } from '../game/characters/networkRegistry';
-import { noteRemoteView } from '../game/characters/shared/shotPrediction';
+import { noteRemoteView, noteLocalBodyFrame } from '../game/characters/shared/shotPrediction';
 // game.js
 
 import {
@@ -117,6 +117,7 @@ import {
   playCharacterAnimation,
 } from "../game/characters/shared/animationState.js";
 import socket, { waitForConnect } from "../lib/socket";
+import { netFlagSearch, readNetFlags } from "../lib/netFlags";
 import OpPlayer from "../game/players/RemotePlayer";
 import {
   configureClientNetTest,
@@ -248,18 +249,21 @@ const LAST_HEALTH_BY_PLAYER = Object.create(null);
 const SHIELD_IMPACT_QUEUE = [];
 const LAST_SHIELD_ACTIVE_AT = Object.create(null);
 
+// Server snapshot interpolation and input cadence comparisons (URL flags).
+// Flags persist across lobby -> game navigation (lib/netFlags.js).
+const networkExperiments = readNetworkExperiments(netFlagSearch());
 const localInputSync = createLocalInputSync({
   socket,
   getAmmoSyncState,
   getNetworkInputState,
   throttleMs: 16,
+  frameCadence: !networkExperiments.legacyInputCadence,
 });
 setLocalNetStateFlusher((state) =>
   localInputSync.flushNow(gameScene, player, state),
 );
 
 // Server snapshot interpolation
-const networkExperiments = readNetworkExperiments(window.location.search);
 const snapshotBuffer = createSnapshotBuffer(networkExperiments);
 window.__BB_NETWORK_DIAGNOSTICS__ = () => ({
   experiments: { ...networkExperiments },
@@ -279,6 +283,8 @@ const disposeNetTrace = installNetTrace({
   getCorrectionDiagnostics: () => localMovementCorrector.getDiagnostics(),
   getClockDiagnostics: getServerClockDiagnostics,
   serverNow: serverNowMono,
+  getFlags: () => ({ urlFlags: readNetFlags(), effective: { ...networkExperiments,
+    projectileLead: getServerClockDiagnostics().projectileLead } }),
   getCharacter: () => player?._bbCharacter || null,
   getEnemies: () => Object.entries(opponentPlayers)
     .map(([name, w]) => (w?.opponent?.active && w.opponent.visible !== false && !(w.opCurrentHealth <= 0)
@@ -1763,7 +1769,7 @@ class GameScene extends Phaser.Scene {
       now: Number.isFinite(this.game?.loop?.now) ? this.game.loop.now : performance.now(),
       applyFrame: (frame) => {
         // Shots report this render time so the server aims at what was drawn.
-        noteRemoteView(frame.targetMono);
+        noteRemoteView(frame.targetMono, frame.interpDelayMs);
         this.interpolatePlayerStates(
           frame.aState,
           frame.bState,
@@ -1776,6 +1782,8 @@ class GameScene extends Phaser.Scene {
       },
     });
 
+    // This frame's body as sent: enemy shots are tested against past frames.
+    noteLocalBodyFrame();
     updateHealthBars({ opponentPlayers, teamPlayers });
     noteClientFrame(this.game.loop.delta);
   }
@@ -1868,6 +1876,7 @@ class GameScene extends Phaser.Scene {
           airborne: baseFrame.bState?.players?.[name]?.grounded === false,
           deltaMs: this.game?.loop?.delta || 16.67,
           snap: Number(wrapper._networkSnapUntil) > now,
+          legacyLead: networkExperiments.legacyRemoteLead,
         },
       );
       const { aState, bState, alpha } = sample;
@@ -1900,7 +1909,7 @@ class GameScene extends Phaser.Scene {
             : true;
 
       // Render remote players directly from the buffered snapshot timeline.
-      // Attack/airborne precision is handled by sampleRemoteFrame's small lead.
+      // Every actor is sampled at the render time attack requests report.
       let targetX = spr.x;
       let targetY = spr.y;
       // A loading fighter is still a hittable ghost, so it follows the server's

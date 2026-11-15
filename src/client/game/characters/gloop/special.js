@@ -6,7 +6,9 @@ import { resolveGloopHookSocket } from "../../../../shared/characters/gloopHookG
 import { playPlayerSound } from "../../audio/playerAudio";
 import { createRuntimeId } from "../shared/runtimeId";
 import { consumeOnce } from "../shared/packetDedupe";
-import { predictShotContact, confirmWindowMs, shotBlockerContact, noteShotWithdrawn, notePredictedHit } from "../shared/shotPrediction";
+import { predictShotContact, confirmWindowMs, shotBlockerContact, noteShotWithdrawn, notePredictedHit, isEnemyShooter, localBodyContact, localShotTarget, victimHoldWindowMs, victimLagMs, enemyShotTraced, traceEnemyShot } from "../shared/shotPrediction";
+import { releasedFlightAge } from "../shared/projectileReplication";
+import { serverClock } from "../../match/serverClock";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
 
 const NAME = "gloop";
@@ -176,7 +178,7 @@ function createHookVisual(scene, owner, angle, start, id) {
       y: origin.y + Math.sin(angle) * traveled, angle, traveled,
       collisionForwardOffset: HOOK.collisionForwardOffset, collisionOffsetY: HOOK.collisionOffsetY });
     visual.predict.from = center;
-    const hit = predictShotContact(from || center, center, HOOK.collisionRadius);
+    const hit = predictShotContact(from || center, center, HOOK.collisionRadius, { traceId: visual.id });
     if (!hit) return false;
     const sprite = hit.target.sprite;
     visual.phase = "latched"; visual.elapsed = 0; visual.recoil = 0.6;
@@ -186,16 +188,46 @@ function createHookVisual(scene, owner, angle, start, id) {
     notePredictedHit({ delivery: "released", character: "gloop", target: hit.target, attacker: owner });
     return true;
   }
+  // An enemy's hook stops on this player's body as drawn, tested like the
+  // server's damage circle along its line from the server's launch point.
+  function latchOnLocalBody(t) {
+    const traveled = visual.range * t;
+    const center = attackCollisionCenter({ x: start.x + Math.cos(angle) * traveled,
+      y: start.y + Math.sin(angle) * traveled, angle, traveled,
+      collisionForwardOffset: HOOK.collisionForwardOffset, collisionOffsetY: HOOK.collisionOffsetY });
+    const from = visual.victimFrom || center;
+    visual.victimFrom = center;
+    // Tested like the server will: against this player's body as drawn when
+    // the fully led hook was here (victimLagMs).
+    const targetLead = serverClock.enemyLeadMs?.(visual.launch?.viewRewindMs) || 0;
+    const hit = localBodyContact(from, center, HOOK.collisionRadius, { lagMs: visual.launch ? victimLagMs(targetLead, visual.ageState?.shown || 0) : 0 });
+    if (enemyShotTraced()) traceEnemyShot(visual.id, owner.username, "gloop", center.x, center.y, HOOK.collisionRadius, visual.ageState?.shown || 0, visual.launch?.viewRewindMs, 0, visual.flightAge ?? null);
+    const sprite = hit?.target?.sprite, origin = hit?.origin || sprite;
+    if (!sprite) return false;
+    visual.phase = "latched"; visual.elapsed = 0; visual.recoil = 0.6;
+    visual.latch = { target: hit.target.name, sprite, victim: true,
+      windowMs: victimHoldWindowMs(Math.max(0, visual.ageState?.shown || 0)),
+      offset: { x: hand.x - origin.x, y: hand.y - origin.y } };
+    return true;
+  }
   function update(_time, delta = 16.67) {
     if (!owner.active) { visual.destroy(); return; }
     const ms = Math.min(Math.max(delta, 0), 80), dt = ms / 1000;
     visual.age += ms; visual.elapsed += ms; visual.recoil *= Math.exp(-dt * 10);
     const wrist = resolveStart(owner, visual.angle);
     if (visual.phase === "out") {
-      const t = Math.min(1, visual.elapsed / visual.outMs);
+      // An echoed hook is drawn by server age (an enemy's led, so it reaches
+      // this player when the server does) rather than from packet arrival.
+      const age = visual.flightAge = visual.launch ? releasedFlightAge(serverClock, visual.ageState, visual.launch, performance.now(), visual.enemy) : null;
+      const t = Math.min(1, (age ?? visual.elapsed) / visual.outMs);
       const from = { x: hand.x, y: hand.y };
       hand.setPosition(start.x + Math.cos(angle) * visual.range * t,
         start.y + Math.sin(angle) * visual.range * t);
+      if (visual.resume) {
+        const k = Math.min(1, (performance.now() - visual.resume.at) / 150), keep = 1 - k * k * (3 - 2 * k);
+        hand.setPosition(hand.x + (visual.resume.x - hand.x) * keep, hand.y + (visual.resume.y - hand.y) * keep);
+        if (k >= 1) visual.resume = null;
+      }
       // A wall built against Gloop stops the hand, as on the server.
       const blockedAt = shotBlockerContact(owner.username, from, hand, HOOK.collisionRadius);
       if (blockedAt !== null) {
@@ -203,6 +235,8 @@ function createHookVisual(scene, owner, angle, start, id) {
         finish();
       } else if (visual.predict && latchOnDisplayedEnemy(t)) {
         // Held on the enemy as drawn until the server's catch (or its absence).
+      } else if (visual.enemy && !visual.victimReleased && latchOnLocalBody(t)) {
+        // Held on this player's body until the server's catch (or its absence).
       } else if (t >= 1) {
         // A missed hook dissipates at maximum reach. Only a confirmed catch
         // travels back toward Gloop with its target.
@@ -211,8 +245,17 @@ function createHookVisual(scene, owner, angle, start, id) {
     } else if (visual.phase === "latched") {
       const { latch } = visual;
       if (latch.sprite?.active) hand.setPosition(latch.sprite.x + latch.offset.x, latch.sprite.y + latch.offset.y);
+      if (latch.victim) {
+        if (enemyShotTraced()) traceEnemyShot(visual.id, owner.username, "gloop", hand.x, hand.y, HOOK.collisionRadius, visual.ageState?.shown || 0, visual.launch?.viewRewindMs, 1,
+          visual.launch ? releasedFlightAge(serverClock, visual.ageState, visual.launch, performance.now(), visual.enemy) : null);
+        // No catch for this player in time: the server's hook missed; let go,
+        // as an unconfirmed prediction does.
+        if (visual.elapsed > latch.windowMs) {
+          visual.victimReleased = true;
+          finish();
+        }
       // No catch within a round trip: the server's hook missed; let go.
-      if (visual.elapsed > confirmWindowMs()) { noteShotWithdrawn?.("gloop-hook"); finish(); }
+      } else if (visual.elapsed > confirmWindowMs()) { noteShotWithdrawn?.("gloop-hook"); finish(); }
     } else if (visual.phase === "return" || visual.phase === "catch") {
       const caught = visual.phase === "catch";
       const t = Math.min(1, visual.elapsed / visual.returnMs);
@@ -284,6 +327,10 @@ export function playHookAction(scene, player, specialData = null, isOwner = fals
   visual.outMs = Math.max(1, visual.range / speed * 1000);
   visual.returnMs = Math.max(160, visual.outMs * 0.45);
   if (isOwner && specialData?.predicted) visual.predict = { origin: { x: player.x, y: player.y } };
+  else if (Number.isFinite(Number(specialData?.launchMono))) {
+    visual.launch = specialData; visual.ageState = {};
+    visual.enemy = isEnemyShooter(player.username);
+  }
   visual.burst(start.x, start.y, 5, 90);
   try { playPlayerSound(scene, player, "gloop-special", { volume: 0.68 }); } catch (_) {}
 }
@@ -299,6 +346,10 @@ export function playHookCatchAction(scene, ownerPlayer, actionData = null, isOwn
   // A confirmed latch closes from where the hand is drawn, without a jump.
   if (visual?.phase === "latched" && visual.latch.target === actionData?.target) {
     start.x = visual.hand.x; start.y = visual.hand.y;
+  } else if (actionData?.targetOffset && localShotTarget()?.name === actionData.target) {
+    // On this player: on the body as drawn now, not where the thrower saw it.
+    const self = localShotTarget().sprite;
+    start.x = self.x + Number(actionData.targetOffset.x || 0); start.y = self.y + Number(actionData.targetOffset.y || 0);
   }
   if (!visual) {
     const angle = Math.atan2(start.y - ownerPlayer.y, start.x - ownerPlayer.x);

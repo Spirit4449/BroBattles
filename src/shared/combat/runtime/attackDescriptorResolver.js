@@ -73,39 +73,6 @@ function getRuntimeOverrides(actionType) {
     };
   }
 
-  if (key === "ninja-shuriken") {
-    const shuriken =
-      getResolvedCharacterAttackConfig("ninja", "returningShuriken") || {};
-    return {
-      runtime: {
-        collisionRadius: Math.max(1, Number(shuriken.collisionRadius)),
-        hoverDurationMs: Math.max(0, Number(shuriken.hoverDurationMs)),
-        returnAcceleration: Math.max(
-          0,
-          Number(shuriken.returnAcceleration),
-        ),
-        returnStartSpeedFactor: Math.max(
-          0,
-          Number(shuriken.returnStartSpeedFactor),
-        ),
-        maxLifetimeMs: Math.max(250, Number(shuriken.maxLifetimeMs)),
-        hitArmMs: Math.max(0, Number(shuriken.hitArmMs)),
-        defaultForwardDistance: Math.max(
-          1,
-          Number(shuriken.forwardDistance),
-        ),
-        defaultOutwardDurationMs: Math.max(
-          1,
-          Number(shuriken.outwardDuration),
-        ),
-        defaultReturnSpeed: Math.max(1, Number(shuriken.returnSpeed)),
-        defaultEndYOffset: Number(shuriken.endYOffset),
-        defaultCtrl1YOffset: Number(shuriken.ctrl1YOffset),
-        defaultCtrl2YOffset: Number(shuriken.ctrl2YOffset),
-      },
-    };
-  }
-
   if (key === "sparrow-arrow") {
     const arrows = getResolvedCharacterAttackConfig("sparrow", "arrowSpread");
     return { actionFlow: { startupMs: arrows.castDelayMs } };

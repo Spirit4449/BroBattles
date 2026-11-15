@@ -11,8 +11,26 @@
 const SERVER_TICK_HZ = 60;
 // Duration of one fixed simulation step (ms). Derived; edit SERVER_TICK_HZ.
 const FIXED_DT_MS = 1000 / SERVER_TICK_HZ;
-// Player snapshots go out every N ticks (60 / 2 = 30 Hz).
-const SNAPSHOT_EVERY_TICKS = 2;
+// Player snapshots go out every N ticks: every tick (60 Hz) by default, which
+// halves the render delay of remote players against 30 Hz for ~25 ms/s more
+// publish time on the Pi (measured 2026-11-15). A server
+// can run another rate (BB_SNAPSHOT_HZ, see snapshotEveryTicksFor) and tells
+// clients its interval in game:init, so only the server reads this default.
+// Projectile and bot steps derive from FIXED_DT_MS, never from this.
+const SNAPSHOT_EVERY_TICKS = 1;
+
+// Ticks between player snapshots for a requested rate in Hz (for example
+// BB_SNAPSHOT_HZ=30). Missing or invalid values keep the default; the rate is
+// a whole divisor of the tick rate, at most one snapshot per tick.
+function snapshotEveryTicksFor(hz) {
+  const value = Number(hz);
+  if (!Number.isFinite(value) || value <= 0) return SNAPSHOT_EVERY_TICKS;
+  return Math.max(1, Math.min(SERVER_TICK_HZ, Math.round(SERVER_TICK_HZ / value)));
+}
+// The longest render delay (interpolation buffer) a client keeps behind the
+// snapshots it receives (ms). Attack requests report their render delay and the
+// server honours at most this much of it (shared/combat/attackDelivery.js).
+const MAX_RENDER_DELAY_MS = 115;
 // Slower world-state packets (powerups, drops, timers) every N ticks (7.5 Hz).
 const WORLD_STATE_EVERY_TICKS = 8;
 
@@ -39,6 +57,8 @@ module.exports = {
   SERVER_TICK_HZ,
   FIXED_DT_MS,
   SNAPSHOT_EVERY_TICKS,
+  snapshotEveryTicksFor,
+  MAX_RENDER_DELAY_MS,
   WORLD_STATE_EVERY_TICKS,
   WORLD_MARGIN,
   FALL_OUT_DEPTH,

@@ -563,6 +563,8 @@ export function createMatchCoordinator(config) {
 
   function _onGameInit(gameState) {
     configureCharacterNetworks(gameState);
+    // The room's snapshot rate; older servers omit it (the build default).
+    snapshotBuffer.setSnapshotIntervalMs?.(gameState?.snapshotIntervalMs);
     const gameData = getGameData();
     const username = getUsername();
     configureClientNetTest({
@@ -818,7 +820,7 @@ export function createMatchCoordinator(config) {
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, receivedAt);
     if (ingest.accepted === false) return;
     noteDecodedSnapshot(snapshot, receivedAt);
-    observeServerClockSnapshot(snapshot, receivedAt);
+    observeServerClockSnapshot(snapshot, receivedAt, getUsername());
     observeCharacterSnapshot(snapshot);
 
     try {

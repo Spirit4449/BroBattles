@@ -6,10 +6,19 @@ const { snapshotEpoch } = require("../../../shared/combat/runtime/clock");
 const { getDuelGeometry, spawnForParticipant } = require('../../../shared/physics/duelGeometry');
 const { participantId } = require('./participants');
 const { createSnapshotEncoder } = require('../../../shared/snapshotDelta');
-const { publishedMotion } = require('./humanPlayout');
+const { publishedMotion, reportedPlayoutMs, reportedHistoryMs } = require('./humanPlayout');
+
+// The room's player snapshot interval (ms), or null for a partial test room.
+function snapshotIntervalMs(room) {
+  const ms = Number(room?.FIXED_DT_MS) * Number(room?.SNAPSHOT_EVERY_TICKS);
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
 
 function snapshotEncoder(room) {
-  return (room._snapshotEncoder ||= createSnapshotEncoder());
+  // A keyframe about once a second whatever the snapshot rate.
+  const interval = snapshotIntervalMs(room);
+  return (room._snapshotEncoder ||= createSnapshotEncoder(
+    interval ? { keyframeEvery: Math.max(1, Math.round(1000 / interval)) } : undefined));
 }
 
 function roundPosition(value) {
@@ -173,6 +182,8 @@ function sendGameStateToPlayer(room, socket) {
       };
     }),
     status: room.status,
+    // The render timeline's expected snapshot spacing (BB_SNAPSHOT_HZ).
+    snapshotIntervalMs: snapshotIntervalMs(room),
     // A (re)join during the pre-fight countdown resumes it instead of going live.
     countdownRemainingMs: room.status === "active"
       ? Math.max(0, (room._countdownEndsAt || 0) - Date.now())
@@ -249,6 +260,11 @@ function broadcastSnapshot(room, extraTiming = null) {
     if (playerData.wallSliding && playerData.wallSide) {
       playerSnapshot.wallSide = playerData.wallSide;
     }
+    // Read by this player's own client only (its enemy projectile lead).
+    const playoutMs = reportedPlayoutMs(playerData);
+    if (playoutMs !== undefined) playerSnapshot.playoutMs = playoutMs;
+    const historyMs = reportedHistoryMs(playerData);
+    if (historyMs !== undefined) playerSnapshot.historyMs = historyMs;
     if (shouldPublishMovementFx(playerData, wall)) {
       Object.assign(playerSnapshot, {
         movementFxType: playerData.movementFxType || null,

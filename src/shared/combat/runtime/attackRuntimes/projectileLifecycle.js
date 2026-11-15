@@ -1,6 +1,6 @@
 // Released projectiles outlive their owner; attached attacks and hooks do not.
 function isDetachedProjectile(attack) {
-  return ['projectile-linear', 'projectile-bounce', 'returning-projectile'].includes(attack?.runtimeKind);
+  return ['projectile-linear', 'projectile-bounce'].includes(attack?.runtimeKind);
 }
 
 // The contact a live server runtime is reporting right now.

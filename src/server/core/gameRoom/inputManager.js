@@ -186,7 +186,9 @@ function clampToRoomBounds(x, y, room) {
 // Resolved on first use (circular imports); a require() per history sample
 // was measurable on the game thread.
 let lagCompensation = null;
-function pushPositionHistory(playerData, now = Date.now()) {
+// `clientTs`: the sender's own timestamp of an accepted human position (net
+// traces map a rewound test back to the victim's frame with it).
+function pushPositionHistory(playerData, now = Date.now(), clientTs = undefined) {
   if (!playerData) return;
   const history = (playerData._posHistory ||= []);
   // Human samples are keyed slightly ahead of arrival (when snapshots publish
@@ -196,6 +198,7 @@ function pushPositionHistory(playerData, now = Date.now()) {
     x: Number(playerData.x) || 0,
     y: Number(playerData.y) || 0,
     t: now,
+    ...(Number.isFinite(clientTs) ? { ts: clientTs } : null),
     body: (lagCompensation ||= require("../../../shared/combat/runtime/lagCompensation.js")).collisionPose(playerData),
   });
   while (
@@ -420,7 +423,7 @@ function handlePlayerInput(room, socketId, inputData) {
     }
     resolveStomp(room, playerData, now);
     // Keyed by when snapshots publish this position (see humanPlayout.js).
-    pushPositionHistory(playerData, notePlayoutSample(playerData, packetTimestamp, now));
+    pushPositionHistory(playerData, notePlayoutSample(playerData, packetTimestamp, now), packetTimestamp);
     netTestLogger.noteInput(room, playerData, now, {
       dx: rawX - prevInputX,
       dy: rawY - prevInputY,

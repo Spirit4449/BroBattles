@@ -1,4 +1,5 @@
 import { CombatClock } from "../../../shared/characters/sparrowReplication";
+import { readNetFlags } from "../../lib/netFlags";
 
 // The one client estimate of server time. Snapshots and combat packets keep it
 // tied to the room's epoch; game:clock pings refine the offset with the
@@ -10,6 +11,9 @@ const BURST_SPACING_MS = 120;
 const STEADY_INTERVAL_MS = 2000;
 
 export const serverClock = new CombatClock();
+// A/B switch for production measurement: netProjectileLead=0 (lib/netFlags.js)
+// draws enemy projectiles at the server's present instead of leading them.
+if (readNetFlags().netProjectileLead === "0") serverClock.projectileLead = false;
 
 let socketRef = null;
 let steadyTimer = null;
@@ -50,11 +54,16 @@ export function ensureServerClockEpoch(epoch) {
   return true;
 }
 
-export function observeServerClockSnapshot(snapshot, received = performance.now()) {
+export function observeServerClockSnapshot(snapshot, received = performance.now(), localName = null) {
   if (!snapshot?.snapshotEpoch) return;
   ensureServerClockEpoch(snapshot.snapshotEpoch);
   serverClock.observe({ epoch: snapshot.snapshotEpoch, sentMono: snapshot.sentMono,
     simMono: snapshot.tMono }, received);
+  // The server reports each human's own playout delay in its snapshot entry
+  // (when it changes); it is part of the enemy projectile lead.
+  const own = localName != null ? snapshot.players?.[localName] : null;
+  if (own && own.playoutMs != null) serverClock.notePlayout(own.playoutMs);
+  if (own && own.historyMs != null) serverClock.noteHistory(own.historyMs);
 }
 
 function acknowledgeLatency(_data, ack) { if (typeof ack === 'function') ack(); }
@@ -90,5 +99,7 @@ export function serverNowMono(localNow = performance.now()) {
 export function getServerClockDiagnostics() {
   const best = serverClock.samples.reduce((a, b) => (!a || b.rtt < a.rtt ? b : a), null);
   return { epoch: serverClock.epoch, offsetMs: serverClock.offset,
-    bestRttMs: best?.rtt ?? null, samples: serverClock.samples.length };
+    bestRttMs: best?.rtt ?? null, samples: serverClock.samples.length,
+    playoutMs: serverClock.playoutMs, projectileLead: serverClock.projectileLead !== false,
+    enemyLeadMs: serverClock.enemyLeadMs(0) };
 }
