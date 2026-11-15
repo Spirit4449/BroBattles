@@ -46,14 +46,11 @@ function setupPlayerSocket(room, socket) {
       return;
     }
     if (Number(player._controlLockUntil || 0) > Date.now()) return;
-    const actionType = String(actionData?.type || "").toLowerCase();
-    const isReturnControlAction = actionType === "ninja-shuriken-return";
     const now = Date.now();
     if (Number(player._actionSuppressedUntil || 0) > now) return;
 
     const lastActionAt = Number(player._lastActionAt || 0);
     if (
-      !isReturnControlAction &&
       lastActionAt > 0 &&
       now - lastActionAt < ACTION_MIN_INTERVAL_MS
     ) {
@@ -76,9 +73,7 @@ function setupPlayerSocket(room, socket) {
       return;
     }
 
-    if (!isReturnControlAction) {
-      player._lastActionAt = now;
-    }
+    player._lastActionAt = now;
     room.handlePlayerAction(socket.id, actionData);
   });
 

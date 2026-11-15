@@ -1,6 +1,7 @@
 // Minimal singleton Socket.IO client (bundled)
 import { io } from "socket.io-client";
 import { readNetTraceSpec } from "./netTraceSpec";
+import { readNetFlags } from "./netFlags";
 
 function getSocketDebugMeta(socket) {
   const location =
@@ -26,6 +27,8 @@ function getSocketDebugMeta(socket) {
 // guarantee the handshake finished after /status completed.
 const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
 const netTraceSpec = editorSession ? null : readNetTraceSpec();
+// Keeps any net* A/B flag on this page's URL for the rest of the tab (netFlags.js).
+readNetFlags();
 const socket = io(editorSession ? '/map-playtest' : '/', {
   ...(editorSession ? {auth:{session:editorSession}} : {}),
   ...(netTraceSpec ? { auth: { netTrace: netTraceSpec } } : {}),

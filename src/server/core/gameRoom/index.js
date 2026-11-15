@@ -18,7 +18,7 @@ const {
 } = require("../../../shared/combat/matchConfig.js");
 const {
   FIXED_DT_MS,
-  SNAPSHOT_EVERY_TICKS,
+  snapshotEveryTicksFor,
   WORLD_STATE_EVERY_TICKS,
 } = require("../../../shared/gameConstants");
 
@@ -81,11 +81,14 @@ class GameRoom {
     // Fixed-step loop state (see startGameLoop)
     this._loopRunning = false;
     this.traceCombatHit = (attacker, targetName, details) => netTrace.noteHit(this, attacker, targetName, details);
+    this.traceShotGap = (details) => netTrace.noteShotGap(this, details);
     this._tickId = 0; // monotonically increasing per 60Hz tick
     this._chatSeq = 1;
     // Tick/snapshot cadence: src/shared/gameConstants.js
     this.FIXED_DT_MS = FIXED_DT_MS;
-    this.SNAPSHOT_EVERY_TICKS = SNAPSHOT_EVERY_TICKS;
+    // BB_SNAPSHOT_HZ (e.g. 60) changes the player snapshot rate for newly
+    // created rooms; game:init tells clients the interval. Default 30 Hz.
+    this.SNAPSHOT_EVERY_TICKS = snapshotEveryTicksFor(process.env.BB_SNAPSHOT_HZ);
     this.WORLD_STATE_EVERY_TICKS = WORLD_STATE_EVERY_TICKS;
     // Rollback switch for comparing publication pacing; simulation is unchanged.
     this.COALESCE_SNAPSHOTS = process.env.BB_COALESCE_SNAPSHOTS !== "0";

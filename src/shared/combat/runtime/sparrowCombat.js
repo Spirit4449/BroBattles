@@ -6,6 +6,7 @@ const model = require('../../characters/sparrowProjectile');
 const { participantId, getParticipant } = require('./participants');
 const { characterBody } = require('../../physics/characterBody');
 const { clampDeliveryRewind } = require('../attackDelivery');
+const { traceShotGaps } = require('./shotTrace.js');
 const { requestIdentity, withinRequestRate, unavailableReason, isCharged, spendShot, rememberRequest, enemyShotTargets } = require('./shotRequests.js');
 
 function initialize(room) {
@@ -44,7 +45,7 @@ function request(room, p, data, special = false) {
     if (special) room.io.to(`game:${room.matchId}`).emit('player:special', { username: p.name, character: 'sparrow', aim: data.aim });
     const startup = model.attackConfig(special).castDelayMs || 0;
     state.pending.push({ ownerId: participantId(p), id, shot, dueTick: room._tickId + Math.ceil(startup / model.STEP_MS),
-      viewRewindMs: clampDeliveryRewind('released', data?.viewRewindMs) });
+      viewRewindMs: clampDeliveryRewind('released', data?.viewRewindMs), viewRewindRequestedMs: Number(data?.viewRewindMs) || 0 });
     // Keep public windups available to existing animations and bot perception.
     require('./characterActionRegistry.js').broadcastAction(room, p, {
       type: special ? 'sparrow-windup-special' : 'sparrow-arrow', id, angle: shot.angle, startup,
@@ -58,8 +59,9 @@ function pose(p) {
   const body = characterBody('sparrow', p.flip);
   return { x: p.x, y: p.y, width: body.displayWidth, height: body.displayHeight };
 }
+// viewRewindMs: the shot's rewind, which victims add to their projectile lead.
 function packetFor(attack) {
-  return { ...attack.projectile, ownerName: attack.attackerName, ownerId: attack.attackerParticipantId };
+  return { ...attack.projectile, ownerName: attack.attackerName, ownerId: attack.attackerParticipantId, viewRewindMs: attack.viewRewindMs || 0 };
 }
 // Sorted by name so ties resolve the same way on every client.
 function targetList(room, owner, viewRewindMs = 0, now = combatNow(room)) {
@@ -115,7 +117,7 @@ function tick(room) {
       projectile, clientRequestId: cast.id, attackerName: owner.name, attackerParticipantId: cast.ownerId,
       attackType: cast.shot.special ? 'sparrow-burning-arrow' : 'sparrow-arrow',
       x: projectile.x, y: projectile.y, vx: projectile.vx, vy: projectile.vy, gravity: projectile.gravity,
-      collisionRadius: projectile.radius, age: 0, viewRewindMs: cast.viewRewindMs || 0,
+      collisionRadius: projectile.radius, age: 0, viewRewindMs: cast.viewRewindMs || 0, viewRewindRequestedMs: cast.viewRewindRequestedMs || 0,
     });
     emit(room, owner, { type: 'sparrow-projectiles', requestId: cast.id, projectiles: projectiles.map(p => packetFor(state.active.get(p.id))) });
   }
@@ -127,7 +129,10 @@ function tick(room) {
     const nextAge = Math.min(attack.projectile.maxLifetimeMs, Math.max(0, room._simulationMono - attack.projectile.launchMono));
     const next = model.sample(attack.projectile, nextAge);
     exposeDamageHitbox(room, attack.projectile, { kind: 'sweep', a: { x: attack.x, y: attack.y }, b: { x: next.x, y: next.y }, radius: attack.collisionRadius });
-    const contact = model.firstContact(attack, next, attack.collisionRadius, shotTerrain(room, owner.team), targetList(room, owner, attack.viewRewindMs));
+    const targets = targetList(room, owner, attack.viewRewindMs);
+    if (room._netTrace) traceShotGaps(room, { pid: attack.projectile.id, attacker: owner, a: { x: attack.x, y: attack.y }, b: next,
+      radius: attack.collisionRadius, age: nextAge, rewindMs: attack.viewRewindMs, targets });
+    const contact = model.firstContact(attack, next, attack.collisionRadius, shotTerrain(room, owner.team), targets);
     Object.assign(attack, next, { age: nextAge });
     if (contact) finish(room, attack, contact);
     else if (nextAge >= attack.projectile.maxLifetimeMs || attack.y >= room.geometry.world.y + room.geometry.world.height) {

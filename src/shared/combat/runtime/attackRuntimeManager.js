@@ -1,5 +1,6 @@
 const { combatNow } = require("./clock");
 const { participantId } = require('./participants');
+const { FIXED_DT_MS } = require('../../gameConstants');
 const {
   createRuntimeAttack,
   tickRuntimeAttack,
@@ -52,7 +53,21 @@ function registerAttackFromAction(
   return true;
 }
 
+// The simulation time at which a runtime projectile registered right now has
+// flown 0 ms, so that at every later step s its `elapsed` is s - launchMono.
+// tickActiveAttacks advances each attack one step: a release registered
+// inside a step before that (scheduled releases, bots) is already one step
+// old at this step's time; one registered between steps (a socket request)
+// is first advanced by the next step. Release packets carry it so clients
+// draw the flight by server age instead of from packet arrival.
+function releaseLaunchMono(room) {
+  const sim = Number(room?._simulationMono);
+  if (!Number.isFinite(sim)) return null;
+  return room._attacksAdvancedTick === room._tickId ? sim : sim - (Number(room.FIXED_DT_MS) || FIXED_DT_MS);
+}
+
 function tickActiveAttacks(room, now = combatNow(room)) {
+  room._attacksAdvancedTick = room._tickId;
   const attacks = ensureAttackState(room);
   if (attacks.length) {
     room._activeAttacks = attacks.filter((attack) => {
@@ -67,37 +82,9 @@ function tickActiveAttacks(room, now = combatNow(room)) {
   tickRuntimeControlEffects(room, now);
 }
 
-function requestReturningProjectilePhase(room, playerData, actionData) {
-  const attacks = ensureAttackState(room);
-  if (!attacks.length) return false;
-  const socketId = String(participantId(playerData) || "");
-  const instanceId = String(actionData?.id || "").trim();
-  if (!socketId || !instanceId) return false;
-
-  let applied = false;
-  for (const attack of attacks) {
-    if (
-      !attack ||
-      String(attack.runtimeKind || "") !== "returning-projectile"
-    ) {
-      continue;
-    }
-    if (String(attack.attackerParticipantId || "") !== socketId) continue;
-    if (String(attack.instanceId || "") !== instanceId) continue;
-    if (String(attack.phase || "") === "return") {
-      applied = true;
-      continue;
-    }
-    attack.phase = "return";
-    attack.phaseElapsed = 0;
-    applied = true;
-  }
-  return applied;
-}
-
 module.exports = {
+  releaseLaunchMono,
   ensureAttackState,
   registerAttackFromAction,
   tickActiveAttacks,
-  requestReturningProjectilePhase,
 };

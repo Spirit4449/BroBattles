@@ -1,6 +1,5 @@
 const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig } = require("../characters/characterTuning.js");
 const { getResolvedAttackDescriptor } = require("./runtime/attackDescriptorResolver.js");
-const attackRuntime = require("./runtime/attackRuntimeManager.js");
 const { characterDefinitions } = require('../characters');
 const { characterBody } = require('../physics/characterBody');
 const attackTypes = Object.fromEntries(Object.values(characterDefinitions).map(definition => [definition.key, definition.basicAction]));
@@ -8,7 +7,6 @@ const { botProfile, DEFAULT_SPECIAL_LOCK_MS, DEFAULT_SPECIAL_RANGE } = require('
 const { FIXED_DT_MS } = require('../gameConstants');
 const { launchLagMs } = require('./launchRamp');
 const { muzzleOf } = require('../characters/characterRig');
-const ninjaModel = require('../characters/ninjaProjectile');
 const { shotBlockers, shotTerrain } = require('./runtime/attackRuntimes/geometry.js');
 const BOT_ATTACK_TO_SUPER_COOLDOWN_MS = 400;
 
@@ -107,8 +105,7 @@ function hasClearShot(room, player, target, aim = basicAim(player, target, playe
   // Shots that ignore map terrain are still stopped by the other team's walls.
   const colliders = clearShot ? shotTerrain(room, player.team) : shotBlockers(room, player.team);
   if (!colliders.length) return true;
-  const collisionRadius = (clearShot && ((clearShot.radiusFromAttack &&
-    getResolvedAttackDescriptor(clearShot.radiusFromAttack)?.runtime?.collisionRadius) || clearShot.radius)) || 16;
+  const collisionRadius = clearShot?.radius || 16;
   return !colliders.some((rect) =>
     segmentCrossesRect(
       player.x,
@@ -279,21 +276,4 @@ function requestSpecial(room, p, target, now) {
   return used;
 }
 
-function startNinjaSwarm(room, p, now, aim = {}) {
-  const { count, releaseMs } = ninjaModel.swarmConfig();
-  const direction = aim.direction === -1 ? -1 : 1;
-  const burst = ++p._botActionSeq;
-  const interruptSeq = p._attackInterruptSeq || 0;
-  for (let i = 0; i < count; i++) room.scheduleAction(() => {
-    if (!p.isAlive || (p._attackInterruptSeq || 0) !== interruptSeq) return;
-    const shard = ninjaModel.swarmShard(i, direction);
-    const action = { type: "ninja-shuriken", id: `${p.participantId}:swarm:${burst}:${i}`, direction, angle: direction < 0 ? Math.PI : 0,
-      x: p.x + shard.spawnOffsetX, y: p.y + shard.spawnOffsetY,
-      forwardDistance: shard.forwardDistance, outwardDuration: shard.outwardDuration, returnSpeed: shard.returnSpeed,
-      endYOffset: shard.endYOffset, ctrl1YOffset: shard.ctrl1YOffset, ctrl2YOffset: shard.ctrl2YOffset };
-    attackRuntime.registerAttackFromAction(room, p, action, room._botNow || Date.now());
-    const attack = room._activeAttacks.at(-1);
-    if (attack?.instanceId === action.id) attack.attackType = "ninja-special-swarm";
-  }, i * releaseMs, now);
-}
-module.exports = { BOT_ATTACK_TO_SUPER_COOLDOWN_MS, advanceAmmo, basicAim, basicRange, hasClearShot, pressureAim, requestBasic, requestSpecial, startNinjaSwarm };
+module.exports = { BOT_ATTACK_TO_SUPER_COOLDOWN_MS, advanceAmmo, basicAim, basicRange, hasClearShot, pressureAim, requestBasic, requestSpecial };

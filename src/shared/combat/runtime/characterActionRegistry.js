@@ -5,32 +5,18 @@ const { participantId } = require('./participants');
 const attackRuntimeManager = require("./attackRuntimeManager.js");
 const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver.js");
 
-function maybeHandleNinjaReturnSignal(room, playerData, actionData) {
-  const actionType = String(actionData?.type || "").toLowerCase();
-  if (actionType !== "ninja-shuriken-return") return null;
-  if (String(playerData?.char_class || "").toLowerCase() !== "ninja") {
-    return { handled: true };
-  }
-  attackRuntimeManager.requestReturningProjectilePhase(
-    room,
-    playerData,
-    actionData,
-  );
-  return { handled: true };
-}
-
-// Terrain rectangles only matter to the Gloop slimeball visual, whose release
-// packet carries the room's own colliders. Every other action would otherwise
-// echo a whole map's worth of rectangles to every client.
-const TERRAIN_ACTION_TYPES = new Set(["gloop-slimeball-release"]);
+// Terrain rectangles never go back out: the server flies every shot against
+// the room's own colliders, and clients have them from the match bootstrap
+// (moving platforms and built walls included). Echoing a client's or the
+// map's list sent a whole map's worth of rectangles with every slimeball.
 function withoutUnusedTerrain(action) {
-  if (!action?.mapCollisionRects || TERRAIN_ACTION_TYPES.has(action.type)) return action;
+  if (!action?.mapCollisionRects) return action;
   const { mapCollisionRects: _unused, ...rest } = action;
   return rest;
 }
 
 function broadcastAction(room, playerData, action, timestamp = combatNow(room)) {
-  if (getDescriptor(action?.type)?.character === playerData.char_class && action?.type !== 'ninja-shuriken-return') {
+  if (getDescriptor(action?.type)?.character === playerData.char_class) {
     playerData._visibleAttack = { at: timestamp, startupMs: Number(action.startup) || 0,
       angle: Number.isFinite(action.angle) ? action.angle : (playerData.flip ? Math.PI : 0) };
   }
@@ -43,6 +29,19 @@ function broadcastAction(room, playerData, action, timestamp = combatNow(room)) 
     action: withoutUnusedTerrain(action),
     t: timestamp,
   });
+}
+
+// A released projectile's packet says where the server launched it and when
+// (`launchMono`, simulation clock: its runtime `elapsed` is s - launchMono at
+// every step s) and the view rewind it is tested with, so every client draws
+// it by server age, and victims lead it (CombatClock.enemyLeadMs).
+function stampRelease(room, playerData, action, launchMono) {
+  const launched = room._activeAttacks?.findLast(attack => attack.instanceId === action.id && attack.attackerParticipantId === participantId(playerData));
+  if (!launched) return action;
+  if (Number.isFinite(launched.x) && Number.isFinite(launched.y)) action.start = { x: launched.x, y: launched.y };
+  if (Number.isFinite(launchMono)) action.launchMono = Math.round(launchMono * 10) / 10;
+  action.viewRewindMs = launched.viewRewindMs || 0;
+  return action;
 }
 
 function getDescriptor(actionType) {
@@ -137,18 +136,15 @@ function scheduleWindupRelease(
         x: slimeCast.start.x + playerData.x - castOrigin.x,
         y: slimeCast.start.y + playerData.y - castOrigin.y,
       } });
-      // Static terrain only: clients add moving platforms where they are each frame.
-      if (room.geometry?.colliders) releaseAction.mapCollisionRects = room.geometry.colliders.filter((c) => !c.motion).map(
-        ({ left, right, top, bottom }) => ({ left, right, top, bottom }));
     }
+    const launchMono = attackRuntimeManager.releaseLaunchMono(room);
     attackRuntimeManager.registerAttackFromAction(
       room,
       playerData,
       releaseAction,
       combatNow(room),
     );
-    const launched = room._activeAttacks?.findLast(attack => attack.instanceId === releaseAction.id && attack.attackerParticipantId === participantId(playerData));
-    if (launched && Number.isFinite(launched.x) && Number.isFinite(launched.y)) releaseAction.start = { x: launched.x, y: launched.y };
+    stampRelease(room, playerData, releaseAction, launchMono);
     broadcastAction(room, playerData, releaseAction, combatNow(room));
   };
 
@@ -178,15 +174,6 @@ function handleCharacterAction(
   actionData,
   actionNow = combatNow(room),
 ) {
-  const ninjaReturnResult = maybeHandleNinjaReturnSignal(
-    room,
-    playerData,
-    actionData,
-  );
-  if (ninjaReturnResult?.handled) {
-    return ninjaReturnResult;
-  }
-
   const descriptor = getDescriptor(actionData?.type);
   if (!descriptor) return null;
 
@@ -223,6 +210,7 @@ function handleCharacterAction(
 }
 
 module.exports = {
+  stampRelease,
   withoutUnusedTerrain,
   broadcastAction,
   handleCharacterAction,

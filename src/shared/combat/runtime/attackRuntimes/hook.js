@@ -7,6 +7,7 @@ const effectManager = require("../effects/effectManager.js");
 const { clampToWorld, circleAabbOverlap, getAttackCollisionCenter, shotBlockers, sweptCircleOverlapsRect } = require('./geometry.js');
 const { buildProjectileLinearAttack } = require('./projectiles.js');
 const { getObjectiveTargets, emitServerHit, buildTargetList, shotTargetBounds } = require('./targets.js');
+const { positionAt } = require('../lagCompensation.js');
 
 function resolveLiveGloopPullDestination(room, target, pull) {
   const source = getParticipant(room, String(pull?.sourceSocketId || ""));
@@ -93,6 +94,9 @@ function applyGloopPull(room, attacker, target, attack, now) {
         y: Number(attack.hitContactY ?? attack.y ?? ay),
       },
       end: { x: target._gloopPullState.toX, y: target._gloopPullState.toY },
+      // The contact relative to where the target was tested (as the thrower
+      // saw it), so the victim draws the latch on its body as drawn now.
+      targetOffset: attack.hitTargetOffset || undefined,
       pullDurationMs,
       sourceName: attacker.name,
       pulledStopDistance: stopDistance,
@@ -251,6 +255,8 @@ function tickHookProjectile(room, attack, descriptor, now) {
     emitServerHit(room, attack, target.name, { damage: attack.damage });
     attack.hitContactX = collisionCenter.x;
     attack.hitContactY = collisionCenter.y;
+    const seen = positionAt(target, attack.viewRewindMs, now);
+    if (Number.isFinite(seen?.x) && Number.isFinite(seen?.y)) attack.hitTargetOffset = { x: collisionCenter.x - seen.x, y: collisionCenter.y - seen.y };
     applyGloopPull(room, attacker, target, attack, now);
     return true;
   }

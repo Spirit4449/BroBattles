@@ -96,7 +96,7 @@
         "icon-berry-bomb",
         "icon-robo-cat"
       ],
-      "promotedCount": 2
+      "promotedCount": 3
     }
   },
   "offers": [
@@ -478,7 +478,7 @@
       "id": "card-mjolnirs-anvil",
       "section": "profile",
       "kind": "item",
-      "name": "Mjolnir\u2019s Anvil",
+      "name": "Mjolnir’s Anvil",
       "description": "An animated rare battle card.",
       "rarity": "rare",
       "banner": "/assets/shop/banners/mjolnirs-anvil-card.webp",

@@ -3,7 +3,6 @@ const { getResolvedAttackDescriptor } = require('./attackDescriptorResolver.js')
 const projectiles = require('./attackRuntimes/projectiles.js');
 const melee = require('./attackRuntimes/melee.js');
 const hook = require('./attackRuntimes/hook.js');
-const returning = require('./attackRuntimes/returningProjectile.js');
 const ATTACK_RUNTIMES = {
   'projectile-linear': { create: projectiles.buildProjectileLinearAttack, tick: projectiles.tickLinearProjectile },
   'projectile-bounce': { create: projectiles.buildProjectileBounceAttack, tick: projectiles.tickBouncingProjectile },
@@ -11,7 +10,6 @@ const ATTACK_RUNTIMES = {
   'attached-cone': { create: melee.buildAttachedConeAttack, tick: melee.tickAttachedCone },
   'attached-charge': { create: melee.buildAttachedChargeAttack, tick: melee.tickAttachedCharge },
   'path-rect': { create: melee.buildPathRectAttack, tick: melee.tickPathRect },
-  'returning-projectile': { create: returning.buildReturningProjectileAttack, tick: returning.tickReturningProjectile },
   'hook-projectile': { create: hook.buildHookProjectileAttack, tick: hook.tickHookProjectile },
 };
 

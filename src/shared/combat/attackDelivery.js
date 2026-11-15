@@ -6,7 +6,14 @@
 const { characterBody } = require('../physics/characterBody');
 const { sweep } = require('../characters/sparrowProjectile');
 const { sampleThorgHitbox, THORG_SWEEP } = require('../characters/thorgSweep');
+const { MAX_RENDER_DELAY_MS } = require('../gameConstants');
 
+// A view rewind is the attacker's network latency plus its render buffer (the
+// interpolation delay its client keeps behind the snapshots). `rewindCapMs`
+// bounds the network part; the render buffer the request reports is honoured
+// up to MAX_RENDER_DELAY_MS, the client's own maximum. The transport has
+// already bounded the whole rewind by the connection's measured latency
+// (lagCompensation.stampViewRewind), so a forged buffer cannot extend it.
 const DELIVERIES = Object.freeze({
   // The hitbox moves with the attacker: swings, sweeps, cones. Targets are
   // tested where the attacker saw them, within a shorter cap than shots so a
@@ -30,7 +37,6 @@ const RUNTIME_DELIVERY = Object.freeze({
   'path-rect': 'attached',
   'projectile-linear': 'released',
   'projectile-bounce': 'released',
-  'returning-projectile': 'released',
   'hook-projectile': 'released',
 });
 
@@ -42,10 +48,18 @@ function deliveryPolicy(delivery) {
   return DELIVERIES[delivery] || DELIVERIES.area;
 }
 
-// Bounds a view rewind to what the attack's delivery allows.
-function clampDeliveryRewind(delivery, ms) {
+// Bounds a view rewind to what the attack's delivery allows: `bufferMs` of it
+// (the attacker's render buffer, bounded by the client maximum and by the
+// rewind itself) always counts, the rest at most the delivery's cap. A delivery
+// without rewind (cap 0) tests targets where they are now.
+function clampDeliveryRewind(delivery, ms, bufferMs = 0) {
   const value = Number(ms);
-  return Number.isFinite(value) ? Math.max(0, Math.min(deliveryPolicy(delivery).rewindCapMs, value)) : 0;
+  const cap = deliveryPolicy(delivery).rewindCapMs;
+  if (!Number.isFinite(value) || !(cap > 0)) return 0;
+  const buffer = Number(bufferMs);
+  const honoured = Number.isFinite(buffer) ? Math.max(0, Math.min(MAX_RENDER_DELAY_MS, buffer)) : 0;
+  // Never more than the rewind itself, which the transport bounded.
+  return Math.max(0, Math.min(value, honoured + cap));
 }
 
 // --- Attached shapes -------------------------------------------------------

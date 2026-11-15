@@ -1,18 +1,34 @@
 import { shouldMuteClientDefaultLogs } from "../../lib/netTestLogger.js";
-import { FIXED_DT_MS, SNAPSHOT_EVERY_TICKS } from "../../../shared/gameConstants.js";
+import { FIXED_DT_MS, SNAPSHOT_EVERY_TICKS, MAX_RENDER_DELAY_MS } from "../../../shared/gameConstants.js";
 export const DEFAULT_SNAPSHOT_BUFFER_CONFIG = Object.freeze({
   maxStateBuffer: 90,
   initialInterpDelayMs: 75,
+  // Floor of the legacy spacing-based delay; the arrival delay's floor is one
+  // snapshot interval plus `delaySafetyMs`.
   minInterpDelayMs: 45,
-  maxInterpDelayMs: 115,
-  snapIntervalMs: FIXED_DT_MS * SNAPSHOT_EVERY_TICKS, // expected server snapshot spacing
+  maxInterpDelayMs: MAX_RENDER_DELAY_MS,
+  // Expected server snapshot spacing. game:init carries the room's real rate
+  // (`setSnapshotIntervalMs`); this compile-time default covers older servers.
+  snapIntervalMs: FIXED_DT_MS * SNAPSHOT_EVERY_TICKS,
   maxSpacingMs: 500,
   lateSnapshotThresholdMs: 140,
   largePositionDeltaPx: 90,
   spacingEmaAlpha: 0.12,
   enableAdaptiveDelay: true,
-  // Opt-in until gameplay traces validate the latency / underrun tradeoff.
-  enableArrivalAdaptiveDelay: false,
+  // "arrival": one snapshot interval plus how late snapshots actually arrive
+  // (a high quantile of arrival offset above the median the timeline follows),
+  // plus a small safety margin. A clean link converges near one interval.
+  // "spacing": the pre-2026-11 target, 2 x spacing + 2 x jitter, 45-115 ms
+  // (`netRenderDelay=legacy`).
+  delayMode: "arrival",
+  delaySafetyMs: 6,
+  lateQuantile: 0.98,
+  // Per frame, the delay may grow by this fraction of the frame time (remote
+  // motion briefly runs slower) and shrink by the smaller one (briefly faster),
+  // so the buffer grows quickly when snapshots start arriving late and gives
+  // latency back slowly.
+  delayRiseRate: 0.2,
+  delayFallRate: 0.02,
   enableClockCorrection: false,
   enableBacklogCatchup: true,
   extrapolationLimitMs: 250,
@@ -56,13 +72,17 @@ export function createSnapshotBuffer(options = {}) {
     initialInterpDelayMs,
     minInterpDelayMs,
     maxInterpDelayMs,
-    snapIntervalMs,
+    snapIntervalMs: configuredSnapIntervalMs,
     maxSpacingMs,
     lateSnapshotThresholdMs,
     largePositionDeltaPx,
     spacingEmaAlpha,
     enableAdaptiveDelay,
-    enableArrivalAdaptiveDelay,
+    delayMode,
+    delaySafetyMs,
+    lateQuantile,
+    delayRiseRate,
+    delayFallRate,
     enableClockCorrection,
     enableBacklogCatchup,
     extrapolationLimitMs,
@@ -73,6 +93,8 @@ export function createSnapshotBuffer(options = {}) {
     ...DEFAULT_SNAPSHOT_BUFFER_CONFIG,
     ...(options || {}),
   };
+  const arrivalDelay = delayMode !== "spacing";
+  let snapIntervalMs = configuredSnapIntervalMs;
   let active = false;
   const stateBuffer = [];
   let interpDelayMs = initialInterpDelayMs;
@@ -96,9 +118,16 @@ export function createSnapshotBuffer(options = {}) {
   let renderedFrames = 0;
   let rejectedSnapshots = 0;
   let maxExtrapolationMs = 0;
+  let underrunEpisodes = 0;
+  let cappedFrames = 0;
+  let underrunning = false;
   let generation = 0;
   const deliveryOffsets = [];
   let deliveryOffsetMs = null;
+  // How late a snapshot arrives relative to the median the timeline follows
+  // (the `lateQuantile` of recent offsets minus their median).
+  let lateMarginMs = null;
+  let delayTargetMs = initialInterpDelayMs;
 
   function noteDelivery(clientMonoNow, snapMono) {
     deliveryOffsets.push({ at: clientMonoNow, offset: clientMonoNow - snapMono });
@@ -108,6 +137,25 @@ export function createSnapshotBuffer(options = {}) {
     if (deliveryOffsets.length < deliveryMinSamples) return;
     const sorted = deliveryOffsets.map((d) => d.offset).sort((a, b) => a - b);
     deliveryOffsetMs = sorted[Math.floor(sorted.length / 2)];
+    const late = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * lateQuantile))];
+    lateMarginMs = Math.max(0, late - deliveryOffsetMs);
+  }
+
+  // The arrival delay: one snapshot interval (the newest snapshot ages that
+  // much before the next is due), plus how late snapshots arrive, plus safety.
+  function arrivalDelayTarget() {
+    const cadence = Number.isFinite(spacingEma) ? spacingEma : snapIntervalMs;
+    const floor = cadence + delaySafetyMs;
+    if (lateMarginMs == null) return Math.max(floor, Math.min(maxInterpDelayMs, initialInterpDelayMs));
+    return Math.max(floor, Math.min(maxInterpDelayMs, cadence + lateMarginMs + delaySafetyMs));
+  }
+
+  // Moves the delay toward its target by a bounded share of frame time.
+  function slewArrivalDelay(dt) {
+    delayTargetMs = arrivalDelayTarget();
+    const error = delayTargetMs - interpDelayMs;
+    if (error > 0) interpDelayMs += Math.min(error, dt * delayRiseRate);
+    else if (error < 0) interpDelayMs -= Math.min(-error, dt * delayFallRate);
   }
 
   function reset() {
@@ -123,14 +171,21 @@ export function createSnapshotBuffer(options = {}) {
     lastTickId = lastSequence = epoch = lastPeriodic = null;
     arrivalJitterEma = arrivalGapMs = sourceGapMs = 0;
     underrunFrames = renderedFrames = rejectedSnapshots = maxExtrapolationMs = 0;
+    underrunEpisodes = cappedFrames = 0;
+    underrunning = false;
     lastAdaptivePrint = lastDiagLogMono = 0;
     deliveryOffsets.length = 0;
-    deliveryOffsetMs = null;
+    deliveryOffsetMs = lateMarginMs = null;
+    delayTargetMs = initialInterpDelayMs;
   }
 
   function getDiagnostics() {
-    return { interpDelayMs, deliveryOffsetMs, spacingEma, jitterEma, arrivalJitterEma,
-      arrivalGapMs, sourceGapMs, underrunFrames, renderedFrames,
+    // underrunFrames counts every extrapolated frame, including frames held at
+    // the extrapolation cap after the server stopped sending (match end);
+    // cappedFrames counts those and underrunEpisodes counts separate underruns.
+    return { interpDelayMs, delayTargetMs, delayMode: arrivalDelay ? "arrival" : "spacing",
+      snapIntervalMs, lateMarginMs, deliveryOffsetMs, spacingEma, jitterEma, arrivalJitterEma,
+      arrivalGapMs, sourceGapMs, underrunFrames, underrunEpisodes, cappedFrames, renderedFrames,
       rejectedSnapshots, maxExtrapolationMs, bufferLength: stateBuffer.length };
   }
 
@@ -277,15 +332,12 @@ export function createSnapshotBuffer(options = {}) {
           spacingEma = spacingEma == null ? d : spacingEma + (d - spacingEma) * spacingEmaAlpha;
           const dev = Math.abs(d - spacingEma);
           jitterEma = jitterEma == null ? dev : jitterEma + (dev - jitterEma) * spacingEmaAlpha;
-          if (enableAdaptiveDelay) {
-            // Two snapshot intervals plus jitter keeps one spare snapshot. The
-            // old 3x target was masked by a startup clamp that left the
-            // timeline only ~15-48 ms behind; with delivery steering the
-            // configured delay is what players actually see.
-            const target = enableArrivalAdaptiveDelay
-              ? snapIntervalMs * 2 + arrivalJitterEma * 2
-              : spacingEma * 2 + jitterEma * 2;
-            interpDelayMs += (Math.max(minInterpDelayMs, Math.min(maxInterpDelayMs, target)) - interpDelayMs) * 0.1;
+          if (enableAdaptiveDelay && !arrivalDelay) {
+            // Legacy: two snapshot intervals plus jitter keeps one spare
+            // snapshot whatever the link does.
+            const target = spacingEma * 2 + jitterEma * 2;
+            delayTargetMs = Math.max(minInterpDelayMs, Math.min(maxInterpDelayMs, target));
+            interpDelayMs += (delayTargetMs - interpDelayMs) * 0.1;
           }
         }
       }
@@ -370,6 +422,7 @@ export function createSnapshotBuffer(options = {}) {
     if (dt < 0) dt = 0;
     if (dt > 250) dt = 250;
 
+    if (enableAdaptiveDelay && arrivalDelay) slewArrivalDelay(dt);
     renderClockMono += dt;
     if (enableDeliverySteering && deliveryOffsetMs != null) {
       renderClockMono += getDeliveryClockCorrection(
@@ -457,8 +510,15 @@ export function createSnapshotBuffer(options = {}) {
 
     renderedFrames++;
     const frame = sampleAt(targetMono);
-    if (frame.extrapolationMs > 0) underrunFrames++;
+    if (frame.extrapolationMs > 0) {
+      underrunFrames++;
+      if (!underrunning) underrunEpisodes++;
+      if (frame.extrapolationMs >= extrapolationLimitMs - 1) cappedFrames++;
+    }
+    underrunning = frame.extrapolationMs > 0;
     maxExtrapolationMs = Math.max(maxExtrapolationMs, frame.extrapolationMs);
+    // Attack requests report it with the render time (see shotPrediction).
+    frame.interpDelayMs = interpDelayMs;
     return frame;
   }
 
@@ -520,12 +580,20 @@ export function createSnapshotBuffer(options = {}) {
     if (spacingEma == null) return null;
     if (perfNow - lastAdaptivePrint <= 5000) return null;
     lastAdaptivePrint = perfNow;
-    return `[adaptive] delay=${interpDelayMs.toFixed(1)}ms spacingEma=${spacingEma?.toFixed(2)} jitterEma=${jitterEma?.toFixed(2)} arrivalJitter=${arrivalJitterEma.toFixed(2)}ms arrivalGap=${arrivalGapMs.toFixed(1)}ms sourceGap=${sourceGapMs.toFixed(1)}ms underruns=${underrunFrames}/${renderedFrames} maxExtrap=${maxExtrapolationMs.toFixed(1)}ms buffer=${stateBuffer.length}`;
+    return `[adaptive] delay=${interpDelayMs.toFixed(1)}ms target=${delayTargetMs.toFixed(1)}ms late=${(lateMarginMs ?? 0).toFixed(1)}ms spacingEma=${spacingEma?.toFixed(2)} jitterEma=${jitterEma?.toFixed(2)} arrivalJitter=${arrivalJitterEma.toFixed(2)}ms arrivalGap=${arrivalGapMs.toFixed(1)}ms sourceGap=${sourceGapMs.toFixed(1)}ms underruns=${underrunFrames}/${renderedFrames} maxExtrap=${maxExtrapolationMs.toFixed(1)}ms buffer=${stateBuffer.length}`;
+  }
+
+  // The room's snapshot interval from game:init. Older servers omit it.
+  function setSnapshotIntervalMs(ms) {
+    const value = Number(ms);
+    if (Number.isFinite(value) && value > 0 && value <= maxSpacingMs) snapIntervalMs = value;
   }
 
   return {
     ingestSnapshot,
     reset,
+    setSnapshotIntervalMs,
+    getSnapshotIntervalMs: () => snapIntervalMs,
     sampleAt,
     getDiagnostics,
     getGeneration: () => generation,

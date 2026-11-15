@@ -135,11 +135,8 @@ const NINJA_SWARM_HIT_DAMAGE = getResolvedCharacterSpecialConfig("ninja", "swarm
 // Anti-cheat & lag compensation
 // ---------------------------------------------------------------------------
 
-// Hit claims are rewound at most this far into the past (older timestamps are clamped).
+// Attacks rewind targets at most this far into the past (older views are clamped).
 const HIT_STALENESS_MAX_MS = 300;
-// Hit claims stamped this far in the future (clock drift) are still accepted;
-// anything later is rejected. Future timestamps are clamped to `now`.
-const HIT_FUTURE_TOLERANCE_MS = 120;
 // Per-player position history kept for lag-compensated hit checks.
 const POSITION_HISTORY_DEPTH = 128; // max samples
 const POSITION_HISTORY_MS = 1000; // max age
@@ -256,7 +253,6 @@ module.exports = {
   DUPLICATE_HIT_WINDOW_MS,
   NINJA_SWARM_HIT_DAMAGE,
   HIT_STALENESS_MAX_MS,
-  HIT_FUTURE_TOLERANCE_MS,
   POSITION_HISTORY_DEPTH,
   POSITION_HISTORY_MS,
   MOVE_PLAUSIBLE_SPEED_H,

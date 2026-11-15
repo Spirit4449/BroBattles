@@ -2,6 +2,8 @@ const { HIT_STALENESS_MAX_MS } = require("../matchConfig.js");
 const { getHistoricalPosition } = require("./combatValidation.js");
 const { characterBody } = require('../../physics/characterBody');
 const { DUCK_HEIGHT_RATIO } = require('../../physics/ducking');
+const { combatMono } = require('./clock');
+const { MAX_RENDER_DELAY_MS } = require('../../gameConstants');
 
 // Shooter-favoring lag compensation for projectiles.
 //
@@ -43,11 +45,23 @@ function createLatencyProbe(room, socket) {
   return state;
 }
 
+// The rewind is measured from the request's arrival on the server's monotonic
+// clock: attacks start (and look up position history) at the arrival instant,
+// and the simulation clock trails it by the loop's unspent remainder (0-17 ms,
+// more during catch-up). `BB_VIEW_REWIND_CLOCK=simulation` restores the old
+// simulation-clock stamp for comparisons; it pairs with the client's
+// `netRemoteLead=legacy`, which restores the lead it compensated.
+const STAMP_WITH_SIMULATION_CLOCK = typeof process !== 'undefined' && process.env?.BB_VIEW_REWIND_CLOCK === 'simulation';
 function stampViewRewind(room, request, latency) {
   if (!request || typeof request !== "object") return request;
   const view = request.viewMono;
-  const now = Number(room?._simulationMono);
+  const now = Number(STAMP_WITH_SIMULATION_CLOCK ? room?._simulationMono : combatMono(room));
   request.viewRewindMs = Number.isFinite(view) && Number.isFinite(now) ? Math.min(clampViewRewind(now - view), rewindAllowance(latency)) : 0;
+  // The part of that rewind the client reports as its render buffer: never
+  // more than the client maximum or the rewind itself. Deliveries cap only
+  // the remainder (attackDelivery.clampDeliveryRewind).
+  const buffer = typeof request.viewDelayMs === 'number' ? request.viewDelayMs : NaN;
+  request.viewBufferMs = Number.isFinite(buffer) ? Math.max(0, Math.min(buffer, MAX_RENDER_DELAY_MS, request.viewRewindMs)) : 0;
   return request;
 }
 
@@ -77,6 +91,26 @@ function poseAt(player, rewindMs, now = Date.now()) {
     ...(sample?.body || {}), ...position };
 }
 
+// Net traces only: the victim's own timestamp (client Date.now()) of the
+// position a rewind of `rewindMs` tests, interpolated between the history
+// samples around it; null for server-side moves and bots.
+function clientTimeAt(player, rewindMs, now = Date.now()) {
+  const history = player?._posHistory || [];
+  if (!history.length) return null;
+  const at = now - (Number(rewindMs) > 0 ? Number(rewindMs) : 0);
+  const last = history[history.length - 1];
+  if (at >= last.t) return Number.isFinite(last.ts) ? last.ts : null;
+  if (at <= history[0].t) return Number.isFinite(history[0].ts) ? history[0].ts : null;
+  for (let i = history.length - 1; i > 0; i--) {
+    const newer = history[i], older = history[i - 1];
+    if (at < older.t || at > newer.t) continue;
+    if (!Number.isFinite(newer.ts) || !Number.isFinite(older.ts)) return null;
+    const alpha = Math.max(0, Math.min(1, (at - older.t) / Math.max(1e-6, newer.t - older.t)));
+    return older.ts + (newer.ts - older.ts) * alpha;
+  }
+  return null;
+}
+
 function collisionPose(player) {
   const body = characterBody(player.char_class, player.flip);
   const height = body.height * (player.ducking ? DUCK_HEIGHT_RATIO : 1);
@@ -87,5 +121,5 @@ function collisionPose(player) {
     _bodyCenterOffsetY: player._bodyCenterOffsetY ?? body.offsetY + (body.height - height) / 2,
   };
 }
-module.exports = { stampViewRewind, clampViewRewind, positionAt, poseAt, collisionPose,
+module.exports = { stampViewRewind, clampViewRewind, positionAt, poseAt, collisionPose, clientTimeAt,
   createLatencyProbe, rewindAllowance, VIEW_BUFFER_ALLOWANCE_MS };

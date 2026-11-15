@@ -14,7 +14,9 @@ function attackIdentity(playerData, actionData, descriptor, now, runtimeKind = d
     attackerName: playerData.name,
     attackType: String(descriptor?.attackType || "basic").toLowerCase(),
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
-    viewRewindMs: clampDeliveryRewind(deliveryOf(kind), actionData?.viewRewindMs),
+    viewRewindMs: clampDeliveryRewind(deliveryOf(kind), actionData?.viewRewindMs, actionData?.viewBufferMs),
+    // Before the delivery cap, for production traces (netTraceRecorder `hit`).
+    viewRewindRequestedMs: Number(actionData?.viewRewindMs) || 0,
   };
 }
 
