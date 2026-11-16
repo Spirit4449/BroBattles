@@ -24,8 +24,8 @@ export function roomTerrain() { return roomStaticTerrain; }
 // The age to draw a released projectile at, from the server launch time in its
 // release packet (`launchMono`, server simulation clock), so every client
 // draws it where the server flies it rather than from when its packet
-// arrived. It starts in the hand at age 0 and reaches server age over the
-// lead ramp; an enemy's (`enemy`: it can damage this player) also gains the
+// arrived. It starts in the hand at age 0 and reaches server age at a bounded
+// speed (advanceShownLead); an enemy's (`enemy`: it can damage this player) also gains the
 // victim lead (CombatClock.enemyLeadMs). `state` is kept per projectile.
 // Null when the packet or clock cannot place it (an older server, no clock
 // yet): the caller then flies it from arrival as before.

@@ -5,6 +5,11 @@ const { tickActiveAttacks } = require('../src/shared/combat/runtime/attackRuntim
 const characterCombat = require('../src/shared/combat/runtime/characterCombatRegistry.js');
 const { stampViewRewind, rewindAllowance, VIEW_BUFFER_ALLOWANCE_MS, createLatencyProbe, poseAt } = require('../src/shared/combat/runtime/lagCompensation.js');
 const { HIT_STALENESS_MAX_MS } = require('../src/shared/combat/matchConfig.js');
+const { combatMono } = require('../src/shared/combat/runtime/clock.js');
+// A room whose last simulation step was at `simulationMono`, receiving a
+// request `sinceStepMs` later on its monotonic clock.
+const stampRoom = (simulationMono, sinceStepMs = 0) => ({ _simulationMono: simulationMono,
+  combatClock: { mono: () => simulationMono + sinceStepMs } });
 const { FIXED_DT_MS: STEP } = require('../src/shared/gameConstants');
 const { DELIVERIES } = require('../src/shared/combat/attackDelivery');
 
@@ -22,8 +27,11 @@ const SHOOTERS = {
 // Attached attacks, with a target inside their reach.
 const MELEE = { thorg: { targetX: 160 }, draven: { targetX: 180 } };
 let viewLagMs = 0;
+// The render buffer the browser reports with the request (part of viewLagMs).
+let viewDelayMs = null;
 // What the socket handlers do with a browser request rendered `viewLagMs` behind.
-function request(room, data) { return stampViewRewind(room, { ...data, viewMono: room._simulationMono - viewLagMs }, { samples: [{ at: performance.now(), rtt: HIT_STALENESS_MAX_MS }] }); }
+function request(room, data) { return stampViewRewind(room, { ...data, viewMono: combatMono(room) - viewLagMs,
+  ...(viewDelayMs == null ? {} : { viewDelayMs }) }, { samples: [{ at: performance.now(), rtt: HIT_STALENESS_MAX_MS }] }); }
 
 function arena(t, shooter, { targetX = 330 } = {}) {
   const clock = { now: 5_000_000 };
@@ -89,23 +97,36 @@ for (const [attacker, options] of Object.entries(MELEE)) {
     const strikeMs = arena(t, attacker, options).fire();
     assert.ok(strikeMs !== null, `${attacker} reaches a target that stays put`);
     // The target leaves 30 ms before the swing reaches it on the live timeline.
-    for (const [lag, hits] of [[0, false], [cap - 20, true], [cap + 120, false]]) {
-      viewLagMs = lag;
-      const f = arena(t, attacker, options);
-      f.leaveAfter(strikeMs - (lag > cap ? lag - 20 : 30));
-      assert.equal(f.fire() !== null, hits, `${attacker} with the attacker's view ${lag} ms behind`);
+    // The cap bounds the network part: a reported render buffer counts on top.
+    for (const buffer of [null, 80]) {
+      viewDelayMs = buffer;
+      const limit = cap + (buffer || 0);
+      for (const [lag, hits] of [[0, false], [limit - 20, true], [limit + 120, false]]) {
+        viewLagMs = lag;
+        const f = arena(t, attacker, options);
+        f.leaveAfter(strikeMs - (lag > limit ? lag - 20 : 30));
+        assert.equal(f.fire() !== null, hits, `${attacker} with the attacker's view ${lag} ms behind (buffer ${buffer})`);
+      }
     }
-    viewLagMs = 0;
+    viewLagMs = 0; viewDelayMs = null;
   });
 }
 
 test('the server bounds claimed view age by observed latency and rejects malformed times', t => {
-  const room = { _simulationMono: 1000 };
+  const room = stampRoom(1000);
   assert.equal(stampViewRewind(room, { viewMono: 880, viewRewindMs: 999 }).viewRewindMs, 120);
   assert.equal(stampViewRewind(room, { viewRewindMs: 250 }).viewRewindMs, 0);
   assert.equal(stampViewRewind(room, { viewMono: 2000 }).viewRewindMs, 0, 'future view');
   assert.equal(stampViewRewind(room, { viewMono: -5000 }).viewRewindMs, VIEW_BUFFER_ALLOWANCE_MS);
   assert.equal(stampViewRewind(room, null), null);
+});
+
+test('the view rewind is measured from the request\'s arrival, not the last simulation step', () => {
+  // Arriving 12 ms after the last step: attacks start at arrival, so the
+  // attacker's view is 12 ms further behind than the step time suggests.
+  const room = stampRoom(1000, 12);
+  assert.equal(stampViewRewind(room, { viewMono: 900 }).viewRewindMs, 112);
+  assert.equal(stampViewRewind(room, { viewMono: 1005 }).viewRewindMs, 7, 'a view after the step but before arrival');
 });
 
 test('bot shots use live target positions, and melee rewinds no further than the attached cap', t => {
@@ -146,7 +167,7 @@ test('a Gloop hook uses the requesting browser\'s id, so its prediction is not r
 });
 
 test('rewind budget accommodates measured latency, expires, and ignores client coercions', () => {
-  const room = { _simulationMono: 10000 }, at = performance.now();
+  const room = stampRoom(10000), at = performance.now();
   const low = { samples: [{ at, rtt: 10 }, { at, rtt: 500 }] };
   const high = { samples: [{ at, rtt: HIT_STALENESS_MAX_MS }] };
   for (const viewMono of [null, '', '9000', false, [], NaN, Infinity]) {

@@ -54,7 +54,7 @@ bystander, so Arcane Surge visibly grants a real powerup to an ally. `showcaseRo
 participant IDs, teams and positions; simulation and presentation have no two-player
 assumption. Fights start with empty super bars. Charge is earned through hits and carried
 between practice rounds, allowing kits such as Gloop to charge across multiple
-Ninja opponents. Ammo consumption, reloads, returning-projectile refunds, damage
+Ninja opponents. Ammo consumption, reloads, shuriken return refunds, damage
 and effects are real match outcomes. Defeated fighters stay down until the active
 fighters on one side are eliminated, followed by a new round; bystanders do not
 keep a defeated side fighting. Buff presentation is allowed to finish before reset.

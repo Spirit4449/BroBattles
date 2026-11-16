@@ -202,7 +202,7 @@ For new attacks:
 - A new shape kind needs support in `src/client/game/scene/damageHitboxDebug.js` and a test.
   Extend `tests/damageHitboxes.test.js` when adding a new collision protocol.
 
-Generic projectiles, splash rectangles, Thorg's hammer, returning projectiles,
+Generic projectiles, splash rectangles, Thorg's hammer,
 hooks, cones, Ninja shurikens, Sparrow arrows, Inferno, turret shots, and sudden
 death poison use this API. Attached burn/poison status effects have no separate
 spatial collision volume: their originating attack and affected player already

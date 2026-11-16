@@ -51,7 +51,7 @@ The file is split into commented sections:
 - **Derived from the powerup catalog:** shockwave radius/force, health regen, poison DPS, freeze multipliers. Don't edit these here; edit the catalog.
 - **Death drops:** lifetime, blink, pickup radius, coin/gem ranges, launch velocities.
 - **Combat rules:** `STOMP_RADIUS`, `STOMP_INTERRUPT_MS`, `DUPLICATE_HIT_WINDOW_MS`. `NINJA_SWARM_HIT_DAMAGE` is derived from `ninja.json`.
-- **Anti-cheat and lag compensation:** hit rewind and future tolerance, position history, movement plausibility budget, action spam limits, melee facing tolerance, `ATTACK_MAX_DIST_MAP`. Keep each max distance a little above that attack's real reach in its character JSON.
+- **Anti-cheat and lag compensation:** hit rewind cap, position history, movement plausibility budget, action spam limits, melee facing tolerance, `ATTACK_MAX_DIST_MAP`. Keep each max distance a little above that attack's real reach in its character JSON.
 
 ## Movement: `src/shared/physics/movementPhysics.json`
 
@@ -146,7 +146,7 @@ The admin panel calls the runtime configuration service, which updates in-memory
 | `matchConfig.js`: regen | Starts after 3.8s out of combat; ticks every 1.5s for 25% of missing health, minimum 500, capped at max health |
 | `matchConfig.js`: powerups | Spawn interval 25s; first 2 spawn 5s into the match; max active 3; pickup radius 34px (collected when a hurtbox overlaps the pickup circle); despawn 10s after the 2s omen; anchored spawn lift 22px |
 | `matchConfig.js`: drops | Lifetime 12s; final 3s blinking; pickup radius 110px; 4–8 coin drops and 1–3 gem drops |
-| `matchConfig.js`: validation | Hit rewind cap 300ms; future tolerance 120ms; history 1s / 128 samples; duplicate-hit window 80ms; stomp radius 110px and interruption 300ms |
+| `matchConfig.js`: validation | Hit rewind cap 300ms; history 1s / 128 samples; duplicate-hit window 80ms; stomp radius 110px and interruption 300ms |
 | `movementPhysics.json` | Run speed 260px/s; ground/air acceleration 3000/3300px/s²; gravity 990px/s²; jump speed parameter 490px/s; dash 600px/s (straight down 840), burst 160ms, cooldown 5000ms, coast up to 850ms |
 | `ducking.js` | Body height ×0.55; movement ×0.25; damage taken ×0.8; minimum hold 50ms; reentry delay 100ms |
 | `characterStats.js` | Level cap 10; levels 2–5 add 500 HP / 100 damage / 200 special damage per level; levels 6–10 add 400 / 80 / 100; next-level coin costs 200, 400, 800, 1600, 2400, 3300, 4500, 6100, 8200 |

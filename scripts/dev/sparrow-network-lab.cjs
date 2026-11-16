@@ -55,7 +55,6 @@ io.on('connection',socket=>{
   later(()=>socket.emit('lab:init',{combat:combat.bootstrap(room),players:players.map(p=>({...p,body:characterBody('sparrow')})),username:p.name}));
   socket.on('game:action',data=>later(()=>room.handlePlayerAction(p.participantId,data)));
   socket.on('game:special',data=>later(()=>room.requestSpecial(p.participantId,data)));
-  socket.on('hit',data=>later(()=>room.handleHit(p.participantId,data)));
   socket.on('game:clock',(_data,ack)=>later(()=>{const response=combat.timing(room);later(()=>ack(response));}));
   socket.on('lab:metrics',data=>{stats.frames[`${rtt}-${p.name}`]=data;});
   socket.on('disconnect',()=>{p.connected=false;});

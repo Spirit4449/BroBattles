@@ -141,7 +141,7 @@ test('a very short Gloop reticle continues through its bounce', () => {
   assert.equal(attack.y, aim.throwPreview.endY);
 });
 
-test('authoritative release publishes the same launch and terrain used for damage', () => {
+test('authoritative release publishes the same launch used for damage, its server age and rewind, and no terrain', () => {
   const { handleCharacterAction } = require('../src/shared/combat/runtime/characterActionRegistry.js');
   const { slimeLaunch } = require('../src/shared/characters/gloopProjectile');
   const cfg = require("../src/shared/characters/characterTuning.js").getResolvedCharacterAttackConfig('gloop','slimeball');
@@ -149,6 +149,7 @@ test('authoritative release publishes the same launch and terrain used for damag
     x:100,y:200,_lastWidth:150,_lastHeight:150 };
   const emitted=[];let release;
   const room={status:'active',matchId:1,geometry:{colliders:[{left:600,right:610,top:100,bottom:500}], world: WORLD },
+    _simulationMono:5000,_tickId:10,FIXED_DT_MS:1000/60,
     io:{to:()=>({emit:(_event,data)=>emitted.push(data)})},scheduleAction:fn=>{release=fn;}};
   const target={x:450,y:300};
   handleCharacterAction(room,owner,{type:'gloop-slimeball',id:'release-test',target},0);
@@ -161,7 +162,12 @@ test('authoritative release publishes the same launch and terrain used for damag
   assert.equal(runtime.x,packet.start.x);assert.equal(runtime.y,packet.start.y);
   assert.equal(runtime.vx,Math.cos(packet.angle)*packet.speed);
   assert.equal(runtime.vy,packet.initialVy);
-  assert.deepEqual(runtime.mapCollisionRects,packet.mapCollisionRects);
+  // Clients fly it against their bootstrap colliders, as the server flies it
+  // against the room's own; no release echoes the map.
+  assert.equal(packet.mapCollisionRects,undefined);
+  // Released inside a step before attacks advance: one step old at this step.
+  assert.equal(packet.launchMono,Math.round((5000-1000/60)*10)/10);
+  assert.equal(packet.viewRewindMs,0);
 });
 
  test('launch clamps distant targets on both sides to the throw limit', () => {

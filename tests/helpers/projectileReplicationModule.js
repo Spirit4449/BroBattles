@@ -7,6 +7,7 @@ module.exports = function loadProjectileReplication(globals = {}) {
     ...globals,
     require: name => {
       if (name.includes('projectilePresentation')) return require('../../src/shared/projectilePresentation');
+      if (name.includes('sparrowReplication')) return require('../../src/shared/characters/sparrowReplication');
       throw new Error(`projectileReplication has no harness binding for ${name}`);
     },
   });

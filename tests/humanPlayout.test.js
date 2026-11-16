@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const input = require('../src/server/core/gameRoom/inputManager');
-const { publishedMotion, MAX_PLAYOUT_MS } = require('../src/server/core/gameRoom/humanPlayout');
+const { publishedMotion, reportedPlayoutMs, MAX_PLAYOUT_MS } = require('../src/server/core/gameRoom/humanPlayout');
 const { getHistoricalPosition } = require('../src/shared/combat/runtime/combatValidation.js');
 const movement = require('../src/shared/physics/movementPhysics.json');
 const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
@@ -83,4 +83,19 @@ test('the playout delay stays bounded and a server-side move publishes at once',
   assert.equal(publishedMotion(player, last.at + 33).x, 4000);
   input.resetMovementBudget(player, last.at + 40);
   assert.equal(publishedMotion(player, last.at + 66).x, 4000);
+});
+
+test('each human is told its own playout delay, changing only when it moves by more than 2 ms', t => {
+  const { player, published } = run(t, { jitter: i => (i % 3) * 4 });
+  const delay = player._playout.delay;
+  assert.ok(delay > 10);
+  const reported = reportedPlayoutMs(player);
+  assert.ok(Math.abs(reported - delay) <= 2, `reported ${reported} for ${delay}`);
+  player._playout.delay += 1.5;
+  assert.equal(reportedPlayoutMs(player), reported, 'small changes are not resent');
+  // A server-side move restarts playout from zero delay; the report follows at once.
+  player.x += 500;
+  publishedMotion(player, published.at(-1).at + 33);
+  assert.equal(reportedPlayoutMs(player), 0);
+  assert.equal(reportedPlayoutMs({ isBot: true, _playout: { delay: 20 } }), undefined);
 });
