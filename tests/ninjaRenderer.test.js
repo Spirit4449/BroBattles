@@ -288,12 +288,12 @@ test('an enemy shuriken is drawn ahead by its rewind so it reaches this player w
     const q=model.launch({x:600,y:200},Math.PI,`${shooter}:shot:0`);q.ownerName=shooter;q.launchMono=0;
     f.packet({type:'ninja-launch',projectile:q,viewRewindMs:100},shooter);
     let previous=Infinity;
-    for(let t=0;t<=200;t+=8){f.frame(t);const star=f.images.find(s=>s.active);if(star){assert.ok(star.x<=previous+1e-6,'never runs backwards');previous=star.x;}}
+    for(let t=0;t<=300;t+=4){f.frame(t);const star=f.images.find(s=>s.active);if(star){assert.ok(star.x<=previous+1e-6,'never runs backwards');previous=star.x;}}
     positions[shooter]=f.images.find(s=>s.active).x;
     f.api.resetNinjaNetwork();
   }
-  // Ally: the server's present (age 200). Enemy: 100 ms further (no ping or playout here).
+  // Ally: the server's present (age 300). Enemy: 100 ms further, once it has caught up (no ping or playout here).
   const flown=age=>{const q=model.launch({x:600,y:200},Math.PI,'x');for(let i=0;i<Math.round(age/model.STEP_MS);i++)model.step(q,{x:600,y:200},[]);return q.x;};
-  assert.ok(Math.abs(positions.ally-flown(200))<1,`ally at ${positions.ally}`);
-  assert.ok(Math.abs(positions.foe-flown(300))<1,`enemy at ${positions.foe}`);
+  assert.ok(Math.abs(positions.ally-flown(300))<1,`ally at ${positions.ally}`);
+  assert.ok(Math.abs(positions.foe-flown(400))<1,`enemy at ${positions.foe}`);
 });

@@ -267,12 +267,13 @@ function victimView(f){
   return {me,p,arrow,box};
 }
 test('an enemy arrow is drawn ahead by its rewind, ramped in from where the server flies it',()=>{
-  const f=setup(),{p,arrow}=victimView(f);
+  const f=setup(),{me,p,arrow}=victimView(f);
+  me.x=5000; // out of the arrow's way: this test watches the free flight
   f.tick(0);assert.ok(Math.abs(arrow().x-model.sample(p,0).x)<1e-6,'no jump on the first frame');
   let previous=arrow().x;
-  for(let t=8;t<=120;t+=8){f.tick(t);assert.ok(arrow().x>=previous,'never runs backwards');previous=arrow().x;}
+  for(let t=8;t<=320;t+=8){f.tick(t);assert.ok(arrow().x>=previous,'never runs backwards');previous=arrow().x;}
   // Rewind 100 ms; this harness has no ping or playout report, so that is the lead.
-  assert.ok(Math.abs(arrow().x-model.sample(p,220).x)<1e-6);
+  assert.ok(Math.abs(arrow().x-model.sample(p,420).x)<1e-6);
   f.api.resetSparrowNetwork();
 });
 test('an enemy arrow stops on this player as drawn and stays when the server says it hit them',()=>{

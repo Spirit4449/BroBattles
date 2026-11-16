@@ -155,29 +155,32 @@ function clampLead(ms) { return Number.isFinite(ms) ? Math.max(0, Math.min(MAX_P
 const MAX_ENEMY_LEAD_MS = 500;
 const MAX_PLAYOUT_REPORT_MS = 200;
 const MAX_UPLINK_MS = 300;
-// The lead grows in over this much local time after a projectile first shows,
-// then follows changes at most LEAD_SLEW ms per ms, so the drawn flight never
-// jumps and never runs backwards (its speed stays within 0.9x-1.1x).
-const LEAD_RAMP_MS = 120;
+// The lead is never applied at once. A drawn projectile closes the gap to its
+// target lead at LEAD_CATCHUP ms per ms, so it flies at most 1.35x its real
+// speed until it has caught up (about 430 ms for a 150 ms lead), then at its
+// real speed. A fixed short ramp drew enemy shots at up to 3x speed, which
+// read as shots flying faster than they really do. A shot that lands sooner
+// than the catch-up is led only in part; those are close shots, which cannot
+// be dodged anyway. Changes after that follow at LEAD_SLEW, and the lead
+// drops no faster than LEAD_SLEW, so the drawn flight never runs backwards.
+const LEAD_CATCHUP = 0.35;
 const LEAD_SLEW = 0.1;
 // Advances `state` (one per drawn projectile) and returns the lead to add to
 // its server age this frame. `fromMs` is the offset shown on the first frame:
 // 0 for flights already drawn at server age; minus the first age for flights
-// that start from the hand at age 0 and catch up to the server over the ramp.
+// that start from the hand at age 0 and catch up to the server.
 function advanceShownLead(state, targetMs, localNow, fromMs = 0) {
   const target = Number.isFinite(targetMs) ? targetMs : 0;
   if (state.at == null) {
-    state.at = state.start = localNow;
-    state.from = Number.isFinite(fromMs) ? Math.min(fromMs, target) : 0;
-    return (state.shown = state.from);
+    state.at = localNow;
+    state.caught = false;
+    return (state.shown = Number.isFinite(fromMs) ? Math.min(fromMs, target) : 0);
   }
   const elapsed = Math.max(0, localNow - state.at);
   state.at = localNow;
-  const k = Math.min(1, (localNow - state.start) / LEAD_RAMP_MS);
-  const ramped = state.from + (target - state.from) * k * k * (3 - 2 * k);
-  // Never move back faster than the slew, even if the target dropped mid-ramp.
-  const floor = state.shown - elapsed * LEAD_SLEW;
-  const next = localNow - state.start <= LEAD_RAMP_MS ? ramped : state.shown + Math.max(-elapsed * LEAD_SLEW, Math.min(elapsed * LEAD_SLEW, target - state.shown));
-  return (state.shown = Math.max(floor, next));
+  const up = elapsed * (state.caught ? LEAD_SLEW : LEAD_CATCHUP);
+  state.shown += Math.max(-elapsed * LEAD_SLEW, Math.min(up, target - state.shown));
+  if (state.shown >= target) state.caught = true;
+  return state.shown;
 }
-module.exports = { CombatClock, SparrowReplica, MAX_PREDICTION_LEAD_MS, MAX_ENEMY_LEAD_MS, LEAD_RAMP_MS, clampLead, advanceShownLead };
+module.exports = { CombatClock, SparrowReplica, MAX_PREDICTION_LEAD_MS, MAX_ENEMY_LEAD_MS, LEAD_CATCHUP, clampLead, advanceShownLead };

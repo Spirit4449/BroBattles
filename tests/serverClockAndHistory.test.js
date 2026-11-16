@@ -166,9 +166,10 @@ function victimFairnessRun({ lead = true, up = 20, down = 40, rewindMs = 120, of
       at(tau, () => {
         now = W(tau);
         if (n === LAUNCH_STEP) {
-          // Fired straight down, timed to cross the victim's path about 600 ms later.
+          // Fired straight down, timed to cross the victim's path about 1.3 s later:
+          // long enough for the drawn shot to have caught up to its full lead.
           for (const offset of offsets) {
-            const p = { id: `s${offset}`, x: selfX(tau + 640) + offset, y: FOOT_Y - 600, vx: 0, vy: 900, gravity: 0,
+            const p = { id: `s${offset}`, x: selfX(tau + 1300) + offset, y: FOOT_Y - 1200, vx: 0, vy: 900, gravity: 0,
               maxLifetimeMs: 2000, radius: RADIUS, launchMono: sim, viewRewindMs: rewindMs, ownerName: 'foe' };
             shots.set(p.id, { p, server: Infinity, client: Infinity, last: sample(p, 0) });
             at(tau + down, () => replica.launch(p));
@@ -239,7 +240,7 @@ test('an enemy projectile touches the victim on their screen exactly when the se
 });
 
 test('the victim lead grows in after spawn and follows changes without jumping or running backwards', () => {
-  const { advanceShownLead, LEAD_RAMP_MS } = require('../src/shared/characters/sparrowReplication');
+  const { advanceShownLead, LEAD_CATCHUP } = require('../src/shared/characters/sparrowReplication');
   const state = {};
   let previousAge = -Infinity, previousLead = null;
   for (let t = 0; t <= 3000; t += 4) {
@@ -247,17 +248,19 @@ test('the victim lead grows in after spawn and follows changes without jumping o
     const target = t < 600 ? 160 : t < 1200 ? 90 : 210;
     const lead = advanceShownLead(state, target, t);
     if (t === 0) assert.equal(lead, 0, 'no lead on the first frame');
-    if (t === LEAD_RAMP_MS) assert.equal(lead, 160);
+    if (t === 596) assert.equal(lead, 160, 'caught up to the first target');
     const age = t + lead;
     assert.ok(age >= previousAge, `age never decreases (${t} ms)`);
-    if (previousLead !== null && t > LEAD_RAMP_MS) assert.ok(Math.abs(lead - previousLead) <= 4 * 0.1 + 1e-9, 'drawn speed stays within 10%');
+    if (previousLead !== null) assert.ok(lead - previousLead <= 4 * LEAD_CATCHUP + 1e-9 && previousLead - lead <= 4 * 0.1 + 1e-9, 'drawn speed stays within the catch-up bound');
+    if (previousLead !== null && t > 596) assert.ok(Math.abs(lead - previousLead) <= 4 * 0.1 + 1e-9, 'once caught up, within 10%');
     previousAge = age; previousLead = lead;
   }
   assert.equal(previousLead, 210);
-  // A flight drawn from the hand (age 0) catches up to server age over the ramp.
+  // A flight drawn from the hand (age 0) catches up to server age at the same bounded speed.
   const hand = {};
   assert.equal(advanceShownLead(hand, 0, 0, -45), -45);
-  assert.equal(advanceShownLead(hand, 0, LEAD_RAMP_MS, -45), 0);
+  assert.ok(advanceShownLead(hand, 0, 60, -45) < 0, 'still catching up');
+  assert.equal(advanceShownLead(hand, 0, 200, -45), 0);
   // Absent rewind (an older server) and the A/B switch mean no lead.
   const clock = new CombatClock(); clock.reset('room');
   clock.synchronize({ epoch: 'room', sentMono: 100, simMono: 98 }, 0, 60); clock.notePlayout(30);
