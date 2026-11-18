@@ -1,8 +1,9 @@
+const { SOCKET_EVENTS } = require("../../../net/socketEvents.js");
 const { getResolvedCharacterAttackConfig } = require("../../../characters/characterTuning");
 const SLIME = getResolvedCharacterAttackConfig("gloop", "slimeball");
 const { getParticipant } = require('../participants');
 const { attackIdentity } = require('./attackIdentity.js');
-const { WORLD_MARGIN } = require("../../matchConfig.js");
+const { WORLD_MARGIN } = require("../../../gameConstants.js");
 const { advanceSlimeball } = require("../../../characters/gloopProjectile");
 const { launchTravel } = require('../../launchRamp');
 const { launchPoint } = require('../../../characters/characterRig');
@@ -229,8 +230,8 @@ function tickLinearProjectile(room, attack, descriptor, now = Date.now()) {
 function burstSplash(room, attack, descriptor, attacker, at, now) {
   hitCircleTargets(room, attack, descriptor, at.x, at.y, attack.splashRadius, now);
   const type = descriptor?.runtime?.impactActionType;
-  if (!type || !room.io?.to) return;
-  room.io.to(`game:${room.matchId}`).emit("game:action", {
+  if (!type || !room.broadcast) return;
+  room.broadcast(SOCKET_EVENTS.GAME_ACTION, {
     playerName: attacker.name,
     character: attacker.char_class,
     origin: { x: attacker.x, y: attacker.y },
@@ -252,7 +253,7 @@ function tickBouncingProjectile(room, attack, descriptor, now) {
     shotTerrain(room, attacker.team, attack.mapCollisionRects),
     () => {
       const hits = hitCircleTargets(room, attack, descriptor, attack.x, attack.y,
-        Math.max(1, Number(attack.collisionRadius) || 18), now);
+        Math.max(1, Number(attack.collisionRadius) || SLIME.collisionRadius), now);
       return attack.destroyOnHit && hits > 0;
     });
   return !!attack.done;

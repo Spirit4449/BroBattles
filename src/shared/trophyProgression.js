@@ -1,4 +1,4 @@
-const modes = require("./catalogs/gameModes.catalog.json").modes;
+const modes = require("./catalogs/gameModes.catalog.cjs").modes;
 function trophyPeak(user) {
   return Math.max(0, Number(user?.trophies) || 0, Number(user?.trophy_peak ?? user?.trophyPeak) || 0);
 }

@@ -1,5 +1,5 @@
 import "../styles/broPortrait.css";
-import ICONS from "../../shared/catalogs/profileIconsCatalog.json";
+import ICONS from "../../shared/catalogs/profileIconsCatalog.cjs";
 import { BRO_PORTRAIT_PALETTES, buildBroPortraitSvg } from "./broPortrait.mjs";
 import ninjaBody from "../../../public/assets/ninja/portrait.webp?portrait";
 import thorgBody from "../../../public/assets/thorg/portrait.webp?portrait";

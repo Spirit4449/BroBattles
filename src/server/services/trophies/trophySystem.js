@@ -1,32 +1,9 @@
-const trophyCatalog = require("../../../shared/catalogs/trophySystem.catalog.json");
-
-const MODE_RANGES = trophyCatalog?.modeTrophyRanges || {};
-const WEIGHTS = trophyCatalog?.performanceWeights || {};
-const LOSS_RANGE_SCALE = Math.max(
-  0.1,
-  Math.min(1, Number(trophyCatalog?.lossRangeScale) || 0.5),
-);
-const LOSS_PERFORMANCE_MITIGATION = Math.max(
-  0,
-  Math.min(0.9, Number(trophyCatalog?.lossPerformanceMitigation) || 0.35),
-);
-
-function getModeTrophyRange(modeId) {
-  const key = String(modeId || "").trim();
-  const entry = MODE_RANGES[key] || MODE_RANGES.default || { min: 20, max: 30 };
-  const min = Math.max(1, Number(entry.min) || 20);
-  const max = Math.max(min, Number(entry.max) || min);
-  return { min, max };
-}
+const trophyCatalog = require("../../../shared/catalogs/trophySystem.catalog.cjs");
+const { DEFAULT_MODE_ID } = require("../../../shared/gameSelection");
+const { clamp01, lerp } = require("../../../shared/math");
 
 function resolveMatchModeId(matchData = {}) {
-  const modeId = String(matchData?.modeId || "").trim();
-  if (modeId) return modeId;
-  return "duels";
-}
-
-function clamp01(value) {
-  return Math.max(0, Math.min(1, Number(value) || 0));
+  return String(matchData?.modeId || "").trim() || DEFAULT_MODE_ID;
 }
 
 function buildPerformanceMaxima(rewardBuckets) {
@@ -38,30 +15,22 @@ function buildPerformanceMaxima(rewardBuckets) {
   };
 }
 
-function getPerformanceScore(bucket, maxima) {
+function getPerformanceScore(bucket, maxima, weights) {
   const hitsRatio = clamp01(
-    (Number(bucket?.hits) || 0) / Math.max(1, maxima?.hits || 1),
+    (Number(bucket?.hits) || 0) / Math.max(1, maxima?.hits || 1) || 0,
   );
   const damageRatio = clamp01(
-    (Number(bucket?.damage) || 0) / Math.max(1, maxima?.damage || 1),
+    (Number(bucket?.damage) || 0) / Math.max(1, maxima?.damage || 1) || 0,
   );
   const killsRatio = clamp01(
-    (Number(bucket?.kills) || 0) / Math.max(1, maxima?.kills || 1),
+    (Number(bucket?.kills) || 0) / Math.max(1, maxima?.kills || 1) || 0,
   );
-
-  const damageWeight = Number(WEIGHTS.damage) || 0.55;
-  const killsWeight = Number(WEIGHTS.kills) || 0.3;
-  const hitsWeight = Number(WEIGHTS.hits) || 0.15;
 
   return clamp01(
-    damageRatio * damageWeight +
-      killsRatio * killsWeight +
-      hitsRatio * hitsWeight,
+    damageRatio * weights.damage +
+      killsRatio * weights.kills +
+      hitsRatio * weights.hits,
   );
-}
-
-function lerp(min, max, t) {
-  return min + (max - min) * clamp01(t);
 }
 
 function calculateTrophyDelta({
@@ -71,16 +40,18 @@ function calculateTrophyDelta({
   bucket,
   maxima,
   currentTrophies,
-}) {
-  const range = getModeTrophyRange(modeId);
-  const score = getPerformanceScore(bucket, maxima);
+}, catalog = trophyCatalog) {
+  const { modeTrophyRanges, performanceWeights, drawRangeScale, lossRangeScale, lossPerformanceMitigation } = catalog;
+  const key = String(modeId || "").trim();
+  const range = Object.hasOwn(modeTrophyRanges, key) ? modeTrophyRanges[key] : modeTrophyRanges.default;
+  const score = getPerformanceScore(bucket, maxima, performanceWeights);
   const isWinner = winnerTeam && playerTeam && winnerTeam === playerTeam;
 
   const gain = Math.round(lerp(range.min, range.max, score));
 
   if (winnerTeam == null) {
     return {
-      trophiesDelta: Math.max(0, Math.round(gain * 0.55)),
+      trophiesDelta: Math.max(0, Math.round(gain * drawRangeScale)),
       performanceScore: score,
     };
   }
@@ -89,9 +60,9 @@ function calculateTrophyDelta({
     return { trophiesDelta: gain, performanceScore: score };
   }
 
-  const lossMin = Math.max(1, Math.round(range.min * LOSS_RANGE_SCALE));
-  const lossMax = Math.max(lossMin, Math.round(range.max * LOSS_RANGE_SCALE));
-  const mitigated = 1 - score * LOSS_PERFORMANCE_MITIGATION;
+  const lossMin = Math.max(1, Math.round(range.min * lossRangeScale));
+  const lossMax = Math.max(lossMin, Math.round(range.max * lossRangeScale));
+  const mitigated = 1 - score * lossPerformanceMitigation;
   const rawLoss = Math.round(lerp(lossMin, lossMax, clamp01(mitigated)));
   const cappedLoss = Math.min(
     Math.max(0, Number(currentTrophies) || 0),

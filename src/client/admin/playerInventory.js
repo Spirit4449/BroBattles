@@ -1,3 +1,4 @@
+import { adminUserPath } from "../../shared/net/apiPaths.js";
 import { node, button, fetchJson, showToast, confirmDialog } from "./common";
 
 const LABELS = { skins: "Skins", icons: "Profile icons", cards: "Player cards", titles: "Titles" };
@@ -28,7 +29,7 @@ export function createInventoryEditor(host, { onSaved = async () => {}, onDirty 
       onDirty();
       host.querySelectorAll("input").forEach(input => { input.disabled = true; });
       try {
-        await fetchJson(`/api/admin/users/${target}/inventory`, { method: "POST", body: { changes } });
+        await fetchJson(adminUserPath(target, "inventory"), { method: "POST", body: { changes } });
         if (target !== userId) return;
         for (const change of changes) inventory[change.kind].items.find(item => item.id === change.id).owned = change.owned;
         draft.clear();

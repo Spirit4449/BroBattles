@@ -16,11 +16,11 @@ function temperament(id) {
 
 function updateTeamwork(brain, observed, now) {
   const { room, player } = brain;
-  room._botTeamwork ||= new Map();
-  let board = room._botTeamwork.get(player.team);
+  room.botTeamwork ||= new Map();
+  let board = room.botTeamwork.get(player.team);
   if (!board) {
     board = { reports: new Map(), plans: new Map(), nextPlanAt: 0 };
-    room._botTeamwork.set(player.team, board);
+    room.botTeamwork.set(player.team, board);
   }
   const allies = [...room.players.values()].filter((p) => p.team === player.team && active(p));
   const bots = allies.filter((p) => p.isBot).sort((a, b) => String(participantId(a)).localeCompare(String(participantId(b))));

@@ -1,9 +1,9 @@
+const { clamp } = require("../math.js");
 const { getResolvedCharacterAttackConfig } = require("./characterTuning");
 const { launchPoint } = require('./characterRig.js');
 const SLIME = getResolvedCharacterAttackConfig("gloop", "slimeball");
 // Shared fixed-step slime physics. Collision normals drive both rebound and animation.
 const STEP_MS = 1000 / 120;
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function getSlimeLaunchStepCount(distance, cfg = SLIME) {
   const speedMultiplier = Math.max(

@@ -1,9 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { installFakeClock } from './helpers/fakeClock.js';
 
-const source = await readFile(new URL('../src/client/navigation/pageScope.js', import.meta.url), 'utf8');
-const { createPageScope } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+import { createPageScope } from '../src/client/navigation/pageScope.js';
 
 test('disconnected observers leave screen cleanup and rejoin when reused', async () => {
   const originalWindow = globalThis.window, originalDocument = globalThis.document;
@@ -41,7 +40,8 @@ test('disconnected observers leave screen cleanup and rejoin when reused', async
   }
 });
 
-test('screen lifetimes support repeated navigation without stale work', async () => {
+test('screen lifetimes support repeated navigation without stale work', async t => {
+  const clock = installFakeClock(t, { apis: ['setTimeout', 'setInterval'] });
   const originalWindow = globalThis.window;
   const originalDocument = globalThis.document;
   const originalFetch = globalThis.fetch;
@@ -95,7 +95,7 @@ test('screen lifetimes support repeated navigation without stale work', async ()
     assert.equal(window.__MATCH_SESSION__, undefined, 'screen globals cannot retain old match state');
     window.dispatchEvent(new Event('resize'));
     first.location.href = '/game/stale';
-    await new Promise(resolve => setTimeout(resolve, 25));
+    clock.tick(25);
     assert.equal(calls, 2, 'retired callbacks cannot run on the next screen');
     assert.equal(routes.length, 1, 'retired callbacks cannot redirect the next screen');
     const second = createPageScope(() => {});

@@ -1,3 +1,5 @@
+import { BROWSER_EVENTS } from "../lib/browserEvents.js";
+import { getNavigation, getPageScope } from "../lib/globals.cjs";
 // Keep the static template hidden until the authoritative roster is committed.
 let revealPending = false;
 let failureTimer;
@@ -24,7 +26,7 @@ export async function revealLobby() {
   const lobby = document.getElementById("lobby-area");
   if (!lobby?.hasAttribute("data-loading") || revealPending) return;
   revealPending = true;
-  window.__BB_NAVIGATION__?.progress(94);
+  getNavigation()?.progress(94);
   // Allow cached sprites to decode without holding the lobby on a slow asset.
   const images = [...lobby.querySelectorAll("img")].filter(img => img.getAttribute("src"));
   let assetTimer;
@@ -32,12 +34,12 @@ export async function revealLobby() {
     Promise.allSettled(images.map(img => img.decode?.())),
     new Promise(resolve => { assetTimer = window.setTimeout(resolve, 450); }),
   ]);
-  if (window.__BB_PAGE_SCOPE__ && !window.__BB_PAGE_SCOPE__.active) return;
+  if (getPageScope() && !getPageScope().active) return;
   window.clearTimeout(assetTimer);
   window.clearTimeout(failureTimer);
   lobby.removeAttribute("data-loading");
   lobby.setAttribute("aria-busy", "false");
-  document.dispatchEvent(new Event("lobby:ready"));
+  document.dispatchEvent(new Event(BROWSER_EVENTS.LOBBY_REVEALED));
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
   [...lobby.querySelectorAll(":scope > .platform, :scope > #vs-container")].forEach((platform, index) => {
     platform.animate([

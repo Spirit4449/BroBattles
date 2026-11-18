@@ -1,3 +1,4 @@
+const { parseVersionedBundle } = require('../../shared/net/bundleVersion');
 const crypto = require('crypto');
 const fs = require('fs');
 
@@ -31,7 +32,8 @@ function versionMatches(res, filePath, stat) {
 
 // Only content-addressed build outputs are safe to cache across deployments.
 function setStaticCacheHeaders(res, filePath, stat) {
-  if (/[\\/]bundles[\\/][^\\/]+\.[a-f0-9]{16}\.(?:js|css)$/.test(filePath)
+  const bundle = /[\\/]bundles[\\/]([^\\/]+)$/.exec(filePath);
+  if ((bundle && parseVersionedBundle(bundle[1]))
     || /[\\/]assets[\\/]map-revisions[\\/][a-f0-9]{64}\.(?:webp|png|jpg|jpeg|json)$/.test(filePath)
     || versionMatches(res, filePath, stat)) {
     res.setHeader('Cache-Control', IMMUTABLE);
@@ -45,4 +47,4 @@ function setStaticCacheHeaders(res, filePath, stat) {
   }
 }
 
-module.exports = { setStaticCacheHeaders, contentVersion };
+module.exports = { setStaticCacheHeaders, IMMUTABLE };

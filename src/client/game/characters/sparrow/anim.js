@@ -1,13 +1,15 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { createAnimationBuilder } from '../shared/animationBuilder';
 import { DIRECTIONS } from './aimPoses';
 import movementPhysics from '../../../../shared/physics/movementPhysics.json';
+
+const { key: NAME } = characterDefinitions.sparrow;
 
 const SHOT = [0, 1, 2, 3, 4, 5];
 // Hold the drawn bow, snap the release, then recover without a long aura.
 const SPECIAL = [0, 1, 2, 2, 3, 4, 5];
 const frameNames = (prefix, order) => order.map((i) => `${prefix}${String(i).padStart(2, '0')}`);
 export function animations(scene) {
-  const NAME = "sparrow";
   if (!scene?.textures?.exists(NAME)) return;
 
   const { make } = createAnimationBuilder(scene, NAME);

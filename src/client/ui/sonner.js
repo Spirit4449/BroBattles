@@ -3,7 +3,7 @@ import { playSound } from "./uiSounds.js";
 // Exported function: sonner(header, message, buttonText = "OK", onClick?, options?)
 // Pass null for the header, or layout: "description", for a description-only toast.
 // options: { duration?: number, persistent?: boolean, containerId?: string, tone?: "info"|"success"|"error", layout?: "description" }
-export function friendlyToastMessage(value) {
+function friendlyToastMessage(value) {
   const message = String(value ?? "").trim();
   if (/^(?:TypeError: )?(?:failed to fetch|fetch failed|network ?error|network request failed|load failed)/i.test(message)) {
     return "Couldn't reach the server. Check your connection and try again.";

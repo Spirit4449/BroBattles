@@ -1,5 +1,8 @@
+const roomTransport = require('./helpers/roomTransport.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createFakeDb, createTransactionalDb } = require('./helpers/fakeDb');
+const { createFakeIo } = require('./helpers/fakeIo');
 const { EventEmitter } = require('node:events');
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -7,7 +10,7 @@ const path = require('node:path');
 const input = require('../src/server/core/gameRoom/inputManager');
 const { MOVE_PLAUSIBLE_SPEED_V, MOVE_PLAUSIBLE_LAG_PAD_V, MAX_MOVEMENT_CREDIT_MS } = require('../src/shared/combat/matchConfig.js');
 const { DUCK_REENTRY_DELAY_MS } = require('../src/shared/physics/ducking');
-const { characterBody } = require('../src/shared/physics/duelGeometry');
+const { characterBody } = require('../src/shared/physics/characterBody');
 const { GameRoom } = require('../src/server/core/gameRoom');
 const { createAuthSessionService, tokenHash } = require('../src/server/services/auth/authSessionService');
 const { createAbuseHttpMiddleware } = require('../src/server/middleware/abuseHttpMiddleware');
@@ -24,7 +27,8 @@ function movement(t) {
   const player = { socketId: 'p', name: 'Player', char_class: 'ninja', x: 0, y: 0,
     isAlive: true, connected: true, lastInput: now, inputBuffer: [] };
   const events = [];
-  const room = { players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit: (name, data) => events.push({ name, data }) }) } };
+  const room = { ...roomTransport, players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD },
+    io: createFakeIo({ onEmit: (_room, name, data) => events.push({ name, data }) }) };
   input.resetMovementBudget(player, now);
   return { player, room, events, advance: ms => { now += ms; }, send: data => input.handlePlayerInput(room, 'p', data) };
 }
@@ -94,13 +98,7 @@ test('ready acknowledgments cannot reposition players or mutate an active match'
 });
 
 function serialDb(initial, query) {
-  let state = structuredClone(initial), chain = Promise.resolve();
-  const db = { get state() { return state; }, async withTransaction(fn) {
-    const prior = chain; let release; chain = new Promise(r => { release = r; }); await prior;
-    const before = structuredClone(state);
-    try { return await fn(null, (sql, params = []) => query(state, sql, params)); }
-    catch (error) { state = before; throw error; } finally { release(); }
-  } };
+  const db = createTransactionalDb({ state: structuredClone(initial), query });
   db.runQuery = (sql, params) => db.withTransaction((_conn, q) => q(sql, params));
   return db;
 }
@@ -155,7 +153,8 @@ test('HTTP aliases share limits and forwarded headers cannot invent identities',
   const decisions = [];
   const middleware = createAbuseHttpMiddleware({ abuseControl: { guardHttpAction: async x => { decisions.push(x); return { allowed: true }; } } });
   for (const route of ['/login', '/LOGIN', '/login/']) {
-    await middleware({ method: 'POST', path: route, ip: '127.0.0.1', headers: { 'x-forwarded-for': Math.random().toString() } }, {}, () => {});
+    await middleware({ method: 'POST', path: route, ip: '127.0.0.1',
+      headers: { 'x-forwarded-for': `192.0.2.${decisions.length + 1}` } }, {}, () => {});
   }
   assert.deepEqual(decisions.map(x => [x.source, x.identityKey]), Array(3).fill(['POST /login', 'ip:127.0.0.1']));
 });
@@ -242,7 +241,8 @@ test('durable match results survive failed writes and service restart', async t 
   t.after(() => fs.rm(journalDir, { recursive: true, force: true }));
   const f = rewardsDb(); f.fail(true);
   const service = createMatchResultService({ db: f.db, journalDir });
-  await assert.rejects(service.complete(rewardRoom(f.db), 'team1'), /simulated/);
+  const room = rewardRoom(f.db);
+  await Promise.all(Array.from({ length: 2 }, () => assert.rejects(service.complete(room, 'team1'), /simulated/)));
   assert.equal(service.isPending(1), true);
   assert.deepEqual(await service.pendingMatchIds(), [1]);
   f.fail(false);
@@ -256,6 +256,22 @@ test('durable match results survive failed writes and service restart', async t 
   assert.deepEqual(await restarted.pendingMatchIds(), []); assert.ok(f.db.state.user.coins > 0);
   const coins = f.db.state.user.coins; await restarted.reconcile(); assert.equal(f.db.state.user.coins, coins);
 });
+test('journal recovery preserves zero currency and no streak credit for a player who never joined', async t => {
+  const journalDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-result-no-show-'));
+  t.after(() => fs.rm(journalDir, { recursive: true, force: true }));
+  const f = rewardsDb(), room = rewardRoom(f.db);
+  room.players.get('p')._neverJoined = true;
+  f.fail(true);
+  await assert.rejects(createMatchResultService({ db: f.db, journalDir }).complete(room, 'team1'), /simulated/);
+  f.fail(false);
+  const restarted = createMatchResultService({ db: f.db, journalDir });
+  await restarted.reconcile();
+  assert.equal(f.db.state.match.status, 'completed');
+  assert.equal(f.db.state.user.coins, 0);
+  assert.equal(f.db.state.user.gems, 0);
+  assert.equal(f.db.state.user.highest_win_streak, 0);
+});
+
 test('production disables inline source maps while development keeps debugging maps', () => {
   const config = require('../webpack.config');
   assert.equal(config({}, { mode: 'production' }).devtool, false);
@@ -358,7 +374,7 @@ test('client hit reports cannot damage other players', t => {
 test('falling below the world kills a human instantly from accepted positions', t => {
   const { FALL_OUT_DEPTH } = require('../src/shared/gameConstants');
   const f = movement(t), deaths = [];
-  f.room._handlePlayerDeath = (p, meta) => { deaths.push(meta.cause); p.isAlive = false; };
+  f.room.handlePlayerDeath = (p, meta) => { deaths.push(meta.cause); p.isAlive = false; };
   const bottom = WORLD.y + WORLD.height;
   Object.assign(f.player, { y: bottom + FALL_OUT_DEPTH - 5 });
   input.resetMovementBudget(f.player, Date.now());
@@ -402,7 +418,7 @@ test('temporary bans allow support login while blocking gameplay auth and socket
   t.mock.method(Date, 'now', () => now);
   const deadline = now + 60000;
   const user = { user_id: 2, name: 'Suspended', password: await bcrypt.hash('correct-password', 4), is_banned: 1, ban_expires_at: new Date(deadline), ban_reason: 'Test restriction', session_expires_at: new Date(now + 3600000) };
-  const db = { runQuery: async () => [user], withTransaction: fn => fn(null, async () => [user]) };
+  const db = createFakeDb(async () => [user]);
   const cookieOpts = { SIGNED_COOKIE_OPTS: {}, DISPLAY_COOKIE_OPTS: {} };
   const auth = makeAuthHelpers(db, cookieOpts);
   const token = 'a'.repeat(64);

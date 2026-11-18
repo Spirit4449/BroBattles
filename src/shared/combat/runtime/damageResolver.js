@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../net/socketEvents.js");
 const { isPlaced } = require('../targetable.js');
 const sparrowModel = require('../../characters/sparrowProjectile');
 const { EFFECT_RULES } = require('../../effectRules');
@@ -23,6 +24,28 @@ const { reduceDuckDamage } = require("../../physics/ducking");
 const { chargeSuperForHit } = require("./superCharge.js");
 const { CENTER_CRATE_TARGET } = require("./attackRuntimes/targets.js");
 const { combatNow } = require("./clock");
+
+// Objective and fighter hits share incoming modifiers, ducking and combat time.
+// An environmental source has no participant to credit with a hit or a kill.
+function applyIncomingDamage(target, rawDamage, now) {
+  const old = target.health;
+  const scaled = rawDamage * effectManager.getModifiers(target, now).damageTakenMult;
+  const damage = Math.round(reduceDuckDamage(target, scaled));
+  target.health = Math.max(0, old - damage);
+  target.lastDamagedAt = now;
+  target.lastCombatAt = now;
+  return { old, damage, appliedDamage: old - target.health };
+}
+
+function applyEnvironmentDamage(room, target, rawDamage, { cause, killedBy, at }) {
+  const { old, appliedDamage } = applyIncomingDamage(target, rawDamage, at);
+  if (appliedDamage > 0) {
+    target._lastAttackerParticipantId = null;
+    room.broadcastHealthUpdate(target, { cause, duckBlocked: target.ducking === true });
+    if (old > 0 && target.health === 0) room.handlePlayerDeath(target, { cause, killedBy, at });
+  }
+  return appliedDamage;
+}
 
 function handleHit(room, socketId, payload, { server = false, sparrowProjectile = null, ninjaProjectile = null, runtimeProjectile = null } = {}) {
   try {
@@ -156,7 +179,7 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
     let aPos = null;
     let tPos = null;
     let dist = 0;
-    let maxDist = room._getAttackMaxDist(attacker.char_class, attackType);
+    let maxDist = room.getAttackMaxDist(attacker.char_class, attackType);
     if (trustedProjectile) {
       aPos = { x: attacker.x, y: attacker.y };
       tPos = targetObjective ? { x: targetObjective.x, y: targetObjective.y } : { x: target.x, y: target.y };
@@ -168,7 +191,7 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       tPos = targetObjective ? { x: Number(targetObjective.x) || 0, y: Number(targetObjective.y) || 0 }
         : positionAt(target, runtimeProjectile.viewRewindMs);
     } else if (targetObjective) {
-      aPos = room._getHistoricalPosition(attacker, attackTimeRaw);
+      aPos = room.getHistoricalPosition(attacker, attackTimeRaw);
       tPos = { x: Number(targetObjective.x) || 0, y: Number(targetObjective.y) || 0 };
       attackTimeClamped = Math.min(now, attackTimeRaw);
       dist = Math.hypot(
@@ -238,7 +261,7 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
     }
 
     // Basic per-attacker->target rate limit to avoid accidental double submissions
-    room._recentHits = room._recentHits || new Map(); // key: attacker|target -> timestamp
+    room.recentHits = room.recentHits || new Map(); // key: attacker|target -> timestamp
     const instanceId = payload.instanceId ? String(payload.instanceId) : "";
     const hitTargetKey = targetObjective ? targetName.toLowerCase() : target.name;
     const keySafe =
@@ -249,7 +272,7 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       attackType +
       "|" +
       instanceId;
-    const last = room._recentHits.get(keySafe) || 0;
+    const last = room.recentHits.get(keySafe) || 0;
     if (!isSelf && now - last < DUPLICATE_HIT_WINDOW_MS) {
       if (room.DEBUG_HIT_EVENTS) {
         console.log(
@@ -258,7 +281,7 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       }
       return; // duplicate, ignore
     }
-    room._recentHits.set(keySafe, now);
+    room.recentHits.set(keySafe, now);
     if (targetCrate) {
       // Neither team's property, so it counts for no one's combat stats.
       const appliedDamage = room.gameMode.damageCenterCrate(dmg, {
@@ -271,10 +294,10 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
         attacker.lastCombatAt = now;
         room.broadcastSnapshot();
       }
-      if (room._netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, sparrowProjectile || ninjaProjectile || runtimeProjectile);
+      if (room.netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, sparrowProjectile || ninjaProjectile || runtimeProjectile, now);
       return { accepted: true, appliedDamage };
     }
-    if (!isSelf) room._recordCombatStat(attacker, { hits: 1 });
+    if (!isSelf) room.recordCombatStat(attacker, { hits: 1 });
 
     if (targetVault) {
       // Objective damage is measured in the coins it strips out of the vault.
@@ -288,35 +311,29 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
         0,
         previousCoins - (Number(vaultState?.coins) || 0),
       );
-      if (room._netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, sparrowProjectile || ninjaProjectile || runtimeProjectile);
+      if (room.netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, sparrowProjectile || ninjaProjectile || runtimeProjectile, now);
       if (appliedDamage > 0) {
         attacker.lastAttackAt = now;
         attacker.lastCombatAt = now;
-        room._recordCombatStat(attacker, { damage: appliedDamage });
+        room.recordCombatStat(attacker, { damage: appliedDamage });
         room.broadcastSnapshot();
-        room._checkVictoryCondition();
+        room.checkVictoryCondition();
       }
       return { accepted: true, appliedDamage };
     }
 
     // Apply damage (incoming modifier covers shield powerup, freeze stun, etc.)
-    dmg *= effectManager.getModifiers(target, now).damageTakenMult;
     const duckBlocked = !isSelf && target.ducking === true;
-    dmg = reduceDuckDamage(target, dmg);
-    const old = target.health;
-    target.health = Math.max(0, target.health - Math.round(dmg));
-    const appliedDamage = Math.max(0, old - target.health);
-    if (room._netTrace && !isSelf) traceHit(room, attacker, targetName, target, attackType, appliedDamage, payload, sparrowProjectile || ninjaProjectile || runtimeProjectile);
+    const { old, damage, appliedDamage } = applyIncomingDamage(target, dmg, now);
+    if (room.netTrace && !isSelf) traceHit(room, attacker, targetName, target, attackType, appliedDamage, payload, sparrowProjectile || ninjaProjectile || runtimeProjectile, now);
     if (room.DEBUG_HIT_EVENTS) {
       console.log(
-        `[HitDebug ${room.matchId}] accept attacker=${attacker.name} target=${target.name} type=${attackType} dist=${dist.toFixed(0)}/${maxDist} dmgRaw=${Math.round(dmg)} applied=${appliedDamage} hp=${old}->${target.health}`,
+        `[HitDebug ${room.matchId}] accept attacker=${attacker.name} target=${target.name} type=${attackType} dist=${dist.toFixed(0)}/${maxDist} dmgRaw=${damage} applied=${appliedDamage} hp=${old}->${target.health}`,
       );
     }
     attacker.lastAttackAt = now;
-    target.lastDamagedAt = now;
     target._lastAttackerParticipantId = participantId(attacker);
     attacker.lastCombatAt = now;
-    target.lastCombatAt = now;
     if (!isSelf && isSparrowBurningArrow && target.health > 0) {
       try {
         effectManager.apply(
@@ -335,7 +352,7 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       } catch (_) {}
     }
     if (appliedDamage > 0) {
-      room._recordCombatStat(attacker, { damage: appliedDamage });
+      room.recordCombatStat(attacker, { damage: appliedDamage });
 
       if (!isSelf) chargeSuperForHit(room, attacker, attackType);
 
@@ -353,10 +370,10 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
     if (target.health !== old) {
       const scoredKill = !isSelf && target.health === 0 && old > 0 ? 1 : 0;
       if (scoredKill) {
-        room._recordCombatStat(attacker, { kills: scoredKill });
+        room.recordCombatStat(attacker, { kills: scoredKill });
       }
       if (appliedDamage > 0 && !trustedSparrow && !trustedNinja) {
-        room.io.to(`game:${room.matchId}`).emit("game:action", {
+        room.broadcast(SOCKET_EVENTS.GAME_ACTION, {
           playerId: attacker.user_id,
           playerName: attacker.name,
           origin: { x: attacker.x, y: attacker.y },
@@ -376,14 +393,14 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       // Every viewer holds the struck fighter for the same delivery hitstop.
       const delivery = deliveryOf(runtimeProjectile?.runtimeKind) ||
         (sparrowProjectile || ninjaProjectile ? 'released' : null);
-      room._broadcastHealthUpdate(target, { cause: "combat", duckBlocked, delivery,
-        ...(room._netTrace ? traceHealthMeta(room, attacker, sparrowProjectile || ninjaProjectile || runtimeProjectile, delivery) : null) });
+      room.broadcastHealthUpdate(target, { cause: "combat", duckBlocked, delivery,
+        ...(room.netTrace ? traceHealthMeta(room, attacker, sparrowProjectile || ninjaProjectile || runtimeProjectile, delivery) : null) });
       if (target.health === 0 && old > 0) {
         console.log(
           `%c[GameRoom ${room.matchId}] Player ${target.name} was killed by ${attacker.name}`,
           "color: red; font-weight: bold;",
         );
-        room._handlePlayerDeath(target, {
+        room.handlePlayerDeath(target, {
           cause: "combat",
           killedBy: attacker.name,
           at: now,
@@ -399,29 +416,29 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
 
 // Traced rooms only. `projectile` is the Sparrow attack, the Ninja entry or
 // the attack runtime instance that made the contact.
-function traceHit(room, attacker, targetName, target, attackType, appliedDamage, payload, projectile) {
+function traceHit(room, attacker, targetName, target, attackType, appliedDamage, payload, projectile, now) {
   const runtime = projectile?.runtimeKind ? projectile : null;
   const shot = runtime ? null : projectile?.projectile || null;
   const delivery = runtime ? deliveryOf(runtime.runtimeKind) || 'area' : shot ? 'released' : 'none';
   const rewindMs = Number(projectile?.viewRewindMs) || 0;
   const age = runtime ? runtime.elapsed : Number.isFinite(shot?.elapsed) ? shot.elapsed
-    : shot && Number.isFinite(shot.launchMono) ? room._simulationMono - shot.launchMono : null;
-  const tested = target ? positionAt(target, rewindMs) : null;
+    : shot && Number.isFinite(shot.launchMono) ? room.simulationMono - shot.launchMono : null;
+  const tested = target ? positionAt(target, rewindMs, now) : null;
   room.traceCombatHit?.(attacker, targetName, { target, type: attackType, dmg: appliedDamage,
     id: payload?.instanceId ?? shot?.id ?? null, rewindMs, delivery,
     kind: runtime ? runtime.runtimeKind : shot ? (projectile.clientRequestId != null ? 'sparrow' : 'ninja') : null,
     req: runtime ? runtime.instanceId : projectile?.clientRequestId ?? projectile?.requestId ?? null,
     pid: delivery === 'released' ? (shot ? shot.id : runtime.instanceId) : null, age,
     rewindRequestedMs: projectile?.viewRewindRequestedMs, tested, from: attacker,
-    vTs: target && !target.isBot ? clientTimeAt(target, rewindMs) : null });
+    vTs: target && !target.isBot ? clientTimeAt(target, rewindMs, now) : null });
 }
 
 // Traced rooms only: lets the victim's trace tie a health update to the shot.
 function traceHealthMeta(room, attacker, projectile, delivery) {
-  if (!room._netTrace?.runs?.size) return null;
+  if (!room.netTrace?.runs?.size) return null;
   const runtime = projectile?.runtimeKind ? projectile : null;
   const pid = delivery !== 'released' ? null : runtime ? runtime.instanceId : projectile?.projectile?.id;
   return { by: attacker?.name || null, pid: pid == null ? null : String(pid) };
 }
 
-module.exports = { handleHit };
+module.exports = { handleHit, applyEnvironmentDamage };

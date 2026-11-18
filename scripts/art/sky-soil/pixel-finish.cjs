@@ -1,3 +1,4 @@
+// Historical Sky Soil finishing pass. Updates the shipped base map only.
 // One continuous base image; original platform rows remain invisible colliders.
 const fs=require('fs'),path=require('path'),sharp=require('../../../spritesheet-generator/node_modules/sharp');
 const root=path.resolve(__dirname,'../../..');process.chdir(root);
@@ -29,7 +30,8 @@ master.data.copy(data,dst,(sy*W+x)*4,(sy*W+x)*4+4);
 }
 const saved=await sharp(data,{raw:{width:W,height:H,channels:4}}).png().toBuffer();
 await pixel(saved,'island-saved-pixel.webp',2,40);
-for(const file of ['src/shared/maps/2.json','data/maps/2.json']){
+{
+const file='src/shared/maps/2.json';
 const m=JSON.parse(fs.readFileSync(file));
 for(const p of m.layout.platforms.filter(p=>['p0','p1','p2','p3'].includes(p.id)))p.alpha=0;
 m.assets['mangrove-tiny-platform'].url='/assets/sky-soil/small-platform-pixel.webp';
@@ -38,11 +40,11 @@ layers.find(l=>l.id==='sky').url='/assets/sky-soil/sky-pixel.webp';
 layers.find(l=>l.id==='far-peaks').url='/assets/sky-soil/peaks-pixel.webp';
 layers.find(l=>l.id==='forest-ridges').url='/assets/sky-soil/forest-pixel.webp';
 const base=layers.find(l=>l.id==='island-underside'||l.id==='island-base');
-Object.assign(base,{id:'island-base',url:'/assets/sky-soil/'+(file.startsWith('data/')?'island-saved-pixel.webp':'island-pixel.webp'),scroll:1,fit:'none',scale:1,x:0,y:310,stack:'arena',filter:'nearest'});
+Object.assign(base,{id:'island-base',url:'/assets/sky-soil/'+'island-pixel.webp',scroll:1,fit:'none',scale:1,x:0,y:310,stack:'arena',filter:'nearest'});
 for(const l of layers)l.filter='nearest';
 // A single lighting pass on the unified island avoids four rectangular overlays.
 m.scenery.atmosphere.platforms.strength=0;
 fs.writeFileSync(file,JSON.stringify(m,null,2)+'\n');
 }
-await sharp(out+'sky-pixel.webp').composite([{input:out+'peaks-pixel.webp'},{input:out+'forest-pixel.webp'}]).webp({lossless:true}).toFile('/tmp/sky-soil-pixel-lobby.webp');fs.copyFileSync('/tmp/sky-soil-pixel-lobby.webp',out+'background.webp');
+await sharp(out+'sky-pixel.webp').composite([{input:out+'peaks-pixel.webp'},{input:out+'forest-pixel.webp'}]).webp({lossless:true}).toFile(out+'background.webp');
 })();

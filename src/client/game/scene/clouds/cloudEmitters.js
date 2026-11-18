@@ -1,3 +1,4 @@
+import { clamp } from "../../../../shared/math.js";
 // cloudEmitters.js
 // Shape vocabulary for movement clouds, built from cloudSim blobs. Pure: each
 // emitter only adds blobs to a sim, so emitters run in Node tests.
@@ -13,7 +14,6 @@
 //
 // Sizes are world pixels. Randomness comes from the sim so tests can seed it.
 
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 /**
  * An irregular clump of lobes sharing one velocity. `curl` (rad/s) makes the

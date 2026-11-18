@@ -1,0 +1,7 @@
+
+
+const RIDE_EXIT_CHECK_MS = 250;
+
+const AIR_LANDING_CHECK_MS = 100;
+
+module.exports = { RIDE_EXIT_CHECK_MS, AIR_LANDING_CHECK_MS };

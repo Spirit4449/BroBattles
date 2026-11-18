@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 // Private-party join requests: owners review, requesters wait out a timeout
 // and a cooldown between attempts.
 const { resolveCharacterKey } = require("../../../shared/characters/characterStats.js");
@@ -15,15 +16,6 @@ function createPartyJoinRequestService({ db, io, getPartyOwnerName }) {
   const MAX_JOIN_REQUESTS = 4; // requests a player may send to one party before cooldown
   const JOIN_REQUEST_TIMEOUT_MS = PARTY_JOIN_REQUEST_TIMEOUT_MS; // shared with the client countdown
   const JOIN_REQUEST_COOLDOWN_MS = 120_000; // lockout after MAX_JOIN_REQUESTS
-
-  function isMissingJoinRequestTable(error) {
-    return (
-      error?.code === "ER_NO_SUCH_TABLE" &&
-      /party_join_requests/i.test(
-        String(error?.sqlMessage || error?.message || ""),
-      )
-    );
-  }
 
   function buildJoinRequestState(requestRow) {
     if (!requestRow) {
@@ -110,51 +102,37 @@ function createPartyJoinRequestService({ db, io, getPartyOwnerName }) {
       return failure(403, { error: "Only the party owner can review join requests." });
     }
 
-    try {
-      await db.runQuery(
-        `UPDATE party_join_requests
-            SET status = 'expired',
-                responded_at = CURRENT_TIMESTAMP
-          WHERE party_id = ?
-            AND status = 'pending'
-            AND requested_at <= DATE_SUB(NOW(), INTERVAL 15 SECOND)`,
-        [partyId],
-      );
+    await db.runQuery(
+      `UPDATE party_join_requests
+          SET status = 'expired',
+              responded_at = CURRENT_TIMESTAMP
+        WHERE party_id = ?
+          AND status = 'pending'
+          AND requested_at <= DATE_SUB(NOW(), INTERVAL 15 SECOND)`,
+      [partyId],
+    );
 
-      const requestRows = await db.runQuery(
-        `${JOIN_REQUEST_SELECT} WHERE r.party_id = ? AND r.status = 'pending' ORDER BY r.requested_at ASC, r.request_id ASC`,
-        [partyId],
-      );
+    const requestRows = await db.runQuery(
+      `${JOIN_REQUEST_SELECT} WHERE r.party_id = ? AND r.status = 'pending' ORDER BY r.requested_at ASC, r.request_id ASC`,
+      [partyId],
+    );
 
-      return {
-        ok: true,
-        payload: {
-          partyId,
-          requests: requestRows.map((row) => ({
-            requestId: Number(row.request_id) || null,
-            partyId: Number(row.party_id) || null,
-            requesterUserId: Number(row.requester_user_id) || null,
-            requesterName: String(row.requester_name || ""),
-            userStatus: String(row.user_status || "online"),
-            status: String(row.status || "pending"),
-            requestedAt: row.requested_at || null,
-            respondedAt: row.responded_at || null,
-          })),
-        },
-      };
-    } catch (error) {
-      if (isMissingJoinRequestTable(error)) {
-        return {
-          ok: false,
-          statusCode: 500,
-          payload: {
-            error:
-              "Party join requests are unavailable. Apply the join request migration first.",
-          },
-        };
-      }
-      throw error;
-    }
+    return {
+      ok: true,
+      payload: {
+        partyId,
+        requests: requestRows.map((row) => ({
+          requestId: Number(row.request_id) || null,
+          partyId: Number(row.party_id) || null,
+          requesterUserId: Number(row.requester_user_id) || null,
+          requesterName: String(row.requester_name || ""),
+          userStatus: String(row.user_status || "online"),
+          status: String(row.status || "pending"),
+          requestedAt: row.requested_at || null,
+          respondedAt: row.responded_at || null,
+        })),
+      },
+    };
   }
 
   async function emitJoinRequestUpdateToRequester(requestRow, payload) {
@@ -170,7 +148,7 @@ function createPartyJoinRequestService({ db, io, getPartyOwnerName }) {
       if (!socketId) return;
       const sock = io.sockets.sockets.get(socketId);
       if (!sock) return;
-      sock.emit("party:join-request:status", payload);
+      sock.emit(SOCKET_EVENTS.PARTY_JOIN_REQUEST_STATUS, payload);
     } catch (error) {
       console.warn(
         "[party] join-request requester emit failed:",
@@ -191,7 +169,7 @@ function createPartyJoinRequestService({ db, io, getPartyOwnerName }) {
       [partyId],
     );
     const socketId = rows?.[0]?.socket_id;
-    if (socketId) io.to(socketId).emit("party:join-request", requestRow);
+    if (socketId) io.to(socketId).emit(SOCKET_EVENTS.PARTY_JOIN_REQUEST, requestRow);
   }
 
   async function submitJoinRequest({
@@ -385,16 +363,7 @@ function createPartyJoinRequestService({ db, io, getPartyOwnerName }) {
           await conn.rollback();
         } catch (_) {}
       }
-      if (isMissingJoinRequestTable(error)) {
-        return {
-          ok: false,
-          statusCode: 500,
-          payload: {
-            error:
-              "Party join requests are unavailable. Apply the join request migration first.",
-          },
-        };
-      }
+
       throw error;
     } finally {
       if (conn) conn.release();
@@ -498,16 +467,7 @@ function createPartyJoinRequestService({ db, io, getPartyOwnerName }) {
           await conn.rollback();
         } catch (_) {}
       }
-      if (isMissingJoinRequestTable(error)) {
-        return {
-          ok: false,
-          statusCode: 500,
-          payload: {
-            error:
-              "Party join requests are unavailable. Apply the join request migration first.",
-          },
-        };
-      }
+
       throw error;
     } finally {
       if (conn) conn.release();
@@ -515,7 +475,7 @@ function createPartyJoinRequestService({ db, io, getPartyOwnerName }) {
   }
 
   return {
-    isMissingJoinRequestTable,
+
     buildJoinRequestState,
     isJoinRequestTimedOut,
     getJoinRequestRowByUserId,

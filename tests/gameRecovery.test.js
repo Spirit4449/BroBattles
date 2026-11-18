@@ -1,20 +1,10 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
 
 describe("Recovery actions", () => {
-  const compiled = babel.transformSync(
-    fs.readFileSync(require.resolve("../src/client/game/match/gameErrorActions.js"), "utf8"),
-    {
-      babelrc: false,
-      configFile: false,
-      presets: [["@babel/preset-env", { targets: { node: "current" } }]],
-    },
-  );
   const api = {};
-  vm.runInNewContext(compiled.code, { exports: api });
+  loadClientModule(require.resolve("../src/client/game/match/gameErrorActions.js"), { exports: api });
 
   test("game errors map to the action that resolves them", () => {
     const actionFor = (code) => api.resolveGameErrorAction({ code }).action;
@@ -95,4 +85,46 @@ for (const status of [null, 'completed', 'cancelled', 'live', 'queued']) {
     }
   }
 });
+});
+
+test('the first guest battle owns tutorial DOM and socket listeners until it is destroyed', () => {
+  const { createBrowserFixture } = require('./helpers/browserFixture');
+  const { SOCKET_EVENTS } = require('../src/shared/net/socketEvents');
+  const f = createBrowserFixture();
+  const { createBattleTutorialController } = f.load('src/client/game/hud/battleTutorialController.js');
+  const controllerFor = (matchId, isGuest) =>
+    createBattleTutorialController({ socket: f.socket, getGameData: () => ({ matchId, isGuest }) });
+  assert.equal(controllerFor('member-match', false).initialize(), false);
+  const first = controllerFor('guest-match', true);
+  assert.equal(first.initialize(), true);
+  assert.equal(first.initialize(), true);
+  assert.equal(f.document.querySelectorAll('#battle-tutorial').length, 1);
+  assert.equal(f.socket.listenerCount(SOCKET_EVENTS.GAME_CHAT_MESSAGE), 1);
+  first.destroy();
+  assert.equal(f.document.getElementById('battle-tutorial'), null);
+  assert.equal(f.socket.listenerCount(SOCKET_EVENTS.GAME_CHAT_MESSAGE), 0);
+  assert.equal(controllerFor('later-match', true).initialize(), false);
+  assert.equal(f.document.getElementById('battle-tutorial'), null);
+});
+
+test('tutorial hints follow remapped keys while a wall-jump hint is visible', () => {
+  const { createBrowserFixture } = require('./helpers/browserFixture');
+  const f = createBrowserFixture();
+  const settings = f.load('src/client/site/preferences.js');
+  const { createBattleTutorialController } = f.load('src/client/game/hud/battleTutorialController.js');
+  const tutorial = createBattleTutorialController({
+    socket: f.socket,
+    getGameData: () => ({ matchId: 'wall', isGuest: true }),
+    getPlayer: () => ({ active: true, body: { touching: { left: true } } }),
+    isBattleReady: () => true,
+  });
+  assert.ok(tutorial.initialize());
+  tutorial.update();
+  assert.ok(f.document.querySelector('kbd[data-codes="KeyW"]'));
+  settings.saveSettings({ keys: { ...settings.getSettings().keys, up: 75 } });
+  const hint = f.document.querySelector('kbd[data-codes="KeyK"]');
+  assert.equal(hint.textContent, 'K');
+  f.window.dispatchEvent(Object.assign(new f.window.Event('keydown'), { code: 'KeyK' }));
+  assert.ok(hint.classList.contains('is-down'));
+  tutorial.destroy();
 });

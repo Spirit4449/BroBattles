@@ -1,3 +1,5 @@
+import { getUser } from "./session.mjs";
+import { getNavigation } from "../lib/globals.cjs";
 import { mapDefaults } from '../../shared/maps';
 import { buildCharacterSkinAtlasUrls, buildCharacterSkinWeaponUrl } from '../views/skinAssets';
 import { sceneryUrls } from '../../shared/maps/scenery';
@@ -7,7 +9,7 @@ let lastSelection;
 let lastRoster = [];
 
 export function warmBattleSelection(selection = lastSelection, roster = null) {
-  const self = window.__BRO_BATTLES_USERDATA__;
+  const self = getUser();
   if (self) warmEquippedPlayerCard(self.selected_card_id || self.selectedCardId);
   if (!selection) return;
   lastSelection = selection;
@@ -18,7 +20,7 @@ export function warmBattleSelection(selection = lastSelection, roster = null) {
     } : member,
   ) : self ? [self] : []);
   warmRosterPlayerCards(members.map(member => member?.selected_card_id || member?.selectedCardId || null));
-  window.__BB_NAVIGATION__?.selectPreloadMode?.(selection.modeId);
+  getNavigation()?.selectPreloadMode?.(selection.modeId);
   // Plays the moment the battle loading screen lifts.
   const urls = ['/assets/game-sounds/pregame.mp3'];
   if (selection?.mapId) {
@@ -38,5 +40,5 @@ export function warmBattleSelection(selection = lastSelection, roster = null) {
       custom?.animationsUrl || atlas.animationsUrl, custom?.spritesheetUrl || atlas.spritesheetUrl,
       custom?.weaponUrl || buildCharacterSkinWeaponUrl(character, skinId));
   }
-  window.__BB_NAVIGATION__?.preload(urls.filter(url => typeof url === 'string' && url.startsWith('/assets/')));
+  getNavigation()?.preload(urls.filter(url => typeof url === 'string' && url.startsWith('/assets/')));
 }

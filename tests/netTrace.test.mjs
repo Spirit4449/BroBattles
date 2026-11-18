@@ -1,3 +1,4 @@
+import roomTransport from './helpers/roomTransport.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -6,7 +7,8 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import recorderModule from "../src/server/core/gameRoom/netTraceRecorder.js";
 import { createRequire } from "node:module";
-import vm from "node:vm";
+import { fileURLToPath } from "node:url";
+import { loadClientModule as loadModule } from "./helpers/clientModule.js";
 import { analyzeArrivals, detectBounces, analyzeRun, analyzeAttacks, analyzeVictim, buildTruth,
   VICTIM_DISPLACEMENT_PX, analyzeVictimScreen, summarizeVictimScreen } from "../scripts/dev/netReportAnalysis.mjs";
 import { NET_PRESETS, parseNetProfiles, createDelaySource, createOrderedLink, SPIKE_WINDOW_MS, parseFlagSets } from "../scripts/dev/net-probe.mjs";
@@ -17,12 +19,8 @@ const { handleHit } = require("../src/shared/combat/runtime/damageResolver.js");
 
 // Client modules are ES modules for the bundler; load them like the renderer harnesses do.
 function loadClientModule(file, context = {}) {
-  const babel = require("@babel/core");
-  const code = babel.transformSync(fs.readFileSync(new URL(file, import.meta.url), "utf8"), {
-    babelrc: false, configFile: false, presets: [["@babel/preset-env", { targets: { node: "current" } }]] }).code;
-  const exports = {};
-  vm.runInNewContext(code, { exports, require: () => null, URLSearchParams, ...context });
-  return exports;
+  const { require: requireStub = () => null, ...globals } = context;
+  return loadModule(fileURLToPath(new URL(file, import.meta.url)), { URLSearchParams, ...globals }, { require: requireStub });
 }
 
 function fakeWindow(search) {
@@ -72,7 +70,7 @@ test("client batches are accepted only from traced sockets, rate limited and siz
   const { env, dir } = tempEnv();
   const rec = createNetTraceRecorder({ env, wall: () => wall });
   const traced = fakeSocket("s1", { runId: "run-a", tag: "c0" });
-  const room = { matchId: 7, matchData: {}, players: new Map(), botControllers: new Map(), io: { sockets: { sockets: new Map() } } };
+  const room = { ...roomTransport, matchId: 7, matchData: {}, players: new Map(), botControllers: new Map(), io: { sockets: { sockets: new Map() } } };
   rec.attachRoom(room, traced);
 
   assert.equal(rec.acceptClientBatch(fakeSocket("s2", null), { seq: 0 }), false);
@@ -263,16 +261,16 @@ test("net A/B flags on the first page survive navigation until netflags=off", ()
 test("server hit records say how the hit was delivered and where it was tested", () => {
   const { env, dir } = tempEnv();
   const rec = createNetTraceRecorder({ env });
-  const now = Date.now();
+  const now = 50_000;
   const fighter = (name, team, x, extra = {}) => ({ name, team, x, y: 300, isAlive: true, connected: true, loaded: true, char_class: "ozzy",
     health: 5000, maxHealth: 5000, baseDamage: 400, socketId: name, ...extra });
   const shooter = fighter("shooter", "team1", 100);
   const victim = fighter("victim", "team2", 400, { _posHistory: [{ t: now - 500, x: 300, y: 300, ts: 5000 }, { t: now + 1000, x: 450, y: 300, ts: 6500 }] });
   const healthMeta = [];
-  const roomOf = () => ({ players: new Map([["shooter", shooter], ["victim", victim]]), matchId: 9, matchData: {}, botControllers: new Map(),
-    io: { to: () => ({ emit() {} }), sockets: { sockets: new Map() } }, _simulationMono: 1000, _recordCombatStat() {}, broadcastSnapshot() {},
-    _getAttackMaxDist: () => 2000, _getHistoricalPosition: (p) => ({ x: p.x, y: p.y }), _checkVictoryCondition() {}, applyKnockback() {},
-    _handlePlayerDeath() {}, _broadcastHealthUpdate: (p, meta) => healthMeta.push(meta) });
+  const roomOf = () => ({ ...roomTransport, combatClock: { now: () => now }, players: new Map([["shooter", shooter], ["victim", victim]]), matchId: 9, matchData: {}, botControllers: new Map(),
+    io: { to: () => ({ emit() {} }), sockets: { sockets: new Map() } }, simulationMono: 1000, recordCombatStat() {}, broadcastSnapshot() {},
+    getAttackMaxDist: () => 2000, getHistoricalPosition: (p) => ({ x: p.x, y: p.y }), checkVictoryCondition() {}, applyKnockback() {},
+    handlePlayerDeath() {}, broadcastHealthUpdate: (p, meta) => healthMeta.push(meta) });
   const room = roomOf();
   rec.attachRoom(room, fakeSocket("victim", { runId: "run-h", tag: "c1" }));
   room.traceCombatHit = (a, n, d) => rec.noteHit(room, a, n, d);
@@ -298,9 +296,9 @@ test("server hit records say how the hit was delivered and where it was tested",
     assert.equal(hit.rewindMs, 250);
     assert.deepEqual(hit.vAt, [400, 300]);
     assert.deepEqual(hit.aAt, [100, 300]);
-    assert.ok(hit.tested[0] < 400, "tested where the victim stood 250 ms earlier");
+    assert.equal(hit.tested[0], 325, "tested where the victim stood 250 ms earlier");
     // The victim's own timestamp of the tested position (history ts).
-    assert.ok(Math.abs(hit.vTs - (5000 + 250)) < 30, `vTs ${hit.vTs}`);
+    assert.equal(hit.vTs, 5250);
     resolve();
   }, 50));
 });
@@ -382,7 +380,7 @@ test("released shots near a traced victim leave one closest-approach record per 
   const rec = createNetTraceRecorder({ env, now: () => clock });
   const victim = { name: "victim", team: "team2", socketId: "victim", x: 0, y: 0,
     _posHistory: [{ t: Date.now() - 1000, x: 0, y: 0, ts: 1000 }, { t: Date.now() + 1000, x: 0, y: 0, ts: 3000 }] };
-  const room = { players: new Map([["victim", victim]]), matchId: 3, matchData: {}, botControllers: new Map(), _simulationMono: 500 };
+  const room = { players: new Map([["victim", victim]]), matchId: 3, matchData: {}, botControllers: new Map(), simulationMono: 500 };
   rec.attachRoom(room, fakeSocket("victim", { runId: "run-n", tag: "c0" }));
   room.traceShotGap = (d) => rec.noteShotGap(room, d);
   const bounds = { left: -10, right: 10, top: -20, bottom: 20 };

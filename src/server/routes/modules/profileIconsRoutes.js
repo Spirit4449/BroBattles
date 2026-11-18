@@ -1,3 +1,4 @@
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
 const {
   getProfileIconById,
   getProfileIconsCatalog,
@@ -5,15 +6,15 @@ const {
 const {
   syncProfileIconOwnershipForUser,
 } = require("../../services/cosmetics/profileIconOwnership");
-const { authedRoute, sendShopError, purchaseGrantFromShop } = require("../routeHelpers");
+const { authedRoute } = require("../http");
 
-function registerProfileIconsRoutes({ app, db, requireCurrentUser, shopService }) {
-  app.get("/profile-icons/catalog", (_req, res) => {
+function registerProfileIconsRoutes({ app, db, requireCurrentUser }) {
+  app.get(API_PATHS.PROFILE_ICONS_CATALOG, (_req, res) => {
     const catalog = getProfileIconsCatalog();
     return res.json({ success: true, catalog });
   });
 
-  app.get("/profile-icons/owned", authedRoute(requireCurrentUser, "[profile-icons] /profile-icons/owned", async (_req, res, user) => {
+  app.get(API_PATHS.PROFILE_ICONS_OWNED, authedRoute(requireCurrentUser, "[profile-icons] /profile-icons/owned", async (_req, res, user) => {
     const sync = await syncProfileIconOwnershipForUser(db, user);
     return res.json({
       success: true,
@@ -38,7 +39,7 @@ function registerProfileIconsRoutes({ app, db, requireCurrentUser, shopService }
     return { iconId, owned: new Set((sync.ownedIconIds || []).map(String)).has(iconId) };
   }
 
-  app.post("/profile-icons/select", authedRoute(requireCurrentUser, "[profile-icons] /profile-icons/select", async (req, res, user) => {
+  app.post(API_PATHS.PROFILE_ICONS_SELECT, authedRoute(requireCurrentUser, "[profile-icons] /profile-icons/select", async (req, res, user) => {
     const icon = await resolveIcon(req, res, user);
     if (!icon) return undefined;
     if (!icon.owned) {
@@ -49,25 +50,6 @@ function registerProfileIconsRoutes({ app, db, requireCurrentUser, shopService }
     await db.setUserSelectedProfileIconId(user.user_id, icon.iconId);
     return res.json({ success: true, selectedProfileIconId: icon.iconId });
   }));
-
-  app.post("/profile-icons/buy", authedRoute(requireCurrentUser, "[profile-icons] /profile-icons/buy", async (req, res, user) => {
-    const icon = await resolveIcon(req, res, user);
-    if (!icon) return undefined;
-    const { iconId } = icon;
-    if (icon.owned) {
-      return res.json({ success: true, owned: true, iconId, gems: Number(user.gems) || 0 });
-    }
-
-    const purchase = await purchaseGrantFromShop({
-      shopService, req, user, grantType: "profileIcon", grantId: iconId, idempotencyPrefix: "legacy-icon",
-    });
-    if (purchase) return res.json({ ...purchase, iconId });
-
-    return res.status(409).json({
-      success: false,
-      error: "This profile icon is earned through progression, not purchased.",
-    });
-  }, { onError: (error, res) => sendShopError(res, error, "Unable to purchase profile icon") }));
 }
 
 module.exports = { registerProfileIconsRoutes };

@@ -1,3 +1,4 @@
+import { lerp } from "../../../shared/math.js";
 // gameScene/pregameFlythrough.js
 //
 // Pure camera choreography for the pregame map walkthrough. Nothing here
@@ -28,7 +29,6 @@ export const TOUR_HOLD = 0.15;
 
 export const easeInOutSine = (t) => 0.5 - Math.cos(Math.PI * Math.min(1, Math.max(0, t))) / 2;
 
-const lerp = (a, b, t) => a + (b - a) * t;
 // Zoom changes are perceived multiplicatively; interpolate in log space.
 const lerpZoom = (a, b, t) => Math.exp(lerp(Math.log(a), Math.log(b), t));
 

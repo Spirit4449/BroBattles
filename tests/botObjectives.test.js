@@ -246,7 +246,7 @@ test('lost affordability invalidates a claim goal and simultaneous buyers rechec
 test('bots preserve a winning vault balance near the timer and reject finished-game purchases', () => {
   const h = bankSetup();
   const turret = { type: 'claimableTurret', x: h.p.x, y: h.p.y, state: { claimCost: 10000 } };
-  h.room._botNow = 10000;
+  h.room.botNow = 10000;
   h.room.modeState.endsAt = 15000;
   h.room.modeState.vaults.team2.coins = 95000;
   assert.equal(purchaseAllowed(h.brain, turret), false);
@@ -339,7 +339,7 @@ function wallSetup(builtByTeam) {
 }
 
 test('bots collide with built walls whichever team built them', () => {
-  const { stepBody, bounds, movementGeometry } = require('../src/server/core/bots/physics');
+  const { stepBody, bounds, movementGeometry } = require('../src/server/core/physics/bodySolver');
   for (const builtByTeam of ['team1', 'team2']) {
     const h = wallSetup(builtByTeam);
     let now = 10000;
@@ -351,7 +351,7 @@ test('bots collide with built walls whichever team built them', () => {
 });
 
 test('bots plan routes over built walls, their own team\'s included', () => {
-  const { movementGeometry } = require('../src/server/core/bots/physics');
+  const { movementGeometry } = require('../src/server/core/physics/bodySolver');
   const { buildGraph, createRouteSearch } = require('../src/server/core/bots/navigation');
   const routeAcross = (builtByTeam) => {
     const h = wallSetup(builtByTeam);
@@ -379,7 +379,7 @@ test('bots shoot through their own team\'s walls but not the other team\'s', () 
 });
 
 test('bot dashes stop at built walls whichever team built them', () => {
-  const { stepBody, bounds, movementGeometry } = require('../src/server/core/bots/physics');
+  const { stepBody, bounds, movementGeometry } = require('../src/server/core/physics/bodySolver');
   const dash = (builtByTeam) => {
     const h = wallSetup(builtByTeam);
     h.p.x = 900;

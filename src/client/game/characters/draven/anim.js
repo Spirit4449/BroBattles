@@ -1,6 +1,9 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { createAnimationBuilder } from '../shared/animationBuilder';
+
+const { key: NAME } = characterDefinitions.draven;
+
 export function animations(scene) {
-  const NAME = "draven";
   const { make } = createAnimationBuilder(scene, NAME);
 
   // Try reasonable prefix variants for robustness across atlases

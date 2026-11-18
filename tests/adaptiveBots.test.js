@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { createFakeDb, createTransactionalDb } = require("./helpers/fakeDb");
+const { createFakeIo } = require("./helpers/fakeIo");
 const {
   BOT_NAMES,
   TROLL_NAMES,
@@ -23,10 +25,8 @@ const {
   computeUserMMRFromRow,
   ratingWindow,
 } = require("../src/server/core/matchmaking/mmrUtils");
-const {
-  getDuelGeometry,
-  characterBody,
-} = require("../src/shared/physics/duelGeometry");
+const { characterBody } = require("../src/shared/physics/characterBody");
+const { getDuelGeometry } = require("../src/shared/physics/duelGeometry");
 const {
   standOn,
   safeWalkDirection,
@@ -35,7 +35,7 @@ const {
   stepBody,
   bounds,
   applyImpulse,
-} = require("../src/server/core/bots/physics");
+} = require("../src/server/core/physics/bodySolver");
 const {
   BOT_ATTACK_TO_SUPER_COOLDOWN_MS,
   requestBasic,
@@ -484,7 +484,7 @@ test("atomic assembly commits once under concurrent fill attempts and creates no
   const {
     createMatchAssemblyManager,
   } = require("../src/server/core/matchmaking/matchAssemblyManager");
-  let queued = [
+  const queued = [
     {
       ...ticket(1, 800),
       status: "queued",
@@ -504,10 +504,9 @@ test("atomic assembly commits once under concurrent fill attempts and creates no
     char_levels: '{"ninja":3}',
     trophies: 800,
   };
-  let mutex = Promise.resolve();
-  const query = async (sql, params) => {
+  const query = async (state, sql, params) => {
     if (sql.startsWith("SELECT * FROM match_tickets"))
-      return queued.map((t) => ({ ...t }));
+      return state.queued.map((t) => ({ ...t }));
     if (sql.includes("FROM users WHERE user_id =")) return [{ ...user }];
     if (sql.startsWith("INSERT INTO matches")) {
       inserts.push({ sql, params });
@@ -518,30 +517,19 @@ test("atomic assembly commits once under concurrent fill attempts and creates no
       return { affectedRows: 1 };
     }
     if (sql.startsWith("DELETE FROM match_tickets")) {
-      queued = [];
+      state.queued = [];
       return { affectedRows: 1 };
     }
     if (sql.startsWith("SELECT user_id, socket_id"))
       return [{ user_id: 1, socket_id: "human" }];
     throw new Error("Unexpected query: " + sql);
   };
-  const db = {
-    runQuery: query,
-    withTransaction(fn) {
-      const result = mutex.then(() => fn(null, query));
-      mutex = result.catch(() => {});
-      return result;
-    },
-  };
+  const db = createTransactionalDb({ state: { queued }, query });
+  const io = createFakeIo();
+  io.addSocket("human", { onEmit: (...args) => notifications.push(args) });
   const manager = createMatchAssemblyManager({
     db,
-    io: {
-      sockets: {
-        sockets: new Map([
-          ["human", { emit: (...args) => notifications.push(args) }],
-        ]),
-      },
-    },
+    io,
     partyStatus: { READY_CHECK: "ready_check" },
     lastProgress: new Map(),
     readyCheckCoordinator: { startReadyCheck: (...args) => ready.push(args) },
@@ -576,7 +564,7 @@ test("cancelled tickets cannot produce a bot match", async () => {
     createMatchAssemblyManager,
   } = require("../src/server/core/matchmaking/matchAssemblyManager");
   const manager = createMatchAssemblyManager({
-    db: { withTransaction: (fn) => fn(null, async () => []) },
+    db: createFakeDb(async () => []),
   });
   const result = await manager.assembleAndReady(
     "duels",
@@ -596,8 +584,8 @@ test("bot results retain combat stats, but only human accounts receive normal re
   const [human, bot] = h.players;
   human.isBot = false;
   human.user_id = 42;
-  h.room._recordCombatStat(human, { hits: 3, damage: 4000, kills: 1 });
-  h.room._recordCombatStat(bot, { hits: 2, damage: 2000 });
+  h.room.recordCombatStat(human, { hits: 3, damage: 4000, kills: 1 });
+  h.room.recordCombatStat(bot, { hits: 2, damage: 2000 });
   h.room.db.withTransaction = async fn => fn(null, async (sql, params = []) => {
     h.queries.push({ sql, params });
     if (sql.startsWith("SELECT status FROM matches")) return [{ status: "live" }];

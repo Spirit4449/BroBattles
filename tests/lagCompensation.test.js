@@ -8,7 +8,7 @@ const { HIT_STALENESS_MAX_MS } = require('../src/shared/combat/matchConfig.js');
 const { combatMono } = require('../src/shared/combat/runtime/clock.js');
 // A room whose last simulation step was at `simulationMono`, receiving a
 // request `sinceStepMs` later on its monotonic clock.
-const stampRoom = (simulationMono, sinceStepMs = 0) => ({ _simulationMono: simulationMono,
+const stampRoom = (simulationMono, sinceStepMs = 0) => ({ simulationMono: simulationMono,
   combatClock: { mono: () => simulationMono + sinceStepMs } });
 const { FIXED_DT_MS: STEP } = require('../src/shared/gameConstants');
 const { DELIVERIES } = require('../src/shared/combat/attackDelivery');
@@ -44,12 +44,12 @@ function arena(t, shooter, { targetX = 330 } = {}) {
   Object.assign(target, { x: targetX, y: 300, isBot: false, connected: true, loaded: true,
     _bodyHalfWidth: 20, _bodyHalfHeight: 400, _bodyCenterOffsetX: 0, _bodyCenterOffsetY: 0 });
   room.geometry = { ...room.geometry, colliders: [] };
-  room.gameMode = null; room._tickId = 0; room._simulationMono = 90_000;
+  room.gameMode = null; room.tickId = 0; room.simulationMono = 90_000;
   const scheduled = [];
-  room.scheduleAction = (fn, ms) => scheduled.push({ at: room._simulationMono + ms, fn });
+  room.scheduleAction = (fn, ms) => scheduled.push({ at: room.simulationMono + ms, fn });
   f.step = () => {
-    clock.now += STEP; room._tickId++; room._simulationMono += STEP;
-    for (const job of scheduled.splice(0)) (job.at <= room._simulationMono ? job.fn() : scheduled.push(job));
+    clock.now += STEP; room.tickId++; room.simulationMono += STEP;
+    for (const job of scheduled.splice(0)) (job.at <= room.simulationMono ? job.fn() : scheduled.push(job));
     tickActiveAttacks(room, clock.now);
     characterCombat.tick(room);
   };

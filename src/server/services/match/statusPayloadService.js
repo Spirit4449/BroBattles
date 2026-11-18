@@ -92,16 +92,19 @@ async function buildStatusPayload({
       console.warn("[status] unable to load win streak:", error?.message || error);
     }),
   ]);
-  if (userNormalized) {
-    userNormalized.selected_card_id = selectedCardId;
-    userNormalized.owned_card_ids = ownedCardIds;
-    userNormalized.selected_profile_icon_id = iconState?.selectedProfileIconId || null;
-    userNormalized.owned_profile_icon_ids = Array.isArray(iconState?.ownedIconIds) ? iconState.ownedIconIds : [];
-    userNormalized.selected_skin_id_by_char = skinState?.selectedSkinIdByCharacter || {};
-    userNormalized.owned_skin_ids = Array.isArray(skinState?.ownedSkinIds) ? skinState.ownedSkinIds : [];
-    userNormalized.preferred_selection = preferredSelection;
-    userNormalized.winStreak = winStreak;
-  }
+  // The authenticated row also contains credentials and moderation details.
+  // Serialize only the account fields the lobby and its roster can display.
+  const userData = userNormalized ? {
+    user_id: userId, name: userNormalized.name, coins: userNormalized.coins, gems: userNormalized.gems,
+    trophies: userNormalized.trophies, trophy_peak: userNormalized.trophy_peak,
+    char_class: userNormalized.char_class, char_levels: userNormalized.char_levels,
+    selected_title_id: userNormalized.selected_title_id, selected_card_id: selectedCardId, owned_card_ids: ownedCardIds,
+    selected_profile_icon_id: iconState?.selectedProfileIconId || null,
+    owned_profile_icon_ids: Array.isArray(iconState?.ownedIconIds) ? iconState.ownedIconIds : [],
+    selected_skin_id_by_char: skinState?.selectedSkinIdByCharacter || {},
+    owned_skin_ids: Array.isArray(skinState?.ownedSkinIds) ? skinState.ownedSkinIds : [],
+    preferred_selection: preferredSelection, winStreak,
+  } : null;
 
   const mmSuspendedUntilMs = parseMs(userNormalized?.mm_suspended_until);
   const chatSuspendedUntilMs = parseMs(userNormalized?.chat_suspended_until);
@@ -113,7 +116,7 @@ async function buildStatusPayload({
 
   return {
     success: true,
-    userData: userNormalized,
+    userData,
     mapCatalog: require("../maps/mapRepository").mapRepository.listMetadata(),
     suspension,
     isAdmin:
@@ -126,6 +129,5 @@ async function buildStatusPayload({
 }
 
 module.exports = {
-  normalizeUserForStatus,
   buildStatusPayload,
 };

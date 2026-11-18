@@ -1,13 +1,17 @@
+import { getNavigation } from "../../lib/globals.cjs";
+import { prefersReducedMotion } from "../../ui/domMotion";
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
+import { returnFromMatch } from "../../navigation/lobbyReturn.js";
 import { escapeHtml } from "../../../shared/site/html.cjs";
 import { gameOverWinStreakMarkup, animateGameOverWinStreak } from "../../views/winStreakView.mjs";
 // hud/gameOverScreenController.js
 
 import { playSound, preloadSound } from "../../ui/uiSounds.js";
 import {
-  END_BATTLE_MESSAGES,
   getEndBattleMessage,
 } from "./gameOverMessages.js";
-import { POST_BATTLE_LOBBY_RETURN_KEY } from "../../lib/storageKeys.js";
+import { MATCH_ID_KEY, POST_BATTLE_LOBBY_RETURN_KEY } from "../../lib/storageKeys.js";
+import { postJson } from "../../lib/http.js";
 
 const REWARD_TYPES = {
   coins: {
@@ -30,10 +34,6 @@ const REWARD_TYPES = {
 
 const delay = (duration) =>
   new Promise((resolve) => window.setTimeout(resolve, duration));
-
-function prefersReducedMotion() {
-  return !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-}
 
 function formatCount(value) {
   return Math.max(0, Math.round(Number(value) || 0)).toLocaleString();
@@ -228,14 +228,10 @@ export function createGameOverScreenController({
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 2800);
     try {
-      const response = await fetch("/status", {
-        method: "POST",
-        credentials: "same-origin",
+      const payload = await postJson(API_PATHS.STATUS, undefined, {
         cache: "no-store",
         signal: controller.signal,
       });
-      if (!response.ok) return null;
-      const payload = await response.json();
       const user = payload?.userData;
       if (!user) return null;
       return {
@@ -554,7 +550,7 @@ export function createGameOverScreenController({
       </div>`;
 
     document.body.appendChild(div);
-    window.__BB_NAVIGATION__?.warmLobby?.();
+    getNavigation()?.warmLobby?.();
     void (async () => {
       const streakBadge = div.querySelector('.bb-game-over-streak');
       const streakCue = myReward?.winStreakAfter === 0 ? 'streakLost' : 'streakIncrease';
@@ -587,41 +583,10 @@ export function createGameOverScreenController({
       leaving = true;
       window.removeEventListener("keydown", onExitKey, true);
       try {
-        sessionStorage.removeItem("matchId");
+        sessionStorage.removeItem(MATCH_ID_KEY);
         sessionStorage.setItem(POST_BATTLE_LOBBY_RETURN_KEY, "1");
       } catch (_) {}
-      const myPartyId = Number(
-        (gameData?.players || []).find((p) => p.name === username)?.party_id,
-      );
-      if (window.__BB_NAVIGATION__?.prepareLobbyReturn) {
-        await window.__BB_NAVIGATION__.prepareLobbyReturn(myPartyId);
-        return;
-      }
-      try {
-        const res = await fetch("/status", { method: "POST" });
-        if (res.ok) {
-          const data = await res.json();
-          const pid = Number(data?.party_id);
-          if (Number.isFinite(pid) && pid > 0) {
-            window.location.replace(`/party/${pid}`);
-            return;
-          }
-          window.location.replace(data?.banned ? '/banned' : '/');
-          return;
-        }
-      } catch (_) {}
-
-      try {
-        const myPartyId = Number(
-          (gameData?.players || []).find((p) => p.name === username)?.party_id,
-        );
-        if (Number.isFinite(myPartyId) && myPartyId > 0) {
-          window.location.replace(`/party/${myPartyId}`);
-          return;
-        }
-      } catch (_) {}
-
-      window.location.replace("/");
+      await returnFromMatch({ gameData, username, refreshStatus: true });
     };
 
     const timer = setInterval(() => {
@@ -646,5 +611,3 @@ export function createGameOverScreenController({
     showGameOverScreen,
   };
 }
-
-export { END_BATTLE_MESSAGES, getEndBattleMessage };

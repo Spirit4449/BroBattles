@@ -1,3 +1,5 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { trackDebugShape } from "../shared/attackDebugDraw";
 import { applyTeamVisual, teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
@@ -5,6 +7,8 @@ import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { rigPoint } from "../shared/rig";
 import rigData from "../../../../shared/characters/characterRig.js";
+
+const { key: NAME } = characterDefinitions.ozzy;
 
 const { launchPoint } = rigData;
 import { attachToPlayer } from "../shared/attachToPlayer";
@@ -21,7 +25,7 @@ import { releasedFlightAge } from "../shared/projectileReplication";
 import { serverClock } from "../../match/serverClock";
 import { ozzyChargeShapes } from "../../../../shared/characters/ozzyCharge";
 
-const FIREBALL = getResolvedCharacterAttackConfig("ozzy", "fireball");
+const FIREBALL = getResolvedCharacterAttackConfig(NAME, "fireball");
 
 const FIREBALL_RANGE = FIREBALL.range;
 const FIREBALL_VISUAL_RADIUS = FIREBALL.visualRadius;
@@ -40,19 +44,6 @@ const FIREBALL_DURATION_MS = Math.round(launchDurationMs(FIREBALL.range, FIREBAL
 // Each release is drawn once, whether predicted locally or echoed by the server.
 export const consumeOzzyRelease = (scene, id) => consumeOnce(scene, "ozzy-release", id, 4000);
 
-let DEBUG_DRAW = false;
-const ACTIVE_DEBUG_SHAPES = new Set();
-
-function registerDebugShape(shape) {
-  if (!shape) return shape;
-  ACTIVE_DEBUG_SHAPES.add(shape);
-  shape.setVisible(DEBUG_DRAW);
-  shape.once("destroy", () => {
-    ACTIVE_DEBUG_SHAPES.delete(shape);
-  });
-  return shape;
-}
-
 function createDebugCircle(scene) {
   if (!scene?.add) return null;
   const circle = scene.add.circle(
@@ -64,7 +55,7 @@ function createDebugCircle(scene) {
   );
   circle.setStrokeStyle(1, 0x00ffff, 0.8);
   circle.setDepth(RENDER_LAYERS.ATTACKS + 10);
-  return registerDebugShape(circle);
+  return trackDebugShape(circle);
 }
 
 function attachDebugFollower(scene, target) {
@@ -190,7 +181,7 @@ export function playOzzyCastWindup(scene, ownerSprite, volume = 0.3, id = null) 
   playSpriteAnimation({
     scene,
     sprite: ownerSprite,
-    character: "ozzy",
+    character: NAME,
     logical: "throw",
     fallback: "idle",
     id,
@@ -225,7 +216,7 @@ function resolveProjectileStart(payload, ownerSprite, angle, direction) {
       ? Math.PI
       : 0;
   // The same rig muzzle the server spawns from (ozzy.json fireballMuzzle).
-  return launchPoint("ozzy", FIREBALL.muzzle, {
+  return launchPoint(NAME, FIREBALL.muzzle, {
     x: Number(ownerSprite?.x) || 0, y: Number(ownerSprite?.y) || 0, flip: direction < 0,
   }, resolvedAngle) || { x: Number(ownerSprite?.x) || 0, y: Number(ownerSprite?.y) || 0 };
 }
@@ -379,7 +370,7 @@ function spawnOzzyFireballProjectile(
         if (victimHold) {
           const body = victimHold.body;
           if (body?.active) { sprite.x = body.x + victimHold.offset.x; sprite.y = body.y + victimHold.offset.y; }
-          if (enemyShotTraced()) traceEnemyShot(attackId, shooter, "ozzy", sprite.x, sprite.y, FIREBALL_COLLISION_RADIUS, ageState.shown || 0, payload.viewRewindMs, 1, age);
+          if (enemyShotTraced()) traceEnemyShot(attackId, shooter, NAME, sprite.x, sprite.y, FIREBALL_COLLISION_RADIUS, ageState.shown || 0, payload.viewRewindMs, 1, age);
           if (performance.now() - victimHold.at <= victimHold.windowMs || victimHold.fading) return;
           // No burst from the server: withdrawn like an unconfirmed prediction
           // (a server burst during the fade still plays).
@@ -409,7 +400,7 @@ function spawnOzzyFireballProjectile(
         }
         if (enemy && enemyShotTraced()) {
           const drawn = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
-          traceEnemyShot(attackId, shooter, "ozzy", drawn.x, drawn.y, FIREBALL_COLLISION_RADIUS, ageState.shown || 0, payload.viewRewindMs, 0, age);
+          traceEnemyShot(attackId, shooter, NAME, drawn.x, drawn.y, FIREBALL_COLLISION_RADIUS, ageState.shown || 0, payload.viewRewindMs, 0, age);
         }
         if (victimFrom && !victimReleased) {
           const victimTo = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
@@ -510,7 +501,7 @@ function predictSplash(at, delivery) {
   const splashed = new Set();
   for (let victim; (victim = predictShotContact(at, at, FIREBALL_SPLASH_RADIUS, { skip: splashed }));) {
     splashed.add(victim.target.name);
-    notePredictedHit({ delivery, character: "ozzy", target: victim.target });
+    notePredictedHit({ delivery, character: NAME, target: victim.target });
   }
 }
 
@@ -547,16 +538,10 @@ export function spawnOzzyFireballAuthoritative(
   });
 }
 
-export function changeDebugState(state) {
-  DEBUG_DRAW = !!state;
-  for (const shape of ACTIVE_DEBUG_SHAPES) {
-    shape.setVisible(DEBUG_DRAW);
-  }
-}
 
 // The staff tip on the frame being shown (ozzy.json `rig.points.staffTip`).
 export function getOzzyStaffTip(owner) {
-  return rigPoint(owner, "staffTip", "ozzy") || { x: owner.x, y: owner.y };
+  return rigPoint(owner, "staffTip", NAME) || { x: owner.x, y: owner.y };
 }
 
 // Spawn frames are selected from the same sheet using cast elapsed time.

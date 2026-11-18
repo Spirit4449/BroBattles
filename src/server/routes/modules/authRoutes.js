@@ -1,3 +1,8 @@
+const { isSameOrigin } = require("../../middleware/sameOrigin");
+const { createRequestWindow } = require("../../lib/requestWindow");
+const signupService = require("../../services/auth/signupVerificationService");
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
+const { USERNAME_PATTERN } = require("../../../shared/social/textRules.js");
 const {
   completeSignupFromGuest,
   loginPermanentUser,
@@ -6,16 +11,15 @@ const { setBanHoldCookies, clearBanHoldCookies } = require("../../services/auth/
 const { isReservedAdminName } = require("../../services/auth/auth");
 
 function registerAuthRoutes({ app, db, requireCurrentUser }) {
-  app.get("/username-availability", async (req, res) => {
-    if (!require("./siteRoutes").isSameOrigin(req)) {
+  app.get(API_PATHS.USERNAME_AVAILABILITY, async (req, res) => {
+    if (!isSameOrigin(req)) {
       return res.status(403).json({ error: "Same-origin request required." });
     }
 
     const username =
       typeof req.query?.username === "string" ? req.query.username.trim() : "";
-    const usernamePattern = /^[a-zA-Z0-9_.-]{3,14}$/;
 
-    if (!usernamePattern.test(username)) {
+    if (!USERNAME_PATTERN.test(username)) {
       return res.json({ available: false, valid: false });
     }
     if (isReservedAdminName(username)) {
@@ -37,11 +41,10 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
     }
   });
 
-  const signupLimits = require('../../lib/requestWindow').createRequestWindow();
-  const signupService = require('../../services/auth/signupVerificationService');
-  app.use(['/signup', '/signup/pending', '/signup/verify', '/signup/resend', '/signup/cancel'], (req,res,next) => {
+  const signupLimits = createRequestWindow();
+  app.use([API_PATHS.SIGNUP, '/signup/pending', '/signup/verify', '/signup/resend', '/signup/cancel'], (req,res,next) => {
     res.set('Cache-Control','no-store');
-    if (req.method !== 'GET' && !require('./siteRoutes').isSameOrigin(req)) return res.status(403).json({error:'Same-origin request required.'});
+    if (req.method !== 'GET' && !isSameOrigin(req)) return res.status(403).json({error:'Same-origin request required.'});
     if (signupLimits.count(req.ip, 3600000) > 60) return res.status(429).json({error:'Too many attempts. Try again in an hour.'});
     next();
   });
@@ -51,8 +54,8 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
       catch(error){console.warn('[signup] verification unavailable:',error.code||error.message);res.status(503).json({error:'Unable to complete this step. Please try again.'});}
     });
   }
-  app.post("/signup", async (req, res) => {
-    if (!require("./siteRoutes").isSameOrigin(req)) return res.status(403).json({ error: "Same-origin request required." });
+  app.post(API_PATHS.SIGNUP, async (req, res) => {
+    if (!isSameOrigin(req)) return res.status(403).json({ error: "Same-origin request required." });
     try {
       const result = await completeSignupFromGuest({
         app,
@@ -83,8 +86,8 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
     }
   });
 
-  app.post("/login", async (req, res) => {
-    if (!require("./siteRoutes").isSameOrigin(req)) return res.status(403).json({ error: "Same-origin request required." });
+  app.post(API_PATHS.LOGIN, async (req, res) => {
+    if (!isSameOrigin(req)) return res.status(403).json({ error: "Same-origin request required." });
     try {
       const result = await loginPermanentUser({ app, db, req });
       if (!result.ok) {
@@ -115,7 +118,7 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
     }
   });
 
-  app.post("/logout", async (req, res) => {
+  app.post(API_PATHS.LOGOUT, async (req, res) => {
     try {
       await app.locals.authSessions.revokeRequest(req, res);
     } catch (error) {

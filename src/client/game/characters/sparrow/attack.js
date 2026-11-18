@@ -1,3 +1,4 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId.js";
 import { aimAngle, aimFacesLeft, faceAttack } from "../shared/flipLock.js";
@@ -5,7 +6,9 @@ import { playSpriteAnimation } from "../shared/animationState.js";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { sparrowAimVariant } from "./aimPoses";
 
-const ARROWS = getResolvedCharacterAttackConfig("sparrow", "arrowSpread");
+const { key: NAME } = characterDefinitions.sparrow;
+
+const ARROWS = getResolvedCharacterAttackConfig(NAME, "arrowSpread");
 
 export function performSparrowArrowSpread(instance, attackContext = null) {
   const { scene, player: p } = instance;
@@ -15,7 +18,7 @@ export function performSparrowArrowSpread(instance, attackContext = null) {
   const id = createRuntimeId("sparrowArrow");
   // Face the shot and hold it, so running the other way does not turn her mid-draw.
   faceAttack(scene, p, aimFacesLeft({ direction: context?.direction, angle }, p.flipX), ARROWS.flipLockMs);
-  playSpriteAnimation({ scene, sprite: p, character: "sparrow", logical: "throw", fallback: "throw", id,
+  playSpriteAnimation({ scene, sprite: p, character: NAME, logical: "throw", fallback: "throw", id,
     variant: sparrowAimVariant(angle) });
   try {
     if (scene?.cache?.audio?.exists?.("sparrow-attack") || scene?.sound?.get?.("sparrow-attack")) {

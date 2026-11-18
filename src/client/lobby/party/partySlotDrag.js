@@ -1,4 +1,5 @@
 import { playSound } from '../../ui/uiSounds.js';
+import { SLOT_SELECTOR } from './slotDom.js';
 
 // Move the real card so its layout, artwork, and inherited styles stay intact.
 export function createPartySlotDrag({ canMove, move, render, onError }) {
@@ -8,7 +9,9 @@ export function createPartySlotDrag({ canMove, move, render, onError }) {
   let suppressClickUntil = 0;
   const placementOrigins = new Map();
   const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const slots = () => [...document.querySelectorAll('#lobby-area .character-slot:not(.party-seat-silhouette)')].filter(el => el.getClientRects().length);
+  const draggableSeats = `#lobby-area ${SLOT_SELECTOR}:not(.party-seat-silhouette)`;
+  const movableHandles = `${SLOT_SELECTOR}[data-slot-movable="true"]`;
+  const slots = () => [...document.querySelectorAll(draggableSeats)].filter(el => el.getClientRects().length);
   const announce = message => {
     let live = document.getElementById('party-slot-announcement');
     if (!live) {
@@ -134,7 +137,7 @@ export function createPartySlotDrag({ canMove, move, render, onError }) {
   }
   let press = null;
   document.addEventListener('pointerdown', event => {
-    const source = event.target.closest?.('#lobby-area .character-slot:not(.party-seat-silhouette)');
+    const source = event.target.closest?.(draggableSeats);
     if (!source?.dataset.playerName || !canMove() || pending || drag || event.button !== 0) return;
     if (event.target.closest('.status, .switch-character')) return;
     press = { source, x: event.clientX, y: event.clientY, pointerId: event.pointerId };
@@ -156,19 +159,19 @@ export function createPartySlotDrag({ canMove, move, render, onError }) {
   document.addEventListener('pointercancel', () => { press = null; void finish(true); });
   window.addEventListener('blur', () => { press = null; void finish(true); });
   document.addEventListener('dragstart', event => {
-    if (event.target.closest?.('.character-slot[data-slot-movable="true"]')) event.preventDefault();
+    if (event.target.closest?.(movableHandles)) event.preventDefault();
   });
   document.addEventListener('click', event => {
     if (Date.now() < suppressClickUntil) { event.preventDefault(); event.stopImmediatePropagation(); }
   }, true);
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && drag) { event.preventDefault(); press = null; void finish(true); return; }
-    const handle = event.target.matches?.('.character-slot[data-slot-movable="true"]') ? event.target : null;
+    const handle = event.target.matches?.(movableHandles) ? event.target : null;
     if (!handle || !canMove() || pending) return;
     if (event.key === ' ' || event.key === 'Enter') {
       event.preventDefault();
       if (drag) void finish();
-      else { const source = handle.closest('.character-slot'); const r = source.getBoundingClientRect(); start(source, r.left, r.top); }
+      else { const source = handle.closest(SLOT_SELECTOR); const r = source.getBoundingClientRect(); start(source, r.left, r.top); }
     } else if (drag && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
       event.preventDefault();
       const choices = slots().filter(slot => !slot.dataset.botCharacter);

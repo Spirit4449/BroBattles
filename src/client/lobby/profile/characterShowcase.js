@@ -1,3 +1,4 @@
+import { getPageScope } from "../../lib/globals.cjs";
 // Switchable views in the expanded character panel.
 //   body        the static portrait (always available, shown first)
 //   animations  every animation in turn, with the real super, on a platform
@@ -213,7 +214,7 @@ function getStage() {
     if (session) session.frame.prepend(host);
     const stage = createShowcaseStage(host);
     // Leaving the lobby frees the WebGL context for the match.
-    window.__BB_PAGE_SCOPE__?.onDispose(() => {
+    getPageScope()?.onDispose(() => {
       stage.destroy();
       host?.remove();
       host = null;

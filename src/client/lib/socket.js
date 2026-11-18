@@ -1,3 +1,5 @@
+import { BROWSER_GLOBALS, getPageScope } from "./globals.cjs";
+import { SOCKET_EVENTS } from "../../shared/net/socketEvents.js";
 // Minimal singleton Socket.IO client (bundled)
 import { io } from "socket.io-client";
 import { readNetTraceSpec } from "./netTraceSpec";
@@ -40,18 +42,18 @@ const socket = io(editorSession ? '/map-playtest' : '/', {
 });
 
 // A restriction ends lobby/game access while keeping the HTTP support session.
-socket.on("auth:banned", () => window.location.replace("/banned"));
-socket.on("connect_error", error => {
+socket.on(SOCKET_EVENTS.AUTH_BANNED, () => window.location.replace("/banned"));
+socket.on(SOCKET_EVENTS.CONNECT_ERROR, error => {
   if (error?.message === "Account banned") window.location.replace("/banned");
 });
 
 // Traced debug tabs expose the socket so the headless probe can drive the
 // lobby through the same events the UI emits.
-if (netTraceSpec) window.__BB_NET_TRACE_SOCKET__ = socket;
+if (netTraceSpec) window[BROWSER_GLOBALS.netTraceSocket] = socket;
 
 // A soft navigation mounts a fresh bundle; retire this screen's connection
 // before the next screen authenticates and joins its room.
-window.__BB_PAGE_SCOPE__?.onDispose(() => {
+getPageScope()?.onDispose(() => {
   socket.removeAllListeners();
   socket.disconnect();
 });
@@ -59,15 +61,8 @@ window.__BB_PAGE_SCOPE__?.onDispose(() => {
 // Utility: call this once after /status finishes
 export function ensureSocketConnected() {
   if (socket.connected || socket.connecting) {
-    console.log("[socket] ensureSocketConnected skipped", getSocketDebugMeta(socket));
     return false;
   }
-  console.log("[socket] ensureSocketConnected starting connect()", {
-    ...getSocketDebugMeta(socket),
-    withCredentials: true,
-    transports: ["websocket"],
-    upgrade: false,
-  });
   socket.connect();
   return true;
 }
@@ -75,7 +70,6 @@ export function ensureSocketConnected() {
 // Optional: expose a promise for “connected”
 export function waitForConnect(timeoutMs = 10000) {
   if (socket.connected) {
-    console.log("[socket] waitForConnect immediate resolve", getSocketDebugMeta(socket));
     return Promise.resolve();
   }
 
@@ -86,15 +80,14 @@ export function waitForConnect(timeoutMs = 10000) {
       if (done) return;
       done = true;
       clearTimeout(t);
-      socket.off("connect", onConnect);
-      socket.off("reconnect", onConnect);
-      socket.off("connect_error", onError);
-      socket.off("reconnect_error", onError);
+      socket.off(SOCKET_EVENTS.CONNECT, onConnect);
+      socket.off(SOCKET_EVENTS.RECONNECT, onConnect);
+      socket.off(SOCKET_EVENTS.CONNECT_ERROR, onError);
+      socket.off(SOCKET_EVENTS.RECONNECT_ERROR, onError);
     };
 
     const onConnect = () => {
       if (done) return;
-      console.log("[socket] waitForConnect resolved", getSocketDebugMeta(socket));
       cleanup();
       resolve();
     };
@@ -115,14 +108,13 @@ export function waitForConnect(timeoutMs = 10000) {
       reject(new Error("waitForConnect timeout after " + timeoutMs + "ms"));
     }, timeoutMs);
 
-    socket.once("connect", onConnect);
-    socket.once("reconnect", onConnect);
-    socket.on("connect_error", onError);
-    socket.on("reconnect_error", onError);
+    socket.once(SOCKET_EVENTS.CONNECT, onConnect);
+    socket.once(SOCKET_EVENTS.RECONNECT, onConnect);
+    socket.on(SOCKET_EVENTS.CONNECT_ERROR, onError);
+    socket.on(SOCKET_EVENTS.RECONNECT_ERROR, onError);
 
     // Important: if not already connecting, start handshake now
     if (!socket.connected) {
-      console.log("[socket] waitForConnect forcing connect()", getSocketDebugMeta(socket));
       socket.connect();
     }
   });

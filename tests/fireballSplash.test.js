@@ -18,11 +18,11 @@ function arena(t, characters = ['ozzy', 'ninja', 'ninja', 'ninja']) {
     _bodyHalfHeight: 40, _bodyCenterOffsetX: 0, _bodyCenterOffsetY: 0, _posHistory: [] });
   f.fire = () => {
     registerAttackFromAction(f.room, owner, { type: 'ozzy-fireball-release', id: 'boom', start: { x: 130, y: 200 }, angle: 0, direction: 1 });
-    return f.room._activeAttacks[0];
+    return f.room.activeAttacks[0];
   };
   f.flyOut = () => {
-    for (let i = 0; i < 400 && f.room._activeAttacks.length; i++) tickActiveAttacks(f.room, Date.now());
-    assert.equal(f.room._activeAttacks.length, 0, 'the fireball ended');
+    for (let i = 0; i < 400 && f.room.activeAttacks.length; i++) tickActiveAttacks(f.room, Date.now());
+    assert.equal(f.room.activeAttacks.length, 0, 'the fireball ended');
   };
   f.impacts = () => f.events.filter(e => e.payload?.action?.type === 'ozzy-fireball-impact').map(e => e.payload.action);
   return f;
@@ -120,7 +120,7 @@ test('with no one in the charge zone the fireball releases as normal', t => {
   const cast = castAt(f, now);
   cast.tickTo(chargeConfig().endMs + 40);
   assert.equal(enemy.health, hp, 'the charge never reaches in front of him');
-  assert.equal(f.room._activeAttacks.length, 0, 'the charge ends with the windup');
+  assert.equal(f.room.activeAttacks.length, 0, 'the charge ends with the windup');
   cast.release();
   assert.equal(cast.releases().length, 1);
 });
@@ -131,5 +131,5 @@ test('a client cannot trigger the charge hitbox on its own', t => {
   enemy.x = 62; enemy.y = 196;
   const result = handleCharacterAction(f.room, owner, { type: 'ozzy-fireball-charge', id: 'x' }, Date.now());
   assert.equal(result?.handled, true);
-  assert.equal((f.room._activeAttacks || []).length, 0);
+  assert.equal((f.room.activeAttacks || []).length, 0);
 });

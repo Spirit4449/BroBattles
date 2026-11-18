@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 // Recent system activity is separate from user messages/read receipts. Keep it
 // across lobby/game navigation, bounded for the lifetime of this server process.
 const journals = new WeakMap();
@@ -24,7 +25,7 @@ function appendPartyChatLog(io, partyId, { kind, body, key, winnerTeam, particip
   const event = { id: `system:${Number(partyId)}:${Date.now()}:${++entry.seq}`, kind, body: String(body), ...(kind === "battle" ? { winnerTeam, participants } : {}), createdAt: new Date().toISOString(), key };
   entry.events.push(event);
   if (entry.events.length > 100) entry.events.shift();
-  io.to(`party:${Number(partyId)}`).emit('party-chat:system', { partyId: Number(partyId), event });
+  io.to(`party:${Number(partyId)}`).emit(SOCKET_EVENTS.PARTY_CHAT_SYSTEM, { partyId: Number(partyId), event });
   return event;
 }
 function recordPartyRoster(io, partyId, members) {

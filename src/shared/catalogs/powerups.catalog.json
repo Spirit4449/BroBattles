@@ -1,5 +1,6 @@
 {
   "rage": {
+    "scalesWithPower": true,
     "assetDir": "rage",
     "color": 11032055,
     "lightColor": 14533370,
@@ -8,6 +9,27 @@
     "modifiers": {
       "damageMult": 1.35,
       "speedMult": 1.25
+    },
+    "visual": {
+      "bubbleStrength": 0.92,
+      "bubbleOrder": 1,
+      "priority": 20,
+      "tintPulse": [
+        12616956,
+        9647082
+      ],
+      "tintSpeed": 8,
+      "particle": {
+        "kind": "trail",
+        "chance": 0.32,
+        "offset": [
+          14,
+          -26,
+          18
+        ],
+        "size": 3.5,
+        "duration": 300
+      }
     }
   },
   "health": {
@@ -16,15 +38,41 @@
     "lightColor": 11070912,
     "durationMs": 10000,
     "tickVolume": 0.2,
-    "healingPerSecond": 100
+    "healingPerSecond": 100,
+    "visual": {
+      "bubbleStrength": 0.82,
+      "bubbleOrder": 2,
+      "priority": 30,
+      "tintPulse": [
+        8843180,
+        3462041
+      ],
+      "tintSpeed": 5,
+      "particle": {
+        "kind": "plus",
+        "chance": 0.55,
+        "offset": [
+          16,
+          -30,
+          8
+        ],
+        "size": 9,
+        "duration": 430
+      }
+    }
   },
   "shield": {
+    "scalesWithPower": true,
     "assetDir": "shield",
     "color": 16347926,
     "lightColor": 16500895,
     "durationMs": 10000,
     "modifiers": {
       "damageTakenMult": 0.7
+    },
+    "visual": {
+      "bubbleStrength": 1,
+      "bubbleOrder": 0
     }
   },
   "poison": {
@@ -33,9 +81,26 @@
     "lightColor": 16114543,
     "durationMs": 8000,
     "tickVolume": 0.28,
-    "damagePerSecond": 50
+    "damagePerSecond": 50,
+    "visual": {
+      "bubbleStrength": 0.78,
+      "bubbleOrder": 3,
+      "priority": 40,
+      "particle": {
+        "kind": "trail",
+        "chance": 0.42,
+        "offset": [
+          12,
+          -18,
+          18
+        ],
+        "size": 4.3,
+        "duration": 300
+      }
+    }
   },
   "gravityBoots": {
+    "scalesWithPower": true,
     "assetDir": "gravity-boots",
     "color": 15680580,
     "lightColor": 16103608,
@@ -44,6 +109,26 @@
     "modifiers": {
       "jumpMult": 1.55,
       "speedMult": 1.15
+    },
+    "visual": {
+      "bubbleStrength": 0.8,
+      "bubbleOrder": 4,
+      "priority": 60,
+      "particle": {
+        "kind": "arrow",
+        "chance": 0.72,
+        "offset": [
+          12,
+          8,
+          20
+        ],
+        "size": [
+          9,
+          13
+        ],
+        "duration": 280
+      },
+      "label": "B"
     }
   },
   "invisibility": {
@@ -71,6 +156,28 @@
     "modifiers": {
       "speedMult": 0.45,
       "jumpMult": 0.6
+    },
+    "visual": {
+      "priority": 10,
+      "tintPulse": [
+        14678783,
+        6809849
+      ],
+      "tintSpeed": 5,
+      "particle": {
+        "kind": "trail",
+        "chance": 0.24,
+        "offset": [
+          12,
+          -22,
+          18
+        ],
+        "size": [
+          1.5,
+          2.8
+        ],
+        "duration": 360
+      }
     }
   }
 }

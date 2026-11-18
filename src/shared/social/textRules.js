@@ -1,0 +1,22 @@
+const USERNAME_MIN = 3;
+const USERNAME_MAX = 14;
+const USERNAME_PATTERN = new RegExp(`^[a-zA-Z0-9_.-]{${USERNAME_MIN},${USERNAME_MAX}}$`);
+const PASSWORD_MIN = 6;
+const PASSWORD_MAX = 32;
+const CHAT_BODY_MAX = 500;
+const GAME_CHAT_BODY_MAX = 220;
+const PLAYER_REPORT_MESSAGE_MIN = 5;
+const PLAYER_REPORT_MESSAGE_MAX = 3500;
+const PARTY_NAME_MIN = 3;
+const PARTY_NAME_MAX = 32;
+
+function nameKey(name) {
+  return String(name || "").trim().toLowerCase();
+}
+
+module.exports = {
+  nameKey,
+  USERNAME_PATTERN, USERNAME_MIN, USERNAME_MAX, PASSWORD_MIN, PASSWORD_MAX,
+  CHAT_BODY_MAX, GAME_CHAT_BODY_MAX, PARTY_NAME_MIN, PARTY_NAME_MAX,
+  PLAYER_REPORT_MESSAGE_MIN, PLAYER_REPORT_MESSAGE_MAX,
+};

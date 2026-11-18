@@ -236,4 +236,4 @@ function coverScale({ image, scroll, offset = { x: 0, y: 0 }, view, bounds, refe
   return scale;
 }
 
-module.exports = { ARENA_DEPTH, CLOUD_TYPES, CLOUD_DIRECTIONS, RANDOM_CLOUD, validateScenery, cloudUrl, activeClouds, sceneryUrls, sceneryParts, lampState, layerZoom, sceneryTransform, coverScale };
+module.exports = { ARENA_DEPTH, CLOUD_TYPES, RANDOM_CLOUD, validateScenery, cloudUrl, activeClouds, sceneryUrls, sceneryParts, lampState, sceneryTransform, coverScale };

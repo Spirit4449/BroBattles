@@ -1,6 +1,8 @@
+const { formatFixed: fmt } = require("../../../shared/format");
+const { getConfig } = require("../../config");
+
 function isServerNetTestEnabled() {
-  const value = String(process.env.NETTEST_LOGS || "").toLowerCase();
-  return value === "1" || value === "true" || value === "on";
+  return getConfig().diagnostics.netTestLogs;
 }
 
 function createPlayerSummary() {
@@ -47,11 +49,6 @@ function ensurePlayerSummary(room, playerName) {
     room._netTest.players.set(playerName, summary);
   }
   return summary;
-}
-
-function fmt(value, digits = 1) {
-  const num = Number(value);
-  return Number.isFinite(num) ? num.toFixed(digits) : "n/a";
 }
 
 function noteRoomCreated(room) {
@@ -118,7 +115,6 @@ function noteAction(room, playerData, type) {
   const normalized = String(type || "");
   if (normalized) summary.attacks += 1;
   if (normalized.includes("special")) summary.specials += 1;
-  emitPlayer(room, playerData.name, "action", `type=${normalized || "unknown"}`);
 }
 
 function flushIfDue(room, now = Date.now()) {

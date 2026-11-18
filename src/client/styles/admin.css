@@ -1,5 +1,5 @@
 /* Admin control center. Shares the Map Studio look: tokens and frames come
-   from public/styles/ui-system.css, pixel type for chrome, Lato for values. */
+   from ui-system.css, pixel type for chrome, Lato for values. */
 :root {
   --admin-bg: var(--bb-bg-deep);
   --admin-panel: var(--bb-surface-1);
@@ -26,7 +26,6 @@ p { margin: 0 0 10px; color: var(--admin-muted); }
 .mono { font-family: ui-monospace, monospace; }
 .good-text { color: #5fe0a3; }
 .bad-text { color: #ff9b9b; }
-* { scrollbar-width: thin; scrollbar-color: var(--bb-border) transparent; }
 
 /* ---- Controls (same pixel buttons as Map Studio) ---- */
 :is(#admin, #grantDialog, .modal) button:where(:not(.site-nav-wrap button, .shop-window button, .shop-card-frame button)) {
@@ -74,25 +73,10 @@ p { margin: 0 0 10px; color: var(--admin-muted); }
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
-select option { color: var(--bb-text); background: var(--bb-surface-1); }
-input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
-input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
 #admin input[type="datetime-local"] { border: 2px solid var(--bb-border); color: var(--bb-text); background: rgba(5, 12, 25, 0.9); color-scheme: dark; }
 :is(#admin, .modal) textarea { min-height: 80px; resize: vertical; }
 :is(#admin, #grantDialog, .modal) :is(input, select, textarea):focus { outline: none; border-color: var(--bb-field-focus); }
 input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--bb-green); }
-
-kbd {
-  display: inline-block;
-  min-width: 18px;
-  padding: 2px 4px 3px;
-  border: 1px solid var(--bb-ink);
-  background: var(--bb-surface-3);
-  box-shadow: 0 2px var(--bb-ink);
-  color: var(--bb-text-soft);
-  font: 7px/1.4 var(--bb-font-display);
-  text-align: center;
-}
 
 label, .field-label { display: grid; gap: 7px; color: var(--admin-label); font: var(--admin-pixel-sm); text-transform: uppercase; }
 label > :is(input, select, textarea), .field > :not(span:first-child) { text-transform: none; }
@@ -148,7 +132,6 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
 #status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #status.is-error { color: #ff9b9b; }
 .footer-keys { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; }
-.footer-keys kbd { margin-left: 6px; }
 
 /* ---- Panels ---- */
 .panel { min-width: 0; padding: 20px 22px 22px; border: 2px solid var(--bb-ink); background: var(--admin-panel); box-shadow: 0 0 0 2px var(--admin-line), 0 5px var(--bb-ink); }

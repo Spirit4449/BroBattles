@@ -1,3 +1,4 @@
+const { DEFAULT_SHOP_TIMEZONE } = require("./shopRotationService");
 const { buildOfferIndexes } = require("./shopOfferRules");
 const fs = require("fs");
 const path = require("path");
@@ -16,13 +17,12 @@ const PUBLIC_PATH = path.resolve(__dirname, "../../../../public");
 const CURRENCIES = new Set(["coins", "gems"]);
 const PRICE_TYPES = new Set(["virtual", "money"]);
 const PURCHASE_LIMITS = new Set(["lifetime", "unlimited"]);
-const FALLBACK_TIMEZONE = "America/New_York";
 const SECTION_LAYOUTS = ["grid", "featured", "list"];
 
 const rawLoader = createCatalogLoader({
   name: "shop",
   filePath: CATALOG_PATH,
-  fallback: () => ({ version: 1, timezone: FALLBACK_TIMEZONE, sections: [], offers: [] }),
+  fallback: () => ({ version: 1, timezone: DEFAULT_SHOP_TIMEZONE, sections: [], offers: [] }),
 });
 
 // Validation (including banner existence checks) is cached per combination of
@@ -240,7 +240,7 @@ function buildValidatedCatalog(raw, errors) {
   if (!errors.length) return { ...raw };
   return {
     version: raw?.version,
-    timezone: FALLBACK_TIMEZONE,
+    timezone: DEFAULT_SHOP_TIMEZONE,
     sections: [],
     offers: [],
     rotation: { dailies: { rewards: [] }, sales: { pinnedOfferIds: [], promotedOfferIds: [], promotedCount: 0, discountPercent: 0 } },
@@ -293,11 +293,6 @@ function getShopOfferById(offerId) {
   return loadValidatedCatalog().offerById.get(id) || null;
 }
 
-function findOfferForGrant(kind, id) {
-  const key = `${String(kind || "")}:${String(id || "")}`;
-  return loadValidatedCatalog().offerByGrant.get(key) || null;
-}
-
 // Drops every cached catalog (shop and cosmetics) so the next access rereads
 // the JSON files and revalidates the shop, e.g. after editing them in dev.
 function invalidateCatalog() {
@@ -320,7 +315,6 @@ function getCosmeticCatalogs() {
 
 module.exports = {
   CATALOG_PATH,
-  findOfferForGrant,
   getCosmeticCatalogs,
   getShopCatalog,
   getShopCatalogErrors,

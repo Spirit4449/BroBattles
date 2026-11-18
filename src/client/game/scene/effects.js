@@ -1,3 +1,5 @@
+import { clamp01, lerp } from "../../../shared/math.js";
+import { isAllyTeam } from "../../../shared/projectilePresentation";
 // effects.js
 // Shared lightweight VFX helpers for movement, combat, and player lifecycle.
 import { RENDER_LAYERS } from "./renderLayers";
@@ -24,6 +26,12 @@ export const MOVEMENT_VFX_CONFIG = Object.freeze({
   landingShockwaveMinFallPx: 163,
   wallSlideSpeedReference: 120,
   runSpeedReference: 260,
+  runDustMinSpeed: 35,
+  turnBurstCooldownMs: 130,
+  wallKickMinSpeed: 220,
+  jumpRiseThreshold: -40,
+  wallSlideHeightFraction: 0.68,
+  wallKickHeightFraction: 0.62,
   runDustMinIntervalMs: 48,
   runDustMaxIntervalMs: 112,
   directionChangeMinSpeed: 72,
@@ -32,6 +40,20 @@ export const MOVEMENT_VFX_CONFIG = Object.freeze({
   fastFallTrailMinIntervalMs: 42,
   fastFallTrailMaxIntervalMs: 104,
 });
+
+export function wallContactPoint(body, side, heightFraction, fallbackX, fallbackY, halfWidth) {
+  return body ? { x: body.x + (side === "left" ? 0 : body.width), y: body.y + body.height * heightFraction }
+    : { x: fallbackX + (side === "left" ? -halfWidth : halfWidth), y: fallbackY };
+}
+
+export function runDustInterval(ratio) {
+  return lerp(MOVEMENT_VFX_CONFIG.runDustMaxIntervalMs, MOVEMENT_VFX_CONFIG.runDustMinIntervalMs, ratio);
+}
+
+export function fallSpeedRatio(vy) {
+  const { fastFallStartVelocity: start, fastFallMaxVelocity: max } = MOVEMENT_VFX_CONFIG;
+  return clamp01((vy - start) / (max - start));
+}
 
 function destroyWhenDone(scene, target, tweenConfig) {
   if (!scene?.tweens || !target) return;
@@ -535,8 +557,7 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
   if (rounded === 0) return null;
   const positive = rounded > 0;
   const self = opts.isSelf === true;
-  const teammate = !self &&
-    (opts.team === "ally" || opts.team === "teammate" || opts.team === true);
+  const teammate = !self && isAllyTeam(opts.team);
   // Bright fills over a near-black outline keep numbers readable on any map.
   const color = positive
     ? teammate ? "#7dffc0" : self ? "#ffffff" : "#ffd0d0"

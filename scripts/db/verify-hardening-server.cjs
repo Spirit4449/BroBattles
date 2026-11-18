@@ -1,4 +1,4 @@
-// End-to-end smoke test using an empty copy of the local schema, never live accounts.
+// End-to-end smoke test using a freshly bootstrapped local database.
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
@@ -7,27 +7,24 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { io } = require('socket.io-client');
-const mysql = require('mysql2/promise');
-require('dotenv').config({ quiet: true });
+const { connect } = require('./db.cjs');
+const { bootstrapSchema } = require('./apply-migration.cjs');
 
 const schema = `bb_smoke_${crypto.randomBytes(8).toString('hex')}`;
-const source = process.env.DB_NAME || 'game';
 const host = process.env.DB_HOST || 'localhost';
 if (!['localhost', '127.0.0.1', '::1'].includes(host)) throw new Error('Local MySQL only');
 const port = crypto.randomInt(31000, 39000);
 const base = `http://127.0.0.1:${port}`;
 let admin, child, socket, journal;
+let created = false;
 let output = '';
 
 async function run() {
-  admin = await mysql.createConnection({ host, port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER || 'root', password: process.env.DB_PASSWORD });
-  const [tables] = await admin.query('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = \'BASE TABLE\'', [source]);
-  assert.ok(tables.length > 0, 'Source schema must exist');
-  await admin.query('CREATE DATABASE ??', [schema]);
-  for (const row of tables) {
-    await admin.query('CREATE TABLE ??.?? LIKE ??.??', [schema, row.TABLE_NAME, source, row.TABLE_NAME]);
-  }
+  admin = await connect({ database: undefined, multipleStatements: true });
+  await admin.query('CREATE DATABASE ?? CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', [schema]);
+  created = true;
+  await admin.query('USE ??', [schema]);
+  await bootstrapSchema(admin);
   journal = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-server-smoke-'));
   child = spawn(process.execPath, ['src/server/server.js'], {
     cwd: path.resolve(__dirname, '../..'), stdio: ['ignore', 'pipe', 'pipe'],
@@ -73,6 +70,9 @@ run().catch(error => { console.error('Server smoke failed:', error.message); pro
   .finally(async () => {
     socket?.close();
     if (child && child.exitCode === null) { const exited = once(child, 'exit'); child.kill('SIGTERM'); await exited; }
-    if (admin) { await admin.query('DROP DATABASE IF EXISTS ??', [schema]); await admin.end(); }
+    if (admin) {
+      try { if (created) await admin.query('DROP DATABASE ??', [schema]); }
+      finally { await admin.end(); }
+    }
     if (journal) await fs.rm(journal, { recursive: true, force: true });
   });

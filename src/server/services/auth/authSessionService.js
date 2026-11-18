@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const crypto = require('node:crypto');
 
@@ -101,7 +102,7 @@ function createAuthSessionService({ db, cookieOptions }) {
       }
       next();
     });
-    socket.once('disconnect', () => { clearTimeout(timer); sockets.delete(socket); });
+    socket.once(SOCKET_EVENTS.DISCONNECT, () => { clearTimeout(timer); sockets.delete(socket); });
   }
   async function authenticateSocket(socket, token) {
     try {

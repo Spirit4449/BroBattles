@@ -1,7 +1,8 @@
+const roomTransport = require('./helpers/roomTransport.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const input = require('../src/server/core/gameRoom/inputManager');
-const { characterBody } = require('../src/shared/physics/duelGeometry');
+const { characterBody } = require('../src/shared/physics/characterBody');
 const { createMovementCorrector } = require('../src/client/game/players/movementCorrection');
 const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 const physics = require('../src/shared/physics/movementPhysics.json');
@@ -13,7 +14,7 @@ function server(t) {
   const player = { socketId: 'p', name: 'Player', char_class: 'ninja', x: 0, y: 0,
     isAlive: true, connected: true, lastInput: now };
   const events = [];
-  const room = { players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD },
+  const room = { ...roomTransport, players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD },
     io: { to: () => ({ emit: (name, data) => events.push({ name, data }) }) } };
   input.resetMovementBudget(player, now);
   const corrections = () => events.filter(e => e.name === 'game:correction').map(e => e.data);
@@ -138,7 +139,7 @@ function idleServer(t) {
   f.room.status = 'active';
   f.room.geometry = { colliders: [floor], world: WORLD };
   f.deaths = [];
-  f.room._handlePlayerDeath = (player, meta) => { f.deaths.push(meta); player.isAlive = false; };
+  f.room.handlePlayerDeath = (player, meta) => { f.deaths.push(meta); player.isAlive = false; };
   f.standingY = floor.top - shape.offsetY - shape.halfHeight;
   f.advance(20);
   f.send({ x: 0, y: 0, sequence: 1, vx: 0, vy: 0, grounded: false });

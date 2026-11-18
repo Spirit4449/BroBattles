@@ -71,4 +71,4 @@ function consumePartyInvite(inviteeId, partyId) {
   return true;
 }
 
-module.exports = { addPartyInvite, hasPartyInvite, consumePartyInvite, getInviteCooldownMs, INVITE_TTL_MS };
+module.exports = { addPartyInvite, hasPartyInvite, consumePartyInvite, getInviteCooldownMs };

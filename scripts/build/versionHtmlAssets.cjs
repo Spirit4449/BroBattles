@@ -1,4 +1,4 @@
-const { createHash } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
@@ -10,8 +10,8 @@ const zlib = require('node:zlib');
 // caught mid-deploy ever request an older hash.
 const KEEP_VERSIONS = 5;
 const KEEP_MS = 24 * 60 * 60 * 1000;
-const HASHED = /^(.+)\.[a-f0-9]{16}\.(js|css)$/;
-const COMPRESSED = ['.br', '.gz'];
+const { BUNDLE_ENCODINGS, BUNDLE_HASH_LENGTH, parseVersionedBundle } = require('../../src/shared/net/bundleVersion');
+const COMPRESSED = Object.values(BUNDLE_ENCODINGS);
 
 // Hashed files never change, so each compressed copy is written only once.
 // src/server/middleware/precompressed.js serves them instead of compressing
@@ -22,31 +22,44 @@ function writeCompressedCopies(dir, names) {
     let source;
     for (const suffix of COMPRESSED) {
       if (fs.existsSync(file + suffix)) continue;
-      try { source ||= fs.readFileSync(file); } catch (_) { return; }
-      const output = suffix === '.br'
+      source ||= fs.readFileSync(file);
+      const output = suffix === BUNDLE_ENCODINGS.br
         ? zlib.brotliCompressSync(source, { params: {
           [zlib.constants.BROTLI_PARAM_QUALITY]: 10,
           [zlib.constants.BROTLI_PARAM_SIZE_HINT]: source.length,
         } })
         : zlib.gzipSync(source, { level: 9 });
-      // Write then rename so the server never serves a partial file.
-      fs.writeFileSync(file + suffix + '.tmp', output);
-      fs.renameSync(file + suffix + '.tmp', file + suffix);
+      // Concurrent builds may publish the same hash. Each writer needs its own
+      // temporary file so its rename cannot disturb another writer.
+      const destination = file + suffix;
+      const temporary = destination + '.' + randomUUID() + '.tmp';
+      try {
+        fs.writeFileSync(temporary, output);
+        fs.renameSync(temporary, destination);
+      } finally {
+        fs.rmSync(temporary, { force: true });
+      }
     }
   }
 }
 
 function pruneOldVersions(dir, current, now = Date.now()) {
   let entries;
-  try { entries = fs.readdirSync(dir); } catch (_) { return []; }
+  try { entries = fs.readdirSync(dir); } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
   const groups = new Map();
   for (const name of entries) {
-    const match = HASHED.exec(name);
+    const match = parseVersionedBundle(name);
     if (!match) continue;
-    const key = `${match[1]}.${match[2]}`;
+    const key = `${match.base}.${match.extension}`;
     const file = path.join(dir, name);
     let mtimeMs;
-    try { mtimeMs = fs.statSync(file).mtimeMs; } catch (_) { continue; }
+    try { mtimeMs = fs.statSync(file).mtimeMs; } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw error;
+    }
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push({ name, file, mtimeMs });
   }
@@ -56,7 +69,7 @@ function pruneOldVersions(dir, current, now = Date.now()) {
     for (const [index, version] of versions.entries()) {
       if (index < KEEP_VERSIONS || current.has(version.name) || now - version.mtimeMs < KEEP_MS) continue;
       for (const suffix of ['', ...COMPRESSED]) {
-        try { fs.unlinkSync(version.file + suffix); } catch (_) { /* Already gone. */ }
+        fs.rmSync(version.file + suffix, { force: true });
       }
       removed.push(version.name);
     }
@@ -77,7 +90,7 @@ class VersionHtmlAssetsPlugin {
           const content = html.source.source().toString().replace(/(["'])(\/bundles\/[^"'?\s]+\.(?:js|css))\1/g, (match, quote, url) => {
             const asset = compilation.getAsset(url.slice(1));
             if (!asset) return match;
-            const hash = createHash('sha256').update(asset.source.buffer()).digest('hex').slice(0,16);
+            const hash = createHash('sha256').update(asset.source.buffer()).digest('hex').slice(0, BUNDLE_HASH_LENGTH);
             const name = asset.name.replace(/\.(js|css)$/, `.${hash}.$1`);
             if (!compilation.getAsset(name)) compilation.emitAsset(name, asset.source, { ...asset.info, immutable: true });
             current.add(path.basename(name));

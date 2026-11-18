@@ -1,3 +1,4 @@
+import { BROWSER_GLOBALS } from "../lib/globals.cjs";
 // A bundle gets a fresh scope each time it mounts. Only its lexical browser
 // bindings are scoped; the real browser APIs (and the router) are never patched.
 export function createPageScope(navigate) {
@@ -152,7 +153,7 @@ export function createPageScope(navigate) {
     const methods = new Map();
     const proxy = new Proxy({}, {
       get(_, key) {
-        if (key === '__BB_PAGE_SCOPE__') return scope;
+        if (key === BROWSER_GLOBALS.pageScope) return scope;
         if (key === 'addEventListener') return (...args) => listen(target, ...args);
         if (key === 'removeEventListener') return (...args) => unlisten(target, ...args);
         if (key === 'location') return locationFacade;

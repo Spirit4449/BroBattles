@@ -210,11 +210,11 @@
   aspect-ratio: 1 / 1;
   flex: none;
   display: block;
-  /* Match the rounded silhouette of the composed portrait. */
-  border-radius: 9.375%;
+  /* Match the square silhouette of the composed portrait. */
+  border-radius: 0;
   overflow: hidden;
   background: transparent;
-  /* The SVG owns the complete rounded frame; avoid a second outer bezel. */
+  /* The SVG owns the complete frame; avoid a second outer bezel. */
   box-shadow: none;
 }
 
@@ -225,7 +225,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 9.375%;
+  border-radius: 0;
   border: 0;
   outline: none;
   box-shadow: none;
@@ -321,7 +321,7 @@
 }
 
 .character-card-lock-overlay {
-  border-radius: 9.375%;
+  border-radius: 0;
 }
 
 .character-details-lock-overlay {
@@ -1439,10 +1439,6 @@
   box-shadow: 0 2px 0 #0a0a0a;
 }
 
-.skin-selector-section {
-  justify-content: center;
-}
-
 .character-details-skin-stepper {
   display: grid;
   place-items: center;
@@ -2044,19 +2040,12 @@
 }
 
 /* Confirmation modal sizing shared with the level-up visuals. */
-.cs-vars,
 :root {
   --cs-level-size: 176px;
   --cs-level-wrap: calc(var(--cs-level-size) + 8px);
 }
 
 /* Dialog shell, title, body, and actions live in selectionPopup.css. */
-.cs-price-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  vertical-align: middle;
-}
 
 
 /* Level upgrade beams (from confirm dialogs) */
@@ -2180,63 +2169,6 @@
 }
 
 /* Success overlay displayed after card unlock/upgrade */
-.cs-card-success {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  animation: cs-pop-in 250ms ease-out;
-}
-
-.cs-card-success.fade-out {
-  animation: cs-fade-out 300ms ease-in forwards;
-}
-
-.cs-card-beams {
-  position: absolute;
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  background: repeating-conic-gradient(
-    rgba(255, 230, 150, 0) 0deg,
-    rgba(255, 230, 150, 0) 8deg,
-    rgba(255, 230, 150, 0.65) 12deg,
-    rgba(255, 230, 150, 0.65) 20deg
-  );
-  mask: radial-gradient(
-    circle at 50% 50%,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.8) 55%,
-    rgba(0, 0, 0, 1) 100%
-  );
-  -webkit-mask: radial-gradient(
-    circle at 50% 50%,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.8) 55%,
-    rgba(0, 0, 0, 1) 100%
-  );
-  animation: cs-spin 6s linear infinite;
-  filter: drop-shadow(0 0 10px rgba(255, 222, 96, 0.4));
-}
-
-.cs-card-beams.gem {
-  filter: hue-rotate(210deg) saturate(1.2)
-    drop-shadow(0 0 10px rgba(80, 180, 255, 0.5));
-}
-
-.cs-card-success-label {
-  position: relative;
-  z-index: 1;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 0;
-  letter-spacing: 0.4px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
-}
 
 @keyframes cs-pop-in {
   from {
@@ -2450,25 +2382,6 @@
   color: var(--bb-text); font-family: var(--bb-font-display);
   font-size: 18px; text-transform: uppercase; line-height: 1.5; margin-bottom: 12px;
 }
-.cs-unlock-confirm .cs-confirm-body .cs-price-row {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  width: fit-content;
-  max-width: 100%;
-  box-sizing: border-box;
-  margin: 16px auto 4px;
-  padding: 12px 16px;
-  background: var(--bb-panel-bg);
-  border: var(--bb-panel-border);
-  box-shadow: 0 3px 0 var(--bb-ink), inset 0 2px 0 var(--bb-border-soft);
-  color: var(--bb-text-soft);
-  font-family: var(--bb-font-display);
-  font-size: 10px;
-  line-height: 1.6;
-  text-shadow: 2px 2px 0 var(--bb-ink);
-}
-.cs-unlock-confirm .cs-price-row .cs-currency { width: 24px; height: 24px; image-rendering: pixelated; }
 body .cs-unlock-confirm .cs-confirm-actions { display: grid; grid-template-columns: 1fr 1.5fr; gap: 18px; margin-top: 26px; }
 .cs-unlock-confirm .cs-btn { min-width: 0; }
 .character-details-success {

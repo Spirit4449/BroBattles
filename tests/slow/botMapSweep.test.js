@@ -1,13 +1,11 @@
 // Exhaustive bot movement sweeps across every character and Duels map (1v1
-// and 2v2). These
-// take several seconds, so they run with `npm run test:slow` (and
-// `npm run test:bots`) rather than the default `npm test`.
+// and 2v2). Run with `npm run test:slow`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('../helpers/botRoom');
 const { getDuelGeometry } = require('../../src/shared/physics/duelGeometry');
 const { buildGraph } = require('../../src/server/core/bots/navigation');
-const { bounds } = require('../../src/server/core/bots/physics');
+const { bounds } = require('../../src/server/core/physics/bodySolver');
 const { staticGeometry } = require('../../src/shared/maps/platformMotion');
 const { mapDefaults } = require('../../src/shared/maps');
 const { mapArena } = require('../../src/shared/maps/arenas');
@@ -83,12 +81,12 @@ for (const map of duelMaps) for (const character of characters) {
       h.players[1].isAlive = false;
       h.place(p, map === 2 ? 980 : 1150);
       const poisonY = p.y - 5;
-      h.room._suddenDeathActive = true;
-      h.room._loopStartWallTime = time.now() - h.room.gameMode.getMatchDurationMs();
+      h.room.suddenDeathActive = true;
+      h.room.loopStartWallTime = time.now() - h.room.gameMode.getMatchDurationMs();
       // All low landings and takeoff approaches are exposed. The bot must
       // still execute physically valid motion rather than cancelling each think,
       // land on ground above the gas and then stay out of it.
-      h.room._computePoisonY = () => poisonY;
+      h.room.computePoisonY = () => poisonY;
       let escapedAt = null;
       for (let i = 0; i < 900 && p.isAlive; i++) {
         time.step(h);

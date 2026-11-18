@@ -1,3 +1,5 @@
+import { BROWSER_EVENTS } from "../lib/browserEvents.js";
+import { getPageScope } from "../lib/globals.cjs";
 // Menus are available immediately on interaction, even before their idle setup.
 export function createLazyInitializer(initialize) {
   let initialized = false;
@@ -12,7 +14,7 @@ export function createLazyInitializer(initialize) {
 }
 
 export function deferLobbySetup(tasks) {
-  const scope = window.__BB_PAGE_SCOPE__;
+  const scope = getPageScope();
   const pending = [...tasks];
   let cancelled = false;
   let started = false;
@@ -25,7 +27,7 @@ export function deferLobbySetup(tasks) {
   function cancel() {
     cancelled = true;
     pending.length = 0;
-    document.removeEventListener("lobby:ready", onReady);
+    document.removeEventListener(BROWSER_EVENTS.LOBBY_REVEALED, onReady);
     if (frame != null) window.cancelAnimationFrame(frame);
     if (idle != null) window.cancelIdleCallback(idle);
     if (timer != null) window.clearTimeout(timer);
@@ -64,7 +66,7 @@ export function deferLobbySetup(tasks) {
   function onReady() {
     if (!active() || started) return;
     started = true;
-    document.removeEventListener("lobby:ready", onReady);
+    document.removeEventListener(BROWSER_EVENTS.LOBBY_REVEALED, onReady);
     // Readiness fires before paint. Yield a painted frame before even an idle
     // callback can construct menu DOM or start optional network requests.
     frame = window.requestAnimationFrame(() => {
@@ -79,6 +81,6 @@ export function deferLobbySetup(tasks) {
   unregister = scope?.onDispose(cancel);
   const lobby = document.getElementById("lobby-area");
   if (lobby && !lobby.hasAttribute("data-loading")) onReady();
-  else document.addEventListener("lobby:ready", onReady);
+  else document.addEventListener(BROWSER_EVENTS.LOBBY_REVEALED, onReady);
   return cancel;
 }

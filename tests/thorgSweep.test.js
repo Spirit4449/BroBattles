@@ -36,7 +36,7 @@ test('damage capsule follows the displayed grip and mace tip', t => {
   const pose = sampleThorgSweep({ x: 500, y: 300 }, 0);
   assert.deepEqual(shape.a, pose.grip);
   assert.deepEqual(shape.b, { x: 500 + (pose.tip.x - 500) * 1.3, y: pose.tip.y });
-  assert.equal(shape.radius, 14);
+  assert.equal(shape.radius, pose.radius * 2);
 });
 
 

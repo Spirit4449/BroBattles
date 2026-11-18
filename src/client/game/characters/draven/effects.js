@@ -1,8 +1,11 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
 // Draven-specific per-player effects (fire trail)
 import { getResolvedCharacterEffectConfig } from "../../../../shared/characters/characterTuning.js";
 
-const FIRE_TRAIL = getResolvedCharacterEffectConfig("draven", "fireTrail");
+const { key: NAME } = characterDefinitions.draven;
+
+const FIRE_TRAIL = getResolvedCharacterEffectConfig(NAME, "fireTrail");
 
 export default class DravenEffects {
   constructor(scene, sprite) {

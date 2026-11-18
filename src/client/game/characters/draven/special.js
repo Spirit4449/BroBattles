@@ -1,4 +1,5 @@
-import { drawShieldBubble } from "../../powerups/shieldBubble";
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { drawShieldBubble } from "../../scene/fx/shieldBubble";
 import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
 import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
 import { getResolvedCharacterSpecialAimConfig } from "../../../../shared/characters/characterTuning.js";
@@ -11,10 +12,12 @@ import {
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playerSoundVolume } from "../../audio/playerAudio";
 
+const { key: NAME } = characterDefinitions.draven;
+
 const shieldReflections = new WeakMap();
 
-const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
-const INFERNO_AIM = getResolvedCharacterSpecialAimConfig("draven");
+const INFERNO = getResolvedCharacterSpecialConfig(NAME, "inferno");
+const INFERNO_AIM = getResolvedCharacterSpecialAimConfig(NAME);
 
 // Tuning lives in src/shared/characters/draven.json (special.inferno / special.aim).
 const DRAVEN_INFERNO_DURATION_MS = INFERNO.durationMs;
@@ -171,7 +174,7 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
     const specialKey = resolveSpriteAnimationKey({
       scene,
       sprite: player,
-      character: "draven",
+      character: NAME,
       logical: "special",
       fallback: "throw",
     });
@@ -179,7 +182,7 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
       playSpriteAnimation({
         scene,
         sprite: player,
-        character: "draven",
+        character: NAME,
         logical: "special",
         fallback: "throw",
       });
@@ -209,16 +212,7 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
   tick();
 }
 
-export function perform(
-  scene,
-  player,
-  playersInTeam,
-  opponentPlayers,
-  username,
-  gameId,
-  isOwner = false,
-  specialData = null,
-) {
+export function perform({ scene, player, isOwner = false }) {
   if (!scene || !player || !player.active) return;
 
   const now = Date.now();
@@ -247,7 +241,7 @@ export function perform(
   playSpriteAnimation({
     scene,
     sprite: player,
-    character: "draven",
+    character: NAME,
     logical: "special",
     fallback: "throw",
     holdMs: DRAVEN_INFERNO_DURATION_MS,

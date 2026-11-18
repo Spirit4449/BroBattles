@@ -1,3 +1,4 @@
+// Historical Sky Soil finishing pass. Updates the shipped base map only.
 const fs=require('fs'),path=require('path'),sharp=require('../../../spritesheet-generator/node_modules/sharp');
 process.chdir(path.resolve(__dirname,'../../..'));
 const out='public/assets/sky-soil/',src='scripts/art/sky-soil/';
@@ -37,16 +38,17 @@ const sy=Math.round(15*ratio+(y-54*ratio)*150/111);data.copy(saved,dst,(sy*width
 // The pillar refit copies pixels after the first pass; clean again.
 keepLargest(saved,width,height);
 await sharp(saved,{raw:info}).webp({lossless:true}).toFile(out+'island-saved-sharp.webp');
-for(const file of ['src/shared/maps/2.json','data/maps/2.json']){
+{
+const file='src/shared/maps/2.json';
 const m=JSON.parse(fs.readFileSync(file));
 for(const [id,name]of [['sky','sky'],['far-peaks','peaks'],['forest-ridges','forest']]){const l=m.scenery.layers.find(l=>l.id===id);l.url='/assets/sky-soil/'+name+'-sharp.webp';l.filter='nearest';if(l.fog)l.fog=id==='far-peaks'?0.16:0.04;}
-const base=m.scenery.layers.find(l=>l.id==='island-base');base.url='/assets/sky-soil/'+(file.startsWith('data/')?'island-saved-sharp.webp':'island-sharp.webp');base.scale=1100/width;
+const base=m.scenery.layers.find(l=>l.id==='island-base');base.url='/assets/sky-soil/'+'island-sharp.webp';base.scale=1100/width;
 m.assets['mangrove-tiny-platform'].url='/assets/sky-soil/small-platform-sharp.webp';
 // Retain atmosphere depth without a milky veil across the detailed artwork.
 m.scenery.atmosphere.mist[0].alpha=0.20;m.scenery.atmosphere.mist[1].alpha=0.10;m.scenery.atmosphere.mist[2].alpha=0.04;
 m.scenery.atmosphere.glows[0].alpha=[0.06,0.12];m.scenery.atmosphere.rays[0].alpha=[0.03,0.08];
 fs.writeFileSync(file,JSON.stringify(m,null,2)+'\n');
 }
-await sharp(out+'sky-sharp.webp').composite([{input:out+'peaks-sharp.webp'},{input:out+'forest-sharp.webp'}]).webp({lossless:true}).toFile('/tmp/sky-soil-sharp-bg.webp');fs.copyFileSync('/tmp/sky-soil-sharp-bg.webp',out+'background.webp');
+await sharp(out+'sky-sharp.webp').composite([{input:out+'peaks-sharp.webp'},{input:out+'forest-sharp.webp'}]).webp({lossless:true}).toFile(out+'background.webp');
 console.log({islandTexture:[width,height],worldWidth:1100,scale:1100/width});
 })();

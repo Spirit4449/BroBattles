@@ -241,7 +241,7 @@ describe("Eastern calendar rotation", () => {
     const db = {
       withTransaction: async (fn) =>
         fn(null, async (sql, params) => {
-          if (sql.startsWith("INSERT IGNORE INTO shop_rotation_state")) {
+          if (sql.startsWith("INSERT INTO shop_rotation_state")) {
             if (!row) {
               row = {
                 section: params[0],

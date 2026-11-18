@@ -18,6 +18,10 @@ function normalizeTarget(target) {
   };
 }
 
+function botBehaviorFor(room) {
+  return room?.gameMode?.modeId === 'bank-bust' ? 'bank-objectives' : 'standard-combat';
+}
+
 function normalizeBotObjective(room, player, objective = {}) {
   return {
     schemaVersion: BOT_OBJECTIVE_SCHEMA_VERSION,
@@ -32,7 +36,7 @@ function normalizeBotObjective(room, player, objective = {}) {
       objective?.interaction == null ? null : String(objective.interaction),
 
     // Bank Bust has a dedicated planner; other modes retain combat tactics.
-    behavior: room?.gameMode?.modeId === "bank-bust" ? "bank-objectives" : "standard-combat",
+    behavior: botBehaviorFor(room),
   };
 }
 
@@ -42,6 +46,7 @@ function resolveBotObjective(room, player, context = {}) {
 }
 
 module.exports = {
+  botBehaviorFor,
   BOT_OBJECTIVE_SCHEMA_VERSION,
   DEFAULT_OBJECTIVE_KIND,
   normalizeBotObjective,

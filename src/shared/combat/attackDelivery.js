@@ -7,6 +7,7 @@ const { characterBody } = require('../physics/characterBody');
 const { sweep } = require('../characters/sparrowProjectile');
 const { sampleThorgHitbox, THORG_SWEEP } = require('../characters/thorgSweep');
 const { MAX_RENDER_DELAY_MS } = require('../gameConstants');
+const { HIT_STALENESS_MAX_MS } = require('./matchConfig');
 
 // A view rewind is the attacker's network latency plus its render buffer (the
 // interpolation delay its client keeps behind the snapshots). `rewindCapMs`
@@ -22,7 +23,7 @@ const DELIVERIES = Object.freeze({
   // Something flies on its own: projectiles, returning shots, hooks. The
   // offset between the shot and the actors it was aimed at holds for the
   // whole flight.
-  released: Object.freeze({ rewindCapMs: 300, predict: true, hitstopMs: 35, attackerHitstop: false }),
+  released: Object.freeze({ rewindCapMs: HIT_STALENESS_MAX_MS, predict: true, hitstopMs: 35, attackerHitstop: false }),
   // A warned area that resolves later. The target had time to react, so it is
   // tested where it is now (favor the target), and nothing is predicted.
   area: Object.freeze({ rewindCapMs: 0, predict: false, hitstopMs: 0, attackerHitstop: false }),
@@ -143,5 +144,5 @@ function shapeTouches(shape, bounds, { reach = 0 } = {}) {
   return false;
 }
 
-module.exports = { DELIVERIES, RUNTIME_DELIVERY, deliveryOf, deliveryPolicy, clampDeliveryRewind,
+module.exports = { DELIVERIES, deliveryOf, clampDeliveryRewind,
   attackerPose, attachedRectShape, pathSweepShapes, pathSweepProgress, sectorShape, shapeTouches, normalizeAngleDelta };

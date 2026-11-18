@@ -8,5 +8,12 @@ CREATE TABLE IF NOT EXISTS user_trophy_reward_claims (
     ON DELETE CASCADE
 );
 
-CREATE INDEX idx_user_trophy_reward_claims_user
-  ON user_trophy_reward_claims(user_id);
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_trophy_reward_claims' AND INDEX_NAME = 'idx_user_trophy_reward_claims_user'),
+  'SELECT 1',
+  'CREATE INDEX idx_user_trophy_reward_claims_user ON user_trophy_reward_claims(user_id)'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;

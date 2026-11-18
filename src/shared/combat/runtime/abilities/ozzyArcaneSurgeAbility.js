@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../net/socketEvents.js");
 const { combatRandom } = require("../clock");
 const { POWERUP_TYPES } = require("../../matchConfig.js");
 const { getResolvedCharacterSpecialConfig } = require("../../../characters/characterTuning.js");
@@ -39,10 +40,10 @@ function activate(caster, now, room) {
 
     const type = randomFrom(getAllowedPowerupsForTarget(), room);
 
-    room._applyPowerupToPlayer(target, type, now, {
+    room.applyPowerupToPlayer(target, type, now, {
       powerScale: ARCANE_SURGE_POWER_SCALE,
       durationScale: ARCANE_SURGE_DURATION_SCALE,
-      source: "ozzy:arcane-surge",
+      source: SOCKET_EVENTS.OZZY_ARCANE_SURGE,
     });
     target.lastCombatAt = now;
 
@@ -54,7 +55,7 @@ function activate(caster, now, room) {
     });
   }
 
-  room.io.to(`game:${room.matchId}`).emit("ozzy:arcane-surge", {
+  room.broadcast(SOCKET_EVENTS.OZZY_ARCANE_SURGE, {
     caster: caster.name,
     at: now,
     recipients,
@@ -65,5 +66,4 @@ module.exports = {
   key: "ozzy",
   activate,
   SURGE_POWERUPS,
-  ARCANE_SURGE_POWER_SCALE,
 };

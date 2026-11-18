@@ -1,3 +1,5 @@
+import { BROWSER_GLOBALS } from "../../lib/globals.cjs";
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import { decodeWire } from "../../../shared/networkWire.js";
 // Client half of production network tracing. Inactive (every export a no-op)
 // unless this tab carries a nettrace spec (see lib/netTraceSpec.js). Records raw
@@ -22,7 +24,7 @@ let active = null;
 
 const r1 = (v) => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 
-const ATTACK_EVENTS = new Set(["game:action", "game:special"]);
+const ATTACK_EVENTS = new Set([SOCKET_EVENTS.GAME_ACTION, SOCKET_EVENTS.GAME_SPECIAL]);
 const MAX_COMBAT_PER_BATCH = 600;
 
 export function installNetTrace({ socket, getLocal, getRemotes, getUsername, getSnapshotDiagnostics,
@@ -106,28 +108,28 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
   const onSuper = (d) => { if (d?.username === me()) combat([r1(performance.now()), "sp", d.charge ?? null, d.maxCharge ?? null]); };
   const onSpecial = (d) => {
     const name = d?.username ?? d?.playerName ?? d?.name ?? null;
-    if (name === me()) combat([r1(performance.now()), "rx", "player:special", name, null, null, d?.id ?? d?.requestId ?? null, null, null]);
+    if (name === me()) combat([r1(performance.now()), "rx", SOCKET_EVENTS.PLAYER_SPECIAL, name, null, null, d?.id ?? d?.requestId ?? null, null, null]);
   };
   setShotTraceHook({ prediction: noteShotPrediction, withdrawn: noteShotWithdrawn, enemyShot: noteEnemyShot });
   const originalEmit = socket.emit;
   socket.emit = function tracedEmit(event, payload, ...rest) {
     if (ATTACK_EVENTS.has(event)) {
-      combat([r1(performance.now()), "tx", event, String(payload?.type || (event === "game:special" ? "special" : "")).slice(0, 40),
+      combat([r1(performance.now()), "tx", event, String(payload?.type || (event === SOCKET_EVENTS.GAME_SPECIAL ? "special" : "")).slice(0, 40),
         payload?.id ?? payload?.requestId ?? null, getCharacter?.() || null]);
     }
     return originalEmit.call(this, event, payload, ...rest);
   };
   const listeners = {
-    "game:snapshot": onSnapshot,
-    "game:action": onAction,
-    "health-update": onHealth,
-    "super-update": onSuper,
-    "player:special": onSpecial,
-    "game:correction": onCorrection,
-    "game:start": () => event("start"),
-    "game:over": () => { event("over"); victim.flush(performance.now()); upload(); },
-    "player:dead": (d) => event("dead", { name: d?.username }),
-    "player:respawn": (d) => event("respawn", { name: d?.username }),
+    [SOCKET_EVENTS.GAME_SNAPSHOT]: onSnapshot,
+    [SOCKET_EVENTS.GAME_ACTION]: onAction,
+    [SOCKET_EVENTS.HEALTH_UPDATE]: onHealth,
+    [SOCKET_EVENTS.SUPER_UPDATE]: onSuper,
+    [SOCKET_EVENTS.PLAYER_SPECIAL]: onSpecial,
+    [SOCKET_EVENTS.GAME_CORRECTION]: onCorrection,
+    [SOCKET_EVENTS.GAME_START]: () => event("start"),
+    [SOCKET_EVENTS.GAME_OVER]: () => { event("over"); victim.flush(performance.now()); upload(); },
+    [SOCKET_EVENTS.PLAYER_DEAD]: (d) => event("dead", { name: d?.username }),
+    [SOCKET_EVENTS.PLAYER_RESPAWN]: (d) => event("respawn", { name: d?.username }),
     disconnect: (reason) => event("disconnect", { reason }),
     connect: () => event("connect"),
   };
@@ -193,7 +195,7 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
       corrections: state.corrections.splice(0), keys: state.keys.splice(0), diag: state.diag.splice(0),
       events: state.events.splice(0), combat: state.combat.splice(0), character: getCharacter?.() || null,
     };
-    socket.timeout(5000).emit("debug:net-trace", batch, (err, reply) => {
+    socket.timeout(5000).emit(SOCKET_EVENTS.DEBUG_NET_TRACE, batch, (err, reply) => {
       if (!err && reply?.ok) state.uploads++;
       else state.rejected++;
     });
@@ -202,7 +204,7 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
   const onHide = () => upload();
   window.addEventListener("pagehide", onHide);
 
-  window.__BB_NET_TRACE__ = {
+  window[BROWSER_GLOBALS.netTrace] = {
     spec: { runId: spec.runId, tag: spec.tag },
     stats: () => ({ ...state.totals, maxArrivalGapMs: r1(state.totals.maxArrivalGapMs), uploads: state.uploads,
       rejected: state.rejected, seq: state.seq }),
@@ -242,6 +244,14 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
     setShotTraceHook(null);
     active = null;
   };
+}
+
+// Compare a remote action's announced launch, chosen visual origin and drawn
+// owner position in the same packet. Coordinates are in world pixels.
+export function noteRemoteActionOrigin(action, presented, sprite) {
+  if (!active || !sprite || !Number.isFinite(action?.start?.x) || !Number.isFinite(action?.start?.y)) return;
+  active.combatRow?.([r1(performance.now()), "origin", action.type, action.id ?? null,
+    r1(action.start.x), r1(action.start.y), r1(presented.start.x), r1(presented.start.y), r1(sprite.x), r1(sprite.y)]);
 }
 
 // A predicted hit the shooter drew against a displayed enemy. Repeated queries

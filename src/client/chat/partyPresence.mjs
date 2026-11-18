@@ -1,4 +1,6 @@
-const nameKey = (name) => String(name || '').trim().toLowerCase();
+import textRules from "../../shared/social/textRules.js";
+
+const { nameKey } = textRules;
 const onlineStatuses = new Set(['online', 'idle', 'ready', 'not ready', 'in battle', 'end screen', 'selecting character']);
 
 export function countOnlineMembers(members = []) {

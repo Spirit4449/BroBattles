@@ -1,3 +1,4 @@
+// CommonJS keeps these mechanics directly loadable by the Node test suite.
 // Sparrow's aimed shot poses. The art script (scripts/art/sparrow-pixel/
 // attack.cjs) draws one six-frame set per direction under `frame`; anim.js
 // registers each as `sparrow-throw-<key>` and `sparrow-special-<key>`, played

@@ -1,7 +1,11 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { playSpriteAnimation } from "../shared/animationState";
 
 // While Inferno locks movement, the local Draven rises from where it was cast
 // and bobs in place. Once released, restore the gravity setting saved at cast.
+
+const { key: NAME } = characterDefinitions.draven;
+
 export function updateInfernoHover(scene, player, { locked, now }) {
   if (!player) return;
   if (locked) {
@@ -13,7 +17,7 @@ export function updateInfernoHover(scene, player, { locked, now }) {
     const lift = Number(player._dravenInfernoLift || 125);
     player.x = baseX;
     player.y = baseY - lift * Phaser.Math.Easing.Cubic.Out(riseT) + Math.sin((now - startedAt) / 120) * 8;
-    playSpriteAnimation({ scene, sprite: player, character: "draven", logical: "special", fallback: "throw" });
+    playSpriteAnimation({ scene, sprite: player, character: NAME, logical: "special", fallback: "throw" });
   } else if (player.body && player._dravenInfernoPrevGravity !== undefined) {
     player.body.allowGravity =
       typeof player._dravenInfernoPrevGravity === "boolean" ? player._dravenInfernoPrevGravity : true;

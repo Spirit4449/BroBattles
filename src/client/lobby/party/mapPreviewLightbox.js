@@ -1,3 +1,4 @@
+import { openModalDialog } from "../../ui/nativeDialog.js";
 // Full-arena view of a map, opened from the map picker's expand button. Uses
 // the shared bb-popup dialog frame and motion (as the player card preview
 // does). The image loads before the dialog opens, so it never resizes on show.
@@ -61,26 +62,18 @@ export async function openMapPreviewLightbox({ src, title }) {
     dismissPopup(dialog, () => dialog.close());
   };
   close.addEventListener('click', requestClose);
-  dialog.addEventListener('cancel', (event) => { event.preventDefault(); requestClose(); });
-  dialog.addEventListener('keydown', (event) => event.stopPropagation());
-  dialog.addEventListener('click', (event) => {
-    if (event.target !== dialog) return;
-    const box = dialog.getBoundingClientRect();
-    if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) requestClose();
-  });
-
-  const previousFocus = document.activeElement;
-  let unregisterScope;
-  dialog.addEventListener('close', () => {
-    unregisterScope?.();
-    dialog.remove();
+  const trigger = document.activeElement;
+  const cleanup = () => {
     if (active === token) active = null;
-    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
-  }, { once: true });
-
+    dialog.remove();
+  };
   document.body.append(dialog);
-  dialog.showModal();
+  openModalDialog(dialog, {
+    backdrop: 'click',
+    dismiss: requestClose,
+    trigger,
+    onClose: cleanup,
+  });
   close.focus();
-  unregisterScope = window.__BB_PAGE_SCOPE__?.onDispose(() => dialog.close());
   return dialog;
 }

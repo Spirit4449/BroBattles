@@ -1,10 +1,11 @@
+import { clamp01, lerp } from "../../../shared/math.js";
 import { movementSoundKey } from "../../../shared/physics/movementSounds";
 // Per-frame movement presentation for the local fighter: footstep cadence,
 // turn bursts, wall-slide clouds, fast-fall trails, landing impacts and run
 // dust. Gameplay never reads this state; it only follows the physics body.
 // `hidden` (invisibility powerup) suppresses visuals but not audio/events.
 import {
-  MOVEMENT_VFX_CONFIG,
+  MOVEMENT_VFX_CONFIG, runDustInterval, fallSpeedRatio, wallContactPoint,
   spawnDirectionChangeBurst,
   spawnFastFallTrail,
   spawnLandingImpact,
@@ -17,8 +18,6 @@ import { shouldPlayLandingSound, terrainLandingSound } from "../audio/movementAu
 
 // Same semantics as Phaser.Math.Clamp (NaN passes through, so NaN-driven
 // comparisons below stay false exactly as before extraction).
-const clamp01 = (value) => Math.max(0, Math.min(1, value));
-const lerp = (from, to, t) => from + (to - from) * t;
 const bodyBottom = (player) => Number(player.body?.bottom) || player.y + player.height * 0.5;
 
 /**
@@ -73,7 +72,7 @@ export function createLocalMovementFx({ audio, noteEvent }) {
       inputDirection !== 0 && lastGroundInputDirection !== 0 &&
       inputDirection !== lastGroundInputDirection &&
       groundSpeed >= MOVEMENT_VFX_CONFIG.directionChangeMinSpeed &&
-      Date.now() - lastDirectionChangeAt >= 130
+      Date.now() - lastDirectionChangeAt >= MOVEMENT_VFX_CONFIG.turnBurstCooldownMs
     ) {
       spawnDirectionChangeBurst(
         scene,
@@ -114,8 +113,7 @@ export function createLocalMovementFx({ audio, noteEvent }) {
     if (sliding) {
       const side = wallSide || (player.flipX ? "left" : "right");
       const body = player.body;
-      const contactX = body ? body.x + (side === "left" ? 0 : body.width) : player.x + (side === "left" ? -24 : 24);
-      const contactY = body ? body.y + body.height * 0.68 : player.y + 12;
+      const { x: contactX, y: contactY } = wallContactPoint(body, side, MOVEMENT_VFX_CONFIG.wallSlideHeightFraction, player.x, player.y + 12, 24);
       if (!wasWallSliding && !hidden) {
         spawnWallSlideBurst(scene, contactX, contactY, side);
       }
@@ -133,10 +131,7 @@ export function createLocalMovementFx({ audio, noteEvent }) {
   // Falling-air rush and fast-fall streaks.
   function updateFalling(scene, player, { dead, sliding, hidden }) {
     const fallVelocity = Number(player.body.velocity.y) || 0;
-    const fastFallRatio = clamp01(
-      (fallVelocity - MOVEMENT_VFX_CONFIG.fastFallStartVelocity) /
-        (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity - MOVEMENT_VFX_CONFIG.fastFallStartVelocity),
-    );
+    const fastFallRatio = fallSpeedRatio(fallVelocity);
     const falling = !dead && !player.body.touching.down && !sliding && fallVelocity > 85;
     audio.updateFallingAir(scene, falling, fallVelocity);
     if (falling && !hidden && fallVelocity >= MOVEMENT_VFX_CONFIG.fastFallStartVelocity) {
@@ -214,8 +209,8 @@ export function createLocalMovementFx({ audio, noteEvent }) {
     dustElapsed += scene.game.loop.delta;
     const runSpeed = Math.abs(Number(player.body.velocity.x) || 0);
     const runSpeedRatio = clamp01(runSpeed / maxSpeed);
-    const interval = lerp(MOVEMENT_VFX_CONFIG.runDustMaxIntervalMs, MOVEMENT_VFX_CONFIG.runDustMinIntervalMs, runSpeedRatio);
-    if (!(!dead && !hidden && moving && player.body.touching.down && runSpeed > 35 && dustElapsed >= interval)) return;
+    const interval = runDustInterval(runSpeedRatio);
+    if (!(!dead && !hidden && moving && player.body.touching.down && runSpeed > MOVEMENT_VFX_CONFIG.runDustMinSpeed && dustElapsed >= interval)) return;
     dustElapsed = 0;
     // Spawn at the physics body's bottom to account for per-character frame sizing.
     const bottom = player.body ? player.body.y + player.body.height : player.y + player.height / 2;

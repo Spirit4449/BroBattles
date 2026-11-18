@@ -5,6 +5,36 @@ const fs = require('node:fs');
 
 const path = require('node:path');
 
+test("retiring a fighter detaches its pending movement sound loaders", () => {
+  const { EventEmitter } = require("node:events");
+  const { createLocalMovementAudio } = loadClientModule("src/client/game/players/localMovementAudio.js", {
+    require: () => ({}),
+  });
+  const audio = createLocalMovementAudio();
+  const created = [];
+  const makeScene = name => {
+    const events = new EventEmitter();
+    const sounds = new Set();
+    return {
+      events: new EventEmitter(),
+      sound: { add(key) { created.push([name, key]); return {}; } },
+      cache: { audio: { events, exists: key => sounds.has(key) } },
+      load(key) { sounds.add(key); events.emit("add", key); },
+    };
+  };
+  const first = makeScene("old");
+  const second = makeScene("new");
+  audio.attach(first);
+  audio.attach(second);
+  first.load("sfx-sliding");
+  first.events.emit("shutdown");
+  second.load("sfx-sliding");
+  assert.deepEqual(created, [["new", "sfx-sliding"]]);
+  audio.dispose();
+  second.load("sfx-fall-air");
+  assert.equal(created.length, 1);
+});
+
 describe("Spatial mix and spectating", () => {
   const audio = {};
   loadClientModule('src/client/game/audio/playerAudio.js', { exports: audio });

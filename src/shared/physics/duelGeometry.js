@@ -18,4 +18,4 @@ function spawnForParticipant(geometry, player, index) {
     y: landing.y - body.offsetY - body.halfHeight };
 }
 
-module.exports = { getDuelGeometry, characterBody, spawnForParticipant };
+module.exports = { getDuelGeometry, spawnForParticipant };

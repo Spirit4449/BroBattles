@@ -1,5 +1,7 @@
+import { API_PATHS } from "../../shared/net/apiPaths.js";
 import privacyShared from "../../shared/social/privacy.cjs";
 import { createPixelSelect } from "../ui/pixelSelect.js";
+import { getJson, postJson } from "../lib/http.js";
 
 export const { PRIVACY_FIELDS, normalizePrivacy } = privacyShared;
 
@@ -7,7 +9,7 @@ export const { PRIVACY_FIELDS, normalizePrivacy } = privacyShared;
 // window event keeps both in step with the saved values.
 const EVENT = "bb:privacy-changed";
 
-export function announcePrivacy(privacy) {
+function announcePrivacy(privacy) {
   window.dispatchEvent(new CustomEvent(EVENT, { detail: normalizePrivacy(privacy) }));
 }
 
@@ -19,22 +21,17 @@ export function onPrivacyChange(handler) {
 
 // Resolves to null for guests and signed-out visitors.
 export async function loadPrivacy() {
-  const response = await fetch("/friends/privacy", { credentials: "same-origin" });
-  if (response.status === 401 || response.status === 403) return null;
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error || "Couldn't load privacy settings.");
-  return normalizePrivacy(data.privacy);
+  try {
+    const data = await getJson(API_PATHS.FRIENDS_PRIVACY, { fallbackMessage: "Couldn't load privacy settings." });
+    return normalizePrivacy(data.privacy);
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) return null;
+    throw error;
+  }
 }
 
 export async function savePrivacy(update) {
-  const response = await fetch("/friends/privacy", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ privacy: update }),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(data?.error || "Couldn't save privacy settings."), { statusCode: response.status });
+  const data = await postJson(API_PATHS.FRIENDS_PRIVACY, { privacy: update }, { fallbackMessage: "Couldn't save privacy settings." });
   const privacy = normalizePrivacy(data.privacy);
   announcePrivacy(privacy);
   return privacy;

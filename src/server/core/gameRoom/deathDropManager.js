@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { PICKUP_DELAY_MS } = require("../../../shared/powerups");
 const {
   DEATH_DROP_DESPAWN_MS,
@@ -41,7 +42,7 @@ function serializeDrop(drop) {
 }
 
 function buildDeathDropsSnapshot(room) {
-  return Array.from(room._deathDrops.values())
+  return Array.from(room.deathDrops.values())
     .map((drop) => serializeDrop(drop))
     .filter(Boolean);
 }
@@ -91,7 +92,7 @@ function spawnDeathDropsForPlayer(room, playerData, now = Date.now()) {
       ownerDeathUsername: playerData.name,
       claimedBy: null,
     };
-    room._deathDrops.set(drop.id, drop);
+    room.deathDrops.set(drop.id, drop);
     drops.push(drop);
   });
 
@@ -99,11 +100,11 @@ function spawnDeathDropsForPlayer(room, playerData, now = Date.now()) {
 }
 
 function tickDeathDrops(room) {
-  if (!room?._deathDrops?.size) return;
+  if (!room?.deathDrops?.size) return;
   const now = Date.now();
-  for (const [id, drop] of room._deathDrops.entries()) {
+  for (const [id, drop] of room.deathDrops.entries()) {
     if (!drop || now >= Number(drop.expiresAt || 0)) {
-      room._deathDrops.delete(id);
+      room.deathDrops.delete(id);
     }
   }
 }
@@ -134,15 +135,15 @@ function handlePlayerDeath(room, playerData, meta = {}) {
     gameId: room.matchId,
   };
 
-  room.io.to(`game:${room.matchId}`).emit("player:dead", payload);
+  room.broadcast(SOCKET_EVENTS.PLAYER_DEAD, payload);
   try {
     const modeResult = room.gameMode?.onPlayerDeath?.(playerData, meta) || null;
     const respawnPlan = room.gameMode?.getRespawnPlan?.(playerData, meta) || null;
     if (respawnPlan?.enabled) {
-      room._scheduleRespawn?.(playerData, respawnPlan, meta);
+      room.scheduleRespawn?.(playerData, respawnPlan, meta);
     }
     if (modeResult?.shouldCheckVictory !== false) {
-      room._checkVictoryCondition();
+      room.checkVictoryCondition();
     }
   } catch (e) {
     console.warn(
@@ -168,12 +169,12 @@ function handleDeathDropPickup(room, socketId, payload) {
 
   const id = Number(payload.id);
   if (!Number.isFinite(id)) return;
-  const drop = room._deathDrops.get(id);
+  const drop = room.deathDrops.get(id);
   if (!drop || drop.claimedBy) return;
 
   const now = Date.now();
   if (now >= Number(drop.expiresAt || 0)) {
-    room._deathDrops.delete(id);
+    room.deathDrops.delete(id);
     return;
   }
 
@@ -195,9 +196,9 @@ function handleDeathDropPickup(room, socketId, payload) {
   drop.claimedBy = playerData.name;
   drop.x = clientX;
   drop.y = clientY;
-  room._deathDrops.delete(id);
+  room.deathDrops.delete(id);
 
-  const bucket = room._ensureRewardBucket(playerData);
+  const bucket = room.ensureRewardBucket(playerData);
   const modeCollectResult =
     room.gameMode?.onDeathDropCollected?.(playerData, drop) || null;
   if (bucket) {
@@ -208,7 +209,7 @@ function handleDeathDropPickup(room, socketId, payload) {
     }
   }
 
-  room.io.to(`game:${room.matchId}`).emit("deathdrop:collected", {
+  room.broadcast(SOCKET_EVENTS.DEATHDROP_COLLECTED, {
     id: drop.id,
     type: drop.type,
     username: playerData.name,

@@ -1,6 +1,7 @@
 // Imports AI-produced artwork; only crops, scales and packs pixels. No repainting.
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { execFileSync: run } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
 const sources = process.argv[2];
@@ -11,7 +12,7 @@ const jobs = [
   // King uses its revised source and padded atlas: scripts/art/pack-king-skin.cjs.
   ['exec-5b36a2c3-35e0-4d7c-9db8-9bc20b2cb253.png', 'gloop/skins/gloop-amethyst'],
 ];
-const tmp = fs.mkdtempSync('/private/tmp/ai-trophy-import-');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-trophy-import-'));
 function read(file) {
   run('cwebp', ['-quiet', '-lossless', file, '-o', `${tmp}/input.webp`]);
   run('dwebp', ['-quiet', '-pam', `${tmp}/input.webp`, '-o', `${tmp}/input.pam`]);

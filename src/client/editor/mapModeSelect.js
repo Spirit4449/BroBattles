@@ -1,7 +1,8 @@
 import { createPixelSelect } from '../ui/pixelSelect.js';
 import { attachNestedDropdown } from './nestedDropdown.js';
 import { arenaFor } from '../../shared/maps/arenas';
-import { modes } from '../../shared/catalogs/gameModes.catalog.json';
+import modeCatalog from '../../shared/catalogs/gameModes.catalog.cjs';
+const { modes } = modeCatalog;
 
 export function createMapModeSelect({ options, value, onChange, className }) {
   let selected = String(value);

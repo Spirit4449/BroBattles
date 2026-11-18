@@ -11,6 +11,21 @@ test('registered content has valid assets, effects, map documents and attack ref
   assert.deepEqual(require('../src/shared/combat/matchConfig.js').POWERUP_TYPES, POWERUP_TYPES);
 });
 
+test('trophy content validation accepts zero mitigation and weights and rejects missing tuning', () => {
+  const trophies = structuredClone(require('../src/shared/catalogs/trophySystem.catalog.cjs'));
+  trophies.lossPerformanceMitigation = 0;
+  trophies.performanceWeights.hits = 0;
+  assert.deepEqual(validateContent({ trophies }), []);
+
+  delete trophies.modeTrophyRanges.default;
+  delete trophies.performanceWeights.damage;
+  trophies.modeTrophyRanges.duels.max = 0;
+  const errors = validateContent({ trophies });
+  assert.ok(errors.some(error => error.includes('missing default mode range')));
+  assert.ok(errors.some(error => error.includes('invalid range for duels')));
+  assert.ok(errors.some(error => error.includes('invalid performanceWeights.damage')));
+});
+
 test('content validation rejects a missing action and wrong effect owner', () => {
   const characters = structuredClone(characterDefinitions);
   characters.ninja.basicAction = 'missing-action';
@@ -44,9 +59,11 @@ test('validation rejects invalid reload/body data and duplicate tuning or price 
   const powerups = structuredClone(POWERUP_CATALOG);
   characters.thorg.stats.ammoReloadMs = 0;
   characters.draven.stats.body.widthShrink = characters.draven.frame.w;
+  powerups.health.visual.particle.kind = 'unknown';
+  powerups.health.visual.tintPulse = [];
   powerups.gravityBoots.localMovement = { jumpMult: 1.5 };
   const errors = validateContent({ characters, powerups, cosmetics: [{ id: 'skin', price: { gems: 10 } }] });
-  for (const message of ['invalid ammoReloadMs', 'body must fit', 'localMovement tuning is obsolete', 'cosmetic price duplicates']) {
+  for (const message of ['invalid ammoReloadMs', 'body must fit', 'invalid particle style', 'invalid tint pulse', 'localMovement tuning is obsolete', 'cosmetic price duplicates']) {
     assert.ok(errors.some(error => error.includes(message)), message);
   }
 });

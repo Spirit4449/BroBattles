@@ -1,3 +1,4 @@
+const { clamp } = require("../math.js");
 // No renderer or room dependencies: the server and predicted arrows use this model.
 const { getResolvedCharacterAttackConfig, getResolvedCharacterSpecialConfig,
   getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig } = require("./characterTuning.js");
@@ -6,7 +7,6 @@ const VERSION = 2;
 // Replays step at the server tick so client predictions match the server.
 const { FIXED_DT_MS: STEP_MS } = require('../gameConstants');
 const { muzzleOf } = require('./characterRig.js');
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function attackConfig(special = false) {
   const arrows = getResolvedCharacterAttackConfig('sparrow', 'arrowSpread');
@@ -179,4 +179,4 @@ function firstContact(a, z, radius, terrain = [], targets = []) {
 }
 
 module.exports = { VERSION, STEP_MS, attackConfig, resolveShot, powerFromSpeed, createVolley, aimAtTarget,
-  sample, insetBounds, sweep, firstContact, pointInCircleRect, attachmentPoint };
+  sample, insetBounds, sweep, firstContact, attachmentPoint };

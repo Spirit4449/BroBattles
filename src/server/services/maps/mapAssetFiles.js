@@ -1,80 +1,123 @@
-const fs=require('node:fs');
-const path=require('node:path');
-const {randomUUID,createHash}=require('node:crypto');
-const publicRoot=path.resolve(__dirname,"../../../../public");
-const assetDataRoot=()=>path.join(process.env.BB_MAP_DIR||path.resolve(__dirname,"../../../../data/maps"),'assets');
-const assetUrl=url=>typeof url==='string'&&/^\/assets\/[a-zA-Z0-9_./-]+$/.test(url)&&!url.includes('..');
-function resolveAssetFile(url){
-  if(!assetUrl(url))throw Error('Asset must use a local /assets/ path');
-  for(const [prefix,folder]of [['/assets/map-editor-staged/','staged'],['/assets/map-revisions/','revisions']]){
-    if(url.startsWith(prefix)){const name=url.slice(prefix.length);if(!/^[a-zA-Z0-9_-]+\.(webp|png|jpg|jpeg|json)$/.test(name))throw Error('Invalid asset filename');return path.join(assetDataRoot(),folder,name);}
-  }
-  return path.join(publicRoot,url.slice(1));
-}
-function stageUpload({targetUrl,fileName,base64}){
-  const ext=path.extname(String(fileName)).toLowerCase();
-  if(!['.webp','.png','.jpg','.jpeg'].includes(ext))throw Object.assign(Error('Choose a PNG, WebP or JPEG image'),{status:400});
-  if(!assetUrl(targetUrl)||['/assets/map-editor-staged/','/assets/map-revisions/'].some(prefix=>targetUrl.startsWith(prefix)))throw Object.assign(Error('Choose a game asset path under /assets/'),{status:400});
-  const bytes=Buffer.from(String(base64||''),'base64');if(!bytes.length||bytes.length>8*1024*1024)throw Object.assign(Error('Image must be smaller than 8 MB'),{status:400});
-  const {imageSize}=require('./mapAssetValidation');let dimensions;try{dimensions=imageSize(bytes);}catch{throw Object.assign(Error('Choose a valid PNG, WebP or JPEG image'),{status:400});}if(dimensions.width<1||dimensions.height<1||dimensions.width>16384||dimensions.height>16384)throw Object.assign(Error('Image exceeds 16384 pixels'),{status:400});
-  const name=randomUUID()+ext;const url='/assets/map-editor-staged/'+name;const file=resolveAssetFile(url);fs.mkdirSync(path.dirname(file),{recursive:true});
-  const target=targetUrl.replace(/\.[a-zA-Z0-9]+$/,ext);
-  fs.writeFileSync(file,bytes);fs.writeFileSync(file+'.json',JSON.stringify({targetUrl:target,originalUrl:targetUrl}));
-  return {url,targetUrl:target,...dimensions};
-}
-function immutableAsset(url){
-  if(url.startsWith('/assets/map-revisions/'))return url;
-  const bytes=fs.readFileSync(resolveAssetFile(url));const hash=createHash('sha256').update(bytes).digest('hex');const result=`/assets/map-revisions/${hash}${path.extname(url)}`;const file=resolveAssetFile(result);fs.mkdirSync(path.dirname(file),{recursive:true});if(!fs.existsSync(file))fs.writeFileSync(file,bytes);return result;
-}
-function publishUploads(document,commit=doc=>doc){
-  const doc=JSON.parse(JSON.stringify(document));const replacements=new Map();
-  for(const asset of Object.values(doc.assets))if(asset.url.startsWith('/assets/map-editor-staged/')){
-    const stage=resolveAssetFile(asset.url),meta=JSON.parse(fs.readFileSync(stage+'.json','utf8'));
-    if(!assetUrl(meta.targetUrl))throw Error('Invalid staged asset destination');
-    replacements.set(meta.targetUrl,{stage,url:asset.url});
-    asset.sourceUrl=meta.targetUrl;asset.url=immutableAsset(asset.url);delete asset.replaceTarget;
-  }
-  const backups=new Map();
-  function replace(file,stage,root){
-    const assetRoot=fs.realpathSync(path.join(root,'assets'));
-    // Check the nearest existing parent before creating any directories.
-    let parent=path.dirname(file);
-    while(!fs.existsSync(parent))parent=path.dirname(parent);
-    const realParent=fs.realpathSync(parent);
-    if(realParent!==assetRoot&&!realParent.startsWith(assetRoot+path.sep))throw Error('Asset target escapes assets');
-    fs.mkdirSync(path.dirname(file),{recursive:true});
-    backups.set(file,fs.existsSync(file)?fs.readFileSync(file):null);
-    const temp=file+'.'+randomUUID()+'.tmp';
-    try{fs.copyFileSync(stage,temp);fs.renameSync(temp,file);}finally{if(fs.existsSync(temp))fs.unlinkSync(temp);}
-  }
-  try{
-    for(const [target,{stage}]of replacements){
-      const file=resolveAssetFile(target);
-      if(fs.existsSync(file))immutableAsset(target);
-      replace(file,stage,publicRoot);
-      const distRoot=path.resolve(__dirname,"../../../../dist");
-      if(fs.existsSync(path.join(distRoot,'assets')))replace(path.join(distRoot,target.slice(1)),stage,distRoot);
+const { imageSize } = require("./imageSize");
+const { getConfig } = require("../../config");
+const fs = require("node:fs");
+const path = require("node:path");
+const { randomUUID, createHash } = require("node:crypto");
+const publicRoot = path.resolve(__dirname, "../../../../public");
+const assetDataRoot = (directory = getConfig().maps.dir) => path.join(directory, "assets");
+const assetUrl = (url) =>
+  typeof url === "string" && /^\/assets\/[a-zA-Z0-9_./-]+$/.test(url) && !url.includes("..");
+function resolveAssetFile(url, directory) {
+  if (!assetUrl(url)) throw Error("Asset must use a local /assets/ path");
+  for (const [prefix, folder] of [
+    ["/assets/map-editor-staged/", "staged"],
+    ["/assets/map-revisions/", "revisions"],
+  ]) {
+    if (url.startsWith(prefix)) {
+      const name = url.slice(prefix.length);
+      if (!/^[a-zA-Z0-9_-]+\.(webp|png|jpg|jpeg|json)$/.test(name))
+        throw Error("Invalid asset filename");
+      return path.join(assetDataRoot(directory), folder, name);
     }
-    return commit(doc);
-  }catch(error){
-    // An unsuccessful document save must not leave changed game artwork behind.
-    for(const [file,bytes]of [...backups].reverse()){
-      if(bytes===null){if(fs.existsSync(file))fs.unlinkSync(file);}
-      else{const temp=file+'.'+randomUUID()+'.tmp';fs.writeFileSync(temp,bytes);fs.renameSync(temp,file);}
-    }
-    throw error;
   }
+  return path.join(publicRoot, url.slice(1));
+}
+function stageUpload({ targetUrl, fileName, base64 }, directory) {
+  const ext = path.extname(String(fileName)).toLowerCase();
+  if (![".webp", ".png", ".jpg", ".jpeg"].includes(ext))
+    throw Object.assign(Error("Choose a PNG, WebP or JPEG image"), { status: 400 });
+  if (
+    !assetUrl(targetUrl) ||
+    ["/assets/map-editor-staged/", "/assets/map-revisions/"].some((prefix) =>
+      targetUrl.startsWith(prefix),
+    )
+  )
+    throw Object.assign(Error("Choose a game asset path under /assets/"), { status: 400 });
+  const bytes = Buffer.from(String(base64 || ""), "base64");
+  if (!bytes.length || bytes.length > 8 * 1024 * 1024)
+    throw Object.assign(Error("Image must be smaller than 8 MB"), { status: 400 });
+  let dimensions;
+  try {
+    dimensions = imageSize(bytes);
+  } catch {
+    throw Object.assign(Error("Choose a valid PNG, WebP or JPEG image"), { status: 400 });
+  }
+  if (
+    dimensions.width < 1 ||
+    dimensions.height < 1 ||
+    dimensions.width > 16384 ||
+    dimensions.height > 16384
+  )
+    throw Object.assign(Error("Image exceeds 16384 pixels"), { status: 400 });
+  const name = randomUUID() + ext;
+  const url = "/assets/map-editor-staged/" + name;
+  const file = resolveAssetFile(url, directory);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const target = targetUrl.replace(/\.[a-zA-Z0-9]+$/, ext);
+  fs.writeFileSync(file, bytes);
+  fs.writeFileSync(file + ".json", JSON.stringify({ targetUrl: target, originalUrl: targetUrl }));
+  return { url, targetUrl: target, ...dimensions };
+}
+function immutableAsset(url, directory) {
+  if (url.startsWith("/assets/map-revisions/")) return url;
+  return storeImmutableAsset(
+    fs.readFileSync(resolveAssetFile(url, directory)),
+    path.extname(url),
+    directory,
+  );
 }
 
-function pinMapAssets(map){
-  const copy=JSON.parse(JSON.stringify(map));
-  for(const asset of Object.values(copy.assets)){
-    asset.sourceUrl=asset.sourceUrl||asset.replaceTarget||asset.url;
-    asset.url=immutableAsset(asset.url);
-    if(asset.atlasURL)asset.atlasURL=immutableAsset(asset.atlasURL);
+function storeImmutableAsset(bytes, extension, directory) {
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const result = `/assets/map-revisions/${hash}${extension}`;
+  const file = resolveAssetFile(result, directory);
+  if (!fs.existsSync(file)) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const temp = file + "." + randomUUID() + ".tmp";
+    try {
+      fs.writeFileSync(temp, bytes, { flag: "wx" });
+      fs.renameSync(temp, file);
+    } finally {
+      fs.rmSync(temp, { force: true });
+    }
   }
-  // Scenery layers are map art; clouds come from the game-wide cloud library.
-  for(const layer of copy.scenery.layers)layer.url=immutableAsset(layer.url);
+  return result;
+}
+
+function publishUploads(document, directory) {
+  const copy = structuredClone(document);
+  for (const asset of Object.values(copy.assets)) {
+    if (!asset.url.startsWith("/assets/map-editor-staged/")) continue;
+    const stage = resolveAssetFile(asset.url, directory);
+    const { targetUrl } = JSON.parse(fs.readFileSync(stage + ".json", "utf8"));
+    if (!assetUrl(targetUrl)) throw Error("Invalid staged asset destination");
+    asset.sourceUrl = targetUrl;
+    asset.url = immutableAsset(asset.url, directory);
+    delete asset.replaceTarget;
+  }
   return copy;
 }
-module.exports={resolveAssetFile,stageUpload,publishUploads,pinMapAssets,immutableAsset};
+
+function pinMapAssets(map, directory) {
+  const copy = structuredClone(map);
+  // Older archives kept the same asset tables inside each team-size variant.
+  for (const layout of Object.values(copy.variants || { current: copy })) {
+    for (const asset of Object.values(layout.assets || {})) {
+      asset.sourceUrl = asset.sourceUrl || asset.replaceTarget || asset.url;
+      asset.url = immutableAsset(asset.url, directory);
+      if (asset.atlasURL) asset.atlasURL = immutableAsset(asset.atlasURL, directory);
+    }
+    for (const layer of layout.scenery?.layers || [])
+      layer.url = immutableAsset(layer.url, directory);
+    if (typeof layout.background === "string")
+      layout.background = immutableAsset(layout.background, directory);
+  }
+  return copy;
+}
+module.exports = {
+  resolveAssetFile,
+  stageUpload,
+  publishUploads,
+  pinMapAssets,
+  storeImmutableAsset,
+};

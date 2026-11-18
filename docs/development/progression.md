@@ -145,7 +145,7 @@ A gold flash and WobbleBoxx ding accompany the reward count-up
 before rewards fly to the wallet. Reduced motion reveals the final numbers
 without particle or count animation. Streak counter changes play the selected power-up
 or first standalone loss cue through shared SFX settings; source credits live in
-`public/assets/ui-sound/rewards/README.md`. The first win and loss of a one-win streak
+[streak sound credits](../../public/assets/ui-sound/rewards/streak-credits.txt). The first win and loss of a one-win streak
 have no streak badge or cue.
 
 ## Player Cards Implementation Guide
@@ -423,9 +423,8 @@ cosmetics, including bundles and future reward grants. Buying does not equip. Ti
 
 `GET /titles/catalog` and authenticated `GET /titles/owned` expose the collection.
 `POST /titles/select` accepts `{ "titleId": "owned-id" }` or `{ "titleId": null }`
-to remove a title. Unknown and unowned choices are rejected. Both Profile interfaces
-provide selection; public profiles and battle introduction cards display the equipped
-title instead of the selected-character subtitle. No selection leaves that line empty.
+to remove a title. Unknown and unowned choices are rejected. Players equip titles from the lobby Profile collection.
+Public profiles and battle introduction cards display the equipped title in the subtitle. No selection leaves that line empty.
 `src/client/views/titleView.js` shares the text renderer with Shop previews and reward
 reveals. Lettering has no glow and uses a continuous slow left-to-right color gleam.
 Reduced motion keeps static two-tone lettering. Collection price labels use

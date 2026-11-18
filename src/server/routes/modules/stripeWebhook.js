@@ -1,4 +1,5 @@
-const { webhookPath } = require("../../services/shop/stripeListener");
+const { ServiceError } = require("../../services/httpError");
+const { webhookPath } = require("../../jobs/stripeListener");
 const express = require("express");
 
 function registerStripeWebhookRoute({ app, stripeShopService }) {
@@ -13,12 +14,10 @@ function registerStripeWebhookRoute({ app, stripeShopService }) {
         );
         return res.status(200).json({ received: true });
       } catch (error) {
-        const signatureFailure =
-          String(error?.type || "").includes("Signature") ||
-          String(error?.message || "").toLowerCase().includes("signature");
-        console.error("[shop:stripe] webhook error", error?.message || error);
-        return res
-          .status(signatureFailure ? 400 : Number(error?.status) || 500)
+        const signatureFailure = error?.type === "StripeSignatureVerificationError";
+        const status = signatureFailure ? 400 : error instanceof ServiceError && [409, 503].includes(error.status) ? error.status : 500;
+        console.error("[shop:stripe] webhook error", status >= 500 ? error.stack || error : error?.message);
+        return res.status(status)
           .json({ received: false, error: signatureFailure ? "Invalid signature" : "Webhook processing failed" });
       }
     },

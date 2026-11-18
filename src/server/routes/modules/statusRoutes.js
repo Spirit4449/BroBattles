@@ -1,3 +1,5 @@
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
+const { asyncRoute, authedRoute } = require("../http");
 const { buildStatusPayload } = require("../../services/match/statusPayloadService");
 const {
   setBanHoldCookies,
@@ -13,70 +15,48 @@ function registerStatusRoutes({
   isGuest,
   isAdminUser,
 }) {
-  app.post("/status", async (req, res) => {
-    try {
-      const hold = await getBanHoldFromRequest(req, { db, res });
-      if (hold) {
-        return res.status(403).json({
-          success: false,
-          banned: true,
-          message: String(hold.reason || "Your account has been banned."),
-        });
-      }
+  app.post(API_PATHS.STATUS, asyncRoute("[status] /status", async (req, res) => {
+    const hold = await getBanHoldFromRequest(req, { db, res });
+    if (hold) {
+      return res.status(403).json({
+        success: false,
+        banned: true,
+        message: String(hold.reason || "Your account has been banned."),
+      });
+    }
 
-      const payload = await buildStatusPayload({
-        db,
-        getOrCreateCurrentUser,
-        isGuest,
-        isAdminUser,
+    const payload = await buildStatusPayload({
+      db,
+      getOrCreateCurrentUser,
+      isGuest,
+      isAdminUser,
+      req,
+      res,
+    });
+    if (payload?.banned) {
+      setBanHoldCookies({
         req,
         res,
+        userId: payload.userId,
+        expiresAt: payload.banExpiresAt,
+        reason: String(payload?.message || "Your account has been banned."),
       });
-      if (payload?.banned) {
-        setBanHoldCookies({
-          req,
-          res,
-          userId: payload.userId,
-          expiresAt: payload.banExpiresAt,
-          reason: String(payload?.message || "Your account has been banned."),
-        });
-        return res.status(403).json(payload);
-      }
-      res.json(payload);
-    } catch (e) {
-      console.error(e);
-      res
-        .status(500)
-        .json({ success: false, message: "Internal server error" });
+      return res.status(403).json({ success: false, banned: true, message: payload.message });
     }
-  });
+    res.json(payload);
+  }, { messageField: "message" }));
 
-  app.post("/selection-preferences", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Not authenticated" });
-      }
+  app.post(API_PATHS.SELECTION_PREFERENCES, authedRoute(requireCurrentUser, "[status] /selection-preferences", async (req, res, user) => {
+    const selection = normalizeSelection(
+      req.body?.selection || req.body || {},
+    );
+    await db.setUserPreferredSelection(user.user_id, selection);
 
-      const selection = normalizeSelection(
-        req.body?.selection || req.body || {},
-      );
-      await db.setUserPreferredSelection(user.user_id, selection);
-
-      return res.json({
-        success: true,
-        selection,
-      });
-    } catch (error) {
-      console.error("[status] failed to save selection preferences", error);
-      return res.status(500).json({
-        success: false,
-        error: error?.message || "Failed to save selection preferences",
-      });
-    }
-  });
+    return res.json({
+      success: true,
+      selection,
+    });
+  }, { fallback: "Failed to save selection preferences" }));
 }
 
 module.exports = { registerStatusRoutes };

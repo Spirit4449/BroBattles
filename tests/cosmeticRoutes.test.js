@@ -1,7 +1,9 @@
+const { fakeRes } = require('./helpers/fakeHttp');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { authedRoute, sendShopError, purchaseGrantFromShop } = require('../src/server/routes/routeHelpers');
+const { authedRoute, routeErrorMiddleware } = require('../src/server/routes/http');
+const { httpError } = require('../src/server/services/httpError');
 const { registerPlayerCardsRoutes } = require('../src/server/routes/modules/playerCardsRoutes');
 const { getPlayerCardsCatalog } = require('../src/server/services/cosmetics/playerCardsCatalog');
 const { playerCardImage, bindPlayerCardHover, positionPlayerCardCanvas, createPlayerCardMedia, restartPlayerCardMedia, pausePlayerCardPreparation } = require('../src/client/views/playerCardAnimation.cjs');
@@ -108,10 +110,6 @@ test('profile videos prepare visible tiles and retain their decoder between hove
   }
 });
 
-function fakeRes() {
-  return { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
-}
-
 test('showing a card again while an obsolete alpha check finishes prepares the current download', async () => {
   const previousWindow = global.window, previousDocument = global.document;
   let observe, visibility, dispose, finishProbe, announceProbe;
@@ -212,28 +210,34 @@ test('authedRoute answers 401 when signed out and 500 on unexpected errors', asy
   assert.deepEqual([failed.statusCode, failed.body.error], [500, 'Internal server error']);
 });
 
-test('authedRoute lets onError answer known shop failures', async () => {
-  const res = fakeRes();
-  const shopError = Object.assign(new Error('Not enough gems'), { status: 402, code: 'insufficient_funds', wallet: { gems: 1 } });
-  await quietly(() => authedRoute(async () => ({ user_id: 1 }), 'x', () => { throw shopError; }, {
-    onError: (error, r) => sendShopError(r, error, 'fallback'),
-  })({}, res));
-  assert.equal(res.statusCode, 402);
-  assert.deepEqual(res.body, { success: false, code: 'insufficient_funds', error: 'Not enough gems', wallet: { gems: 1 } });
-  assert.equal(sendShopError(fakeRes(), new Error('plain'), 'fallback'), false);
-});
+test('shop error middleware retains the wallet and hides unexpected failures', async () => {
+  const { registerShopRoutes } = require('../src/server/routes/modules/shopRoutes');
+  const routes = require("express").Router();
+  const wallet = { coins: 7, gems: 2 };
+  let failure = httpError(403, 'Insufficient funds.', { code: 'insufficient_funds', details: { wallet } });
+  registerShopRoutes({
+    app: routes,
+    requireCurrentUser: async () => ({ user_id: 1 }),
+    shopService: { purchaseVirtual: async () => { throw failure; } },
+    stripeShopService: {},
+  });
+  routes.use(routeErrorMiddleware);
+  function purchase() {
+    return new Promise((resolve, reject) => {
+      const req = { method: 'POST', url: '/api/shop/purchase', body: {} };
+      const res = fakeRes({ json(body) { this.body = body; resolve(this); } });
+      routes.handle(req, res, (error) => reject(error || new Error('Shop route was not handled')));
+    });
+  }
 
-test('purchaseGrantFromShop buys the matching offer with a stable key', async () => {
-  const calls = [];
-  const shopService = {
-    findOfferForGrant: (type, id) => (type === 'skin' && id === 's1' ? { id: 'offer-1' } : null),
-    purchaseVirtual: async (args) => { calls.push(args); return { success: true, wallet: { coins: 5, gems: 7 } }; },
-  };
-  const user = { user_id: 9 };
-  assert.equal(await purchaseGrantFromShop({ shopService, req: { body: {} }, user, grantType: 'skin', grantId: 'nope', idempotencyPrefix: 'p' }), null);
-  const result = await purchaseGrantFromShop({ shopService, req: { body: { idempotencyKey: 'k1' } }, user, grantType: 'skin', grantId: 's1', idempotencyPrefix: 'p' });
-  assert.deepEqual(calls, [{ userId: 9, offerId: 'offer-1', idempotencyKey: 'k1' }]);
-  assert.deepEqual(result, { success: true, wallet: { coins: 5, gems: 7 }, owned: true, coins: 5, gems: 7 });
+  const declined = await purchase();
+  assert.equal(declined.statusCode, 403);
+  assert.deepEqual(declined.body, { success: false, code: 'insufficient_funds', error: 'Insufficient funds.', wallet });
+
+  failure = new Error('internal database detail');
+  const unavailable = await quietly(purchase);
+  assert.equal(unavailable.statusCode, 500);
+  assert.equal(unavailable.body.error, 'Unable to complete the purchase.');
 });
 
 test('player card routes validate ids and ownership before selecting', async () => {
@@ -242,7 +246,7 @@ test('player card routes validate ids and ownership before selecting', async () 
   const selected = [];
   const cardId = String(getPlayerCardsCatalog().cards[0].id);
   const db = { userOwnsCard: async (_u, id) => id === cardId, setUserSelectedCardId: async (_u, id) => selected.push(id) };
-  registerPlayerCardsRoutes({ app, db, requireCurrentUser: async () => ({ user_id: 3 }), shopService: null });
+  registerPlayerCardsRoutes({ app, db, requireCurrentUser: async () => ({ user_id: 3 }), });
 
   const select = routes['POST /player-cards/select'];
   const missing = fakeRes();
@@ -270,7 +274,7 @@ test('titles start empty, reject unowned or unknown selections, and allow equip 
   registerTitlesRoutes({ app: { get: (url, handler) => routes.set(url, handler), post: (url, handler) => routes.set(url, handler) }, db,
     requireCurrentUser: async () => user });
   async function call(url, body) {
-    const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
+    const res = fakeRes();
     await routes.get(url)({ body }, res);
     return res;
   }

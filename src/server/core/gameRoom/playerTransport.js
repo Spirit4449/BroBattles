@@ -1,3 +1,5 @@
+const { defineSocketHandler } = require("../socketEvents/handler");
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { decodeWire } = require("../../../shared/networkWire");
 const sparrowCombat = require('../../../shared/combat/runtime/sparrowCombat.js');
 const inputManager = require("./inputManager");
@@ -16,19 +18,19 @@ function setupPlayerSocket(room, socket) {
   const latency = createLatencyProbe(room, socket);
   if (socket.data?.netTrace) {
     netTrace.attachRoom(room, socket);
-    room.onSocket(socket, 'debug:net-trace', (payload, ack) => {
+    room.onSocket(socket, SOCKET_EVENTS.DEBUG_NET_TRACE, defineSocketHandler((payload, ack) => {
       const ok = netTrace.acceptClientBatch(socket, payload);
       if (typeof ack === 'function') ack({ ok });
-    });
+    }));
   }
-  room.onSocket(socket, 'game:clock', (data, ack) => {
+  room.onSocket(socket, SOCKET_EVENTS.GAME_CLOCK, defineSocketHandler((data, ack) => {
     if (typeof ack === 'function') ack(sparrowCombat.timing(room));
     latency.probe();
-  });
+  }));
     // Handle player input
-  room.onSocket(socket, "game:input", (inputData) => {
+  room.onSocket(socket, SOCKET_EVENTS.GAME_INPUT, (inputData) => {
     inputData = decodeWire(inputData);
-    if (room._netTrace) netTrace.noteInput(room, socket.id);
+    if (room.netTrace) netTrace.noteInput(room, socket.id);
     if (room.status !== "finished" && room.players.has(socket.id) && Number.isFinite(inputData?.x) && Number.isFinite(inputData?.y)) {
       room.playerActivity?.gameActivity(socket, room.matchId);
     }
@@ -36,11 +38,11 @@ function setupPlayerSocket(room, socket) {
   });
 
     // Handle player actions (attacks, abilities, etc.)
-  room.onSocket(socket, "game:action", (actionData) => {
+  room.onSocket(socket, SOCKET_EVENTS.GAME_ACTION, (actionData) => {
     const player = room.players.get(socket.id);
     if (!player) return;
     stampViewRewind(room, actionData, latency);
-    if (room._netTrace) netTrace.noteAction(room, socket.id, 'game:action', actionData);
+    if (room.netTrace) netTrace.noteAction(room, socket.id, SOCKET_EVENTS.GAME_ACTION, actionData);
     if (characterCombat.ownsAction(room, player, actionData)) {
       room.handlePlayerAction(socket.id, actionData);
       return;
@@ -78,26 +80,20 @@ function setupPlayerSocket(room, socket) {
   });
 
     // Handle special attack request
-  room.onSocket(socket, "game:special", (payload = {}) => {
+  room.onSocket(socket, SOCKET_EVENTS.GAME_SPECIAL, (payload = {}) => {
     stampViewRewind(room, payload, latency);
-    if (room._netTrace) netTrace.noteAction(room, socket.id, 'game:special', payload);
+    if (room.netTrace) netTrace.noteAction(room, socket.id, SOCKET_EVENTS.GAME_SPECIAL, payload);
     room.requestSpecial(socket.id, payload);
   });
 
-  room.onSocket(socket, "deathdrop:pickup", (payload) => {
-    room._handleDeathDropPickup(socket.id, payload);
-  });
-
-    // Handle disconnection
-  room.onSocket(socket, "disconnect", () => {
-    // This will be handled by the main socket disconnect handler
-    // which calls gameHub.handlePlayerLeave
+  room.onSocket(socket, SOCKET_EVENTS.DEATHDROP_PICKUP, (payload) => {
+    room.pickupDeathDrop(socket.id, payload);
   });
 
   // The client's loading screen lifted: its scene exists and its pregame began.
   // Repeats (watchdog, reconnects) are harmless. Once the match is underway a
   // late loader becomes loaded through its input packets instead.
-  room.onSocket(socket, "game:ready", () => {
+  room.onSocket(socket, SOCKET_EVENTS.GAME_READY, () => {
     try {
       const p = room.players.get(socket.id);
       if (!p || !p.user_id || room.status !== "waiting") return;
@@ -108,7 +104,7 @@ function setupPlayerSocket(room, socket) {
         // No snapshots flow before FIGHT, so clients that loaded earlier would
         // keep this fighter hidden through the pregame without this.
         if (p.loaded) {
-          room.io.to(`game:${room.matchId}`).emit("player:loaded", { name: p.name, x: p.x, y: p.y });
+          room.broadcast(SOCKET_EVENTS.PLAYER_LOADED, { name: p.name, x: p.x, y: p.y });
         }
       }
       if (room._noteReady(p) && !room._netTestEnabled) {

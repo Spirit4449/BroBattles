@@ -1,23 +1,24 @@
-// src/client/game/characters/draven/draven.js
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { createAnimationBuilder } from "../shared/animationBuilder";
+import { perform as performSpecial } from "./special";
 import { animations } from "./anim";
 import DravenEffects from "./effects";
 import { updateInfernoHover } from "./infernoHover";
 import {
   performDravenSplashAttack,
   spawnExplosion,
-  changeDebugState,
 } from "./attack";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { takePredictedHit } from "../shared/shotPrediction";
 
-const NAME = "draven";
+const { key: NAME } = characterDefinitions.draven;
 
 class Draven extends CharacterEntityBase {
   static key = NAME;
   // Main texture key used for this character's sprite
-  static textureKey = NAME;
+  static performSpecial = performSpecial;
   // Optional per-player effects class to be used for this character
   static Effects = DravenEffects;
 
@@ -54,7 +55,7 @@ class Draven extends CharacterEntityBase {
       `${NAME}-fireball`,
       this.characterAssetPath(staticPath, "fireball.mp3"),
     );
-    if (!scene.sound.get(`${NAME}-hit`)) {
+    if (!scene.cache?.audio?.exists(`${NAME}-hit`)) {
       scene.load.audio(
         `${NAME}-hit`,
         this.characterAssetPath(staticPath, "hit.mp3"),
@@ -67,16 +68,11 @@ class Draven extends CharacterEntityBase {
     );
 
     // Ensure nearest-neighbor sampling for crisp pixel art (renderer-agnostic)
-    scene.load.on(Phaser.Loader.Events.COMPLETE, () => {
+    scene.load.once(Phaser.Loader.Events.COMPLETE, () => {
       try {
         const tex = scene.textures.get(NAME);
         if (tex && typeof tex.setFilter === "function") {
           tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
-        }
-        // Also set global defaults for this scene's game (Phaser 3.70)
-        if (scene.game && scene.game.config) {
-          scene.game.config.pixelArt = true;
-          scene.game.config.antialias = false;
         }
       } catch (_) {}
     });
@@ -84,72 +80,16 @@ class Draven extends CharacterEntityBase {
 
   static setupAnimations(scene) {
     animations(scene);
-    for (const [key, frameRate, repeat] of [["draven-explosion-red", 28, 0], ["draven-special-fx-red", 14, -1]]) {
-      if (!scene.anims.exists(key) && scene.textures.exists(key)) {
-        const names = scene.textures.get(key).getFrameNames().sort((a,b) => Number(a.match(/\d+/)?.[0]) - Number(b.match(/\d+/)?.[0]));
-        scene.anims.create({ key, frames: names.map(frame => ({ key, frame })), frameRate, repeat });
+    for (const [base, rate, repeat] of [["draven-explosion", 28, 0], ["draven-special-fx", 14, -1]]) {
+      for (const key of [base, base + "-red"]) {
+        if (scene.textures.exists(key)) createAnimationBuilder(scene, key).make(key, "", rate, repeat);
       }
-    }
-    // Create explosion animation once
-    if (!scene.anims.exists(`${NAME}-explosion`)) {
-      try {
-        const tex = scene.textures.get(`${NAME}-explosion`);
-        if (tex && typeof tex.getFrameNames === "function") {
-          let names = tex.getFrameNames();
-          if (!Array.isArray(names)) names = [];
-          // Prefer frames containing "explosion"; fallback to all frames if filter is empty
-          let filtered = names.filter((f) => /explosion/i.test(String(f)));
-          if (!filtered.length) filtered = names.slice();
-          if (filtered.length) {
-            // Keep natural order if possible (assumes TexturePacker export is already ordered)
-            scene.anims.create({
-              key: `${NAME}-explosion`,
-              frames: filtered.map((f) => ({
-                key: `${NAME}-explosion`,
-                frame: f,
-              })),
-              frameRate: 28,
-              repeat: 0,
-            });
-          }
-        }
-      } catch (_) {}
-    }
-    if (!scene.anims.exists(`${NAME}-special-fx`)) {
-      try {
-        const tex = scene.textures.get(`${NAME}-special-fx`);
-        if (tex && typeof tex.getFrameNames === "function") {
-          let names = tex.getFrameNames();
-          if (!Array.isArray(names)) names = [];
-          names.sort((a, b) => {
-            const ra = /(\d+)(?=\D*$)/.exec(String(a));
-            const rb = /(\d+)(?=\D*$)/.exec(String(b));
-            if (ra && rb) return parseInt(ra[1], 10) - parseInt(rb[1], 10);
-            return String(a).localeCompare(String(b));
-          });
-          if (names.length) {
-            scene.anims.create({
-              key: `${NAME}-special-fx`,
-              frames: names.map((f) => ({
-                key: `${NAME}-special-fx`,
-                frame: f,
-              })),
-              frameRate: 14,
-              repeat: -1,
-            });
-          }
-        }
-      } catch (_) {}
     }
   }
 
   // Called every local movement frame; Inferno is Draven's ability lock.
   static updateMovementLock(scene, player, state) {
     updateInfernoHover(scene, player, state);
-  }
-
-  static setDebugState(enabled) {
-    changeDebugState(enabled);
   }
 
   // Cast animation starts immediately; confirmed hits own impact presentation.
@@ -200,12 +140,7 @@ class Draven extends CharacterEntityBase {
   }
 
   // Draven splash attack trigger
-  handlePointerDown(attackContext = null) {
-    const context = attackContext || this.consumeAttackContext();
-    return this.performDefaultAttack(() =>
-      performDravenSplashAttack(this, context),
-    );
-  }
+  static basicAttack = performDravenSplashAttack;
 }
 
 export default Draven;

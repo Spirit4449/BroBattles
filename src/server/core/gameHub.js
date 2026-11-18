@@ -1,3 +1,5 @@
+const { cancelMatch } = require('../services/match/matchLifecycleService');
+const { SOCKET_EVENTS } = require("../../shared/net/socketEvents.js");
 // gameHub.js
 // Central hub for managing active game rooms
 
@@ -12,7 +14,7 @@
  * Create game hub controller
  * @param {GameHubDeps} deps
  */
-function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, playerActivity = null, matchResults = null }) {
+function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, playerActivity = null, matchResults = null, navigation = null }) {
   // Map of matchId -> GameRoom instance
   const activeRooms = new Map();
 
@@ -36,6 +38,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
       abuseControl,
       playerActivity,
       matchResults,
+      navigation,
     });
     activeRooms.set(matchId, room);
     playerActivity?.registerMatch(matchId, matchData.players);
@@ -61,7 +64,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
    */
   function removeGameRoom(matchId) {
     const room = activeRooms.get(matchId);
-    if (room?._resultPending) return;
+    if (room?._resultPending || matchResults?.isPending(matchId)) return;
     if (room) {
       playerActivity?.finishMatch(matchId, { endScreen: false });
       room.cleanup();
@@ -78,13 +81,13 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
   async function handlePlayerJoin(socket, matchId) {
     const room = activeRooms.get(matchId);
     if (!room) {
-      socket.emit("game:error", { message: "Game room not found", code: "ROOM_NOT_FOUND" });
+      socket.emit(SOCKET_EVENTS.GAME_ERROR, { message: "Game room not found", code: "ROOM_NOT_FOUND" });
       return false;
     }
 
     const user = socket.data.user;
     if (!user) {
-      socket.emit("game:error", { message: "Authentication required", code: "UNAUTHORIZED" });
+      socket.emit(SOCKET_EVENTS.GAME_ERROR, { message: "Authentication required", code: "UNAUTHORIZED" });
       return false;
     }
 
@@ -97,7 +100,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
         `[GameHub] Error adding player ${user.name} to room ${matchId}:`,
         error,
       );
-      socket.emit("game:error", { message: error.message, code: error.code || "JOIN_FAILED" });
+      socket.emit(SOCKET_EVENTS.GAME_ERROR, { message: error.message, code: error.code || "JOIN_FAILED" });
       return false;
     }
   }
@@ -116,26 +119,6 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
 
     try {
       await room.removePlayer(socket, user);
-      if (
-        room.getPlayerCount() === 0 ||
-        room.hasConnectedHumanPlayers?.() === false
-      ) {
-        const graceMs = Math.max(
-          0,
-          Number(room.ABANDON_MATCH_GRACE_MS) || 0,
-        );
-        setTimeout(() => {
-          const latestRoom = activeRooms.get(matchId);
-          if (!latestRoom) return;
-          if (latestRoom.hasConnectedHumanPlayers?.() === true) return;
-          if (
-            latestRoom.getStatus() === "finished" ||
-            latestRoom.getPlayerCount() === 0
-          ) {
-            removeGameRoom(matchId);
-          }
-        }, graceMs + 1000);
-      }
     } catch (error) {
       console.error(
         `[GameHub] Error removing player ${user.name} from room ${matchId}:`,
@@ -147,15 +130,12 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
   // A lobby may ready again once the old room is finished or has no humans.
   async function endEmptyMatch(matchId) {
     const room = activeRooms.get(Number(matchId));
-    if (room?._resultPending) return false;
+    if (room?._resultPending || matchResults?.isPending(matchId)) return false;
     if (room && room.status !== "finished") {
       if (room.hasConnectedHumanPlayers()) return false;
-      await room._cancelMatchAsAbandoned("No human players remain in the match");
+      await room.cancelMatchAsAbandoned("No human players remain in the match");
     } else if (!room) {
-      await db.runQuery(
-        "UPDATE matches SET status = 'cancelled' WHERE match_id = ? AND status = 'live'",
-        [matchId],
-      );
+      await cancelMatch(db, io, matchId, { liveOnly: true });
       playerActivity?.finishMatch(matchId, { endScreen: false });
     }
     return true;
@@ -187,6 +167,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
     handlePlayerLeave,
     endEmptyMatch,
     getStats,
+    dispose() { for (const room of activeRooms.values()) room.cleanup(); activeRooms.clear(); },
   };
 }
 

@@ -20,14 +20,22 @@ module.exports = (_env = {}, argv = {}) => {
   },
   entry: {
     navigation: "./src/client/navigation/index.js",
+    // Preserve the URL used by cached restriction pages.
+    banned: { import: "./src/client/pages/banned.js", filename: "scripts/banned.js" },
     site: "./src/client/site/index.js",
+    status: [
+      "./src/client/styles/ui-system.css",
+      "./src/client/styles/ui-components.css",
+      "./src/client/styles/status-pages.css",
+    ],
+    battleBoot: "./src/client/game/boot/battleBoot.js",
     game: "./src/client/pages/game.js",
     mapEditor: "./src/client/pages/mapEditor.js",
+    lobbyPaint: "./src/client/lobby/lobbyPaint.js",
     index: "./src/client/pages/lobby.js",
     signup: "./src/client/pages/signup.js",
     login: "./src/client/pages/login.js",
     admin: "./src/client/pages/admin.js",
-    profile: "./src/client/pages/profile.js",
   },
   output: {
     chunkLoadingGlobal: "webpackChunkBroBattles",
@@ -48,16 +56,10 @@ module.exports = (_env = {}, argv = {}) => {
   },
   devtool: mode === "production" ? false : "inline-source-map",
   devServer: {
-    port: 3001,
     devMiddleware: {
       etag: "strong",
       cacheControl: "public, max-age=0, must-revalidate",
     },
-    static: {
-      directory: path.resolve(__dirname, "dist"),
-      watch: true,
-    },
-    historyApiFallback: true,
   },
   stats: {
     all: false, // disable everything
@@ -98,7 +100,9 @@ module.exports = (_env = {}, argv = {}) => {
   plugins: [
     new (require("./scripts/build/buildVersion.cjs").BuildVersionPlugin)(),
     new (require("./scripts/build/pageRuntime.cjs"))(),
-    ...(mode === "production" ? [new (require("./scripts/build/versionHtmlAssets.cjs"))()] : []),
+    mode === "production"
+      ? new (require("./scripts/build/versionHtmlAssets.cjs"))()
+      : new (require("./scripts/build/pruneDevBundles.cjs"))(),
     new MiniCssExtractPlugin({
       filename: "bundles/[name].css",
       chunkFilename: "bundles/[id].css",

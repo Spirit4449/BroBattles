@@ -1,6 +1,7 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { isPlaced } = require('../../../shared/combat/targetable.js');
 const { participantId, applyParticipantKnockback } = require('./participants');
-const { characterBody } = require('../../../shared/physics/duelGeometry');
+const { characterBody } = require('../../../shared/physics/characterBody');
 const { isDetachedProjectile } = require('../../../shared/combat/runtime/attackRuntimes/projectileLifecycle.js');
 const { STOMP_RADIUS, STOMP_INTERRUPT_MS } = require('../../../shared/combat/matchConfig.js');
 
@@ -38,17 +39,17 @@ function resolveStomp(room, player, now = Date.now()) {
     if (target.effects) target.effects.dravenInfernoUntil = 0;
     target.animation = 'falling';
     // Released projectiles continue; attached swings and unreleased casts are interrupted.
-    room._activeAttacks = (room._activeAttacks || []).filter(a =>
+    room.activeAttacks = (room.activeAttacks || []).filter(a =>
       a.attackerParticipantId !== id || isDetachedProjectile(a));
-    if (room._sparrow) room._sparrow.pending = room._sparrow.pending.filter(c => c.ownerId !== id);
-    if (room._ninja) room._ninja.pending = room._ninja.pending.filter(c => c.owner !== id);
+    if (room.sparrowCombatState) room.sparrowCombatState.pending = room.sparrowCombatState.pending.filter(c => c.ownerId !== id);
+    if (room.ninjaCombatState) room.ninjaCombatState.pending = room.ninjaCombatState.pending.filter(c => c.owner !== id);
     const strength = 1 - 0.35 * distance / STOMP_RADIUS;
     applyParticipantKnockback(room, target, { source: player.name, cause: 'stomp', radial: true,
       amountX: (Math.sign(tx - x) || (player.flip ? -1 : 1)) * 299 * strength,
       amountY: -182 * strength });
     interrupted.push(target.name);
   }
-  room.io.to(`game:${room.matchId}`).emit('player:stomp', {
+  room.broadcast(SOCKET_EVENTS.PLAYER_STOMP, {
     username: player.name, dashSeq: player.dashSeq, x, y,
     fallDistance: Number.isFinite(player._stompStartY) ? Math.max(0, player.y - player._stompStartY) : 0, radius: STOMP_RADIUS, interrupted,
   });

@@ -1,3 +1,4 @@
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 // Owns one lobby's matchmaking session: queue context, the overlay's roster
 // preview, the found-match lock and the timers that acknowledge a match or
 // recover a stale queue. All browser/socket collaborators are injected so the
@@ -111,7 +112,7 @@ export function createMatchmakingClient({
     state.healthPending = true;
     const generation = state.healthGeneration;
     const requestedMatchId = state.matchedId;
-    socket.timeout(QUEUE_REQUEST_TIMEOUT_MS).emit("queue:status", (error, status) => {
+    socket.timeout(QUEUE_REQUEST_TIMEOUT_MS).emit(SOCKET_EVENTS.QUEUE_STATUS, (error, status) => {
       if (generation !== state.healthGeneration) return;
       state.healthPending = false;
       if (state.matchedId !== requestedMatchId) return;
@@ -121,10 +122,10 @@ export function createMatchmakingClient({
         navigate(`/game/${status.matchId}`);
       } else if (status?.state === "matched") {
         lockCancel(status.matchId);
-        socket.emit("ready:ack", { matchId: status.matchId });
+        socket.emit(SOCKET_EVENTS.READY_ACK, { matchId: status.matchId });
       } else if (status?.state === "missing") {
         // Let the server reset party readiness and broadcast recovery to everyone.
-        socket.emit("queue:leave");
+        socket.emit(SOCKET_EVENTS.QUEUE_LEAVE);
         state.matchedId = null;
       }
     });
@@ -134,7 +135,7 @@ export function createMatchmakingClient({
     if (state.matchedId || view.isCancelDisabled()) return;
     view.setCancelDisabled(true);
     const generation = state.healthGeneration;
-    socket.timeout(QUEUE_REQUEST_TIMEOUT_MS).emit("queue:leave", (error, result) => {
+    socket.timeout(QUEUE_REQUEST_TIMEOUT_MS).emit(SOCKET_EVENTS.QUEUE_LEAVE, (error, result) => {
       if (state.matchedId || generation !== state.healthGeneration) return;
       if (result?.cancelled === false && result.matchId) {
         lockCancel(result.matchId);
@@ -166,9 +167,9 @@ export function createMatchmakingClient({
     renderCurrent();
     view.bindControls({
       onCancel: requestCancel,
-      onFillBots: () => socket.emit("queue:fill-bots"),
+      onFillBots: () => socket.emit(SOCKET_EVENTS.QUEUE_FILL_BOTS),
       onFillBotsUnlimited: () =>
-        socket.emit("queue:fill-bots", { mode: "unlimited-health", botHealthOverride: 9999999 }),
+        socket.emit(SOCKET_EVENTS.QUEUE_FILL_BOTS, { mode: "unlimited-health", botHealthOverride: 9999999 }),
     });
     view.setCancelDisabled(!!state.matchedId);
     if (!state.healthTimer) state.healthTimer = timers.setInterval(checkHealth, QUEUE_HEALTH_INTERVAL_MS);
@@ -198,7 +199,7 @@ export function createMatchmakingClient({
     state.total = selection.totalPlayers(requested);
     state.players = party.players().slice(0, state.total);
     state.playersSig = rosterSignature(state.players);
-    socket.emit("queue:join", {
+    socket.emit(SOCKET_EVENTS.QUEUE_JOIN, {
       selection: requested,
       modeId: requested.modeId,
       modeVariantId: requested.modeVariantId,
@@ -209,7 +210,7 @@ export function createMatchmakingClient({
   }
 
   function leaveSolo() {
-    socket.emit("queue:leave");
+    socket.emit(SOCKET_EVENTS.QUEUE_LEAVE);
     hide();
     state.queue = null;
   }
@@ -218,7 +219,7 @@ export function createMatchmakingClient({
     state.suppressed = true;
     resetQueue();
     hide({ immediate: true });
-    socket.emit("lobby:heartbeat");
+    socket.emit(SOCKET_EVENTS.LOBBY_HEARTBEAT);
     onReadyReset();
   }
 
@@ -229,7 +230,7 @@ export function createMatchmakingClient({
   const blockedBeforeMatch = () => state.suppressed || !!state.matchedId;
 
   const handlers = {
-    "party:matchmaking:start"({ partyId, selection: requested, botSlots }) {
+    [SOCKET_EVENTS.PARTY_MATCHMAKING_START]({ partyId, selection: requested, botSlots }) {
       if (blockedBeforeMatch() || isForOtherParty(partyId)) return;
       const normalized = selection.normalize(requested || selection.current());
       if (Array.isArray(botSlots)) party.setBotSlots?.(botSlots);
@@ -241,7 +242,7 @@ export function createMatchmakingClient({
       renderCurrent(normalized);
     },
 
-    "queue:joined"(payload) {
+    [SOCKET_EVENTS.QUEUE_JOINED](payload) {
       if (blockedBeforeMatch()) return;
       log.log("[join-debug] queue:joined", debugMeta({
         payloadPartyId: payload?.partyId ?? null,
@@ -257,7 +258,7 @@ export function createMatchmakingClient({
     },
 
     // When a match is found, hold the success state before acknowledging ready.
-    "match:found"(payload) {
+    [SOCKET_EVENTS.MATCH_FOUND](payload) {
       if (state.suppressed || !payload?.matchId) return;
       lockCancel(payload.matchId);
       show();
@@ -278,13 +279,13 @@ export function createMatchmakingClient({
       renderCurrent(normalized);
       if (state.readyAckTimer) timers.clearTimeout(state.readyAckTimer);
       state.readyAckTimer = timers.setTimeout(() => {
-        socket.emit("ready:ack", { matchId: payload.matchId });
+        socket.emit(SOCKET_EVENTS.READY_ACK, { matchId: payload.matchId });
         state.readyAckTimer = null;
       }, successHoldRemaining());
     },
 
     // When the match is ready to start, redirect to the game.
-    async "match:gameReady"(payload) {
+    async [SOCKET_EVENTS.MATCH_GAME_READY](payload) {
       if (state.suppressed) return;
       try {
         const { matchId } = payload;
@@ -306,7 +307,7 @@ export function createMatchmakingClient({
       }
     },
 
-    "queue:error"(err) {
+    [SOCKET_EVENTS.QUEUE_ERROR](err) {
       if (state.matchedId || err?.code === "MATCH_FOUND") return;
       log.error("[join-debug] queue:error", debugMeta({ message: err?.message || null, raw: err || null }));
       hide();
@@ -320,12 +321,12 @@ export function createMatchmakingClient({
       onReadyReset();
     },
 
-    "queue:fill-bots:error"(err) {
+    [SOCKET_EVENTS.QUEUE_FILL_BOTS_ERROR](err) {
       notify("Could not add bots", err?.message || "Please try adding bots again.", "error");
     },
 
     // Match cancelled (e.g., ready timeout) -> hide overlay.
-    "match:cancelled"(data) {
+    [SOCKET_EVENTS.MATCH_CANCELLED](data) {
       if (state.matchedId && Number(data?.matchId) !== state.matchedId) return;
       log.warn("[join-debug] match:cancelled", debugMeta({ reason: data?.reason || null }));
       if (data?.reason && !view.isHidden()) {
@@ -338,7 +339,7 @@ export function createMatchmakingClient({
     },
 
     // Progressive matching updates: incrementally update the found count.
-    "match:progress"(data) {
+    [SOCKET_EVENTS.MATCH_PROGRESS](data) {
       if (blockedBeforeMatch()) return;
       const target = selection.normalize(state.queue?.selection || selection.current());
       const incoming = selection.normalize(data?.selection || {

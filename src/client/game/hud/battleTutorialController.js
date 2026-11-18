@@ -1,18 +1,23 @@
+import { eventKeyCode, keyLabel } from "../../site/keyBindings.mjs";
+import { bindingEventCode } from "../../site/controlsGuide.mjs";
+import { getSettings, subscribeSettings } from "../../site/preferences";
+import { replayClass } from "../../ui/domMotion";
+import { worldToPage } from "../scene/screenSpace";
+import { clamp } from "../../../shared/math.js";
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import { escapeHtml } from "../../../shared/site/html.cjs";
-const TUTORIAL_MATCH_KEY = "bb_tutorial_first_match_v1";
+import { BATTLE_TUTORIAL_MATCH_KEY } from "../../../shared/storageKeys.js";
 const TIP_REST_MS = 5000;
 const ACTION_LIFETIME_MS = 4800;
 const TOP_LIFETIME_MS = 4200;
 const MAX_STANDARD_SHOWS = 2;
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
 
 export function createBattleTutorialController({
   socket,
   getGameData,
   getScene,
+  poisonState,
   getPlayer,
   getPlayerState,
   getNetworkInputState,
@@ -32,7 +37,9 @@ export function createBattleTutorialController({
   let routeEl = null;
   let routeLine = null;
   let listenersBound = false;
-  let inputScheme = "wasd";
+  let inputScheme = "primary";
+  let bindings = getSettings().keys;
+  let stopSettings;
   let pointerDownAt = 0;
   let pointerButton = null;
   let quickAttackCount = 0;
@@ -137,29 +144,10 @@ export function createBattleTutorialController({
   }
 
   function keysFor(id, wallSide = null) {
-    if (id === "duck") {
-      return inputScheme === "arrows"
-        ? [{ label: "↓", codes: ["ArrowDown"] }]
-        : [{ label: "S", codes: ["KeyS"] }];
-    }
-    if (id === "wallJump") {
-      const awayLeft = wallSide === "right";
-      return inputScheme === "arrows"
-        ? [
-            { label: "↑", codes: ["ArrowUp"] },
-            {
-              label: awayLeft ? "←" : "→",
-              codes: [awayLeft ? "ArrowLeft" : "ArrowRight"],
-            },
-          ]
-        : [
-            { label: "W", codes: ["KeyW"] },
-            {
-              label: awayLeft ? "A" : "D",
-              codes: [awayLeft ? "KeyA" : "KeyD"],
-            },
-          ];
-    }
+    const key = slot => ({ label: keyLabel(bindings[slot]), codes: [bindingEventCode(bindings[slot])] });
+    const move = slot => key(inputScheme === "arrows" ? slot + "Alt" : slot);
+    if (id === "duck") return [move("down")];
+    if (id === "wallJump") return [move("up"), move(wallSide === "right" ? "left" : "right")];
     if (id === "attack") {
       return [
         {
@@ -167,7 +155,7 @@ export function createBattleTutorialController({
           codes: ["Mouse0"],
           icon: "/assets/icons/mouse_left.webp",
         },
-        { label: "J", codes: ["KeyJ"] },
+        key("attack"),
       ];
     }
     if (id === "special") {
@@ -177,7 +165,7 @@ export function createBattleTutorialController({
           codes: ["Mouse2"],
           icon: "/assets/icons/mouse_right.webp",
         },
-        { label: "I", codes: ["KeyI"] },
+        key("special"),
       ];
     }
     if (id === "aim") {
@@ -225,8 +213,8 @@ export function createBattleTutorialController({
     actionEl.classList.remove("is-perfect", "is-leaving");
     const wasHidden = root.classList.contains("hidden");
     root.classList.remove("hidden");
-    if (wasHidden) void actionEl.offsetWidth;
-    actionEl.classList.add("is-visible");
+    if (wasHidden) replayClass(actionEl, "is-visible");
+    else actionEl.classList.add("is-visible");
     return true;
   }
 
@@ -244,8 +232,8 @@ export function createBattleTutorialController({
     topEl.classList.remove("is-leaving");
     const wasHidden = root.classList.contains("hidden");
     root.classList.remove("hidden");
-    if (wasHidden) void topEl.offsetWidth;
-    topEl.classList.add("is-visible");
+    if (wasHidden) replayClass(topEl, "is-visible");
+    else topEl.classList.add("is-visible");
     return true;
   }
 
@@ -284,8 +272,13 @@ export function createBattleTutorialController({
     else leave();
   }
 
-  function updateKeyHighlights() {
+  function updateKeyHighlights(refreshLabels = false) {
     if (activeTip?.kind !== "action") return;
+    if (refreshLabels) {
+      const row = actionEl.querySelector(".tutorial-key-row");
+      if (row) row.outerHTML = keysRowHtml(activeTip.id, activeTip.wallSide);
+      return;
+    }
     actionEl.querySelectorAll("[data-codes]").forEach((key) => {
       const codes = String(key.dataset.codes || "").split(",");
       key.classList.toggle(
@@ -293,30 +286,6 @@ export function createBattleTutorialController({
         codes.some((code) => pressed.has(code)),
       );
     });
-    if (activeTip.id === "wallJump") {
-      const row = actionEl.querySelector(".tutorial-key-row");
-      if (row) row.outerHTML = keysRowHtml("wallJump", activeTip.wallSide);
-    }
-  }
-
-  function screenPoint(worldX, worldY) {
-    const scene = getScene?.();
-    const camera = scene?.cameras?.main;
-    const canvas = scene?.game?.canvas;
-    if (!camera || !canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX =
-      rect.width / Math.max(1, Number(scene.scale?.width) || rect.width);
-    const scaleY =
-      rect.height / Math.max(1, Number(scene.scale?.height) || rect.height);
-    return {
-      x:
-        rect.left +
-        (camera.x + (worldX - camera.worldView.x) * camera.zoom) * scaleX,
-      y:
-        rect.top +
-        (camera.y + (worldY - camera.worldView.y) * camera.zoom) * scaleY,
-    };
   }
 
   function currentPowerup(id) {
@@ -340,7 +309,7 @@ export function createBattleTutorialController({
       anchor = { x: Number(powerup.x), y: Number(powerup.y) - 6 };
     }
     if (!anchor) return;
-    const point = screenPoint(Number(anchor.x) || 0, Number(anchor.y) || 0);
+    const point = worldToPage(getScene?.(), Number(anchor.x) || 0, Number(anchor.y) || 0);
     if (!point) return;
     const width = actionEl.offsetWidth || 190;
     const height = actionEl.offsetHeight || 62;
@@ -359,7 +328,7 @@ export function createBattleTutorialController({
     if (activeTip.id !== "powerup") return;
     markerEl.style.transform = `translate3d(${Math.round(point.x - 23)}px, ${Math.round(point.y - 23)}px, 0)`;
     markerEl.classList.add("is-visible");
-    const playerPoint = screenPoint(
+    const playerPoint = worldToPage(getScene?.(),
       Number(player?.x) || 0,
       Number(player?.y) || 0,
     );
@@ -389,22 +358,23 @@ export function createBattleTutorialController({
     )
       return;
     pressed.add(event.code);
-    if (event.code.startsWith("Arrow")) inputScheme = "arrows";
-    if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) {
-      inputScheme = "wasd";
-    }
-    if (event.code === "KeyJ") {
+    const code = eventKeyCode(event);
+    const previousScheme = inputScheme;
+    const directions = ["left", "right", "up", "down"];
+    if (directions.some(slot => bindings[slot + "Alt"] === code)) inputScheme = "arrows";
+    if (directions.some(slot => bindings[slot] === code)) inputScheme = "primary";
+    if (code === bindings.attack) {
       lastAttackAt = performance.now();
       fightBackPending = false;
       markComplete("attack", true);
     }
-    if (event.code === "KeyI") {
+    if (code === bindings.special) {
       lastSpecialAt = performance.now();
       if ((getPlayerState?.()?.superRatio || 0) >= 1) {
         markComplete("special", true);
       }
     }
-    updateKeyHighlights();
+    updateKeyHighlights(inputScheme !== previousScheme);
   }
 
   function onKeyUp(event) {
@@ -473,12 +443,17 @@ export function createBattleTutorialController({
   function bindListeners() {
     if (listenersBound) return;
     listenersBound = true;
+    bindings = getSettings().keys;
+    stopSettings = subscribeSettings(settings => {
+      bindings = settings.keys;
+      updateKeyHighlights(true);
+    });
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("keyup", onKeyUp, true);
     window.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("pointerup", onPointerUp, true);
-    socket?.on?.("powerup:collected", onPowerupCollected);
-    socket?.on?.("game:chat:message", onGameChatMessage);
+    socket?.on?.(SOCKET_EVENTS.POWERUP_COLLECTED, onPowerupCollected);
+    socket?.on?.(SOCKET_EVENTS.GAME_CHAT_MESSAGE, onGameChatMessage);
   }
 
   function initialize() {
@@ -487,9 +462,9 @@ export function createBattleTutorialController({
     if (!data?.isGuest || !matchId) return false;
     let tutorialMatch = "";
     try {
-      tutorialMatch = localStorage.getItem(TUTORIAL_MATCH_KEY) || "";
+      tutorialMatch = localStorage.getItem(BATTLE_TUTORIAL_MATCH_KEY) || "";
       if (!tutorialMatch) {
-        localStorage.setItem(TUTORIAL_MATCH_KEY, matchId);
+        localStorage.setItem(BATTLE_TUTORIAL_MATCH_KEY, matchId);
         tutorialMatch = matchId;
       }
     } catch (_) {
@@ -541,7 +516,7 @@ export function createBattleTutorialController({
       hideActive({ complete: true, success: true });
       return true;
     }
-    if (activeTip.id === "wallJump") {
+    {
       const seq = Number(network.movementFxSeq) || 0;
       if (
         seq !== lastMovementFxSeq &&
@@ -683,7 +658,7 @@ export function createBattleTutorialController({
     const worldHeight =
       Number(scene?.physics?.world?.bounds?.height) || 1000;
     const poisonY = Number(
-      scene?._smoothPoisonY ?? scene?._poisonWaterY ?? worldHeight + 60,
+      poisonState?.smoothY ?? poisonState?.targetY ?? worldHeight + 60,
     );
     const gas = {
       visible: poisonY < worldHeight + 5,
@@ -721,12 +696,13 @@ export function createBattleTutorialController({
 
   function destroy() {
     enabled = false;
+    stopSettings?.();
     window.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("keyup", onKeyUp, true);
     window.removeEventListener("pointerdown", onPointerDown, true);
     window.removeEventListener("pointerup", onPointerUp, true);
-    socket?.off?.("powerup:collected", onPowerupCollected);
-    socket?.off?.("game:chat:message", onGameChatMessage);
+    socket?.off?.(SOCKET_EVENTS.POWERUP_COLLECTED, onPowerupCollected);
+    socket?.off?.(SOCKET_EVENTS.GAME_CHAT_MESSAGE, onGameChatMessage);
     listenersBound = false;
     root?.remove?.();
     root = null;

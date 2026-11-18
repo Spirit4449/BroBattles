@@ -1,18 +1,12 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
 const physics = require('../src/shared/physics/movementPhysics.json');
 const { dashDirection, acceptDash } = require('../src/shared/physics/dash');
 const playerAudio = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/playerAudio.js'), 'utf8'), {
-  babelrc: false, configFile: false, presets: [['@babel/preset-env', {targets:{node:'current'}}]],
-}).code, {exports: playerAudio});
+loadClientModule(require.resolve('../src/client/game/audio/playerAudio.js'), {exports: playerAudio});
 const exported = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/dash.js'), 'utf8'), {
-  babelrc: false, configFile: false, presets: [['@babel/preset-env', {targets:{node:'current'}}]],
-}).code, { exports: exported, require: path => path.endsWith('.json') ? physics : path.includes('sweptCollision') ? require('../src/shared/physics/sweptCollision') : path.includes('playerAudio') ? playerAudio : {dashDirection}, Date });
+loadClientModule(require.resolve('../src/client/game/scene/dash.js'), { exports: exported, require: path => path.endsWith('.json') ? physics : path.includes('sweptCollision') ? require('../src/shared/physics/sweptCollision') : path.includes('playerAudio') ? playerAudio : {dashDirection}, Date });
 const scene = { textures:{exists:()=>false} };
 function player() {
   return { visible:true, flipX:false, body:{allowGravity:true, velocity:{x:0,y:-100}, blocked:{}},
@@ -70,6 +64,57 @@ test('an accepted dash publishes its real movement and clears wall-slide state',
   assert.equal(state.wallSide, null);
   assert.ok(state.vx < 0 && state.vy < 0);
   assert.equal(state.loaded, true);
+});
+
+test('replacing the local fighter releases the previous movement and HUD listeners', t => {
+  const { createLocalPlayerFixture } = require('./helpers/localPlayerFixture');
+  const f = createLocalPlayerFixture();
+  t.after(() => f.destroy());
+  const world = f.scene.physics.world;
+  const worldListeners = world.listenerCount('worldstep');
+  const hudListeners = f.scene.events.listenerCount('postupdate');
+  assert.ok(worldListeners > 0 && hudListeners > 0);
+  f.api.createPlayer(f.scene, { username: 'Replacement', character: 'ninja', opponentPlayers: {} });
+  assert.equal(world.listenerCount('worldstep'), worldListeners);
+  assert.equal(f.scene.events.listenerCount('postupdate'), hudListeners);
+  f.destroy();
+  assert.equal(world.listenerCount('worldstep'), 0);
+  assert.equal(f.scene.events.listenerCount('postupdate'), 0);
+});
+
+test('a replacement fighter starts fresh and ignores callbacks from the retired fighter', t => {
+  const { EventEmitter } = require('node:events');
+  const { createLocalPlayerFixture } = require('./helpers/localPlayerFixture');
+  const f = createLocalPlayerFixture();
+  const [oldHooks] = f.controllerHooks;
+  f.press('left'); f.press('dash'); f.frame();
+  assert.ok(f.api.getNetworkInputState().vx < 0);
+  f.api.setPowerupMobility(0, 0);
+  f.api.setPowerupInvisible(true);
+  f.api.setExternalControlLockUntil(100000);
+  oldHooks.setCanAttack(false);
+  oldHooks.setIsAttacking(true);
+  f.api.setChatInputActive(true);
+
+  const nextScene = { ...f.scene, events: new EventEmitter() };
+  t.after(() => nextScene.events.emit('shutdown'));
+  f.api.createPlayer(nextScene, { username: 'Replacement', character: 'ninja', opponentPlayers: {} });
+  assert.equal(f.api.getNetworkInputState().vx, 0);
+  assert.equal(f.api.getNetworkInputState().loaded, false);
+  assert.equal(f.api.isChatInputActive(), false);
+  const replacement = f.api.player;
+  replacement.setVisible(true);
+  replacement.body.reset(400, 300);
+  f.scene.events.emit('shutdown');
+  assert.equal(f.api.player, replacement);
+  oldHooks.setCanAttack(false);
+  oldHooks.setIsAttacking(true);
+  assert.equal(oldHooks.tryConsume(), false);
+  assert.equal(f.controllerHooks[1].tryConsume(), true);
+  f.press('left'); f.press('dash');
+  f.api.handlePlayerMovement(nextScene);
+  assert.equal(f.api.getNetworkInputState().animation, 'dashing');
+  assert.notEqual(replacement.alpha, f.player.alpha);
 });
 
 test('normal movement and a completed dash preserve boosted vertical speed within the shared cap', t => {
@@ -358,16 +403,14 @@ test('client and bots share faster horizontal launches while vertical components
     assert.equal(cap.x, physics.dashHorizontalSpeed);
     assert.equal(cap.y, straightDown ? physics.dashDownSpeed : physics.dashMaxSpeed);
     const bot = { isAlive: true, grounded: false };
-    require('../src/server/core/bots/physics').startDash(bot, direction, 1000);
+    require('../src/server/core/physics/bodySolver').startDash(bot, direction, 1000);
     assert.equal(bot.vx, p.body.velocity.x);
     assert.equal(bot.vy, p.body.velocity.y);
   }
 });
 
 const knockbackVfx = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/knockbackTrail.js'), 'utf8'), {
-  babelrc: false, configFile: false, presets: [['@babel/preset-env', {targets:{node:'current'}}]],
-}).code, { exports: knockbackVfx });
+loadClientModule(require.resolve('../src/client/game/scene/knockbackTrail.js'), { exports: knockbackVfx });
 
 test('knockback trails follow horizontal and vertical movement, skip teleports, and clean up', () => {
   const f = dashVfxFixture();

@@ -1,111 +1,23 @@
+import { BROWSER_EVENTS } from "../lib/browserEvents.js";
+import { BROWSER_GLOBALS } from "../lib/globals.cjs";
+import { createRouteRecovery } from "./routeRecovery.js";
+import { createRouteStyles, ensureRouteLoaderFont } from "./routeStyles.js";
+import { createTransitionOverlay } from "./transitionOverlay.js";
+import { createRoutePrefetch, fetchRoute, gameRoutePattern, prefetchGameData, supported } from "./routePrefetch.js";
+import { executeScript } from "./scriptRunner.js";
 import { createPageScope } from './pageScope';
-import { createBattlePreloader, getTemplateResources } from './preload';
+import { createBattlePreloader } from './preload';
 import { createLobbyReturnController } from './lobbyReturn';
 import { createLobbyAudio } from './lobbyAudio.mjs';
 import { getSettings, subscribeSettings } from '../site/preferences';
 
-// Retain the decoded transition artwork for the lifetime of navigation, outside
-// page scopes and speculative asset warming. Start before either page boots.
-const transitionArtwork = window.Image ? new window.Image() : null;
-let transitionArtworkReady = !transitionArtwork;
-let transitionArtworkFailed = false;
-let transitionArtworkPromise;
-function prepareTransitionArtwork() {
-  if (transitionArtworkReady || transitionArtworkPromise) return transitionArtworkPromise;
-  transitionArtworkPromise = new Promise(resolve => {
-    let settled = false;
-    const finish = ready => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      transitionArtwork.onload = transitionArtwork.onerror = null;
-      transitionArtworkReady = ready;
-      if (!ready) transitionArtworkFailed = true;
-      resolve(ready);
-    };
-    // A failed image must not trap players on the outgoing screen forever.
-    const timeout = setTimeout(() => finish(false), 12000);
-    transitionArtwork.fetchPriority = 'high';
-    transitionArtwork.onload = () => {
-      if (transitionArtwork.decode) transitionArtwork.decode().then(() => finish(true), () => finish(false));
-      else finish(true);
-    };
-    transitionArtwork.onerror = () => finish(false);
-    transitionArtwork.src = '/assets/loadingscreen.webp';
-  }).then(ready => {
-    if (!ready) transitionArtworkPromise = null;
-    return ready;
-  });
-  return transitionArtworkPromise;
-}
-prepareTransitionArtwork();
-// Only the first attempt holds the outgoing screen. After a failure the image
-// retries in the background so a broken asset cannot stall every transition.
-function awaitTransitionArtwork() {
-  if (transitionArtworkReady) return null;
-  const pending = prepareTransitionArtwork();
-  return transitionArtworkFailed ? null : pending;
-}
-
-const bindings = 'window,document,location,setTimeout,clearTimeout,setInterval,clearInterval,requestAnimationFrame,cancelAnimationFrame,fetch,Audio,ResizeObserver,MutationObserver,IntersectionObserver';
-const supported = url => url.origin === location.origin && /^(\/$|\/party\/[^/]+\/?$|\/game\/[^/]+\/?$)/.test(url.pathname);
 let currentScope;
 let sequence = 0;
-let transition;
-let transitionShownAt = 0;
-let transitionEntrance = Promise.resolve();
-let transitionExitTimer;
-let transitionExitAnimation;
-let transitionPresentation = 0;
-const transitionMinimumMs = 1000;
-const lobbyReturnMinimumMs = 300;
-const transitionFadeMs = 120;
-function cancelTransitionExit() {
-  ++transitionPresentation;
-  clearTimeout(transitionExitTimer);
-  transitionExitAnimation?.cancel();
-  transitionExitAnimation = null;
-}
-function beginTransitionPresentation() {
-  cancelTransitionExit();
-  transitionShownAt = Date.now();
-  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-  const entrance = !reducedMotion && transition.animate?.(
-    [{ opacity: 0 }, { opacity: 1 }], { duration: transitionFadeMs, easing: 'ease-out' });
-  transitionEntrance = entrance ? entrance.finished.catch(() => {}) : Promise.resolve();
-}
-function dismissTransition() {
-  if (!transition) return;
-  cancelTransitionExit();
-  const panel = transition;
-  const presentation = transitionPresentation;
-  const minimumMs = panel.dataset.lobbyReturn === 'true'
-    ? lobbyReturnMinimumMs : transitionMinimumMs;
-  transitionExitTimer = setTimeout(async () => {
-    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-    transitionExitAnimation = !reducedMotion && panel.animate?.(
-      [{ opacity: 1 }, { opacity: 0 }], { duration: transitionFadeMs, easing: 'ease-in', fill: 'forwards' });
-    if (transitionExitAnimation) await transitionExitAnimation.finished.catch(() => {});
-    if (presentation !== transitionPresentation || panel !== transition) return;
-    panel.remove();
-    transition = null;
-    transitionExitAnimation = null;
-  }, Math.max(240, minimumMs - (Date.now() - transitionShownAt)));
-}
-let readinessTimer;
-let readinessTicket = null;
-const readinessTimeoutMs = 45000;
-// Fail only when a screen stops advancing, so a slow but progressing load
-// is never abandoned.
-function armReadinessTimer(ticket) {
-  clearTimeout(readinessTimer);
-  readinessTicket = ticket;
-  readinessTimer = setTimeout(() => { if (ticket === sequence) fail(new Error('Screen readiness timed out')); }, readinessTimeoutMs);
-}
-function clearReadinessTimer() {
-  clearTimeout(readinessTimer);
-  readinessTicket = null;
-}
+const presentation = createTransitionOverlay({ onRetry: () => recovery.retryFailedRoute() });
+const {
+  awaitTransitionArtwork, showTransition, showLobbyLoadingBar, showBattleLoadingBar,
+  updateRouteLoadingBar, cancelTransitionExit, dismissTransition,
+} = presentation;
 let audioContext;
 let pendingFetch;
 let cleanupPromise = Promise.resolve();
@@ -119,127 +31,17 @@ function retireCurrentPage() {
   return cleanupPromise;
 }
 
-// A prefetched response stands in for the first attempt, so retry timing and
-// limits are unchanged when it fails.
-async function fetchRoute(url, signal, retryConnectionFailure, prefetched) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      if (attempt === 0 && prefetched) return await prefetched;
-      return await fetch(url, { credentials: 'same-origin', signal });
-    } catch (error) {
-      if (!retryConnectionFailure || attempt >= 2 || signal.aborted || error.name !== 'TypeError') throw error;
-      // A brief server restart or connection drop should not strand a finished match.
-      await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
-      if (signal.aborted) throw error;
-    }
-  }
-}
 let mounted = true;
-let routeFailed = false;
-let recoveryRequest;
-let retryAvailableAt = 0;
-let retryTimer;
-const unavailableMatchCodes = new Set(['MATCH_UNAVAILABLE', 'MATCH_ENDED']);
-let failureCode;
 let lobbyNavigator;
-let routeProgress = 0;
 const preloader = createBattlePreloader();
 const lobbyReturn = createLobbyReturnController({ navigate, getRouteVersion: () => sequence, getScopeId: () => currentScope?.id, onStatusReady: () => updateRouteLoadingBar(25) });
-let routeHints = [];
-const gameRoutePattern = /^\/game\/([^/]+)\/?$/;
-function requestGameData(matchId, signal) {
-  const request = fetch('/gamedata', {
-    method: 'POST', credentials: 'same-origin', signal,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ matchId: Number(matchId) }),
-  }).then(async response => ({ ok: response.ok, body: await response.json() }));
-  request.catch(() => {});
-  return request;
-}
-// Single-use route responses requested before navigation commits to them:
-// the game page and its match data at match start, or the lobby during the
-// post-battle /status lookup. Neither request changes server state.
-const routePrefetchLifetimeMs = 15000;
-let routePrefetch = null;
-function discardRoutePrefetch() {
-  routePrefetch?.controller.abort();
-  routePrefetch = null;
-}
-function prefetchRoute(target) {
-  const url = new URL(target, location.href);
-  if (!supported(url) || routePrefetch?.href === url.href) return;
-  discardRoutePrefetch();
-  const controller = new AbortController();
-  const page = fetch(url.href, { credentials: 'same-origin', signal: controller.signal });
-  page.catch(() => {});
-  const match = url.pathname.match(gameRoutePattern);
-  routePrefetch = {
-    href: url.href, controller, page, at: Date.now(),
-    gameData: match ? requestGameData(match[1], controller.signal) : null,
-  };
-}
-function takeRoutePrefetch(href, signal) {
-  const entry = routePrefetch;
-  routePrefetch = null;
-  if (!entry) return null;
-  if (entry.href !== href || Date.now() - entry.at > routePrefetchLifetimeMs) {
-    entry.controller.abort();
-    return null;
-  }
-  signal.addEventListener('abort', () => entry.controller.abort(), { once: true });
-  return entry;
-}
-// The game bundle consumes its match data once, from the route that mounted it.
-let gameDataHandoff = null;
-// A direct load or refresh of /game/:id would otherwise request its match data
-// only after Phaser and the game bundle have downloaded and run. /gamedata
-// changes no server state, so start it with the document instead.
-const initialGameMatch = location.pathname.match(gameRoutePattern);
-if (initialGameMatch) {
-  gameDataHandoff = { ticket: sequence, matchId: initialGameMatch[1], request: requestGameData(initialGameMatch[1]) };
-}
-function consumeGameData(matchId) {
-  const entry = gameDataHandoff;
-  gameDataHandoff = null;
-  return entry && entry.ticket === sequence && entry.matchId === String(matchId) ? entry.request : null;
-}
-const styleLoadsByNode = new WeakMap();
-const styleOwners = new WeakMap();
-function clearRouteHints() {
-  routeHints.forEach(link => link.remove());
-  routeHints = [];
-}
-function preloadRouteScripts(html) {
-  for (const url of getTemplateResources(html).filter(url => /\.js(?:\?|$)/.test(url))) {
-    if (url.includes('phaser-arcade-physics') && window.Phaser) continue;
-    const link = document.createElement('link');
-    link.rel = 'preload';
-    link.as = 'script';
-    link.href = url;
-    document.head.append(link);
-    routeHints.push(link);
-  }
-}
+const routeRequests = createRoutePrefetch({ getTicket: () => sequence });
+const { prefetchRoute, takeRoutePrefetch, discardRoutePrefetch, consumeGameData, handOffGameData } = routeRequests;
 function markRoute(phase) {
   window.performance?.mark?.(`bb:route:${sequence}:${phase}`);
 }
-const routeLoaderFontStyleId = 'bb-route-loader-font';
 
-// Navigation is the one stylesheet that remains mounted while pages swap.
-// Keep the loading font here as well, otherwise removing game.css can briefly
-// make the route bar fall back to a system font before lobby.css has settled.
-function ensureRouteLoaderFont() {
-  if (!document.head?.append || document.getElementById?.(routeLoaderFontStyleId)) return;
-  const style = document.createElement('style');
-  style.id = routeLoaderFontStyleId;
-  style.dataset.navigation = 'route-loader-font';
-  style.textContent = '@font-face{font-family:"Press Start 2P";src:url("/assets/PressStart2P.woff2") format("woff2");font-display:block}';
-  document.head.append(style);
-  // Begin fetching before a player starts a route, so the loader never shows
-  // a fallback font on the first game or lobby transition.
-  document.fonts?.load?.('16px "Press Start 2P"').catch(() => {});
-}
-
+const { clearRouteHints, preloadRouteScripts, createStyleSwap } = createRouteStyles();
 ensureRouteLoaderFont();
 
 function scope() {
@@ -258,105 +60,8 @@ function unlockAudio() { getAudioContext()?.resume().catch(() => {}); lobbyAudio
 document.addEventListener('pointerdown', unlockAudio, { passive: true });
 document.addEventListener('keydown', unlockAudio);
 
-function showTransition(message) {
-  cancelTransitionExit();
-  if (!transition) {
-    transition = document.createElement('div');
-    transition.id = 'bb-route-transition';
-    transition.setAttribute('role', 'status');
-    transition.setAttribute('aria-live', 'polite');
-    document.body.append(transition);
-    beginTransitionPresentation();
-  }
-
-  if (transition.dataset.presentation !== 'message') {
-    transition.replaceChildren();
-    const panel = document.createElement('div');
-    panel.className = 'bb-loading-panel';
-    const label = document.createElement('p');
-    label.id = 'bb-route-message';
-    const retry = document.createElement('button');
-    retry.textContent = 'Try again';
-    retry.className = 'bb-loading-retry';
-    retry.type = 'button';
-    retry.hidden = true;
-    retry.onclick = retryFailedRoute;
-    panel.append(label, retry);
-    transition.append(panel);
-    transition.dataset.presentation = 'message';
-  }
-  transition.querySelector('p').textContent = message;
-  transition.querySelector('button').hidden = true;
-  transition.hidden = false;
-  transition.style.display = 'grid';
-}
-function updateRouteLoadingBar(progress, message) {
-  if (transition?.dataset.presentation !== 'loading-bar') return;
-  const pct = Math.max(routeProgress, Math.round(Math.max(0, Math.min(100, Number(progress) || 0))));
-  routeProgress = pct;
-  const fill = transition.querySelector('#bb-route-loading-fill');
-  const percent = transition.querySelector('#bb-route-loading-percent');
-  const label = transition.querySelector('#bb-route-loading-text');
-  if (fill) fill.style.width = `${pct}%`;
-  if (percent) percent.textContent = `${pct}%`;
-  if (message) label.textContent = message;
-}
-
-function showLoadingBar(labelText) {
-  cancelTransitionExit();
-  if (!transition) {
-    transition = document.createElement('div');
-    transition.id = 'bb-route-transition';
-    transition.setAttribute('role', 'status');
-    transition.setAttribute('aria-live', 'polite');
-    document.body.append(transition);
-    beginTransitionPresentation();
-  }
-
-  if (transition.dataset.presentation !== 'loading-bar') {
-    routeProgress = 0;
-    transition.replaceChildren();
-    const wrap = document.createElement('div');
-    wrap.id = 'bb-route-loading-wrap';
-    // Keep this geometry identical to game.html's loading wrap. The route
-    // overlay remains in place until the game reports ready, so players never
-    // see a centered message jump down into a second loading indicator.
-
-    const label = document.createElement('p');
-    label.id = 'bb-route-loading-text';
-    label.textContent = labelText;
-
-    const shell = document.createElement('div');
-    shell.className = 'loading-shell';
-
-    const fill = document.createElement('div');
-    fill.id = 'bb-route-loading-fill';
-    fill.className = 'loading-fill';
-
-    const percent = document.createElement('span');
-    percent.id = 'bb-route-loading-percent';
-    percent.textContent = '0%';
-    percent.setAttribute('aria-hidden', 'true');
-
-    shell.append(fill, percent);
-    wrap.append(label, shell);
-    transition.append(wrap);
-    transition.dataset.presentation = 'loading-bar';
-  }
-  updateRouteLoadingBar(8, labelText);
-  transition.hidden = false;
-  transition.style.display = 'block';
-}
-
-function showLobbyLoadingBar() {
-  showLoadingBar('Loading lobby…');
-}
-
-function showBattleLoadingBar() {
-  showLoadingBar('Preparing your battle…');
-}
 function ready() {
-  if (!mounted || routeFailed) return;
+  if (!mounted || recovery.isFailed()) return;
   clearReadinessTimer();
   updateRouteLoadingBar(100);
   dismissTransition();
@@ -367,114 +72,30 @@ function ready() {
     preloader.start('battle');
   } else preloader.start('cards');
 }
-function fail(error) {
-  if (routeFailed) return;
-  routeFailed = true;
-  lobbyAudio.handoff();
-  mounted = false;
-  ++sequence;
-  clearReadinessTimer();
-  pendingFetch?.abort();
-  discardRoutePrefetch();
-  gameDataHandoff = null;
-  recoveryRequest?.abort();
-  recoveryRequest = null;
-  failureCode = error.code;
-  lobbyReturn.clear();
-  clearRouteHints();
-  preloader.stop();
-  console.error('[navigation]', error);
-  showTransition('An error occurred');
-  transition.querySelector('button').hidden = false;
-  const retry = transition.querySelector('button');
-  if (retryAvailableAt) retryAvailableAt = Math.max(retryAvailableAt, Date.now() + 2000);
-  const delay = Math.max(0, retryAvailableAt - Date.now());
-  retry.disabled = delay > 0;
-  retry.textContent = delay > 0 ? 'Please wait…' : 'Try again';
-  clearTimeout(retryTimer);
-  if (delay) retryTimer = setTimeout(() => {
-    if (!routeFailed || transition?.querySelector('button') !== retry) return;
-    retry.disabled = false;
-    retry.textContent = 'Try again';
-  }, delay);
-}
+const recovery = createRouteRecovery({
+  getTicket: () => sequence,
+  presentation,
+  navigate,
+  prepareLobbyReturn,
+  onFailure() {
+    lobbyAudio.handoff();
+    mounted = false;
+    ++sequence;
+    pendingFetch?.abort();
+    discardRoutePrefetch();
+    handOffGameData(null);
+    lobbyReturn.clear();
+    clearRouteHints();
+    preloader.stop();
+  },
+});
+const { fail, armReadinessTimer, clearReadinessTimer } = recovery;
 
-async function retryFailedRoute() {
-  if (!routeFailed || recoveryRequest || Date.now() < retryAvailableAt) return;
-  const destination = transition?.dataset.destination || location.href;
-  const match = new URL(destination, location.href).pathname.match(gameRoutePattern);
-  const code = failureCode;
-  const ticket = sequence;
-  const controller = new AbortController();
-  recoveryRequest = controller;
-  routeFailed = false;
-  retryAvailableAt = Date.now() + 2000;
-  const button = transition.querySelector('button');
-  button.disabled = true;
-  button.textContent = 'Trying again…';
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    let returnToLobby = match && unavailableMatchCodes.has(code);
-    let gameData = null;
-    if (match && !returnToLobby) {
-      const response = await fetch('/gamedata', {
-        method: 'POST', credentials: 'same-origin', signal: controller.signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchId: match[1] }),
-      });
-      const result = await response.json();
-      returnToLobby = unavailableMatchCodes.has(result.code);
-      if (!returnToLobby && (!response.ok || !result.success)) {
-        throw new Error(result.error || 'Unable to check match');
-      }
-      // The check already fetched this match's data; the game reuses it.
-      gameData = Promise.resolve({ ok: response.ok, body: result });
-    }
-    if (ticket !== sequence || recoveryRequest !== controller) return;
-    clearTimeout(timeout);
-    if (returnToLobby) await window.__BB_NAVIGATION__.prepareLobbyReturn();
-    else await navigate(destination, { replace: true, gameData });
-  } catch (error) {
-    if (ticket === sequence && recoveryRequest === controller) fail(error);
-  } finally {
-    clearTimeout(timeout);
-    if (recoveryRequest === controller) recoveryRequest = null;
-  }
-}
-document.addEventListener('lobby:ready', ready);
-document.addEventListener('game:ready', ready);
+document.addEventListener(BROWSER_EVENTS.LOBBY_REVEALED, ready);
+document.addEventListener(BROWSER_EVENTS.BATTLE_REVEALED, ready);
 // A join request is also an interactive, finished lobby screen.
-document.addEventListener('lobby:join-request', ready);
+document.addEventListener(BROWSER_EVENTS.LOBBY_JOIN_REQUEST, ready);
 
-function runInline(fn) {
-  const owner = scope();
-  fn(...bindings.split(',').map(key => owner[key]));
-}
-async function executeScript(source, owner) {
-  if (!owner.active) return;
-  // The edge may inject analytics into fetched HTML. The initial document has
-  // already handled those scripts; replaying them on a route change can make a
-  // browser extension's blocked beacon fail the entire navigation.
-  if (source.src && new URL(source.src, location.href).origin !== location.origin) return;
-  if (source.src && (/\/socket\.io\/socket\.io\.js/.test(source.src) || /\/bundles\/navigation[.]/.test(source.src))) return;
-  if (source.src && /phaser-arcade-physics/.test(source.src) && window.Phaser) return;
-  const script = document.createElement('script');
-  if (source.src) {
-    script.src = source.src;
-    script.dataset.bbPageScope = owner.id;
-    script.async = false;
-    await new Promise((resolve, reject) => {
-      script.onload = resolve;
-      script.onerror = () => reject(new Error(`Unable to load ${source.src}`));
-      document.body.append(script);
-    });
-  } else {
-    // Inline templates use the same lexical lifetime as their entry bundle.
-    script.textContent = source.textContent;
-    document.body.append(script);
-  }
-  script.remove();
-}
 async function navigate(target, { replace = false, pop = false, lobbyReturnStatus = null, gameData = null } = {}) {
   lobbyReturn.clear();
   clearRouteHints();
@@ -484,15 +105,9 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     return;
   }
   const ticket = ++sequence;
-  routeFailed = false;
-  recoveryRequest?.abort();
-  recoveryRequest = null;
-  clearTimeout(retryTimer);
+  recovery.resetForNavigation();
   cancelTransitionExit();
-  const newStyles = [];
-  const discardNewStyles = () => newStyles.forEach(node => {
-    if (styleOwners.get(node) === ticket) node.remove();
-  });
+  const styles = createStyleSwap(ticket);
   markRoute('start');
   mounted = false;
   // A download already in flight finishes into the HTTP cache for the next screen.
@@ -508,10 +123,9 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
   const pageRequest = fetchRoute(url.href, controller.signal, returningToLobby, prefetched?.page);
   pageRequest.catch(() => {});
   const gameMatch = url.pathname.match(gameRoutePattern);
-  gameDataHandoff = gameMatch ? {
-    ticket, matchId: gameMatch[1],
-    request: gameData || prefetched?.gameData || requestGameData(gameMatch[1], controller.signal),
-  } : null;
+  if (gameMatch) {
+    handOffGameData(gameMatch[1], ticket, gameData || prefetched?.gameData || prefetchGameData(gameMatch[1], controller.signal));
+  } else handOffGameData(null);
   // Leave the outgoing screen intact until the transition image is decoded.
   const artwork = !inLobby && awaitTransitionArtwork();
   if (artwork) {
@@ -521,18 +135,18 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
   // Keep the interactive lobby visible during a party request.
   if (returningToLobby) {
     showLobbyLoadingBar();
-    transition.dataset.destination = url.href;
-    transition.dataset.lobbyReturn = 'true';
+    presentation.getNode().dataset.destination = url.href;
+    presentation.getNode().dataset.lobbyReturn = 'true';
     retireCurrentPage();
   } else if (url.pathname.startsWith('/game/')) {
     lobbyAudio.loading();
     showBattleLoadingBar();
-    transition.dataset.destination = url.href;
-    transition.dataset.lobbyReturn = 'false';
+    presentation.getNode().dataset.destination = url.href;
+    presentation.getNode().dataset.lobbyReturn = 'false';
   } else if (!inLobby) {
     showTransition('Loading lobby…');
-    transition.dataset.destination = url.href;
-    transition.dataset.lobbyReturn = 'false';
+    presentation.getNode().dataset.destination = url.href;
+    presentation.getNode().dataset.lobbyReturn = 'false';
   }
   armReadinessTimer(ticket);
   try {
@@ -561,55 +175,9 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     const cleanup = cleanupPromise.then(() => { if (ticket === sequence) markRoute('cleanup'); });
     const scripts = [...html.querySelectorAll('script')];
     scripts.forEach(script => script.remove());
-    const oldStyles = [...document.head.querySelectorAll('link[rel="stylesheet"], style:not([data-navigation])')];
-    const retained = new Set();
-    const styleLoads = [];
-    // Retain shared sheets without detaching them: moving a loaded <link>
-    // can deactivate its CSS until the browser processes it again. Insert new
-    // sheets around retained anchors so the destination cascade is still exact.
-    const destinationStyles = [...html.head.querySelectorAll('link[rel="stylesheet"], style')];
-    let previousStyleIndex = -1;
-    const anchors = destinationStyles.map(node => {
-      const index = oldStyles.findIndex((old, index) => index > previousStyleIndex &&
-        node.tagName === old.tagName &&
-        (node.tagName === 'LINK' ? node.href === old.href : node.textContent === old.textContent));
-      if (index < 0) return null;
-      previousStyleIndex = index;
-      return oldStyles[index];
-    });
-    for (const [index, node] of destinationStyles.entries()) {
-      const existing = anchors[index];
-      if (existing) {
-        retained.add(existing);
-        styleOwners.set(existing, ticket);
-        if (styleLoadsByNode.has(existing)) styleLoads.push(styleLoadsByNode.get(existing));
-        continue;
-      }
-      const copy = node.cloneNode(true);
-      styleOwners.set(copy, ticket);
-      newStyles.push(copy);
-      if (copy.tagName === 'LINK' && new URL(copy.href).origin === location.origin) {
-        const loading = new Promise((resolve, reject) => {
-          copy.onload = resolve;
-          copy.onerror = () => {
-            copy.remove();
-            reject(new Error(`Unable to load ${copy.href}`));
-          };
-        });
-        styleLoadsByNode.set(copy, loading);
-        styleLoads.push(loading);
-      }
-      const nextAnchor = anchors.slice(index + 1).find(Boolean);
-      if (nextAnchor) document.head.insertBefore(copy, nextAnchor);
-      else document.head.append(copy);
-    }
-    for (const node of html.head.querySelectorAll('link[rel="preload"][as="font"]')) {
-      if (![...document.head.querySelectorAll('link[rel="preload"]')].some(old => old.href === node.href)) {
-        document.head.append(node.cloneNode(true));
-      }
-    }
-    await Promise.all([...styleLoads, cleanup, transitionEntrance]);
-    if (ticket !== sequence) { discardNewStyles(); return; }
+    const styleLoads = styles.prepare(html.head);
+    await Promise.all([...styleLoads, cleanup, presentation.getEntrance()]);
+    if (ticket !== sequence) { styles.discard(); return; }
     markRoute('styles');
     updateRouteLoadingBar(loadingLobby ? 70 : 35);
     // Keep the actual html/body nodes: the fullscreen element stays attached.
@@ -618,8 +186,8 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     document.title = html.title;
     for (const attribute of [...document.body.attributes]) document.body.removeAttribute(attribute.name);
     for (const attribute of [...html.body.attributes]) document.body.setAttribute(attribute.name, attribute.value);
-    oldStyles.filter(node => !retained.has(node)).forEach(node => node.remove());
-    document.body.replaceChildren(...html.body.childNodes, ...(transition ? [transition] : []));
+    styles.commit();
+    document.body.replaceChildren(...html.body.childNodes, ...(presentation.getNode() ? [presentation.getNode()] : []));
     // Keep the route loader above the incoming game template until game:ready.
     // Its position and styling match the template loader exactly, avoiding a
     // flash or vertical jump while the game bundle initializes.
@@ -631,9 +199,6 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     // Each entry is deliberately a fresh runtime. Discard old lazy-chunk
     // registrations so they cannot retain a retired page's module closures.
     window.webpackChunkBroBattles = [];
-    window.__BOOT_GAME__ = undefined;
-    window.updateLoading = undefined;
-    window.markMatchBackgroundReady = undefined;
     for (const [index, script] of scripts.entries()) {
       if (ticket !== sequence) return;
       await executeScript(script, currentScope);
@@ -643,7 +208,7 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     if (ticket === sequence) markRoute('scripts');
     if (!html.body.dataset.bbScreen && ticket === sequence) ready();
   } catch (error) {
-    discardNewStyles();
+    styles.discard();
     if (ticket === sequence && error.name !== 'AbortError') fail(error);
   }
 }
@@ -662,18 +227,39 @@ function scriptScope() {
   return scope();
 }
 function progress(percent, message) {
-  if (!transition || !mounted) return;
-  if (transition.dataset.presentation === 'loading-bar') {
-    const previous = routeProgress;
+  if (!presentation.getNode() || !mounted) return;
+  if (presentation.getNode().dataset.presentation === 'loading-bar') {
+    const previous = presentation.getProgress();
     updateRouteLoadingBar(Math.min(99, Number(percent) || 0), message);
-    if (routeProgress > previous && readinessTicket === sequence) armReadinessTimer(sequence);
+    if (presentation.getProgress() > previous) recovery.refreshReadinessTimer();
     return;
   }
   // Late asset callbacks must not overwrite a failure and its retry action.
 }
-window.__BB_NAVIGATION__ = {
+async function prepareLobbyReturn(fallbackPartyId) {
+  const routeVersion = sequence;
+  preloader.stop({ finishActive: true });
+  const partyId = Number(fallbackPartyId);
+  const hasParty = Number.isFinite(partyId) && partyId > 0;
+  const destination = new URL(hasParty ? `/party/${partyId}` : '/', location.href).href;
+  // The match party is usually still current: load its page alongside /status.
+  if (hasParty) prefetchRoute(destination);
+  const returning = lobbyReturn.prepare(fallbackPartyId);
+  const artwork = awaitTransitionArtwork();
+  if (artwork) await artwork;
+  // A fast /status may already have started the lobby route, which shows its own loader.
+  if (routeVersion !== sequence) return returning;
+  mounted = false;
+  showLobbyLoadingBar();
+  presentation.getNode().dataset.destination = destination;
+  presentation.getNode().dataset.lobbyReturn = 'true';
+  if (document.body.dataset.bbScreen === 'game') retireCurrentPage();
+  return returning;
+}
+
+window[BROWSER_GLOBALS.navigation] = {
   lobbyAudio,
-  setLobbyNavigator(fn) { lobbyNavigator = fn; }, scope, scriptScope, runInline, navigate, getAudioContext,
+  setLobbyNavigator(fn) { lobbyNavigator = fn; }, scope, scriptScope, navigate, getAudioContext,
   preload: preloader.enqueue, selectPreloadMode: preloader.selectMode,
   requestCardAnimation: preloader.requestCardAnimation,
   warmPlayerCard: preloader.warmPlayerCard,
@@ -682,34 +268,15 @@ window.__BB_NAVIGATION__ = {
   warmLobby() { preloader.start('lobby'); },
   prefetchRoute,
   consumeGameData,
-  async prepareLobbyReturn(fallbackPartyId) {
-    const routeVersion = sequence;
-    preloader.stop({ finishActive: true });
-    const partyId = Number(fallbackPartyId);
-    const hasParty = Number.isFinite(partyId) && partyId > 0;
-    const destination = new URL(hasParty ? `/party/${partyId}` : '/', location.href).href;
-    // The match party is usually still current: load its page alongside /status.
-    if (hasParty) prefetchRoute(destination);
-    const returning = lobbyReturn.prepare(fallbackPartyId);
-    const artwork = awaitTransitionArtwork();
-    if (artwork) await artwork;
-    // A fast /status may already have started the lobby route, which shows its own loader.
-    if (routeVersion !== sequence) return returning;
-    mounted = false;
-    showLobbyLoadingBar();
-    transition.dataset.destination = destination;
-    transition.dataset.lobbyReturn = 'true';
-    if (document.body.dataset.bbScreen === 'game') retireCurrentPage();
-    return returning;
-  },
+  prepareLobbyReturn,
   async beginBattleLoading() {
     preloader.stop({ finishActive: true });
     const ticket = sequence;
     const artwork = awaitTransitionArtwork();
     if (artwork) await artwork;
     if (ticket !== sequence) return;
-    if (!transition) showBattleLoadingBar();
-    await transitionEntrance;
+    if (!presentation.getNode()) showBattleLoadingBar();
+    await presentation.getEntrance();
   },
   consumeLobbyReturnStatus: lobbyReturn.consume,
   fail, progress,

@@ -1,11 +1,9 @@
 // The motion behind Bank Bust's coins and crate, with no Phaser in it, so what
 // makes them feel right can be tested directly.
 
-export const COIN_SPIN_FRAMES = 16;
-// The sheet is drawn at four times the size a coin is laid out at, so it stays
-// sharp on high-resolution screens. Sprites scale by COIN_FRAME_SCALE to match.
-export const COIN_FRAME_SIZE = 112;
-export const COIN_FRAME_SCALE = 28 / COIN_FRAME_SIZE;
+import { coinSpinFrame, COIN_SPIN_FRAMES } from "../../scene/coinSprite.mjs";
+export { coinSpinFrame, COIN_SPIN_FRAMES, COIN_FRAME_SIZE, COIN_FRAME_SCALE } from "../../scene/coinSprite.mjs";
+
 const COIN_GRAVITY = 1500; // px/s^2
 const COIN_BOUNCE = 0.46; // vertical speed kept per bounce
 const COIN_FLOOR_DRAG = 0.68; // horizontal speed kept per bounce
@@ -16,15 +14,26 @@ const COIN_REST_SPEED = 70; // below this a bounce stops being worth drawing
 // falls away. Returns true on the step it strikes the floor.
 export function stepLooseCoin(coin, dt) {
   if (coin.resting) return false;
+  const previousBottom = coin.y + (coin.radius || 0);
   coin.vy += COIN_GRAVITY * dt;
   coin.x += coin.vx * dt;
   coin.y += coin.vy * dt;
-  const overFloor =
-    Number.isFinite(coin.floorY) &&
-    (!Number.isFinite(coin.floorLeft) || coin.x >= coin.floorLeft) &&
-    (!Number.isFinite(coin.floorRight) || coin.x <= coin.floorRight);
-  if (!overFloor || coin.vy <= 0 || coin.y < coin.floorY) return false;
-  coin.y = coin.floorY;
+  if (coin.vy <= 0) return false;
+  const radius = coin.radius || 0;
+  let floor = Infinity;
+  if (coin.floors) {
+    for (const platform of coin.floors) {
+      if (coin.x >= platform.left && coin.x <= platform.right && previousBottom <= platform.top) {
+        floor = Math.min(floor, platform.top);
+      }
+    }
+  } else if (Number.isFinite(coin.floorY) &&
+      (!Number.isFinite(coin.floorLeft) || coin.x >= coin.floorLeft) &&
+      (!Number.isFinite(coin.floorRight) || coin.x <= coin.floorRight)) {
+    floor = coin.floorY;
+  }
+  if (coin.y + radius < floor) return false;
+  coin.y = floor - radius;
   coin.vy = -coin.vy * COIN_BOUNCE;
   coin.vx *= COIN_FLOOR_DRAG;
   if (Math.abs(coin.vy) < COIN_REST_SPEED) {
@@ -47,13 +56,6 @@ export function homingPoint(from, bow, to, progress) {
     x: inv * inv * from.x + 2 * inv * eased * midX + eased * eased * to.x,
     y: inv * inv * from.y + 2 * inv * eased * midY + eased * eased * to.y,
   };
-}
-
-// Spin is counted in eighths of a turn, whatever the sheet's frame count, so
-// spin rates read the same however finely the turn is drawn.
-export function coinSpinFrame(accumulator) {
-  const whole = Math.floor((accumulator * COIN_SPIN_FRAMES) / 8) % COIN_SPIN_FRAMES;
-  return whole < 0 ? whole + COIN_SPIN_FRAMES : whole;
 }
 
 const CRATE_SHAKE_HZ = 22; // a fast rattle, not a sway

@@ -1,28 +1,12 @@
+const { computeMatchStats } = require('../src/shared/characters/characterStats');
+const { createFakeIo } = require('./helpers/fakeIo');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { EventEmitter } = require('node:events');
 const { createGameHub } = require('../src/server/core/gameHub');
 const { registerGameEvents } = require('../src/server/core/socketEvents/gameEvents');
 const { createBotParticipants } = require('../src/server/core/bots/identity');
 const { decorateParticipant } = require('../src/server/services/match/matchRosterService');
-const { spawnForParticipant } = require('../src/shared/physics/duelGeometry');
 const { PREGAME_MS, PREGAME_GRACE_MS, COUNTDOWN_MS, START_DEADLINE_MS, plannedCountdownStart } = require('../src/shared/matchIntroTiming');
-
-class TestSocket extends EventEmitter {
-  constructor(id, user) {
-    super();
-    this.id = id;
-    this.data = { user };
-    this.rooms = new Set();
-    this.sent = [];
-  }
-  join(room) { this.rooms.add(room); }
-  leave(room) { this.rooms.delete(room); }
-  emit(type, payload) { this.sent.push({ type, payload }); return true; }
-  async receive(type, ...args) {
-    for (const listener of this.listeners(type)) await listener(...args);
-  }
-}
 
 // Both duel formations use the same map; Bank Bust has its own pool.
 const { mapDefaults } = require('../src/shared/maps');
@@ -34,15 +18,7 @@ async function setup(t, teamSize = 1, { humans = 1, friendLevel = 3 } = {}) {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000000 });
   t.mock.method(console, 'log', () => {});
   const events = [];
-  const io = {
-    sockets: { sockets: new Map() },
-    to(channel) {
-      return {
-        emit(type, payload) { events.push({ channel, type, payload }); },
-        compress() { return this; },
-      };
-    },
-  };
+  const io = createFakeIo({ onEmit: (channel, type, payload) => events.push({ channel, type, payload }) });
   const human = decorateParticipant({
     user_id: 1712, name: 'RealPlayer', char_class: 'ninja', team: 'team1',
     level: 3, trophies: 500,
@@ -74,8 +50,7 @@ async function setup(t, teamSize = 1, { humans = 1, friendLevel = 3 } = {}) {
   room.DEV_TIMING_DIAG = false;
   t.after(() => hub.removeGameRoom(1341));
   function socket(id, user = human) {
-    const result = new TestSocket(id, user);
-    io.sockets.sockets.set(id, result);
+    const result = io.addSocket(id, { data: { user } });
     registerGameEvents(result, { db, gameHub: hub });
     return result;
   }
@@ -204,6 +179,106 @@ test('human reconnect preserves identity and combat state, and releases old sock
   assert.equal(h.room.getPlayerCount(), 2);
 });
 
+test('overlapping reconnects leave only the latest socket registered', async (t) => {
+  const h = await setup(t);
+  const first = h.socket('first');
+  assert.equal((await h.join(first)).ok, true);
+  const player = h.room.players.get(first.id);
+  const second = h.socket('second');
+  const third = h.socket('third');
+
+  const results = await Promise.all([h.join(second), h.join(third)]);
+
+  assert.ok(results.every((result) => result.ok));
+  assert.equal(h.room.players.get(third.id), player);
+  assert.equal(third.listenerCount('game:special'), 1);
+  assert.ok(third.rooms.has('game:1341:team:team1'));
+  assert.equal(h.room.players.has(second.id), false);
+  assert.equal(second.listenerCount('game:special'), 0);
+  assert.equal(second.rooms.has('game:1341:team:team1'), false);
+});
+
+const matchChannels = ['game:1341', 'game:1341:team:team1'];
+
+for (const channel of matchChannels) {
+  test(`a failed adapter join for ${channel} preserves the previous player socket`, async (t) => {
+    const h = await setup(t);
+    const previous = h.socket('previous');
+    const joining = h.socket('joining');
+    await h.room.addPlayer(previous, h.human);
+    const player = h.room.players.get(previous.id);
+    const originalJoin = joining.join.bind(joining);
+    t.mock.method(joining, 'join', async (name) => {
+      originalJoin(name);
+      if (name === channel) throw new Error('adapter join failed');
+    });
+
+    await assert.rejects(h.room.addPlayer(joining, h.human), /adapter join failed/);
+
+    assert.equal(h.room.players.get(previous.id), player);
+    assert.equal(h.room.players.has(joining.id), false);
+    assert.equal(previous.listenerCount('game:special'), 1);
+    assert.equal(joining.listenerCount('game:special'), 0);
+    assert.deepEqual([...previous.rooms], matchChannels);
+    assert.equal(joining.rooms.size, 0);
+  });
+
+  for (const interrupt of ['disconnect', 'dispose']) {
+    test(`${interrupt} during adapter join for ${channel} rolls back memberships`, async (t) => {
+      const h = await setup(t);
+      const joining = h.socket('joining');
+      const entered = Promise.withResolvers();
+      const release = Promise.withResolvers();
+      const originalJoin = joining.join.bind(joining);
+      t.mock.method(joining, 'join', async (name) => {
+        if (name === channel) {
+          entered.resolve();
+          await release.promise;
+        }
+        originalJoin(name);
+      });
+
+      const attempt = h.room.addPlayer(joining, h.human);
+      await entered.promise;
+      if (interrupt === 'dispose') h.hub.removeGameRoom(1341);
+      else {
+        joining.connected = false;
+        joining.rooms.clear();
+        await h.hub.handlePlayerLeave(joining, 1341);
+      }
+      release.resolve();
+
+      await assert.rejects(attempt, { code: interrupt === 'dispose' ? 'MATCH_FINISHED' : 'SOCKET_DISCONNECTED' });
+      assert.equal(h.room.players.has(joining.id), false);
+      assert.equal(joining.listenerCount('game:special'), 0);
+      assert.equal(joining.rooms.size, 0);
+    });
+  }
+}
+
+test('a failed adapter leave restores the previous player rooms', async (t) => {
+  const h = await setup(t);
+  const previous = h.socket('previous');
+  const joining = h.socket('joining');
+  await h.room.addPlayer(previous, h.human);
+  const player = h.room.players.get(previous.id);
+  const originalLeave = previous.leave.bind(previous);
+  const leave = t.mock.method(previous, 'leave', async (name) => {
+    originalLeave(name);
+    if (name === matchChannels[1]) throw new Error('adapter leave failed');
+  });
+
+  await assert.rejects(h.room.addPlayer(joining, h.human), /adapter leave failed/);
+  leave.mock.restore();
+
+  assert.equal(h.room.players.get(previous.id), player);
+  assert.equal(previous.listenerCount('game:special'), 1);
+  assert.deepEqual([...previous.rooms], matchChannels);
+  assert.equal(h.room.players.has(joining.id), false);
+  assert.equal(joining.listenerCount('game:special'), 0);
+  assert.equal(joining.rooms.size, 0);
+});
+
 test('a human who has not joined by the countdown is a hittable ghost at spawn, and joining takes it over', async (t) => {
   const h = await setup(t, 2, { humans: 2 });
   const host = h.socket('host');
@@ -264,7 +339,7 @@ test('a ghost seeded without a level looks it up, and a join waits for it', asyn
   assert.equal((await h.join(late)).ok, true);
   assert.equal(h.room.players.get(late.id), ghost);
   assert.equal(ghost.level, 7, 'the stored character level, not level 1');
-  assert.equal(ghost.maxHealth, h.room._computeStats('ninja', 7).maxHealth);
+  assert.equal(ghost.maxHealth, computeMatchStats('ninja', 7).maxHealth);
   assert.equal(ghost.health, ghost.maxHealth);
 });
 
@@ -333,4 +408,46 @@ test('the start deadline starts a match nobody reported loaded, and cleanup rele
   assert.equal(h.room._countdownTimeout, null);
   t.mock.timers.tick(COUNTDOWN_MS);
   assert.equal(h.room._loopRunning, false, 'a disposed room never starts its loop');
+});
+
+test('timer starts sudden death exactly at regulation and finishes by remaining health at the cap', t => {
+  const { tickTimerAndSuddenDeath } = require('../src/server/core/gameRoom/timerManager');
+  const { SUDDEN_DEATH_MAX_MS, TIMER_EMIT_INTERVAL_MS } = require('../src/shared/combat/matchConfig');
+  const { installFakeClock } = require('./helpers/fakeClock');
+  const clock = installFakeClock(t);
+  t.mock.method(console, 'log', () => {});
+  const started = Date.now();
+  const regulation = TIMER_EMIT_INTERVAL_MS * 10;
+  const io = createFakeIo();
+  const outcomes = [];
+  const room = {
+    io, matchId: 4, status: 'active',
+    broadcast: (event, payload) => io.to('game:4').emit(event, payload),
+    loopStartWallTime: started, _lastTimerEmitMs: started,
+    gameMode: { getMatchDurationMs: () => regulation },
+    geometry: { world: { x: 0, y: 0, width: 500, height: 500 } },
+    players: new Map([
+      ['a', { team: 'team1', x: 100, y: 100, isAlive: true, health: 50 }],
+      ['b', { team: 'team2', x: 200, y: 100, isAlive: true, health: 12 }],
+    ]),
+    computePoisonY: () => 450,
+    finishGame: (winner, metadata) => outcomes.push({ winner, metadata }),
+  };
+  clock.setTime(started + regulation - TIMER_EMIT_INTERVAL_MS);
+  tickTimerAndSuddenDeath(room);
+  assert.equal(io.emitted.at(-1).payload.suddenDeath, false);
+  assert.equal(io.emitted.at(-1).payload.remaining, TIMER_EMIT_INTERVAL_MS);
+  clock.setTime(started + regulation);
+  tickTimerAndSuddenDeath(room);
+  tickTimerAndSuddenDeath(room);
+  assert.equal(io.emitted.filter(record => record.event === 'game:sudden-death:start').length, 1);
+  assert.equal(io.emitted.at(-1).payload.remaining, 0);
+  assert.equal(io.emitted.at(-1).payload.suddenDeath, true);
+  assert.deepEqual(outcomes, []);
+  clock.setTime(started + regulation + SUDDEN_DEATH_MAX_MS);
+  tickTimerAndSuddenDeath(room);
+  assert.equal(outcomes.length, 1);
+  assert.equal(outcomes[0].winner, 'team1');
+  assert.equal(outcomes[0].metadata.suddenDeathTimeout, true);
+  assert.equal(outcomes[0].metadata.tiebreakReason, 'health');
 });

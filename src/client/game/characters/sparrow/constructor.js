@@ -1,3 +1,6 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { perform as performSpecial } from "./special";
+import { SOCKET_EVENTS } from "../../../../shared/net/socketEvents.js";
 import socket from "../../../lib/socket";
 import { predictSparrowShot } from './network';
 import { animations } from "./anim";
@@ -9,11 +12,11 @@ import { playPlayerSound } from "../../audio/playerAudio";
 import { withShotView } from "../shared/shotPrediction";
 import { sparrowAimVariant } from "./aimPoses";
 
-const NAME = "sparrow";
+const { key: NAME } = characterDefinitions.sparrow;
 
 class Sparrow extends CharacterEntityBase {
   static key = NAME;
-  static textureKey = NAME;
+  static performSpecial = performSpecial;
 
   static sounds = {
     attack: { key: "sparrow-attack", volume: 0.48 },
@@ -89,15 +92,10 @@ class Sparrow extends CharacterEntityBase {
 
   // Shots are predicted locally before the server confirms them.
   emitAttackAction(payload) {
-    socket.emit("game:action", withShotView(predictSparrowShot(this.scene, this.player, this.username, payload)));
+    socket.emit(SOCKET_EVENTS.GAME_ACTION, withShotView(predictSparrowShot(this.scene, this.player, this.username, payload)));
   }
 
-  handlePointerDown(attackContext = null) {
-    const context = attackContext || this.consumeAttackContext();
-    return this.performDefaultAttack(() =>
-      performSparrowArrowSpread(this, context),
-    );
-  }
+  static basicAttack = performSparrowArrowSpread;
 }
 
 export default Sparrow;

@@ -1,3 +1,4 @@
+import { clamp01, smoothstep } from "../../../shared/math.js";
 // Soft light textures for map atmosphere, drawn once per game on a canvas so
 // maps need no image files for rays, glows, dust, fog or vignettes.
 
@@ -12,8 +13,7 @@ export const SCENERY_TEXTURES = Object.freeze({
   lampPool: 'scenery-fx-lamp-pool',
 });
 
-const clamp01 = (v) => Math.max(0, Math.min(1, v));
-const smoothstep = (a, b, v) => { const t = clamp01((v - a) / (b - a)); return t * t * (3 - 2 * t); };
+const smoothstepBetween = (min, max, value) => smoothstep((value - min) / (max - min));
 
 function seeded(seed) {
   return () => {
@@ -77,7 +77,7 @@ export function ensureSceneryTextures(scene) {
   const painters = {
     // Feathered shaft: soft across its width, fading in at the source and out along its length.
     [T.ray]: () => paintAlpha(scene, T.ray, 128, 512, (u, v) =>
-      Math.exp(-Math.pow((u - 0.5) * 2, 2) * 4.5) * smoothstep(0, 0.1, v) * Math.pow(1 - v, 1.6)),
+      Math.exp(-Math.pow((u - 0.5) * 2, 2) * 4.5) * smoothstepBetween(0, 0.1, v) * Math.pow(1 - v, 1.6)),
     [T.glow]: () => paintAlpha(scene, T.glow, 256, 256, (u, v) =>
       Math.pow(clamp01(1 - Math.hypot(u - 0.5, v - 0.5) * 2), 2.2)),
     [T.dot]: () => paintAlpha(scene, T.dot, 32, 32, (u, v) =>
@@ -85,12 +85,12 @@ export function ensureSceneryTextures(scene) {
     // Haze pools toward the ground, like valley fog, and thins into the sky.
     [T.fog]: () => paintAlpha(scene, T.fog, 4, 256, (_u, v) => 0.3 + 0.7 * Math.pow(v, 1.4)),
     [T.vignette]: () => paintAlpha(scene, T.vignette, 256, 256, (u, v) =>
-      Math.pow(smoothstep(0.45, 1.05, Math.hypot((u - 0.5) * 2, (v - 0.5) * 2) / Math.SQRT2 * 1.25), 1.3)),
+      Math.pow(smoothstepBetween(0.45, 1.05, Math.hypot((u - 0.5) * 2, (v - 0.5) * 2) / Math.SQRT2 * 1.25), 1.3)),
     [T.mist]: () => paintMist(scene, T.mist),
     // A soft cone: narrow at the lamp, spreading and fading towards the ground.
     [T.lampCone]: () => paintAlpha(scene, T.lampCone, 128, 128, (u, v) => {
       const half = 0.06 + 0.26 * v;
-      return Math.exp(-Math.pow((u - 0.5) / half, 2) * 1.2) * Math.pow(1 - v, 0.7) * smoothstep(0, 0.04, v);
+      return Math.exp(-Math.pow((u - 0.5) / half, 2) * 1.2) * Math.pow(1 - v, 0.7) * smoothstepBetween(0, 0.04, v);
     }),
     [T.lampPool]: () => paintAlpha(scene, T.lampPool, 128, 32, (u, v) =>
       Math.pow(clamp01(1 - Math.hypot((u - 0.5) * 2, (v - 0.5) * 2)), 1.8)),

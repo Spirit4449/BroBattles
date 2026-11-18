@@ -1,10 +1,14 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { playPlayerSound } from "../../audio/playerAudio";
 
 import { POWERUP_COLORS } from "../../powerups/powerupConfig";
 import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
 
 // Cast/beam timings live in src/shared/characters/ozzy.json (special.arcaneSurge).
-const SURGE = getResolvedCharacterSpecialConfig("ozzy", "arcaneSurge");
+
+const { key: NAME } = characterDefinitions.ozzy;
+
+const SURGE = getResolvedCharacterSpecialConfig(NAME, "arcaneSurge");
 const ARCANE_SURGE_BEAM_MS = SURGE.beamMs; // total beam lifetime per ally
 // Visual-only beam phases within ARCANE_SURGE_BEAM_MS.
 const BEAM_HIT_MS = 300; // beam reaches the ally

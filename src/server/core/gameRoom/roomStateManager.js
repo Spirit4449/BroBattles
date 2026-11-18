@@ -1,3 +1,5 @@
+const { isDeepStrictEqual } = require("node:util");
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { encodeWire } = require("../../../shared/networkWire");
 const { netTrace } = require('./netTraceRecorder');
 const { damageHitboxSnapshot } = require('../../../shared/combat/runtime/damageHitboxes.js');
@@ -46,13 +48,13 @@ function buildEffectMovement(room, playerEffects, now) {
   return out;
 }
 
-function buildWorldStatePayload(room) {
+function buildWorldStatePayload(room, modeState = room.gameMode?.buildModeState?.() ?? null) {
   const now = Date.now();
   const playerEffects = room._buildPlayerEffectsSnapshot();
   return {
     timestamp: now,
-    modeState: room.gameMode?.buildModeState?.() ?? null,
-    powerups: Array.from(room._powerups.values()).map((pu) => ({
+    modeState,
+    powerups: Array.from(room.powerups.values()).map((pu) => ({
       id: pu.id,
       type: pu.type,
       x: pu.x,
@@ -190,7 +192,7 @@ function sendGameStateToPlayer(room, socket) {
       : 0,
   };
 
-  socket.emit("game:init", gameStateForPlayer);
+  socket.emit(SOCKET_EVENTS.GAME_INIT, gameStateForPlayer);
   // The joiner has no delta base yet; make the next broadcast self-contained.
   snapshotEncoder(room).requestKeyframe();
 }
@@ -213,7 +215,7 @@ function shouldPublishMovementFx(playerData, now) {
 function broadcastSnapshot(room, extraTiming = null) {
   const sentMono = performance.now();
   const wall = Date.now();
-  const tMono = extraTiming?.tMono ?? room._simulationMono ?? sentMono;
+  const tMono = extraTiming?.tMono ?? room.simulationMono ?? sentMono;
   // Several state changes can occur in one simulation tick. Order emissions
   // independently, without inventing elapsed simulation time for those changes.
   room._snapshotSeq = (room._snapshotSeq || 0) + 1;
@@ -222,7 +224,7 @@ function broadcastSnapshot(room, extraTiming = null) {
     timestamp: wall,
     sentMono: Math.round(sentMono * 10) / 10,
     tMono: Math.round(tMono * 10) / 10,
-    tickId: room._tickId || 0,
+    tickId: room.tickId || 0,
     snapshotSeq: room._snapshotSeq,
     snapshotEpoch: snapshotEpoch(room),
     snapshotKind: extraTiming ? "periodic" : "event",
@@ -282,26 +284,30 @@ function broadcastSnapshot(room, extraTiming = null) {
   // (see shared/snapshotDelta); clients rebuild full states before use.
   Object.assign(snapshot, snapshotEncoder(room).encode(room._snapshotSeq, players));
 
-  room.io
-    .to(`game:${room.matchId}`)
-    .compress(false)
-    .emit("game:snapshot", encodeWire(snapshot));
-  if (room._netTrace) netTrace.noteSnapshotEmit(room, snapshot);
+  room.broadcast(SOCKET_EVENTS.GAME_SNAPSHOT, encodeWire(snapshot), { compress: false });
+  if (room.netTrace) netTrace.noteSnapshotEmit(room, snapshot);
 }
 
 function broadcastWorldState(room) {
-  const payload = buildWorldStatePayload(room);
-  const { timestamp, ...state } = payload;
-  const fingerprint = JSON.stringify(state);
-  // Keep a one-second heartbeat for start recovery and newly joined listeners.
-  if (fingerprint === room._worldStateFingerprint &&
-      timestamp - room._worldStateSentAt < 1000) return;
-  room._worldStateFingerprint = fingerprint;
-  room._worldStateSentAt = timestamp;
-  room.io
-    .to(`game:${room.matchId}`)
-    .compress(false)
-    .emit("game:state", payload);
+  const previous = room._lastWorldState;
+  const version = room.gameMode?.stateVersion;
+  const sameMode = previous && previous.mode === room.gameMode &&
+    version !== undefined && version === previous.version;
+  const modeState = sameMode ? previous.payload.modeState : room.gameMode?.buildModeState?.() ?? null;
+  const payload = buildWorldStatePayload(room, modeState);
+  if (previous && payload.timestamp - previous.payload.timestamp < 1000 &&
+      (sameMode || isDeepStrictEqual(modeState, previous.payload.modeState)) &&
+      isDeepStrictEqual(payload.powerups, previous.payload.powerups) &&
+      isDeepStrictEqual(payload.deathDrops, previous.payload.deathDrops) &&
+      isDeepStrictEqual(payload.playerEffects, previous.payload.playerEffects) &&
+      isDeepStrictEqual(payload.playerEffectMovement, previous.payload.playerEffectMovement)) {
+    // A pair of mutations can cancel between publications.
+    previous.mode = room.gameMode;
+    previous.version = version;
+    return;
+  }
+  room._lastWorldState = { mode: room.gameMode, version, payload };
+  room.broadcast(SOCKET_EVENTS.GAME_STATE, payload, { compress: false });
 }
 
 module.exports = {

@@ -11,7 +11,7 @@ Entry points assemble features. A feature owns its state and behavior; shared mo
 ```
 src/
   client/            browser code (bundled by webpack)
-    pages/           one entry per HTML page: lobby, game, login, signup, profile, admin, mapEditor
+    pages/           lobby, game, login, signup, admin and Map Studio entry modules
     game/            everything that runs during a battle
       scene/         Phaser scene helpers: camera, input, rendering, effects, in-match editor
       audio/         battle sound: player, movement, match music
@@ -34,7 +34,8 @@ src/
     lib/             non-UI utilities: socket, cookies, selection catalog, net logging
     styles/          CSS imported by bundles
   server/
-    server.js        Express + Socket.IO bootstrap
+    server.js        process startup, schema checks, runtime ownership and shutdown
+    application.js   creates Express, Socket.IO, services and the Stripe listener
     core/            live game runtime: gameRoom/, bots/, gameModes/, matchmaking/, socket events
     routes/          routes.js registers routes/modules/*
     services/<domain>/  auth, party, cosmetics, shop, trophies, email, moderation,
@@ -51,7 +52,7 @@ src/
 
 ## Constants ownership
 
-[Game constants](constants.md) maps the shared clock/world/party constants in `src/shared/gameConstants.js`, server match defaults in `src/server/core/gameRoomConfig.js`, content tuning, and feature-local constants. Import values from their owner and derive dependent timing. Map and runtime overrides can supersede defaults; inspect those before diagnosing a tuning mismatch.
+[Game constants](constants.md) maps the shared clock/world/party constants in `src/shared/gameConstants.js`, server match defaults in `src/shared/combat/matchConfig.js`, content tuning, and feature-local constants. Import values from their owner and derive dependent timing. Map and runtime overrides can supersede defaults; inspect those before diagnosing a tuning mismatch.
 
 ## Content sources
 
@@ -62,7 +63,7 @@ src/
 | Bot play style per character | `src/shared/combat/characterProfiles.js` | One profile per character: spacing, melee/buff flags, aim model, super range and super decision. Content validation requires a profile for every registered character |
 | Character frames, duck cells, attack descriptors | Derived from character definitions | Exports from `characters/index.js` and rules in `ducking.js`; do not add parallel tables |
 | Powerups | `src/shared/catalogs/powerups.catalog.json` | `powerups.js` derives catalog exports and owns the shared pickup delay; `effectRules.js` shares modifiers with server callbacks and client prediction |
-| Maps | Built-ins in `src/shared/maps/<id>.json`; saved overrides in `data/maps/` or `BB_MAP_DIR` | `mapDocument.js` validates; `maps/index.js` registers built-ins and derives catalog metadata |
+| Maps | Built-ins in `src/shared/maps/<id>.json`; published revisions in `data/maps/` or `BB_MAP_DIR` | `mapDocument.js` validates; `maps/index.js` registers built-ins and derives catalog metadata |
 | Modes | `src/shared/catalogs/gameModes.catalog.json` | Server factories in `src/server/core/gameModes/index.js`; client factories/preloaders in `src/client/game/modes/index.js` |
 | Shop items and cosmetics | `src/shared/catalogs/shopCatalog.json`, `skinsCatalog.json`, `playerCardsCatalog.json`, `profileIconsCatalog.json` | Shop offers own prices; cosmetic catalogs own identity/assets. Commerce services validate and fulfill purchases |
 | Terrain audio | `src/shared/physics/terrainAudio.json` and each map's `metadata.terrain` | Shared movement-audio selection and preload helpers |
@@ -79,16 +80,26 @@ Registration of behavior remains explicit. A JSON file can configure an existing
 - `src/client/game/characters/<key>/` owns animation, attacks, specials and character presentation. `shared/animationBuilder.js` handles atlas selection and ordering; timing and deliberate pose ordering stay in character modules.
 - `shared/characterEntityBase.js` documents the class hooks generic code calls instead of checking character names: `attackFlow`/`emitAttackAction` (basic attack timing), `handleRemoteAttack`/`handleLocalAuthoritativeAttack`, `handleActionTargetingLocalPlayer` (e.g. Gloop's hook pull), `socketEvents` (e.g. Ozzy's arcane surge), `updateMovementLock` (e.g. Draven's Inferno hover), `setupSkinAnimations`, and the powerup visuals. `loadBaseAtlas`/`loadFiles` cover standard preloading; `getStats` derives from `key`. `shared/packetDedupe.js` and `shared/powerupFx.js` hold shared presentation helpers.
 - Client presentation settings live in the character definition's `presentation` block (`hiResArt`, `specialAnimationLockMs` — how long a special blocks dashing, not how long its pose shows — and `abilityLockAnimation`); aim/reticle behaviour lives in its `aim` blocks (`trajectory`, `reticleRoundCorners`, `reticleEndAlpha`, `reticleFadeOnTurn`, `scalesWithSprite`, `reticleScaleLiftY`). Skin-only runtime assets and animation overrides live in the skin catalog's `gameAssets` (`weaponSpin`, `animationOverrides`).
-- Where things are on a character lives in its definition's `rig` block: `feet` (the stand point in its base art, facing right: x under the character, y on the hitbox bottom), optional `frame` (the art size when it differs from the gameplay frame, as for high-resolution art) and named `points` (fixed, per animation by frame index, or launch points `{ "pivot": [x, y], "reach": px, "alongAim": bool }`), all in art pixels. Every character has a rig. `src/shared/characters/characterRig.js` converts them: `artToWorld` for a drawn sprite (it mirrors flipped frames in place), and `rigWorldPoint` / `launchPoint` / `muzzleOf` from gameplay state alone, for the server, bots and predictions. Both give the same position, so what is drawn and what is simulated agree. Projectile attacks name their launch point with `muzzle` instead of frame-size fractions. On the client, `characters/shared/rig.js` gives drawing code `rigPoint(sprite, name)` and `playerAnchor(sprite, 'feet' | 'top' | 'centre' | 'core')` (`core` is the rig's `core` point, the middle of the drawn body, for auras and bubbles on art that does not fill its hitbox; it falls back to the hitbox centre), and `characters/shared/attachToPlayer.js` owns the lifecycle of anything drawn on a player (following, depth layers `floor` / `behind` / `front`, cleanup on death, destroy, shutdown, presentation reset or a sprite event). Draw on players through these instead of hand-tuned offsets. `bindPlayerOrigin` is the only thing that sets a player sprite's horizontal origin: the rig's `feet` put the origin under the character (swapped when it turns) with the client body compensated, so art never shifts on a turn and the hitbox stays where the server puts it. Ctrl+M draws every player's anchors and rig points (`scene/rigDebug.js`); `npm run validate:content` checks rig points lie inside the frame.
-- `src/client/game/characters/networkRegistry.js` delegates optional character-specific protocol lifecycle. Ninja and Sparrow currently use it. Protocol fields and trusted-contact rules remain explicit in their adapters.
+- `src/client/game/characters/networkRegistry.js` delegates optional character-specific protocol lifecycle. Ninja, Sparrow and Ozzy register network adapters. Gloop registers its hook predictor independently. Protocol fields and trusted-contact rules remain explicit in their adapters.
 - `src/client/game/maps/documentRuntime.js` builds map snapshots and stores runtime objects on their scene. Pass the scene to map queries. Scene shutdown clears that scene's references without deleting another scene's runtime for the same map ID.
-- `public/styles/game.css` owns the formerly inline game-page styles. `src/client/styles/` contains styles imported by browser bundles; the public stylesheet keeps its original cascade position.
+- Page entries bundle CSS in the same order. `src/client/styles/ui-system.css` defines tokens and base styles, feature sheets follow, and `src/client/styles/ui-components.css` supplies shared frames and chrome. Lobby and battle entries append their responsive and loading styles where applicable.
+- The battle boot bundle loads Phaser before the game entry and shares loading state through the active page scope. The lobby restores its cached backdrop in a small synchronous bundle before loading its full entry. `src/client/lib/globals.cjs` owns the navigation, page-scope, match-session, and browser diagnostics names used across bundles.
 
 Import owning domains directly. Pass-through compatibility files have been removed; registries remain where they assemble definitions or dispatch behavior.
 
+### Character rig and attachments
+
+Each character definition has a `rig`. Its `feet` give the stand point in right-facing art pixels. Set `frame` for artwork with a different size from its gameplay frame. Named `points` can be fixed, vary by animation frame, or describe a launch point with `pivot`, `reach` and `alongAim`.
+
+- `src/shared/characters/characterRig.js` converts art coordinates to world coordinates. Drawing uses `artToWorld` for the current sprite and flip. Simulation, bots and prediction use `rigWorldPoint`, `launchPoint` or `muzzleOf`. Projectile definitions name the launch point with `muzzle`.
+- `src/client/game/characters/shared/rig.js` exposes `rigPoint` and `playerAnchor`. Use the feet, top or centre anchor for positioning. For auras, the core anchor follows the drawn body's core point and falls back to the hitbox centre.
+- `bindPlayerOrigin` owns the horizontal origin. It mirrors the feet point on a turn and compensates the client physics body so the server hitbox stays aligned.
+- `src/client/game/characters/shared/attachToPlayer.js` owns following, depth and cleanup for attached effects. Choose a floor, behind or front layer. Attachments can retire on death, destruction, shutdown, presentation reset or a sprite event.
+- Use Ctrl+M to inspect rig points and anchors in battle. Run `npm run validate:content` to check that each point lies within its frame.
+
 ## Server domains
 
-- `src/server/routes/` and `core/socketEvents/` adapt transport to `src/server/services/<domain>/`. Keep database mutations and transaction rules in services; there is no separate helpers layer, so put domain logic in its domain folder and only generic utilities in `src/server/lib/`.
+- `src/server/routes/` and `core/socketEvents/` adapt transport to `src/server/services/<domain>/`. Keep database mutations and transaction rules in services; there is no separate helpers layer, so put domain logic in its domain folder and only generic utilities in `src/server/lib/`. Use `ServiceError` for expected failures in throwing services. Party flows that return `failure()` keep their result objects. Express JSON handlers can use `asyncRoute` or `authedRoute` with the endpoint’s existing error shape.
 - `src/server/core/gameRoom/index.js` coordinates room lifecycle and simulation. Its public methods delegate payload validation to `gameRoom/actionValidation.js`, socket registration to `playerTransport.js`, and hit processing to `damageResolver.js`.
 - `shared/combat/runtime/characterAttackRegistry.js` maps attack runtime kinds to constructors and tick functions. `attackRuntimes/` groups linear/bouncing projectiles, melee, hooks, shared geometry and target handling.
 - `shared/combat/runtime/characterCombatRegistry.js` delegates Ninja/Sparrow initialization, requests, ticks, bootstrap and disposal. Their protocol-specific engines own projectile trust and reconciliation. Sparrow authoritative combat is always enabled; the old browser collision engine and rollout toggle are removed. Protocol version checks require stale clients to reload.
@@ -98,7 +109,14 @@ Import owning domains directly. Pass-through compatibility files have been remov
 
 ## Deliberate boundaries
 
-Every map, including the four built-ins in `src/shared/maps/*.json`, is a Map Studio document; `src/client/game/maps/manifest.js` only answers queries over those documents. The legacy JavaScript map modules and their texture preloader have been removed. The in-match editor remains a compatibility tool. New maps use Map Studio and the authenticated map API. See [Map Studio](maps.md).
+Use [shared math](../../src/shared/math.js) for numeric clamping and linear
+interpolation. Aim input accepts numeric strings, optional bounds and nonfinite
+values. Its [aim helpers](../../src/client/game/characters/shared/attackAim.js)
+normalize those inputs before interpolation. Bot skill curves interpolate
+between adjacent trophy rows, and camera zoom interpolates in logarithmic
+space. Each domain owns that conversion.
+
+Every map, including the shipped maps in `src/shared/maps/*.json`, is a Map Studio document; `src/client/game/maps/manifest.js` only answers queries over those documents. The legacy JavaScript map modules and their texture preloader have been removed. The in-match editor remains a compatibility tool. New maps use Map Studio and the authenticated map API. See [Map Studio](maps.md).
 
 Effect modifiers stack multiplicatively through `src/shared/effectRules.js`. World snapshots retain numeric `playerEffects` durations and add `playerEffectMovement` with server-resolved movement, including per-application scaling and slows. Clients fall back to the shared base rules for older snapshots. Gravity Boots now use the server's 1.15 speed / 1.55 jump values; Rage and Thorg Rage retain their client speed boosts on the server too. This reconciles previously inconsistent gameplay, so movement and stacked effects need multiplayer checks.
 
@@ -110,7 +128,7 @@ Large orchestrators still contain lifecycle-sensitive code. Extract a further su
 
 Run `npm run validate:content`, relevant Node tests, then `npm test` and `npm run build` for cross-cutting changes. Content validation checks registered character data/assets, attack references/runtime kinds, powerup assets/effects, invalid body/reload values, duplicate cosmetic prices/movement tuning, shop offers and built-in map documents. It does not replace gameplay testing or the server's uploaded-map asset validation.
 
-[Contributing](contributing.md) lists concrete extension steps; The character brief in that guide lists design/art inputs.
+[Contributing](contributing.md) lists extension steps, focused tests and the character design brief.
 
 ### Embedded combat sessions
 
@@ -121,9 +139,29 @@ GameRoom keeps socket authentication, input sanitization, match modes, persisten
 rewards and server telemetry. The preview has no connection to those services.
 `combatClock` is optional: live rooms default to their existing wall clock, while
 previews/tests advance deterministic fixed steps. Match tuning lives in
-`shared/combat/matchConfig.js`; the old server config entry re-exports it.
+`shared/combat/matchConfig.js`. The host interface and development assertions live in
+`shared/combat/runtime/hostContract.js`.
 
 Client projectile adapters expose instance factories. The default instances serve
 matches; embedded scenes own separate flights, clocks and teardown. A preview must
 never configure/reset the match singleton. See the lobby showcase section in
 [Client](client.md#lobby-character-showcase) and the executable host-parity tests.
+
+
+### Server module map
+
+Paths below are relative to `src/server/`. Start with the owner in the middle column, then follow its collaborators for changes that cross a boundary.
+
+| Change | Entry point | Collaborators |
+| --- | --- | --- |
+| Startup, schema and shutdown | `server.js` and `application.js` | `core/schemaContract.js` checks the database before listening. `jobs/index.js` registers background work with `jobs/scheduler.js`. |
+| HTTP endpoints and sessions | `routes/routes.js` | Domain handlers in `routes/modules/`, `middleware/abuseHttpMiddleware.js`, identity in `services/auth/auth.js` and `authSessionService.js`. |
+| Socket events and party state | `core/socket.js` and `core/socketEvents/` | `services/party/` owns membership, join requests and settings. `services/social/` owns chat, friend requests, messages and privacy. |
+| Queue and match assembly | `core/matchmaking/index.js` | `queueTicketManager.js` handles tickets, `matchAssemblyManager.js` reads rosters and assembles matches, and `readyCheckCoordinator.js` coordinates ready checks. |
+| Room lifecycle and simulation | `core/gameRoom/index.js` | `simulation.js` runs the tick, `roomStateManager.js` builds snapshots, `membership.js` manages players, and `respawn.js` and `abandonment.js` own those timers. |
+| Results and balances | `services/match/matchResultService.js` | `matchLifecycleService.js` handles cancellation and `rewardSettlement.js` awards results. Shop redemptions use `services/shop/shopRedemptions.js`. |
+| Bots and objectives | `core/bots/controller.js` and `core/gameModes/` | `core/physics/bodySolver.js` supports player and bot movement. Bank Bust vaults, gold, turrets and victory live in `core/gameModes/bankBust/`. |
+| Commerce and provider events | `services/shop/shopService.js` and `stripeShopService.js` | `shopRotationService.js` owns rotations. `checkoutSessions.js`, `webhookInbox.js`, `orderFulfillment.js` and `paymentReversals.js` own their stages. |
+| Map publication | `services/maps/mapRepository.js` | `mapAssetFiles.js` pins revision artwork, `mapAssetValidation.js` checks assets and `mapPlaytestService.js` hosts temporary editor sessions. |
+
+See the [client guide](client.md) for battle HUD, Bank Bust rendering, pooled coin effects, powerup renderers, lobby controller ownership and page teardown.

@@ -9,6 +9,7 @@ const modeLoaders = {
       import(/* webpackChunkName: "mode-bank-bust" */ './bankBust/preloadAssets'),
     ]).then(([runtime, assets]) => ({
       create: runtime.createBankBustRuntime,
+      movementAudioProfile: "bank-bust",
       preload: assets.preloadBankBustAssets,
     })),
 };
@@ -39,8 +40,9 @@ export function loadMode(modeId) {
 }
 
 export function preloadModeAssets(scene, modeId, staticPath) {
-  scene._bankBustMovementAudio = false;
-  loadedModes.get(String(modeId))?.preload?.(scene, staticPath);
+  const mode = loadedModes.get(String(modeId));
+  scene.movementAudioProfile = mode?.movementAudioProfile || 'default';
+  mode?.preload?.(scene, staticPath);
 }
 export function createModeRuntime(options) {
   const modeId = options.getGameData()?.modeId || 'duels';

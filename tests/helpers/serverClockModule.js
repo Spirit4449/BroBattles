@@ -1,21 +1,10 @@
-// Loads a fresh, isolated copy of the client match clock for vm-based renderer
-// harnesses, so clock state never leaks between tests.
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
-
-const code = babel.transformSync(fs.readFileSync(require.resolve('../../src/client/game/match/serverClock.js'), 'utf8'), {
-  babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-}).code;
+// A fresh clock isolates state across VM-based presentation fixtures.
+const { loadClientModule } = require('./clientModule');
 
 module.exports = function loadServerClock({ performance, setTimeout = () => 0, clearTimeout = () => {},
   setInterval = () => 0, clearInterval = () => {}, flags = {} } = {}) {
-  const exports = {};
-  vm.runInNewContext(code, {
-    exports,
-    require: name => (name.includes('sparrowReplication') ? require('../../src/shared/characters/sparrowReplication')
-      : name.includes('netFlags') ? { readNetFlags: () => ({ ...flags }) } : null),
+  return loadClientModule('src/client/game/match/serverClock.js', {
     performance, setTimeout, clearTimeout, setInterval, clearInterval,
-  });
-  return exports;
+  }, { require: name => (name.includes('sparrowReplication') ? require('../../src/shared/characters/sparrowReplication')
+    : name.includes('netFlags') ? { readNetFlags: () => ({ ...flags }) } : null) });
 };

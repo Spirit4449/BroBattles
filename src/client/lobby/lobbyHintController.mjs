@@ -1,3 +1,5 @@
+import { BROWSER_EVENTS } from "../lib/browserEvents.js";
+import { formatCountdown } from "../../shared/format.js";
 const DEFAULT_STATE = { lastBattle: null, lastShownAt: null, hints: {} };
 
 function readState(storage, storageKey) {
@@ -29,6 +31,10 @@ function writeState(storage, storageKey, state) {
   } catch (_) {}
 }
 
+const MIN_HINT_INTERVAL_MS = 20000;
+
+export const LOBBY_HINT_STORAGE_KEY = "bb_lobby_hints_v1";
+
 export function getRecentModeStreak(battles = []) {
   const newest = Array.isArray(battles) ? battles[0] : null;
   const modeId = String(newest?.modeId || "").trim();
@@ -42,21 +48,11 @@ export function getRecentModeStreak(battles = []) {
   return { modeId, count };
 }
 
-export function formatHintCountdown(target, now = Date.now()) {
-  const remaining = Math.max(0, new Date(target).getTime() - Number(now));
-  if (!Number.isFinite(remaining)) return "--:--:--";
-  const totalSeconds = Math.floor(remaining / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (days) return `${days}d ${hours}h`;
-  if (hours) return `${hours}h ${minutes}m`;
-  if (minutes) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+function formatHintCountdown(target, now = Date.now()) {
+  return formatCountdown(target, now, "compact");
 }
 
-export function chooseLobbyHint(hints, context, state) {
+function chooseLobbyHint(hints, context, state) {
   const battleCount = Math.max(0, Number(context?.battleCount) || 0);
   const hasLastHintBattle =
     state?.lastBattle !== null &&
@@ -101,7 +97,7 @@ export function chooseLobbyHint(hints, context, state) {
     })[0] || null;
 }
 
-export function chooseTimedLobbyHint(
+function chooseTimedLobbyHint(
   hints,
   context,
   state,
@@ -148,7 +144,7 @@ export function chooseTimedLobbyHint(
 
 export function createLobbyHintController({
   storage = window.localStorage,
-  storageKey = "bb_lobby_hints_v1",
+  storageKey = LOBBY_HINT_STORAGE_KEY,
   autoDismissMs = 9000,
 } = {}) {
   let active = null;
@@ -456,7 +452,7 @@ export function createLobbyHintController({
 
   function repeat(
     task,
-    { initialDelayMs = 5000, minIntervalMs = 20000, maxIntervalMs = 30000 } = {},
+    { initialDelayMs = 5000, minIntervalMs = MIN_HINT_INTERVAL_MS, maxIntervalMs = 30000 } = {},
   ) {
     const queueNext = (delay) => {
       const repeatingTimer = window.setTimeout(async () => {
@@ -466,7 +462,7 @@ export function createLobbyHintController({
           if (!document.hidden) await task();
         } catch (_) {}
         if (cancelled) return;
-        const min = Math.max(1000, Number(minIntervalMs) || 20000);
+        const min = Math.max(1000, Number(minIntervalMs) || MIN_HINT_INTERVAL_MS);
         const max = Math.max(min, Number(maxIntervalMs) || min);
         queueNext(Math.round(min + Math.random() * (max - min)));
       }, Math.max(0, Number(delay) || 0));
@@ -484,7 +480,7 @@ export function createLobbyHintController({
     dismiss(true);
   }
 
-  window.addEventListener("bb:matchmaking-start", cancel, { once: true });
+  window.addEventListener(BROWSER_EVENTS.MATCHMAKING_START, cancel, { once: true });
   window.addEventListener("pagehide", cancel, { once: true });
 
   return { cancel, dismiss, repeat, schedule, showBest, showTimedBest };

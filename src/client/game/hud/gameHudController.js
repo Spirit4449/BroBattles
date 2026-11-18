@@ -1,8 +1,14 @@
+import { getNavigation, getPageScope } from "../../lib/globals.cjs";
+import { describeKiller } from "../../../shared/net/matchPresentation.js";
+import { createModeHud } from "../modes/modeHud";
+import { replayClass } from "../../ui/domMotion";
+import { COUNTDOWN_MS, COUNTDOWN_RISER_MS } from "../../../shared/matchIntroTiming.js";
 import { renderTitle } from "../../views/titleView.js";
 import { getSettings, subscribeSettings } from '../../site/preferences';
 import { updateControlsGuide } from '../../site/controlsGuide.mjs';
 // HUD controller for battle overlays, timer, keybind help, and team status.
-// Keeps DOM/UI concerns out of game scene orchestration.
+// The page scope releases mounted window/document listeners and timers.
+// Socket listeners and Phaser resources need teardown through their owners.
 
 import { playSound, preloadSound } from "../../ui/uiSounds.js";
 import { playCountdownRiser, playCountdownThump, playFightBoom } from "./countdownSfx.js";
@@ -16,7 +22,7 @@ import { bodyDisplayUrl, buildCharacterSkinBodyUrl } from "../../views/skinAsset
 import { LEVEL_CAP, DEFAULT_CHARACTER, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 import { renderLevelBadge } from "../../views/levelBadgeView.js";
 import { pausePlayerCardPreparation, disposePlayerCardMedia, disposePlayerCardMediaWithin, layerPlayerCardMedia, createPlayerCardMedia, mirrorPlayerCardMedia, positionPlayerCardCanvas, warmEquippedPlayerCard } from "../../views/playerCardAnimation.cjs";
-import playerCardsCatalog from "../../../shared/catalogs/playerCardsCatalog.json";
+import playerCardsCatalog from "../../../shared/catalogs/playerCardsCatalog.cjs";
 
 const DEFAULT_CARD_ASSET = "/assets/player-cards/default/default.webp";
 
@@ -53,7 +59,7 @@ export function createGameHudController({
     for (const media of preparedCards.values()) disposePlayerCardMedia(media);
     preparedCards.clear();
   }
-  window.__BB_PAGE_SCOPE__?.onDispose(() => {
+  getPageScope()?.onDispose(() => {
     cardsDisposed = true;
     clearPreparedCards();
     releaseIntroDownloads?.();
@@ -61,17 +67,22 @@ export function createGameHudController({
   let countdownRunning = false;
   let pregameActive = false;
   let currentCardNodes = [];
-  let timerPaused = false;
-  let lastModeAlertAt = 0;
-  let lastModeAlertEventAt = 0;
-  const lastVaultCoins = {};
-  const vaultDeltaTimers = {};
+  let modeHud;
+  let hudType;
+  function syncModeState(modeState, yourTeam) {
+    const type = modeState?.type;
+    if (type !== hudType) {
+      modeHud?.destroy();
+      modeHud = createModeHud(type, () => countdownRunning || _isOverlayVisible());
+      hudType = type;
+    }
+    modeHud?.sync(modeState, yourTeam);
+  }
+  getPageScope()?.onDispose(() => modeHud?.destroy());
   let noticeAutoCloseTimer = null;
   let keybindAutoDismissTimer = null;
   let collapseKeybindHud = null;
-  let stopGuideUpdates = null;
   let spectatedPlayerName = null;
-  let statusBannerHideTimer = null;
   let spectateHudHideTimer = null;
 
   // The catalog ships in the bundle; resolving a card never waits on the network.
@@ -297,10 +308,6 @@ export function createGameHudController({
     _syncCardWrapState(root);
   }
 
-  function _sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
   function _isOverlayVisible() {
     const overlay = document.getElementById("battle-start-overlay");
     return !!overlay && !overlay.classList.contains("hidden");
@@ -407,7 +414,7 @@ export function createGameHudController({
     if (_cardsRevealed(root)) _animateCardsIn(currentCardNodes);
 
     const c = document.getElementById("countdown-display");
-    if (c) c.textContent = "5";
+    if (c) c.textContent = String(Math.ceil(COUNTDOWN_MS / 1000));
 
     root.classList.remove("hidden");
     root.classList.remove("phase-darkened", "phase-cards");
@@ -430,10 +437,6 @@ export function createGameHudController({
     const label = document.getElementById("game-timer-label");
     if (!hud) return;
     hud.classList.remove("hidden");
-    if (timerPaused) {
-      if (label) label.textContent = "Paused (Editor)";
-      return;
-    }
 
     const totalSec = Math.max(0, Math.ceil(remainingMs / 1000));
     const mins = Math.floor(totalSec / 60);
@@ -450,187 +453,18 @@ export function createGameHudController({
     }
   }
 
-  // One row per vault showing the single value the mode runs on: the coins in
-  // it. The bar is that number against what the vault started with, and the
-  // tick on the bar is the floor purchases cannot spend past.
-  function _setVaultRow(teamKey, vault, yourTeam, modeState) {
-    const row = document.getElementById(`bank-bust-${teamKey}`);
-    if (!row || !vault) return;
-    row.classList.toggle("friendly", yourTeam === teamKey);
-    row.classList.toggle("enemy", !!yourTeam && yourTeam !== teamKey);
-    const label = row.querySelector(".bank-bust-vault-label");
-    if (label) {
-      const text = !yourTeam ? "Vault" : yourTeam === teamKey ? "Team Vault" : "Enemy Vault";
-      if (label.textContent !== text) label.textContent = text;
-    }
-
-    const coins = Math.max(0, Number(vault?.coins) || 0);
-    const starting = Math.max(1, Number(vault?.startingCoins) || 1);
-    const ratio = Math.max(0, Math.min(1, coins / starting));
-    const lowRatio = Number(modeState?.lowCoinsRatio) || 0.25;
-
-    const value = row.querySelector(".bank-bust-vault-coins");
-    if (value) value.textContent = coins.toLocaleString("en-US");
-
-    const fill = row.querySelector(".bank-bust-vault-fill");
-    if (fill) fill.style.width = `${(ratio * 100).toFixed(1)}%`;
-
-    row.classList.toggle("empty", coins <= 0);
-    row.classList.toggle("low", coins > 0 && ratio <= lowRatio);
-
-    _flashVaultDelta(teamKey, row, coins);
-  }
-
-  // The last coin change for this vault, flashed beside the label. Tracked
-  // here rather than read from the ledger so a burst of pickups reads as one
-  // movement instead of a stutter of numbers.
-  function _flashVaultDelta(teamKey, row, coins) {
-    const previous = lastVaultCoins[teamKey];
-    lastVaultCoins[teamKey] = coins;
-    if (previous === undefined || previous === coins) return;
-    const delta = coins - previous;
-    const label = row.querySelector(".bank-bust-vault-delta");
-    if (!label) return;
-    label.textContent = `${delta > 0 ? "+" : ""}${delta.toLocaleString("en-US")}`;
-    label.classList.remove("gain", "loss");
-    label.classList.add(delta > 0 ? "gain" : "loss", "show");
-    clearTimeout(vaultDeltaTimers[teamKey]);
-    vaultDeltaTimers[teamKey] = setTimeout(() => {
-      label.classList.remove("show");
-    }, 900);
-
-  }
-
-  function _showVaultAlert(event, yourTeam) {
-    const root = document.getElementById("bank-bust-alert");
-    if (!root || !event) return;
-    // Only warn about your own Vault.
-    if (!yourTeam || event?.targetTeam !== yourTeam) return;
-    const eventAt = Number(event?.at) || 0;
-    if (eventAt && eventAt <= lastModeAlertEventAt) return;
-    const now = Date.now();
-    if (now - lastModeAlertAt < 20000) return;
-    lastModeAlertAt = now;
-    lastModeAlertEventAt = eventAt || now;
-    root.textContent = "You are being attacked";
-    root.classList.remove("hidden", "enemy-alert");
-    root.classList.add("friendly-alert");
-    root.classList.add("show");
-    setTimeout(() => {
-      root.classList.remove("show");
-      root.classList.add("hidden");
-    }, 1600);
-  }
-
-  // Short heads-up while the centre crate is on its way; nothing once it lands.
-  function _syncCenterGold(centerGold) {
-    const root = document.getElementById("bank-bust-event");
-    if (!root) return;
-    const label = root.querySelector(".bb-event-label");
-    const timer = root.querySelector(".bb-event-timer");
-    if (String(centerGold?.phase || "") !== "announced") {
-      root.classList.remove("show", "live");
-      root.classList.add("hidden");
-      return;
-    }
-    if (label) label.textContent = "Crate incoming";
-    if (timer) timer.textContent = "";
-    root.classList.remove("hidden", "live");
-    root.classList.add("show");
-  }
-
-  function syncModeState(modeState, yourTeam = null) {
-    const hud = document.getElementById("bank-bust-hud");
-    if (!hud) return;
-    if (!modeState || String(modeState?.type) !== "bank-bust") {
-      hud.classList.add("hidden");
-      _syncCenterGold(null);
-      return;
-    }
-    const introBlocking = countdownRunning || _isOverlayVisible();
-    if (!introBlocking) {
-      hud.classList.remove("hidden");
-    }
-    _setVaultRow("team1", modeState?.vaults?.team1, yourTeam, modeState);
-    _setVaultRow("team2", modeState?.vaults?.team2, yourTeam, modeState);
-    _syncCenterGold(modeState?.centerGold);
-    if (modeState?.lastVaultDamageEvent?.at) {
-      _showVaultAlert(modeState.lastVaultDamageEvent, yourTeam);
-    }
-  }
-
   function showSuddenDeathBanner() {
     const existing = document.getElementById("sd-flash-banner");
     if (existing) return;
     const banner = document.createElement("div");
     banner.id = "sd-flash-banner";
     banner.textContent = "SUDDEN DEATH";
-    Object.assign(banner.style, {
-      position: "fixed",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%, -50%) scale(0.3)",
-      fontFamily: "'Press Start 2P', cursive",
-      fontSize: "clamp(28px, 6vw, 52px)",
-      color: "#f87171",
-      textShadow: "0 4px 0 #7f1d1d, 0 0 30px rgba(248,113,113,0.85)",
-      zIndex: "10000",
-      letterSpacing: "4px",
-      pointerEvents: "none",
-      transition:
-        "transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.7s ease",
-      opacity: "0",
-      whiteSpace: "nowrap",
-    });
     document.body.appendChild(banner);
-    requestAnimationFrame(() => {
-      banner.style.transform = "translate(-50%, -50%) scale(1)";
-      banner.style.opacity = "1";
-    });
+    requestAnimationFrame(() => replayClass(banner, "is-visible"));
     setTimeout(() => {
-      banner.style.opacity = "0";
-      banner.style.transform = "translate(-50%, -50%) scale(1.3)";
+      banner.classList.replace("is-visible", "is-leaving");
       setTimeout(() => banner.remove(), 600);
     }, 2500);
-  }
-
-  function showStatusBanner(text, { variant = "info" } = {}) {
-    const banner = document.getElementById("game-status-banner");
-    const textEl = document.getElementById("game-status-banner-text");
-    if (!banner || !textEl) return;
-    clearTimeout(statusBannerHideTimer);
-    const wasHidden = banner.classList.contains("hidden");
-    textEl.textContent = String(text || "");
-    banner.classList.remove("hidden", "variant-info", "variant-danger");
-    banner.classList.add(
-      variant === "danger" ? "variant-danger" : "variant-info",
-    );
-    // Establish the hidden state before starting the transition on first reveal.
-    if (wasHidden) void banner.offsetWidth;
-    banner.classList.add("show");
-  }
-
-  function hideStatusBanner() {
-    const banner = document.getElementById("game-status-banner");
-    if (!banner?.classList.contains("show")) return;
-    banner.classList.remove("show");
-    clearTimeout(statusBannerHideTimer);
-    statusBannerHideTimer = setTimeout(() => {
-      if (!banner.classList.contains("show")) {
-        banner.classList.add("hidden");
-      }
-    }, 320);
-  }
-
-  function describeKiller({ killedBy, cause } = {}) {
-    const name = killedBy ? String(killedBy) : "";
-    if (name) {
-      const turret = name.match(/^(\w+)-turret$/);
-      return { label: "Eliminated by", name: turret ? `${turret[1]} turret` : name };
-    }
-    if (cause === "fall") return { label: "You fell", name: "Out of bounds" };
-    if (cause === "poison") return { label: "Eliminated by", name: "Poison" };
-    return null;
   }
 
   // Red edge glow and killer card, shown from death until respawn or match end.
@@ -653,8 +487,7 @@ export function createGameHudController({
       root.setAttribute("aria-hidden", "false");
       document.getElementById("death-screen-killer")?.classList.add("hidden");
       // Restart the flash animation for back-to-back deaths (respawn modes).
-      void root.offsetWidth;
-      root.classList.add("show");
+      replayClass(root, "show");
     }
     if (!info) return;
     const killer = describeKiller(info);
@@ -692,8 +525,8 @@ export function createGameHudController({
       const wasHidden = root.classList.contains("hidden");
       root.classList.remove("hidden");
       if (!wasVisible) {
-        if (wasHidden) void root.offsetWidth;
-        root.classList.add("show");
+        if (wasHidden) replayClass(root, "show");
+        else root.classList.add("show");
       }
     } else if (wasVisible) {
       root.classList.remove("show");
@@ -715,7 +548,10 @@ export function createGameHudController({
     setSpectatingPlayer(null);
   }
 
+  let spectateHudInitialized = false;
   function initSpectateHud() {
+    if (spectateHudInitialized) return;
+    spectateHudInitialized = true;
     const previous = document.getElementById("spectate-previous");
     const next = document.getElementById("spectate-next");
     previous?.addEventListener("click", () => onSpectatePrevious?.());
@@ -761,6 +597,7 @@ export function createGameHudController({
   }
 
   let noticeKeyHandler = null;
+  let systemNoticeOpen = false;
 
   function hideSystemNotice() {
     const overlay = document.getElementById("game-notice-overlay");
@@ -768,7 +605,7 @@ export function createGameHudController({
     overlay.classList.remove("show", "tone-error", "tone-info");
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
-    window.__BB_GAME_NOTICE_OPEN = false;
+    systemNoticeOpen = false;
     if (noticeKeyHandler) {
       document.removeEventListener("keydown", noticeKeyHandler, true);
       noticeKeyHandler = null;
@@ -816,7 +653,7 @@ export function createGameHudController({
 
     // The notice blocks the match, so give the mouse back and let the
     // keyboard press its button.
-    window.__BB_GAME_NOTICE_OPEN = true;
+    systemNoticeOpen = true;
     if (document.pointerLockElement) document.exitPointerLock?.();
     document.body?.classList?.remove("battle-cursor-hidden");
     const canvas = document.querySelector("canvas");
@@ -849,11 +686,14 @@ export function createGameHudController({
     return { close: hideSystemNotice };
   }
 
+  let keybindHudInitialized = false;
   function initKeybindHud() {
+    if (keybindHudInitialized) return;
     const hud = document.getElementById("battle-keybind-hud");
     const toggleBtn = document.getElementById("battle-keybind-toggle");
     const closeBtn = document.getElementById("battle-keybind-close");
     if (!hud) return;
+    keybindHudInitialized = true;
 
     const applyExpandedState = (expanded, persist = true) => {
       if (expanded) document.querySelector(".site-settings-side")?.close();
@@ -890,11 +730,11 @@ export function createGameHudController({
 
     collapseKeybindHud = () => applyExpandedState(false, false);
 
-    stopGuideUpdates?.();
     const updateGuide = settings => updateControlsGuide(hud, settings);
     updateGuide(getSettings());
-    stopGuideUpdates = subscribeSettings(updateGuide);
-    window.addEventListener('pagehide', () => stopGuideUpdates?.(), {once:true});
+    const stopGuideUpdates = subscribeSettings(updateGuide);
+    getPageScope()?.onDispose(stopGuideUpdates);
+    window.addEventListener("pagehide", stopGuideUpdates, { once: true });
     hud.querySelectorAll('kbd:not([data-binding])').forEach(key => {
       if(key.textContent.trim()==='ESC')key.dataset.code='Escape';
     });
@@ -953,31 +793,6 @@ export function createGameHudController({
       if (b?.name === username) return 1;
       return String(a?.name || "").localeCompare(String(b?.name || ""));
     });
-
-    const healthColorForRatio = (ratio) => {
-      if (ratio <= 0.24) return "#f87171";
-      if (ratio <= 0.55) return "#fbbf24";
-      return "#34d399";
-    };
-
-    const applyHealthState = (entry, health, maxHealth = null) => {
-      if (!entry?.row) return;
-      if (Number.isFinite(Number(maxHealth)) && Number(maxHealth) > 0) {
-        entry.maxHealth = Number(maxHealth);
-      }
-      if (Number.isFinite(Number(health))) {
-        entry.currentHealth = Number(health);
-      }
-      const current = Math.max(0, Number(entry.currentHealth) || 0);
-      const max = Math.max(1, Number(entry.maxHealth) || 1);
-      const ratio = Math.max(0, Math.min(1, current / max));
-      entry.row.style.setProperty("--health-ratio", String(ratio));
-      entry.row.style.setProperty(
-        "--health-accent",
-        healthColorForRatio(ratio),
-      );
-      setTeamHudPlayerAlive(entry.name, current > 0);
-    };
 
     const yourTeam = sorted.filter((p) => p?.team === gameData?.yourTeam);
     const oppTeam = sorted.filter((p) => p?.team !== gameData?.yourTeam);
@@ -1044,7 +859,7 @@ export function createGameHudController({
 
       if (p?.connected === false) row.classList.add("disconnected");
       if (p?.loaded !== true) row.classList.add("loading");
-      applyHealthState(entry, entry.currentHealth, entry.maxHealth);
+      setTeamHudPlayerHealth(name, entry.currentHealth, entry.maxHealth);
       return row;
     };
 
@@ -1071,9 +886,7 @@ export function createGameHudController({
       entry.row.style.setProperty("--health-ratio", "0");
     }
     if (shouldBeDead && !wasDead) {
-      entry.row.classList.remove("death-pop");
-      void entry.row.offsetWidth;
-      entry.row.classList.add("death-pop");
+      replayClass(entry.row, "death-pop");
       setTimeout(() => {
         entry.row?.classList?.remove("death-pop");
       }, 360);
@@ -1170,7 +983,7 @@ export function createGameHudController({
     pregameActive = !!active;
     document.body?.classList.toggle("match-pregame", pregameActive);
     if (pregameActive) {
-      releaseIntroDownloads ||= window.__BB_NAVIGATION__?.holdGameplayDownloads?.();
+      releaseIntroDownloads ||= getNavigation()?.holdGameplayDownloads?.();
     } else {
       releaseIntroDownloads?.();
       releaseIntroDownloads = null;
@@ -1193,7 +1006,7 @@ export function createGameHudController({
     fightBurst?.classList?.add("hidden");
   }
 
-  function startCountdown(seconds = 5, { elapsedMs = 0 } = {}) {
+  function startCountdown(seconds = COUNTDOWN_MS / 1000, { elapsedMs = 0 } = {}) {
     if (countdownRunning) return;
     countdownRunning = true;
     // A burst left over from an earlier countdown must not cut this one short.
@@ -1214,20 +1027,14 @@ export function createGameHudController({
     if (!_isOverlayVisible()) showBattleStartOverlay(_gameData()?.players || []);
     _revealCards();
 
-    const totalMs = Math.max(1, Number(seconds) || 5) * 1000;
+    const totalMs = Math.max(1, Number(seconds) || COUNTDOWN_MS / 1000) * 1000;
     const skippedMs = Math.min(totalMs, Math.max(0, Number(elapsedMs) || 0));
     const at = (ms, fn) => setTimeout(fn, Math.max(0, ms - skippedMs));
 
     const overlay = document.getElementById("battle-start-overlay");
     const fightBurst = document.getElementById("fight-burst");
     const count = Math.ceil(totalMs / 1000);
-    // Replays a CSS animation class on an element that may already have it.
-    const replay = (el, cls) => {
-      if (!el?.classList) return;
-      el.classList.remove(cls);
-      void el.offsetWidth;
-      el.classList.add(cls);
-    };
+    const riserSeconds = COUNTDOWN_RISER_MS / 1000;
 
     const showNumber = (num) => {
       // 0 for the first number, 1 for the last: drives colour, size and shake.
@@ -1239,12 +1046,15 @@ export function createGameHudController({
       countdownEl.style.setProperty?.("--heat", heat.toFixed(3));
       overlay?.style?.setProperty?.("--heat", heat.toFixed(3));
       if (overlay?.dataset) overlay.dataset.count = String(num);
-      overlay?.classList?.toggle("is-final", num <= 3);
-      replay(countdownEl, "is-beat");
-      replay(overlay, "is-beat");
+      overlay?.classList?.toggle("is-final", num <= riserSeconds);
+      replayClass(countdownEl, "is-beat");
+      replayClass(overlay, "is-beat");
       playSound("beep", 0.38 + heat * 0.2, { playbackRate: 1 + (count - num) * 0.06 });
       playCountdownThump(heat);
-      if (num === 3) playCountdownRiser(3000 - Math.max(0, skippedMs - (totalMs - 3000)));
+      if (num === riserSeconds) {
+        const elapsedRiserMs = Math.max(0, skippedMs - (totalMs - COUNTDOWN_RISER_MS));
+        playCountdownRiser(COUNTDOWN_RISER_MS - elapsedRiserMs);
+      }
     };
 
     // 5, 4, 3, 2, 1 on whole seconds, then FIGHT.
@@ -1261,7 +1071,7 @@ export function createGameHudController({
       overlay?.classList?.add("is-fight");
       if (fightBurst) {
         fightBurst.classList.remove("hidden");
-        replay(fightBurst, "is-on");
+        replayClass(fightBurst, "is-on");
         clearTimeout(fightBurstTimer);
         fightBurstTimer = setTimeout(hideFightBurst, 1100);
       }
@@ -1279,14 +1089,6 @@ export function createGameHudController({
     });
   }
 
-  function setTimerPaused(paused) {
-    timerPaused = !!paused;
-    if (!timerPaused) {
-      const label = document.getElementById("game-timer-label");
-      if (label) label.textContent = "Time Remaining";
-    }
-  }
-
   window.addEventListener("resize", _syncVisibleOverlayCardSize);
 
   return {
@@ -1294,8 +1096,6 @@ export function createGameHudController({
     initTimerHud,
     updateTimerHud,
     showSuddenDeathBanner,
-    showStatusBanner,
-    hideStatusBanner,
     showLocalDeath,
     hideLocalDeath,
     initSpectateHud,
@@ -1305,6 +1105,7 @@ export function createGameHudController({
     hideTopHudFade,
     showSystemNotice,
     hideSystemNotice,
+    isSystemNoticeOpen: () => systemNoticeOpen,
     initKeybindHud,
     initTeamStatusHud,
     setTeamHudPlayerAlive,
@@ -1318,6 +1119,5 @@ export function createGameHudController({
     prepareBattleCards,
     startCountdown,
     hideBattleStartOverlay,
-    setTimerPaused,
   };
 }

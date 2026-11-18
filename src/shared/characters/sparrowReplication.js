@@ -183,4 +183,4 @@ function advanceShownLead(state, targetMs, localNow, fromMs = 0) {
   if (state.shown >= target) state.caught = true;
   return state.shown;
 }
-module.exports = { CombatClock, SparrowReplica, MAX_PREDICTION_LEAD_MS, MAX_ENEMY_LEAD_MS, LEAD_CATCHUP, clampLead, advanceShownLead };
+module.exports = { CombatClock, SparrowReplica, LEAD_CATCHUP, clampLead, advanceShownLead };

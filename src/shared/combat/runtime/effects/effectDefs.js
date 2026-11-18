@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../net/socketEvents.js");
 const { isPlaced } = require('../../targetable.js');
 const { EFFECT_RULES, getEffectModifiers } = require('../../../effectRules');
 
@@ -40,7 +41,7 @@ const effectDefs = {
     getModifiers(params = {}) { return getEffectModifiers('rage', params); },
     onApply: null,
     onTick(player, room) {
-      room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
+      room.broadcast(SOCKET_EVENTS.POWERUP_TICK, {
         type: "rage",
         username: player.name,
       });
@@ -74,12 +75,12 @@ const effectDefs = {
       const prev = player.health;
       player.health = player.maxHealth;
       if (player.health !== prev) {
-        room._broadcastHealthUpdate(player, { cause: "heal" });
+        room.broadcastHealthUpdate(player, { cause: "heal" });
       }
     },
     onTick(player, room, now, params = {}) {
       // Healing pauses while standing in the sudden-death poison.
-      if (room._isInSuddenDeathWater?.(player, now)) return;
+      if (room.isInSuddenDeathWater?.(player, now)) return;
       const prev = player.health;
       const powerScale = getPowerScale(params);
       const inc =
@@ -87,8 +88,8 @@ const effectDefs = {
         1000;
       player.health = Math.min(player.maxHealth, player.health + inc);
       if (player.health !== prev) {
-        room._maybeBroadcastHealth(player, now, { cause: "heal" });
-        room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
+        room.maybeBroadcastHealth(player, now, { cause: "heal" });
+        room.broadcast(SOCKET_EVENTS.POWERUP_TICK, {
           type: "health",
           username: player.name,
         });
@@ -110,13 +111,13 @@ const effectDefs = {
       player.health = Math.max(0, player.health - dmg);
       player.lastCombatAt = now;
       if (player.health !== prev) {
-        room._broadcastHealthUpdate(player, { cause: "poison" });
-        room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
+        room.broadcastHealthUpdate(player, { cause: "poison" });
+        room.broadcast(SOCKET_EVENTS.POWERUP_TICK, {
           type: "poison",
           username: player.name,
         });
         if (player.health <= 0) {
-          room._handlePlayerDeath(player, { cause: "poison", at: now });
+          room.handlePlayerDeath(player, { cause: "poison", at: now });
         }
       }
     },
@@ -129,7 +130,7 @@ const effectDefs = {
     getModifiers(params = {}) { return getEffectModifiers('gravityBoots', params); },
     onApply: null,
     onTick(player, room) {
-      room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
+      room.broadcast(SOCKET_EVENTS.POWERUP_TICK, {
         type: "gravityBoots",
         username: player.name,
       });
@@ -186,7 +187,7 @@ const effectDefs = {
           amountY: Math.round((Math.abs(ny) < 0.45 ? -0.45 : ny) * POWERUP_SHOCKWAVE_FORCE_Y * falloff),
         };
         room.applyKnockback(target, impulse);
-        room.io.to(`game:${room.matchId}`).emit("shockwave:hit", {
+        room.broadcast(SOCKET_EVENTS.SHOCKWAVE_HIT, {
           username: target.name,
           amountX: impulse.amountX,
           amountY: impulse.amountY,
@@ -203,7 +204,7 @@ const effectDefs = {
     getModifiers(params = {}) { return getEffectModifiers('freeze', params); },
     onApply: null,
     onTick(player, room) {
-      room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
+      room.broadcast(SOCKET_EVENTS.POWERUP_TICK, {
         type: "freeze",
         username: player.name,
       });
@@ -219,7 +220,7 @@ const effectDefs = {
     getModifiers(params = {}) { return getEffectModifiers('thorgRage', params); },
     onApply: null,
     onTick(player, room) {
-      room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
+      room.broadcast(SOCKET_EVENTS.POWERUP_TICK, {
         type: "thorgRage",
         username: player.name,
       });
@@ -251,20 +252,20 @@ const effectDefs = {
       const applied = Math.max(0, prev - player.health);
       if (source && source !== player && applied > 0) {
         source.lastCombatAt = now;
-        room._recordCombatStat?.(source, { damage: applied, hits: 1 });
+        room.recordCombatStat?.(source, { damage: applied, hits: 1 });
       }
 
       if (player.health !== prev) {
-        room._broadcastHealthUpdate(player, { cause: "burn", duckBlocked });
-        room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
+        room.broadcastHealthUpdate(player, { cause: "burn", duckBlocked });
+        room.broadcast(SOCKET_EVENTS.POWERUP_TICK, {
           type: "sparrowBurn",
           username: player.name,
         });
         if (player.health <= 0 && prev > 0) {
           if (source && source !== player) {
-            room._recordCombatStat?.(source, { kills: 1 });
+            room.recordCombatStat?.(source, { kills: 1 });
           }
-          room._handlePlayerDeath(player, {
+          room.handlePlayerDeath(player, {
             cause: "burn",
             killedBy: sourceName || undefined,
             at: now,

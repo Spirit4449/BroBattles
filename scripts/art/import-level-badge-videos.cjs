@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { createHash } = require('node:crypto');
+const { artAssetVersion } = require('./asset-version.cjs');
 const sharp = require('../../spritesheet-generator/node_modules/sharp');
 const sources = {
   1: 'Animate_pixel_art_bronze_shield_20261009000201.mp4',
@@ -143,7 +143,7 @@ async function main() {
       const animation = path.join(out, `${level}-animated.webp`);
       execFileSync('img2webp', ['-loop', '0', '-min_size', '-lossy', '-q', '82', '-m', '6', '-d', String(delayMs), ...loopFiles.map(f => path.join(temp, f)), '-o', animation], { stdio: 'pipe' });
       await sharp(path.join(temp, loopFiles[0])).webp({ lossless: true }).toFile(path.join(out, `${level}-poster.webp`));
-      const version = createHash('sha256').update(fs.readFileSync(animation)).digest('hex').slice(0, 16);
+      const version = artAssetVersion(animation);
       // The WebP encoder can merge identical adjacent frames; record its actual
       // frame count and durations, including any combined frame delays.
       const encoded = await sharp(animation, { animated: true }).metadata();

@@ -1,10 +1,11 @@
 // Mechanical chroma-key import and nearest-neighbor atlas packing of generated art.
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { execFileSync: run } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
 const dir = path.join(root, 'public/assets/ninja/skins/ninja-arena-sovereign');
-const tmp = fs.mkdtempSync('/private/tmp/king-atlas-');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'king-atlas-'));
 function read(name) {
 const source = path.join(dir, name);
 const info = JSON.parse(run('ffprobe', ['-v','quiet','-show_streams','-of','json',source])).streams[0];

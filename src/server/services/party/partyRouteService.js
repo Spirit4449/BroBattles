@@ -1,4 +1,4 @@
-const { capacityFromSelection } = require("../../lib/utils");
+const { capacityFromSelection } = require("./partyRules");
 const { selectPartyById, getPartyOwnerName } = require("./party");
 const { resolveCharacterKey } = require("../../../shared/characters/characterStats.js");
 const {
@@ -12,14 +12,6 @@ const {
 const { failure } = require("../serviceResult");
 
 function createPartyRouteService({ db }) {
-  function isMissingPartyVisibilityColumn(error) {
-    return (
-      error?.code === "ER_BAD_FIELD_ERROR" &&
-      /is_public|public_name/i.test(
-        String(error?.sqlMessage || error?.message || ""),
-      )
-    );
-  }
 
   async function getPartyMembersView({ username, partyId }) {
     if (!partyId) {
@@ -98,45 +90,28 @@ function createPartyRouteService({ db }) {
 
     const ownerName = await getPartyOwnerName(db, partyId);
 
-    try {
-      const rows = await db.runQuery(
-        "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
-        [partyId],
-      );
-      if (!rows.length) {
-        return failure(404, { error: "Party not found" });
-      }
-      return {
-        ok: true,
-        payload: {
-          partyId,
-          ownerName,
-          isOwner: ownerName === username,
-          allowMemberSelection: Number(rows[0]?.allow_member_selection ?? 1) === 1,
-          memberSelectionSupported: rows[0]?.allow_member_selection != null,
-          hideEnemyBros: Number(rows[0]?.hide_enemy_bros ?? 0) === 1,
-          hideEnemyBrosSupported: rows[0]?.hide_enemy_bros != null,
-          visibilitySupported: rows[0]?.is_public != null,
-          isPublic: Number(rows[0]?.is_public || 0) === 1,
-          publicName: String(rows[0]?.public_name || "").trim(),
-        },
-      };
-    } catch (error) {
-      if (isMissingPartyVisibilityColumn(error)) {
-        return {
-          ok: true,
-          payload: {
-            partyId,
-            ownerName,
-            isOwner: ownerName === username,
-            isPublic: false,
-            publicName: "",
-            visibilitySupported: false,
-          },
-        };
-      }
-      throw error;
+    const rows = await db.runQuery(
+      "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
+      [partyId],
+    );
+    if (!rows.length) {
+      return failure(404, { error: "Party not found" });
     }
+    return {
+      ok: true,
+      payload: {
+        partyId,
+        ownerName,
+        isOwner: ownerName === username,
+        allowMemberSelection: Number(rows[0]?.allow_member_selection ?? 1) === 1,
+
+        hideEnemyBros: Number(rows[0]?.hide_enemy_bros ?? 0) === 1,
+
+
+        isPublic: Number(rows[0]?.is_public || 0) === 1,
+        publicName: String(rows[0]?.public_name || "").trim(),
+      },
+    };
   }
 
   async function discoverPublicParties({
@@ -148,72 +123,58 @@ function createPartyRouteService({ db }) {
     const normalizedQuery = String(query || "").trim();
     const maxRows = Math.max(1, Math.min(100, Number(limit) || 30));
 
-    let rows;
-    try {
-      rows = await db.runQuery(
-        `SELECT
-           p.party_id,
-           p.mode,
-           p.map,
-           p.mode_id,
-           p.mode_variant_id,
-           p.public_name,
-           p.status AS party_status,
-           p.created_at AS party_created_at,
-           pm.name,
-           pm.team,
-           pm.joined_at,
-           pm.last_seen,
-           u.char_class,
-           u.selected_skin_id_by_char,
-           u.selected_profile_icon_id AS profile_icon_id,
-           u.trophies,
-           CASE
-             WHEN pm.last_seen IS NULL
-               OR pm.last_seen < DATE_SUB(NOW(), INTERVAL 45 SECOND)
-             THEN 'offline'
-             ELSE COALESCE(u.status, 'online')
-           END AS status,
-           COALESCE(pa.battle_count, 0) AS party_battle_count,
-           pa.last_battle_at,
-           CASE
-             WHEN pm.joined_at = (
-               SELECT MIN(pm2.joined_at)
-               FROM party_members pm2
-               WHERE pm2.party_id = p.party_id
-             ) THEN 1
-             ELSE 0
-           END AS is_owner
-         FROM parties p
-         JOIN party_members pm ON pm.party_id = p.party_id
-         LEFT JOIN users u ON u.name = pm.name
-         LEFT JOIN (
-           SELECT
-             mp.party_id,
-             COUNT(DISTINCT m.match_id) AS battle_count,
-             MAX(m.created_at) AS last_battle_at
-           FROM match_participants mp
-           JOIN matches m ON m.match_id = mp.match_id
-           WHERE mp.party_id IS NOT NULL AND m.status = 'completed'
-           GROUP BY mp.party_id
-         ) pa ON pa.party_id = p.party_id
-         WHERE p.is_public = 1
-         ORDER BY p.party_id DESC, pm.joined_at ASC, pm.name ASC
-         LIMIT ?`,
-        [maxRows * 8],
-      );
-    } catch (error) {
-      if (isMissingPartyVisibilityColumn(error)) {
-        return {
-          ok: true,
-          payload: {
-            parties: [],
-            visibilitySupported: false,
-          },
-        };
-      }
-      throw error;
-    }
+    const rows = await db.runQuery(
+      `SELECT
+         p.party_id,
+         p.mode,
+         p.map,
+         p.mode_id,
+         p.mode_variant_id,
+         p.public_name,
+         p.status AS party_status,
+         p.created_at AS party_created_at,
+         pm.name,
+         pm.team,
+         pm.joined_at,
+         pm.last_seen,
+         u.char_class,
+         u.selected_skin_id_by_char,
+         u.selected_profile_icon_id AS profile_icon_id,
+         u.trophies,
+         CASE
+           WHEN pm.last_seen IS NULL
+             OR pm.last_seen < DATE_SUB(NOW(), INTERVAL 45 SECOND)
+           THEN 'offline'
+           ELSE COALESCE(u.status, 'online')
+         END AS status,
+         COALESCE(pa.battle_count, 0) AS party_battle_count,
+         pa.last_battle_at,
+         CASE
+           WHEN pm.joined_at = (
+             SELECT MIN(pm2.joined_at)
+             FROM party_members pm2
+             WHERE pm2.party_id = p.party_id
+           ) THEN 1
+           ELSE 0
+         END AS is_owner
+       FROM parties p
+       JOIN party_members pm ON pm.party_id = p.party_id
+       LEFT JOIN users u ON u.name = pm.name
+       LEFT JOIN (
+         SELECT
+           mp.party_id,
+           COUNT(DISTINCT m.match_id) AS battle_count,
+           MAX(m.created_at) AS last_battle_at
+         FROM match_participants mp
+         JOIN matches m ON m.match_id = mp.match_id
+         WHERE mp.party_id IS NOT NULL AND m.status = 'completed'
+         GROUP BY mp.party_id
+       ) pa ON pa.party_id = p.party_id
+       WHERE p.is_public = 1
+       ORDER BY p.party_id DESC, pm.joined_at ASC, pm.name ASC
+       LIMIT ?`,
+      [maxRows * 8],
+    );
 
     const byParty = new Map();
     for (const row of rows) {
@@ -344,7 +305,7 @@ function createPartyRouteService({ db }) {
       ok: true,
       payload: {
         parties,
-        visibilitySupported: true,
+
       },
     };
   }

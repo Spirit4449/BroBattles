@@ -1,3 +1,5 @@
+import { getUser, updateUser } from "../session.mjs";
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
 import { renderTitle, renderTitleCollection } from "../../views/titleView.js";
 import { renderFavoriteCharacter } from "../../views/favoriteCharacterView.js";
 import { applyWallet, subscribeWallet, walletRevision } from "../wallet.mjs";
@@ -19,10 +21,10 @@ import { renderCharacterLevelGrid } from "../../views/profileCharacterLevelsView
 import { sonner } from "../../ui/sonner.js";
 import { syncProfileReportButton } from './profileReport.js';
 import { playSound } from "../../ui/uiSounds.js";
-import { escapeHtml, profileFetchJson } from '../ui';
+import { closeOverlay, escapeHtml, openOverlay, profileFetchJson, registerOverlay } from '../ui';
 import { resolveCharacterKey, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 
-export function createProfileController({ getUserData, onProfileRendered }) {
+export function createProfileController({ getUserData = getUser, onProfileRendered }) {
   const lobbyProfileState = {
     profile: null,
     catalog: null,
@@ -90,7 +92,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       renderTitleCollection(document.getElementById("profile-titles-grid"), profile, {
         fetchJson: profileFetchJson,
         onSelected: id => {
-          if (getUserData()) getUserData().selected_title_id = id;
+          updateUser({ selected_title_id: id });
           renderProfilePopupStats();
         },
         onError: error => sonner("Could not equip title", error.message, "error"),
@@ -241,13 +243,13 @@ export function createProfileController({ getUserData, onProfileRendered }) {
             actionBtn.disabled = true;
             const cardId = String(actionBtn.dataset.cardId || "");
 
-            await profileFetchJson("/player-cards/select", {
+            await profileFetchJson(API_PATHS.PLAYER_CARDS_SELECT, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ cardId }),
             });
 
-            if (getUserData()) getUserData().selected_card_id = cardId;
+            updateUser({ selected_card_id: cardId });
             warmEquippedPlayerCard(cardId);
 
             await loadProfilePopupData(true);
@@ -361,7 +363,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
           const iconId = String(tile.dataset.iconId || "");
           if (!iconId) return;
 
-          await profileFetchJson("/profile-icons/select", {
+          await profileFetchJson(API_PATHS.PROFILE_ICONS_SELECT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ iconId }),
@@ -382,10 +384,10 @@ export function createProfileController({ getUserData, onProfileRendered }) {
   async function loadProfilePopupData(force = false) {
     if (!lobbyProfileState.viewingSelf && lobbyProfileState.viewingUsername) {
       const profileRes = await profileFetchJson(
-        `/profile/view?username=${encodeURIComponent(lobbyProfileState.viewingUsername)}`,
+        `${API_PATHS.PROFILE_VIEW}?username=${encodeURIComponent(lobbyProfileState.viewingUsername)}`,
       );
       if (!lobbyProfileState.catalog) {
-        const catalogRes = await profileFetchJson("/player-cards/catalog");
+        const catalogRes = await profileFetchJson(API_PATHS.PLAYER_CARDS_CATALOG);
         lobbyProfileState.catalog =
           catalogRes?.catalog && Array.isArray(catalogRes.catalog.cards)
             ? catalogRes.catalog
@@ -412,11 +414,11 @@ export function createProfileController({ getUserData, onProfileRendered }) {
 
     const revision = walletRevision();
     lobbyProfileState.loadingPromise = Promise.all([
-      profileFetchJson("/profile/data"),
-      profileFetchJson("/player-cards/catalog"),
-      profileFetchJson("/player-cards/owned"),
-      profileFetchJson("/profile-icons/catalog"),
-      profileFetchJson("/profile-icons/owned"),
+      profileFetchJson(API_PATHS.PROFILE_DATA),
+      profileFetchJson(API_PATHS.PLAYER_CARDS_CATALOG),
+      profileFetchJson(API_PATHS.PLAYER_CARDS_OWNED),
+      profileFetchJson(API_PATHS.PROFILE_ICONS_CATALOG),
+      profileFetchJson(API_PATHS.PROFILE_ICONS_OWNED),
     ])
       .then(
         ([profileRes, catalogRes, ownedRes, iconCatalogRes, iconOwnedRes]) => {
@@ -435,7 +437,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
             : [];
           lobbyProfileState.selectedCardId =
             ownedRes?.selectedCardId || profile?.selectedCardId || null;
-          if (getUserData()) getUserData().selected_card_id = lobbyProfileState.selectedCardId;
+          updateUser({ selected_card_id: lobbyProfileState.selectedCardId });
           warmEquippedPlayerCard(lobbyProfileState.selectedCardId);
           lobbyProfileState.ownedProfileIconIds = Array.isArray(
             iconOwnedRes?.ownedIconIds,
@@ -451,12 +453,11 @@ export function createProfileController({ getUserData, onProfileRendered }) {
             null;
 
           if (getUserData()) {
-            getUserData().name = profile.username || getUserData().name;
+            updateUser({ name: profile.username || getUserData().name });
             applyWallet(getUserData(), profile, revision);
             profile.coins = getUserData().coins;
             profile.gems = getUserData().gems;
-            getUserData().trophies =
-              Number(profile.trophies ?? getUserData().trophies) || 0;
+            updateUser({ trophies: Number(profile.trophies ?? getUserData().trophies) || 0 });
           }
 
           const usernameText = document.getElementById("username-text");
@@ -476,8 +477,6 @@ export function createProfileController({ getUserData, onProfileRendered }) {
 
   function initProfilePopup() {
     const overlay = document.getElementById("profile-overlay");
-    const closeBtn = document.getElementById("profile-close");
-    const backdrop = overlay?.querySelector(".profile-overlay-backdrop");
     const passwordForm = document.getElementById("profile-password-form");
     const currentPasswordInput = document.getElementById(
       "profile-current-password",
@@ -485,11 +484,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     const newPasswordInput = document.getElementById("profile-new-password");
     const avatarTrigger = document.getElementById("profile-hero-avatar-trigger");
     const cardTrigger = document.getElementById("profile-hero-card-trigger");
-    const loadoutClose = document.getElementById("profile-loadout-close");
     const loadoutOverlay = document.getElementById("profile-loadout-overlay");
-    const loadoutBackdrop = loadoutOverlay?.querySelector(
-      ".profile-loadout-backdrop",
-    );
     const loadoutTitle = document.getElementById("profile-loadout-title");
     const iconsPanel = document.getElementById("profile-icons-panel");
     const cardsPanel = document.getElementById("profile-cards-panel");
@@ -512,24 +507,26 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       if (iconsPanel) iconsPanel.classList.toggle("is-hidden", !showIcons);
       if (cardsPanel) cardsPanel.classList.toggle("is-hidden", mode !== "cards");
       loadoutOverlay.dataset.loadoutMode = mode;
-      loadoutOverlay.classList.remove("hidden");
-      loadoutOverlay.setAttribute("aria-hidden", "false");
+      openOverlay("profile-loadout-overlay");
     };
 
-    const closeLoadoutModal = () => {
-      if (!loadoutOverlay) return;
-      loadoutOverlay.classList.add("hidden");
-      loadoutOverlay.setAttribute("aria-hidden", "true");
-    };
-
-    const close = () => {
-      playSound("cancel", 0.4);
-      accountSettings.close();
-      closeLoadoutModal();
-      overlay.classList.add("hidden");
-      overlay.setAttribute("aria-hidden", "true");
-      setProfilePopupMessage("");
-    };
+    registerOverlay({
+      id: "profile-overlay",
+      closeButtonId: "profile-close",
+      backdropSelector: ".profile-overlay-backdrop",
+      onClose() {
+        playSound("cancel", 0.4);
+        accountSettings.close();
+        closeOverlay("profile-loadout-overlay");
+        setProfilePopupMessage("");
+      },
+    });
+    registerOverlay({
+      id: "profile-loadout-overlay",
+      closeButtonId: "profile-loadout-close",
+      backdropSelector: ".profile-loadout-backdrop",
+    });
+    const close = () => closeOverlay("profile-overlay");
 
     const open = async (options = {}) => {
       accountSettings.close();
@@ -545,34 +542,20 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       playSound("cursor4", 0.4);
       overlay.classList.add("hidden");
       overlay.setAttribute("aria-hidden", "true");
-      closeLoadoutModal();
+      closeOverlay("profile-loadout-overlay");
       setProfilePopupMessage("Loading profile...");
       try {
         await loadProfilePopupData(true);
         // Each profile opening starts its animation anew, even when the hero
         // reuses the same equipped card and already-loaded video element.
         restartPlayerCardMedia(document.getElementById("profile-hero-card-frame")?.querySelector("video"));
-        overlay.classList.remove("hidden");
-        overlay.setAttribute("aria-hidden", "false");
+        openOverlay("profile-overlay");
         setProfilePopupMessage("");
       } catch (err) {
-        overlay.classList.remove("hidden");
-        overlay.setAttribute("aria-hidden", "false");
+        openOverlay("profile-overlay");
         setProfilePopupMessage(err.message || "Failed to load profile.", true);
       }
     };
-
-    closeBtn?.addEventListener("click", close);
-    backdrop?.addEventListener("click", close);
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      if (loadoutOverlay && !loadoutOverlay.classList.contains("hidden")) {
-        closeLoadoutModal();
-        return;
-      }
-      if (!overlay.classList.contains("hidden")) close();
-    });
 
     wireNameChangeDialog(document.getElementById("profile-change-name"), {
       getProfile: () => lobbyProfileState.viewingSelf ? lobbyProfileState.profile : null,
@@ -580,7 +563,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       beforeOpen: () => accountSettings.close(),
       onChanged: (data, profile) => {
         if (getUserData()) {
-          getUserData().name = profile.username;
+          updateUser({ name: profile.username });
           applyWallet(getUserData(), data);
         }
         const usernameText = document.getElementById("username-text");
@@ -601,7 +584,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       const newPassword = String(newPasswordInput?.value || "");
       if (!newPassword) return;
       try {
-        await profileFetchJson("/profile/change-password", {
+        await profileFetchJson(API_PATHS.PROFILE_CHANGE_PASSWORD, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ currentPassword, newPassword }),
@@ -622,13 +605,6 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     cardTrigger?.addEventListener("click", () => {
       openLoadoutModal("cards");
     });
-    loadoutClose?.addEventListener("click", () => {
-      closeLoadoutModal();
-    });
-    loadoutBackdrop?.addEventListener("click", () => {
-      closeLoadoutModal();
-    });
-
     return { open, close };
   }
   function updateWallet(wallet) {

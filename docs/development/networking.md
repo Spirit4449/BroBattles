@@ -8,7 +8,7 @@ Human movement is client-simulated with server bounds and dash collision checks.
 | --- | --- |
 | Socket authentication and early handler registration | `src/server/core/socket.js` |
 | Join validation and room lookup | `src/server/core/socketEvents/gameEvents.js`, `src/server/core/gameHub.js` |
-| Fixed-step simulation and publication | `src/server/core/gameRoom/index.js` |
+| Fixed-step simulation and publication | `src/server/core/gameRoom/simulation.js` |
 | Player transport and action validation | `src/server/core/gameRoom/playerTransport.js`, `src/server/core/gameRoom/actionValidation.js` |
 | Initial state, spawns and snapshots | `src/server/core/gameRoom/roomStateManager.js` |
 | Damage, hit timing and health | `src/shared/combat/runtime/damageResolver.js`, `src/server/core/gameRoom/healthManager.js` |
@@ -28,7 +28,11 @@ The signed `user_id` cookie carries a session token. Socket authentication resol
 2. `game:init` provides roster, mode/map, server spawns, loaded/connected flags, effects, items and protocol bootstrap state. Clients merge roster data without inventing ownership.
 3. Once the scene is built and the loading screen lifts, the client emits `game:ready` and begins the pregame. Readiness is keyed by account, not socket ID. The coordinator retries join/readiness only after local readiness.
 4. `src/shared/matchIntroTiming.js` defines a five-second pregame, up to two seconds of grace for loading peers, a five-second countdown and a 45-second room-start deadline. `game:start` sends countdown duration and spawns. Rejoins receive remaining countdown state; live rejoins skip pregame. Controls and movement sync begin at FIGHT.
-5. `src/shared/gameConstants.js` owns `SERVER_TICK_HZ`, `FIXED_DT_MS`, `SNAPSHOT_EVERY_TICKS` and `WORLD_STATE_EVERY_TICKS`: currently 60 Hz simulation, 60 Hz player snapshots (`BB_SNAPSHOT_HZ` overrides) and 7.5 Hz world state. `BB_SNAPSHOT_HZ` (e.g. `60`) changes the player snapshot rate for newly created rooms; `game:init.snapshotIntervalMs` tells the client, whose render timeline uses it instead of the build constant. Delta keyframes stay about once a second. Projectile and bot steps derive from `FIXED_DT_MS` and never from the snapshot rate. Human reports are bounded; bots advance in simulation steps.
+5. `src/shared/gameConstants.js` defines a 60 Hz simulation (`SERVER_TICK_HZ`, `FIXED_DT_MS`), 60 Hz player snapshots (`SNAPSHOT_EVERY_TICKS`) and 7.5 Hz world state (`WORLD_STATE_EVERY_TICKS`).
+   `BB_SNAPSHOT_HZ` overrides the player snapshot rate for newly created rooms. The render timeline reads `game:init.snapshotIntervalMs`.
+   Delta keyframes stay about once a second.
+   Projectile and bot steps derive from `FIXED_DT_MS` and never from the snapshot rate.
+   Human reports are bounded; bots advance in simulation steps.
 6. Health, effects, objective state, timers and terminal events remain server-owned. `game:over` disables input and drives results. [Deployment](../operations/deployment.md) explains durable reward settlement and restart behavior.
 
 ## Transport contracts
@@ -48,55 +52,144 @@ The signed `user_id` cookie carries a session token. Socket authentication resol
 | Server → client | `game:timer`, `game:sudden-death:start`, `game:over` | Match lifecycle |
 | Server → client | `powerup:collected`, `powerup:tick`, `deathdrop:collected` | Item/effect events |
 
-This table is an overview, not an exhaustive schema. Read emitters and listeners together when changing payloads. Keep compatible fields additive; update both endpoints and protocol gates when making incompatible changes. `game:input-intent` and the disabled server human-movement simulator have been removed. Socket.IO `connect` handles reconnects; the socket itself does not emit the Manager's `reconnect` event.
+Event names live in `src/shared/net/socketEvents.js`.
+Read each event’s emitter and listener for its payload.
+Keep compatible fields additive; update both endpoints and protocol gates when making incompatible changes.
+`game:input-intent` and the disabled server human-movement simulator have been removed.
+Socket.IO `connect` handles reconnects; the socket itself does not emit the Manager's `reconnect` event.
 
 ## Snapshots and clocks
 
-The versioned `src/shared/networkWire.js` codec shortens input and snapshot keys only on the wire; handlers, interpolation and trace records use descriptive names. `game:join.networkWireVersion` must match the server; cached clients are asked to reload. Deploy the client and server together. Monotonic snapshot times are rounded to 0.1 ms; sequence, epoch, tick and wall time remain explicit because event snapshots and catch-up publication do not have a fixed one-to-one relationship.
+The versioned `src/shared/networkWire.js` codec shortens input and snapshot keys only on the wire; handlers, interpolation and trace records use descriptive names.
+`game:join.networkWireVersion` must match the server; cached clients are asked to reload.
+Deploy the client and server together.
+Monotonic snapshot times are rounded to 0.1 ms; sequence, epoch, tick and wall time remain explicit because event snapshots and catch-up publication do not have a fixed one-to-one relationship.
 
-Inputs go out once per rendered frame, at most about 60 a second: the gate compares the frame's rAF timestamp with the last packet's, with a tolerance of half a frame (at most a quarter of the interval), so 60–80 Hz displays send every frame and 90–144 Hz displays every second frame, evenly spaced. Gating on `Date.now()` read mid-frame skipped frames that read 15 ms and left 33 ms holes, which the server's playout delay follows; `netInputCadence=legacy` restores that gate. A pre-attack flush publishes the state the frame already simulated and never runs the movement update again. Inputs omit sprite/body geometry (the server derives canonical geometry). Movement-effect changes send a reliable packet containing all effect details; subsequent volatile packets omit details. Reliable keyframes refresh effect details, animation, ammo and late-join readiness at least every 250 ms while inputs are flowing.
+### Input cadence
+
+Inputs go out once per rendered frame, at most about 60 a second: the gate compares the frame's rAF timestamp with the last packet's, with a tolerance of half a frame (at most a quarter of the interval), so 60–80 Hz displays send every frame and 90–144 Hz displays every second frame, evenly spaced.
+
+Gating on `Date.now()` read mid-frame skipped frames that read 15 ms and left 33 ms holes, which the server's playout delay follows; `netInputCadence=legacy` restores that gate.
+
+A pre-attack flush publishes the state the frame already simulated and never runs the movement update again. Inputs omit sprite/body geometry (the server derives canonical geometry).
+
+Movement-effect changes send a reliable packet containing all effect details; subsequent volatile packets omit details. Reliable keyframes refresh effect details, animation, ammo and late-join readiness at least every 250 ms while inputs are flowing.
+
+### Snapshot and world-state publication
 
 World state is compared without its timestamp and sent when changed, with a one-second heartbeat for start/rejoin recovery. Active timers that change still publish at the normal world-state cadence.
 
-Each snapshot carries room-instance `snapshotEpoch`, increasing `snapshotSeq`, simulation `tMono`, publication `sentMono`, `snapshotKind` (`periodic` or `event`), plus tick/wall-time fields. Clients reject stale/duplicate sequences before roster or HUD updates. New emissions at the same simulation instant replace that instant in the buffer; reconnects and epoch changes reset history. Compatibility handling accepts older payloads without sequence fields.
+Each snapshot carries room-instance `snapshotEpoch`, increasing `snapshotSeq`, simulation `tMono`, publication `sentMono`, `snapshotKind` (`periodic` or `event`), plus tick/wall-time fields.
+Clients reject stale/duplicate sequences before roster or HUD updates.
+New emissions at the same simulation instant replace that instant in the buffer; reconnects and epoch changes reset history.
+Compatibility handling accepts older payloads without sequence fields.
 
 Catch-up callbacks coalesce periodic snapshots and world state while preserving every simulation step and discrete event. Snapshots remain non-volatile. `BB_COALESCE_SNAPSHOTS=0` disables coalescing for newly created rooms for controlled comparisons.
 
-Per-player snapshot state is delta-encoded by `src/shared/snapshotDelta.js`. A keyframe (`keyframe: true`) carries every player's full state; other snapshots carry `baseSeq` plus only the fields that changed since the previous snapshot (removed fields listed in `_del`, departed players in `gone`), and unchanged players are omitted. The room sends a keyframe at least once per second and right after any `game:init`. The match coordinator decodes before buffering, so everything downstream sees full states; a client that missed a packet drops deltas until the next keyframe. Identity fields (`participantId`, `isBot`, team, skins) come only from `game:init`. World state sends only active effect timers (each player keeps an entry, possibly `{}`) and `playerEffectMovement` only for players with active effects.
+Per-player snapshot state is delta-encoded by `src/shared/snapshotDelta.js`. A keyframe (`keyframe: true`) carries every player's full state; other snapshots carry `baseSeq` plus only the fields that changed since the previous snapshot (removed fields listed in `_del`, departed players in `gone`), and unchanged players are omitted.
+
+The room sends a keyframe at least once per second and right after any `game:init`. The match coordinator decodes before buffering, so everything downstream sees full states; a client that missed a packet drops deltas until the next keyframe.
+
+Identity fields (`participantId`, `isBot`, team, skins) come only from `game:init`. World state sends only active effect timers (each player keeps an entry, possibly `{}`) and `playerEffectMovement` only for players with active effects.
+
+### Room timing and attack history
 
 Each room's timing diagnostics (`gameRoom/timingDiagnostics.js`) log loop stalls and snapshot gaps whenever they occur. Routine summaries every few seconds are printed only outside production; `BB_TIMING_DIAG=1` enables them in production and `BB_TIMING_DIAG=0` silences them in development.
 
-`serverClock.js` owns the clock ping loop: a five-ping burst after epoch changes/reconnects, then one ping every two seconds. It uses the lowest RTT in a 12-sample window. Ninja, Sparrow and hit reports share this clock; character adapters must not reset it independently.
+`serverClock.js` owns the clock ping loop: a five-ping burst after epoch changes/reconnects, then one ping every two seconds. It uses the lowest RTT in a 12-sample window. Ninja, Sparrow and attack timing share this clock; character adapters must not reset it independently.
 
-Clients never report hits: every hit comes from a server attack runtime, and `damageResolver.handleHit` refuses anything else. Its range sanity check reads position history at the runtime's own server-clock `attackTime`. Human history records accepted inputs; bot history records simulation steps. History is bounded by `POSITION_HISTORY_MS` / `POSITION_HISTORY_DEPTH` in `src/server/core/gameRoomConfig.js` (currently one second / 128 samples). `HIT_STALENESS_MAX_MS` in `matchConfig.js` is the 300 ms rewind cap.
+`damageResolver.handleHit` accepts hits from server attack runtimes. Clients send attack requests.
+Its range sanity check reads position history at the runtime's own server-clock `attackTime`.
+Human history records accepted inputs; bot history records simulation steps.
+History is bounded by `POSITION_HISTORY_MS` / `POSITION_HISTORY_DEPTH` in `src/shared/combat/matchConfig.js` (currently one second / 128 samples).
+`HIT_STALENESS_MAX_MS` in `matchConfig.js` is the 300 ms rewind cap.
 
-Human positions in snapshots are time-aligned by `gameRoom/humanPlayout.js`. Each accepted packet is placed on the server clock by its `timestamp` (the client's `Date.now()`), using the lowest arrival-minus-send offset of the last few seconds so network delay variation drops out. Snapshots publish each human's motion (position and velocity) interpolated a playout delay before the snapshot's simulation time. The delay is the 90th percentile of how long the newest sample has been waiting when the next one arrives, plus 2 ms, capped at 80 ms (`MAX_PLAYOUT_MS`), and it changes by at most 8% of elapsed time. Publishing the latest packet instead turned packet spacing and jitter into uneven snapshot steps: with 25 ms packets and 33 ms snapshots, a steady run was published as 9, 9, 18 px steps, which every viewer drew as jitter. Position history keys each accepted position by the time it will be published, so rewinds land on what attackers were shown. Anything that moves a human on the server (respawn, hook pull, idle fallback, Inferno) is published at once, and the playout restarts from zero delay. Packets without a timestamp publish the latest position. Bots are stepped on the simulation clock and published as they are.
+### Human playout
 
-The render timeline interpolates buffered remote states with bounded extrapolation. It advances by the frame's rAF timestamp (`game.loop.now`), not `performance.now()` read partway through the frame's work. Delivery steering follows median arrival offset over a four-second window, with bounded slewing. The render delay is one snapshot interval (the measured periodic spacing) plus how late snapshots arrive (the 98th percentile of recent arrival offsets above their median) plus a few ms of safety, at most 115 ms (`MAX_RENDER_DELAY_MS`). It grows by up to 20% of frame time when snapshots start arriving late and shrinks by at most 2%, so remote motion never reverses. On the Pi most of the lateness is the server's own publication lag (snapshot `sentMono − tMono`, p98 ≈ 13 ms). `netRenderDelay=legacy` restores the old 2 × spacing + 2 × jitter target (45–115 ms). Only periodic snapshots feed cadence/jitter estimates. Diagnostics count `underrunFrames` (every extrapolated frame), `underrunEpisodes` and `cappedFrames` (frames held at the extrapolation cap, such as after the server stops sending at match end); the removed `netSmoothing=legacy` and `netArrivalDelay=1` switches no longer select anything. Remote smoothing preserves spawn snaps and recovery/extrapolation limits. Every remote actor is drawn at the frame's render time, which attack requests report; the old 9–12 ms lead for airborne and attacking actors (`netRemoteLead=legacy`) made the server rewind targets further than they were drawn.
+Human positions in snapshots are time-aligned by `gameRoom/humanPlayout.js`.
+Each accepted packet is placed on the server clock by its `timestamp` (the client's `Date.now()`), using the lowest arrival-minus-send offset of the last few seconds so network delay variation drops out.
+Snapshots publish each human's motion (position and velocity) interpolated a playout delay before the snapshot's simulation time.
+The delay is the 90th percentile of how long the newest sample has been waiting when the next one arrives, plus 2 ms, capped at 80 ms (`MAX_PLAYOUT_MS`), and it changes by at most 8% of elapsed time.
 
-`player:dead` and `player:respawn` arrive one interpolation delay ahead of the snapshots being drawn. Each event carries the newest snapshot received before it (Socket.IO keeps one socket's messages in order), and `remoteLifeState` in `remoteSmoothing.js` gives older snapshots the event's life state, so the lagging timeline cannot undo the event. A respawned actor stays at the spawn until the timeline reaches it. The snapshot path still starts death and respawn presentation when an event was missed.
+Publishing the latest packet instead turned packet spacing and jitter into uneven snapshot steps: with 25 ms packets and 33 ms snapshots, a steady run was published as 9, 9, 18 px steps, which every viewer drew as jitter.
+
+Position history keys each accepted position by the time it will be published, so rewinds land on what attackers were shown.
+
+Anything that moves a human on the server (respawn, hook pull, idle fallback, Inferno) is published at once, and the playout restarts from zero delay. Packets without a timestamp publish the latest position. Bots are stepped on the simulation clock and published as they are.
+
+### Client render timeline
+
+The render timeline interpolates buffered remote states with bounded extrapolation. It advances by the frame's rAF timestamp (`game.loop.now`), not `performance.now()` read partway through the frame's work. Delivery steering follows median arrival offset over a four-second window, with bounded slewing.
+
+The render delay is one snapshot interval (the measured periodic spacing) plus how late snapshots arrive (the 98th percentile of recent arrival offsets above their median) plus a few ms of safety, at most 115 ms (`MAX_RENDER_DELAY_MS`).
+It grows by up to 20% of frame time when snapshots start arriving late and shrinks by at most 2%, so remote motion never reverses.
+On the Pi most of the lateness is the server's own publication lag (snapshot `sentMono − tMono`, p98 ≈ 13 ms).
+
+`netRenderDelay=legacy` restores the old 2 × spacing + 2 × jitter target (45–115 ms).
+Only periodic snapshots feed cadence/jitter estimates.
+Diagnostics count `underrunFrames` (every extrapolated frame), `underrunEpisodes` and `cappedFrames` (frames held at the extrapolation cap, such as after the server stops sending at match end); the removed `netSmoothing=legacy` and `netArrivalDelay=1` switches no longer select anything.
+
+Remote smoothing preserves spawn snaps and recovery/extrapolation limits. Every remote actor is drawn at the frame's render time, which attack requests report; the old 9–12 ms lead for airborne and attacking actors (`netRemoteLead=legacy`) made the server rewind targets further than they were drawn.
+
+### Lifecycle events
+
+`player:dead` and `player:respawn` arrive one interpolation delay ahead of the snapshots being drawn.
+Each event carries the newest snapshot received before it (Socket.IO keeps one socket's messages in order), and `remoteLifeState` in `remoteSmoothing.js` gives older snapshots the event's life state, so the lagging timeline cannot undo the event.
+A respawned actor stays at the spawn until the timeline reaches it.
+The snapshot path still starts death and respawn presentation when an event was missed.
 
 `movementFxSeq` identifies movement cues; detailed movement-effect fields are short-lived, and wall-side data is conditional. Treat optional snapshot fields as optional and reset visual/audio state on lifecycle transitions.
 
 ## Movement corrections
 
-The server limits each input packet to an elapsed-time movement budget and sweeps dash/coast against canonical colliders. Corrections include an increasing per-player `correctionId`, corrected input `sequence`, reason (`budget`, `collision` or `idle`), error and collision contacts. The client echoes its latest applied ID as `correctionAck`; the server briefly drops reports sent before that acknowledgment to prevent repeated stale corrections. Server teleports reset the wait. After silence causes server idle simulation, an `idle` correction hands back authoritative position, velocity and grounded state. The client discards stale path blending, acceleration and dash/coast state; ordinary budget and collision corrections keep their existing smoothing rules.
+The match server limits each input packet to an elapsed-time movement budget and sweeps dash/coast against canonical colliders.
+Corrections include an increasing per-player `correctionId`, corrected input `sequence`, reason (`budget`, `collision` or `idle`), error and collision contacts.
+The client echoes its latest applied ID as `correctionAck`; the server briefly drops reports sent before that acknowledgment to prevent repeated stale corrections.
+Server teleports reset the wait.
+After silence causes server idle simulation, an `idle` correction hands back authoritative position, velocity and grounded state.
+The client discards stale path blending, acceleration and dash/coast state; ordinary budget and collision corrections keep their existing smoothing rules.
 
-The client applies the error relative to the corrected input's recorded position, preserving subsequent movement. Small errors blend; large errors snap. Collision corrections constrain the blocked axis while retaining motion along the surface, and do not pull an actor back to a face already left. Fractional movement precision and subpixel tolerances prevent repeated corrections on platform edges. This is bounded client movement, not a complete authoritative human physics replay.
+The client applies the error relative to the corrected input's recorded position, preserving subsequent movement.
+Small errors blend; large errors snap.
+Collision corrections constrain the blocked axis while retaining motion along the surface, and do not pull an actor back to a face already left.
+Fractional movement precision and subpixel tolerances prevent repeated corrections on platform edges.
+This is bounded client movement, not a complete authoritative human physics replay.
 
 ## Ninja and Sparrow protocols
 
-`src/client/game/characters/networkRegistry.js` and `src/shared/combat/runtime/characterCombatRegistry.js` register the dedicated adapters. Both use server runtimes for human and bot outcomes, predicted local visuals, reconciliation by projectile ID and reconnect bootstrap records. Stale protocol clients must reload; deploy matching browser and server versions. Both server runtimes take request handling from `src/shared/combat/runtime/shotRequests.js`: request ids, retry echoes, the per-second request limit, eligibility (`inactive`, `locked`, `not-ready`), ammo and super spending, and the rewound enemy, vault and crate target list. A new predicted-shot protocol should use it instead of copying those rules.
+`src/client/game/characters/networkRegistry.js` and `src/shared/combat/runtime/characterCombatRegistry.js` register the dedicated adapters.
+Both use server runtimes for human and bot outcomes, predicted local visuals, reconciliation by projectile ID and reconnect bootstrap records.
+Stale protocol clients must reload; deploy matching browser and server versions.
+Both server runtimes take request handling from `src/shared/combat/runtime/shotRequests.js`: request ids, retry echoes, the per-second request limit, eligibility (`inactive`, `locked`, `not-ready`), ammo and super spending, and the rewound enemy, vault and crate target list.
+A new predicted-shot protocol should use it instead of copying those rules.
 
-**Ninja** advertises `ninjaCombatVersion: 1`. The shared projectile model defines outgoing, hover and fixed-step homing-return phases. Requests validate socket identity, aim, ammo, cooldown, charge and eligibility. Swept contacts hit each target at most once per flight leg. Outgoing wall contact turns a projectile back; returning flight passes through terrain. Only an authoritative basic return refunds ammo; supers never do. Return corrections are sent at 10 Hz because the owner moves. Death/disconnect cancels active flight and pending super shards. Late launches cannot resurrect completed/rejected predictions.
+**Ninja** advertises `ninjaCombatVersion: 1`.
+The shared projectile model defines outgoing, hover and fixed-step homing-return phases.
+Requests validate socket identity, aim, ammo, cooldown, charge and eligibility.
+Swept contacts hit each target at most once per flight leg.
+Outgoing wall contact turns a projectile back; returning flight passes through terrain.
+Only an authoritative basic return refunds ammo; supers never do.
+Return corrections are sent at 10 Hz because the owner moves.
+Death/disconnect cancels active flight and pending super shards.
+Late launches cannot resurrect completed/rejected predictions.
 
-**Sparrow** advertises `sparrowCombatVersion: 2`. Authoritative combat is always enabled; there is no browser-damage fallback or rollout toggle. The shared fixed-step model drives arrows and aim preview. Client aim/power are inputs; the server resolves launch position, spread, gravity, ammo and damage. Read `src/shared/characters/sparrow.json` for current speeds/reload/lifetimes. Local arrows predict after windup, accepted launches reconcile by ID, and remote arrows sample server age rather than launching from delayed actor sprites. Visual contact pauses never apply damage. Terminals contain exact impact coordinates and attachment offsets. `game:init.sparrowCombat` carries version, epoch, clocks, geometry, active projectiles and bounded terminals; existing `game:action` carries result/projectile/terminal messages.
+**Sparrow** advertises `sparrowCombatVersion: 2`.
+Authoritative combat is always enabled; there is no browser-damage fallback or rollout toggle.
+The shared fixed-step model drives arrows and aim preview.
+Client aim/power are inputs; the server resolves launch position, spread, gravity, ammo and damage.
+Read `src/shared/characters/sparrow.json` for current speeds/reload/lifetimes.
+Local arrows predict after windup, accepted launches reconcile by ID, and remote arrows sample server age rather than launching from delayed actor sprites.
+Visual contact pauses never apply damage.
+Terminals contain exact impact coordinates and attachment offsets.
+`game:init.sparrowCombat` carries version, epoch, clocks, geometry, active projectiles and bounded terminals; existing `game:action` carries result/projectile/terminal messages.
 
 Human collision locations still depend on received movement reports. Last-moment dodges can disagree under latency; projectile authority does not eliminate that limitation.
 
 ## Attack delivery
 
-How an attack reaches its target decides how it is networked, so attacks are networked by delivery, never per character. `src/shared/combat/attackDelivery.js` owns the policy of each delivery and maps every server attack runtime to one; the server (`lagCompensation.js`, `attackRuntimes/`) and the attacker's client (`characters/shared/shotPrediction.js`) both read it. `tests/attackDelivery.test.js` fails for an attack runtime without a delivery.
+How an attack reaches its target decides how it is networked, so attacks are networked by delivery, never per character.
+`src/shared/combat/attackDelivery.js` owns the policy of each delivery and maps every server attack runtime to one; the server (`lagCompensation.js`, `attackRuntimes/`) and the attacker's client (`characters/shared/shotPrediction.js`) both read it.
+`tests/attackDelivery.test.js` fails for an attack runtime without a delivery.
 
 | Delivery | Attacks | Server rewind | Attacker's client |
 | --- | --- | --- | --- |
@@ -107,14 +200,64 @@ How an attack reaches its target decides how it is networked, so attacks are net
 
 The caps and hitstop lengths are in `DELIVERIES`; a cap bounds the network part of a rewind, on top of the attacker's render buffer. The trade-off of every rewind is the victim's: under latency they can still be struck up to the buffer plus the cap after reaching cover or stepping out of reach.
 
-1. **Requests carry the render time.** `withShotView` adds `viewMono`, the server simulation time the render timeline is drawing remote actors at, to every `game:action` and `game:special`. Requests also carry `viewDelayMs`, the client's current render delay. The socket handlers overwrite `viewRewindMs` with the server's monotonic time at arrival minus `viewMono` (attacks start at arrival; the last step's simulation time trailed it by up to a step, and `BB_VIEW_REWIND_CLOCK=simulation` restores that stamp, paired with `netRemoteLead=legacy`), bounded by both `HIT_STALENESS_MAX_MS` (300 ms) and a per-connection allowance; and set `viewBufferMs` to the reported render delay, bounded by `MAX_RENDER_DELAY_MS` and by the rewind itself. Each attack then bounds it again by its delivery (`clampDeliveryRewind`, in `attackIdentity` and the Sparrow and Ninja runtimes): the render buffer always counts and the delivery's `rewindCapMs` caps the network part. Server-originated `game:latency` acknowledgments, driven by the existing clock cadence, measure RTT without reading client timing values. The allowance is the lowest recent RTT plus 150 ms for the remote render buffer and jitter; before a successful probe (including older clients) it is 150 ms. Samples expire after 30 seconds and reconnects start fresh. Non-numeric or non-finite view times receive no rewind. A forged old view cannot grant more than this allowance; deliberately delaying all network responses remains indistinguishable from genuine latency. Bot attacks, which never pass the transport, have no rewind.
-2. **The server tests targets where the attacker saw them.** Every runtime places each enemy at its position-history entry `viewRewindMs` before the current step (`shotTargetBounds`). The attacker stays where it is now: its own inputs reach the server with the same delay as its request, so its swing or shot and its body line up on the server as they did on its screen. History records collision dimensions and offsets as well as position: coordinates interpolate, but posture/facing changes take effect at the timestamp of the newer sample, never by interpolating body sizes. Teleports (spawn and respawn) restart a player's history, so a rewind never reaches a pre-teleport position. Hit validation for an attached contact (walls between the fighters, melee facing) uses the same two positions the runtime tested. Sparrow attachment offsets are relative to the seen position.
-3. **Attached shapes are shared code.** `attachedRectShape`, `pathSweepShapes` and `sectorShape` are pure functions of the attacker's pose and the time since the attack started. The server runtimes and the attacker's client call the same functions with the same tuning, and `tests/attackDelivery.test.js` checks that the client's volume equals the one the server exposes at each moment of the attack. The client predicts on the attack's own clock from the key press, so a hitstop that holds the drawn swing does not delay what it strikes.
-4. **Every predicted hit lands the same way.** A predicted contact (`predictShotContact` for released attacks, `predictAttachedContacts` for attached ones) goes through `notePredictedHit`: the attacker's hit sound and the shared hit feedback (client guide, "Hit feedback") play at the target, and `hitstop` holds the animation frames (the victim's, and for attached attacks the attacker's too) for the delivery's `hitstopMs`. Position and simulation never pause. The character draws its own impact (an arrow in the body, a burst, a splat, an explosion, a latch). When the server confirms, `takePredictedHit` stops the confirmation, impact and health-update feedback echoes from playing them a second time. Damage numbers and health always wait for the server. A predicted hit the server does not confirm within `confirmWindowMs()` (lowest RTT plus 220 ms) is withdrawn by fading or letting go, never by flying on or jumping; a sound that already played cannot be withdrawn, which is why predictions use the server's exact shapes.
+1. **Requests carry the render time.** `withShotView` adds `viewMono`, the server simulation time the render timeline is drawing remote actors at, to every `game:action` and `game:special`.
+   Requests also carry `viewDelayMs`, the client's current render delay.
+   The socket handlers overwrite `viewRewindMs` with the server's monotonic time at arrival minus `viewMono` (attacks start at arrival; the last step's simulation time trailed it by up to a step, and `BB_VIEW_REWIND_CLOCK=simulation` restores that stamp, paired with `netRemoteLead=legacy`), bounded by both `HIT_STALENESS_MAX_MS` (300 ms) and a per-connection allowance; and set `viewBufferMs` to the reported render delay, bounded by `MAX_RENDER_DELAY_MS` and by the rewind itself.
+   Each attack then bounds it again by its delivery (`clampDeliveryRewind`, in `attackIdentity` and the Sparrow and Ninja runtimes): the render buffer always counts and the delivery's `rewindCapMs` caps the network part.
+   Server-originated `game:latency` acknowledgments, driven by the existing clock cadence, measure RTT without reading client timing values.
+   The allowance is the lowest recent RTT plus 150 ms for the remote render buffer and jitter; before a successful probe (including older clients) it is 150 ms.
+   Samples expire after 30 seconds and reconnects start fresh.
+   Non-numeric or non-finite view times receive no rewind.
+   A forged old view cannot grant more than this allowance; deliberately delaying all network responses remains indistinguishable from genuine latency.
+   Bot attacks, which never pass the transport, have no rewind.
+2. **The server tests targets where the attacker saw them.** Every runtime places each enemy at its position-history entry `viewRewindMs` before the current step (`shotTargetBounds`).
+   The attacker stays where it is now: its own inputs reach the server with the same delay as its request, so its swing or shot and its body line up on the server as they did on its screen.
+   History records collision dimensions and offsets as well as position: coordinates interpolate, but posture/facing changes take effect at the timestamp of the newer sample, never by interpolating body sizes.
+   Teleports (spawn and respawn) restart a player's history, so a rewind never reaches a pre-teleport position.
+   Hit validation for an attached contact (walls between the fighters, melee facing) uses the same two positions the runtime tested.
+   Sparrow attachment offsets are relative to the seen position.
+3. **Attached shapes are shared code.** `attachedRectShape`, `pathSweepShapes` and `sectorShape` are pure functions of the attacker's pose and the time since the attack started.
+   The server runtimes and the attacker's client call the same functions with the same tuning, and `tests/attackDelivery.test.js` checks that the client's volume equals the one the server exposes at each moment of the attack.
+   The client predicts on the attack's own clock from the key press, so a hitstop that holds the drawn swing does not delay what it strikes.
+4. **Every predicted hit lands the same way.** A predicted contact (`predictShotContact` for released attacks, `predictAttachedContacts` for attached ones) goes through `notePredictedHit`: the attacker's hit sound and the shared hit feedback (client guide, "Hit feedback") play at the target, and `hitstop` holds the animation frames (the victim's, and for attached attacks the attacker's too) for the delivery's `hitstopMs`.
+   Position and simulation never pause.
+   The character draws its own impact (an arrow in the body, a burst, a splat, an explosion, a latch).
+   When the server confirms, `takePredictedHit` stops the confirmation, impact and health-update feedback echoes from playing them a second time.
+   Damage numbers and health always wait for the server.
+   A predicted hit the server does not confirm within `confirmWindowMs()` (lowest RTT plus 220 ms) is withdrawn by fading or letting go, never by flying on or jumping; a sound that already played cannot be withdrawn, which is why predictions use the server's exact shapes.
 
 Clients also stop arrows at terrain with the bootstrap colliders, so shots never overshoot a wall while their terminal is in flight. Other players' attacks are not predicted against other bodies; enemy shots stop on this player's own body (below).
 
-**Victim lead.** Rewinding targets keeps the attacker's promise (a hit on their screen counts); the victim's (a shot that misses on my screen deals no damage) needs enemy released shots drawn ahead. The server tests a shot at step s against the victim's history R before (R = the shot's view rewind), and history holds the position the victim drew u + P before its key (u: uplink, P: the victim's playout delay). Every client therefore draws opponents' released shots (not allies', not its own predictions) ahead of the server's present by `CombatClock.enemyLeadMs` in `src/shared/characters/sparrowReplication.js` (derivation beside it): R + u + its own P, where u is the lowest recent uplink history keys by (the minimum over 3 s of packets, not a typical uplink: half the best ping overstated it by up to ~15 ms on jittery links), and a shot with no rewind (a bot's) is tested against the latest position received, so it gets no P. R travels in `sparrow-projectiles`, `ninja-launch` and the Ozzy/Gloop release packets (`viewRewindMs`, 0 for bots); P and the history key offset in the player's own snapshot entry (`playoutMs`, and `historyMs`: the server's lowest packet offset on its monotonic clock, from which `CombatClock.uplinkMs` places this client's frames on the clock; each resent when it moves by more than 2 ms). Until `historyMs` arrives (an older server), u is half the best ping. Absent fields (an older server) mean no lead; `?netProjectileLead=0` turns it off for comparisons (A/B flags, below). `advanceShownLead` never applies the lead at once: a drawn shot closes the gap at 35 % at most (`LEAD_CATCHUP`), so it flies at up to 1.35 times its real speed until it has caught up (about 430 ms for a 150 ms lead), then follows changes at 10 % at most, and a flight never jumps or runs backwards. A shorter ramp drew enemy shots at up to three times their speed. Shots that land before the catch-up ends are led only in part; those are close shots, which cannot be dodged. Measured on production (report "lead error", below), a fully led shot is drawn within a few ms of the server's age at the frame the server tested (p50 −11 to +8 ms across characters and links). The lead cannot help shots the server hits within about L + one downlink of launch: the server then tests a frame this player drew before the release reached them (in dense duels most hits). So the victim's contact test is the server's: `localBodyContact` with `victimLagMs` (target lead − lead shown) tests the drawn shot against this player's body as drawn that long ago (`noteLocalBodyFrame` keeps a second of it), which with the full lead shown is the body as drawn now; a long segment (a shot's first frame, a catch-up) is split so each part meets the frame the server tested it against. A contact embeds the shot on the body as drawn now (offset from where the tested body was); a shot the server will miss flies through. Embedded, it waits `victimHoldWindowMs` (lead shown at the contact + half a ping + 100 ms; the server's verdict arrived within 25–37 ms of lead + half a ping on fast and wifi links and within 80 ms on 4G, with one 531 ms Gloop outlier) and is then withdrawn like an unconfirmed prediction (Sparrow and Ozzy fade, the slimeball vanishes, the hook lets go), never flown on. A dead player's body takes no shots. A hit on this player is drawn on the body as drawn now: Sparrow `targetOffset`, the Ozzy impact's `target`, the Gloop catch's `targetOffset`, slime residue in the current frame. Ozzy's fireball and Gloop's slimeball and hook carry `launchMono` (`releaseLaunchMono`: their runtime `elapsed` is s − launchMono) and are drawn by server age rather than from packet arrival; no release carries map colliders, since clients fly the slimeball against the bootstrap colliders. What is left (`tests/serverClockAndHistory.test.js` measures it): the server holds the target for each 16.7 ms step (up to 5 px at run speed), the step lag at the hit versus at the clock's last packet (0–17 ms, usually a few), the 2 ms report steps of P and `historyMs`, and P's report lag while it slews after a teleport.
+### Victim projectile lead
+
+Rewinding targets keeps the attacker's promise (a hit on their screen counts); the victim's (a shot that misses on my screen deals no damage) needs enemy released shots drawn ahead.
+The server tests a shot at step s against the victim's history R before (R = the shot's view rewind), and history holds the position the victim drew u + P before its key (u: uplink, P: the victim's playout delay).
+
+Each client draws enemy released shots ahead of the server by `CombatClock.enemyLeadMs` in `src/shared/characters/sparrowReplication.js`. The lead L is R + u + P.
+The uplink estimate u is the minimum across three seconds of input packets. Half the best ping overstated it by up to about 15 ms on jittery links.
+A shot with zero rewind, such as a bot's, is tested against the latest position received and gets no P.
+
+R travels in `sparrow-projectiles`, `ninja-launch` and the Ozzy/Gloop release packets (`viewRewindMs`, 0 for bots); P and the history key offset in the player's own snapshot entry (`playoutMs`, and `historyMs`: the server's lowest packet offset on its monotonic clock, from which `CombatClock.uplinkMs` places this client's frames on the clock; each resent when it moves by more than 2 ms).
+Until `historyMs` arrives (an older server), u is half the best ping.
+Absent fields (an older server) mean no lead; `?netProjectileLead=0` turns it off for comparisons (A/B flags, below).
+
+`advanceShownLead` never applies the lead at once: a drawn shot closes the gap at 35 % at most (`LEAD_CATCHUP`), so it flies at up to 1.35 times its real speed until it has caught up (about 430 ms for a 150 ms lead), then follows changes at 10 % at most, and a flight never jumps or runs backwards.
+A shorter ramp drew enemy shots at up to three times their speed.
+Shots that land before the catch-up ends are led only in part; those are close shots, which cannot be dodged.
+
+Measured on production (report "lead error", below), a fully led shot is drawn within a few ms of the server's age at the frame the server tested (p50 −11 to +8 ms across characters and links).
+The lead cannot help shots the server hits within about L + one downlink of launch: the server then tests a frame this player drew before the release reached them (in dense duels most hits).
+
+So the victim's contact test is the server's: `localBodyContact` with `victimLagMs` (target lead − lead shown) tests the drawn shot against this player's body as drawn that long ago (`noteLocalBodyFrame` keeps a second of it), which with the full lead shown is the body as drawn now; a long segment (a shot's first frame, a catch-up) is split so each part meets the frame the server tested it against.
+A contact embeds the shot on the body as drawn now (offset from where the tested body was); a shot the server will miss flies through.
+
+Embedded, it waits `victimHoldWindowMs` (lead shown at the contact + half a ping + 100 ms; the server's verdict arrived within 25–37 ms of lead + half a ping on fast and wifi links and within 80 ms on 4G, with one 531 ms Gloop outlier) and is then withdrawn like an unconfirmed prediction (Sparrow and Ozzy fade, the slimeball vanishes, the hook lets go), never flown on.
+
+A dead player's body takes no shots. A hit on this player is drawn on the body as drawn now: Sparrow `targetOffset`, the Ozzy impact's `target`, the Gloop catch's `targetOffset`, slime residue in the current frame.
+
+Ozzy's fireball and Gloop's slimeball and hook carry `launchMono` (`releaseLaunchMono`: their runtime `elapsed` is s − launchMono) and are drawn by server age rather than from packet arrival; no release carries map colliders, since clients fly the slimeball against the bootstrap colliders.
+
+What is left (`tests/serverClockAndHistory.test.js` measures it): the server holds the target for each 16.7 ms step (up to 5 px at run speed), the step lag at the hit versus at the clock's last packet (0–17 ms, usually a few), the 2 ms report steps of P and `historyMs`, and P's report lag while it slews after a teleport.
 
 ### Adding a character or an attack
 
@@ -128,10 +271,42 @@ Clients also stop arrows at terrain with the bootstrap colliders, so shots never
 Lag and rubber-banding that only reproduce on the production Pi are measured with a run-scoped trace. It is off unless the server has `BB_NET_TRACE_TOKEN` (at least 16 characters) in its environment. `BB_NET_TRACE_DIR` overrides the output directory (default `data/net-traces`, gitignored).
 
 - **Opt in per tab:** open any page with `?nettrace=<runId>&ntk=<token>&ntag=<label>`. The spec is kept in `sessionStorage`, so it survives lobby → party → game navigation; `?nettrace=off` clears it. The socket handshake carries it, and `src/server/core/socket.js` verifies the token. A wrong token is ignored silently.
-- **Server** (`src/server/core/gameRoom/netTraceRecorder.js`): every room a traced socket joins writes `<runId>/server.jsonl`. Records are per-second loop/snapshot/bot/input/write-buffer summaries with main-thread time per fixed-step phase (`tick`: `platforms`, `tick` = bots and idle humans, `attacks`, `combat`, `items`, `mode`, `publish`), loop and snapshot-emission stalls (`stall`), corrections sent to traced players, attack requests from traced sockets with the stamped view rewind (`action`), damage applied where a traced player is attacker or victim (`hit`: `delivery` and runtime kind `akind`, request id `req`, projectile id `pid` and sim age `ageMs` for released shots, the rewind requested before the delivery cap `rewindReqMs` and applied `rewindMs`, the target where it was tested `tested` and where it is now `vAt`, the attacker `aAt`), navigation-worker builds (`nav`), and host load, event-loop delay, CPU, memory, swap, GC pauses, page faults, iowait and context switches (`host`). Writes are buffered and flushed once a second. Limits: 8 traced sockets and 50 MB per run, client batches at most 256 KB and one per 400 ms; runs older than seven days are pruned. `BB_NET_TRACE_CPU_PROFILE_S=<seconds>` also writes `<runId>/cpu.cpuprofile` of the game thread once the first traced room goes live; summarize it on the Pi with `node scripts/dev/cpuprofile-top.cjs <file>` (totals) or `scripts/dev/cpuprofile-spans.cjs <file>` (the longest single bot ticks).
-- **Client** (`src/client/game/match/netTrace.js`): records raw snapshot arrivals, decoded positions, rendered local/remote positions per frame, corrections, keys and mouse buttons, clock and render diagnostics, attack requests sent (at the socket, so every character), combat actions, health and super updates received, predicted hits drawn (`pred`: target, request or projectile id, contact point, delivery) and withdrawn (through a hook `shotPrediction.js` exposes), health updates with their `delivery`, attacker and projectile id (`hp`; a traced room adds `by` and `pid` to health updates), and victim screen rows (`match/victimScreenTrace.js`, below), and uploads them every two seconds on `debug:net-trace` to `<runId>/<tag>.jsonl`. Detection happens offline in the report, so it can change without a client build.
-- **A/B flags** (`src/client/lib/netFlags.js`): `netProjectileLead=0`, `netInputCadence=legacy`, `netRenderDelay=legacy` and `netRemoteLead=legacy` are read only through `readNetFlags()`. Any `net<Name>=<value>` on any page's URL is kept in `sessionStorage` for the tab, so a flag on the first URL still applies on the game page; `?netflags=off` clears them. Each client trace starts with a `flags` event holding the URL/session flags and the values the game page actually runs with (`effective`: render delay mode, remote lead, input cadence, projectile lead).
-- **Probe accounts:** token-verified sockets may use `queue:fill-bots` for their own party and skip trophy mode and character locks for six hours (a locked character plays at level 1), so fresh guests can test any mode and character.
+
+### Server trace
+
+`src/server/core/gameRoom/netTraceRecorder.js` writes a trace for every room a traced socket joins at `<runId>/server.jsonl`. It writes the following records.
+
+- Per-second loop, snapshot, bot, input and write-buffer summaries, with main-thread time per fixed-step phase in `tick` records. Phases are `platforms`, `tick` (bots and idle humans), `attacks`, `combat`, `items`, `mode` and `publish`.
+- Loop and snapshot-emission stalls (`stall`), corrections to traced players and attack requests from traced sockets (`action`) with stamped view rewind.
+- Damage when a traced player is the attacker or victim (`hit`). Fields include `delivery`, runtime kind `akind`, request ID `req`, projectile ID `pid` and simulation age `ageMs` for released shots, requested `rewindReqMs` and applied `rewindMs`, target tested position `tested`, current position `vAt` and attacker position `aAt`.
+- Navigation-worker builds (`nav`) and host load, event-loop delay, CPU, memory, swap, GC pauses, page faults, iowait and context switches (`host`).
+
+Writes are buffered and flushed once a second. The limits are 8 traced sockets and 50 MB per run, client batches at most 256 KB and one per 400 ms. Runs older than seven days are pruned.
+
+`BB_NET_TRACE_CPU_PROFILE_S=<seconds>` also writes `<runId>/cpu.cpuprofile` of the game thread once the first traced room goes live; summarize it on the Pi with `node scripts/dev/cpuprofile-top.cjs <file>` (totals) or `scripts/dev/cpuprofile-spans.cjs <file>` (the longest single bot ticks).
+
+### Client trace
+
+The browser uploads rows from `src/client/game/match/netTrace.js` every two seconds on `debug:net-trace` to `<runId>/<tag>.jsonl`. It records:
+
+- Raw snapshot arrivals, decoded positions, rendered local and remote positions per frame, and corrections.
+- Keys, mouse buttons, clock and render diagnostics, and all attack requests sent through the socket.
+- Combat actions and health and super updates. Traced rooms include delivery, attacker (`by`) and projectile ID (`pid`) on health updates (`hp`).
+- Drawn predictions (`pred`) with target, request or projectile ID, contact point and delivery. A hook in `shotPrediction.js` records withdrawals.
+- Victim screen rows from `src/client/game/match/victimScreenTrace.js`.
+
+Detection happens offline in the report, so it can change without a client build.
+
+### A/B flags
+
+`src/client/lib/netFlags.js` exposes the A/B flags.
+`netProjectileLead=0`, `netInputCadence=legacy`, `netRenderDelay=legacy` and `netRemoteLead=legacy` are read only through `readNetFlags()`.
+Any `net<Name>=<value>` on any page's URL is kept in `sessionStorage` for the tab, so a flag on the first URL still applies on the game page; `?netflags=off` clears them.
+Each client trace starts with a `flags` event holding the URL/session flags and the values the game page actually runs with (`effective`: render delay mode, remote lead, input cadence, projectile lead).
+
+### Probe accounts
+
+Token-verified sockets may use `queue:fill-bots` for their own party and skip trophy mode and character locks for six hours (a locked character plays at level 1), so fresh guests can test any mode and character.
 
 ```sh
 # One-time: npx playwright-core install chromium-headless-shell (and chromium for --headed)
@@ -151,37 +326,125 @@ npm run net:report -- <runId>
 npm run net:report -- --compare <runA> <runB>
 ```
 
-The probe reads the token from `--token`, `$BB_NET_TRACE_TOKEN` or the gitignored `.env` (`BB_NET_TRACE_TOKEN=...`) for both local and remote runs. Use `--local` with the report for local runs. Other flags: `--chrome` (installed Google Chrome instead of the headless shell), `--map`, `--net <profiles>`, `--coop`, `--script strafe|dash|idle|mixed|attack|melee|special|fight`, `--range <px>`, `--matches <n>` (fresh guests and party per match in one browser; runs `<id>-m1`, `-m2`…), `--baseline <runId>`, `--no-report`, `--headed` (Playwright's full Chromium in a window; `npx playwright-core install chromium` once), `--cpu-throttle <rate>`, `--flags <query>[;<query>…]` (A/B flags per client, cycling; `default` for none; recorded in `probe.json` and the report header, and the probe logs the values in effect at FIGHT), `--dense` (duels 1v1 on Sky Soil, spawns ~800 px apart, 6 matches unless `--mode`/`--variant`/`--map`/`--matches` say otherwise; the probe then runs `net-report --pool` over the series), `--run <id>` (refused if the run already exists, since trace files append). `BB_NET_TRACE_REMOTE` (default `nisch@100.94.147.111`) selects the SSH host the report and probe use. Real browsers produce the same files when opened with the trace URL.
+The probe reads the token from `--token`, `$BB_NET_TRACE_TOKEN` or the gitignored `.env` (`BB_NET_TRACE_TOKEN=...`) for both local and remote runs.
+Use `--local` with the report for local runs.
+Other probe flags:
+
+- Browser and network: `--chrome`, `--headed` (install the full Chromium browser once with `npx playwright-core install chromium`), `--cpu-throttle <rate>`, `--net <profiles>`.
+- Match setup: `--map`, `--coop`, `--script strafe|dash|idle|mixed|attack|melee|special|fight`, `--range <px>`.
+- Series: `--matches <n>` uses fresh guests and a party per match in one browser, with runs named `<id>-m1`, `-m2` and so on. `--dense` defaults to six Sky Soil 1v1 duels with spawns about 800 px apart, then runs `net-report --pool` over the series. Override the setup with `--mode`, `--variant`, `--map` or `--matches`.
+- Comparison: `--flags <query>[;<query>…]` cycles flag sets per client. Use `default` for an empty set. The probe logs effective values at FIGHT and saves them in `probe.json` and the report header. Use `--baseline <runId>` or `--no-report` to control reporting.
+- Run ID: `--run <id>` refuses an existing run because trace files append.
+
+`BB_NET_TRACE_REMOTE` selects the SSH host used by the report and probe. `BB_NET_TRACE_REMOTE_DIR` selects the remote trace directory. Regular browsers write the same files when opened with the trace URL.
 
 For attacks the report prints, per client and character: press → request sent (the local attack plays in the same frame), request → server receipt, predicted hit drawn → the target's health update, server hit → client health update, press → confirmation (includes windups and projectile flight), hit → super update, the share of predicted hits the server never confirmed (and how many coincided with a loop stall), and the view rewind applied as shooter and as victim.
 
-**Fighting.** The attack scripts (`attack`, `melee`, `special`, `fight`) use a per-character profile (`FIGHT_PROFILES` in `net-probe.mjs`): close to the character's range, face the target, press J as fast as its ammo allows (the client refuses presses without ammo), fire I when `super-update` says the super is charged, and keep juking and jumping so both sides are moving targets. `attack` skips specials, `fight` adds dashes, `melee` forces close range. Clients alternate team1/team2 (the owner moves seats with `party:slot:move` before anyone is ready) and hunt the rival probe client first, so most hits are human against human; `--coop` puts every client on team1. Sample size is bounded by the game, not the script: duels gives each fighter one life, so a dense fight ends the match in 20–40 s; in Bank Bust each respawn walks ~10 s back to the fight; and ammo caps sustained requests (about 1/s for Thorg and Ninja, 0.67/s for Sparrow and Gloop, 0.5/s for Draven, 0.33/s for Ozzy). The live status line and `probe.json` count presses and the seconds a client was engaged (target within reach and level). Bank Bust spawns are ~4400 px apart, so clients were engaged only 4–22 s of 70; `--dense` trades that walk for several short duels whose spawns are close, pooled with `net-report --pool <runs…>` (it pools victim screen truth per client tag). No server option is involved.
+### Fight scripts
 
-**Network simulation.** `--net <profile>` routes a client's socket.io websocket through Playwright (`routeWebSocket`) and delays each direction: `fast` (no proxy), `wifi` (+40 ms RTT, 8 ms jitter), `4g` (+90, 25, spikes 1%:200 ms), `bad` (+180, 50, 2%:400 ms), or raw `rtt=100,jitter=20,spike=0.01:300`. Jitter is the peak-to-peak spread of each one-way delay; a spike holds the link an extra `ms` with chance `p` per 100 ms of traffic. Each direction stays ordered like TCP: a message is released at `max(previous release, now + delay)`, so a delayed message holds back later ones. A list sets clients in order (`fast,4g`; use `;` between raw profiles), cycling. The real path to brobattles.dev (~13 ms) comes on top: measured in-game RTT p50 was 13 (fast), 58 (wifi), 110–116 (4g) and 217 ms (bad). The probe pings `game:clock` every 1.5 s through the same socket and writes `output/net-traces/<run>/probe.json` (profiles, teams, measured RTT, proxy delay and lateness, attack counters, wall clock per phase), which the report reads.
+The attack scripts (`attack`, `melee`, `special`, `fight`) use a per-character profile (`FIGHT_PROFILES` in `net-probe.mjs`): close to the character's range, face the target, press J as fast as its ammo allows (the client refuses presses without ammo), fire I when `super-update` says the super is charged, and keep juking and jumping so both sides are moving targets.
+`attack` skips specials, `fight` adds dashes, `melee` forces close range.
 
-**Fairness.** The report starts with a one-line fairness summary per client (with its `--flags`) and adds, under each client:
+Clients alternate team1/team2 (the owner moves seats with `party:slot:move` before anyone is ready) and hunt the rival probe client first, so most hits are human against human; `--coop` puts every client on team1.
 
-- *Attacker truth* (a hit drawn on my screen deals damage): unconfirmed predictions by delivery, each tied to its request by the id the `pred` row carries (else the latest request), with the view rewind requested (`sim - viewMono` of the `action` record) and applied (after the delivery cap; `CAPPED` when lower), and the distance between the contact the attacker drew and where the server would test the target (snapshot truth at contact time minus the applied rewind). For confirmed hits, predicted contact → the `hit` record's `tested` position.
-- *Self-view staleness* (drawn→tested): for each damaging hit a traced client took, the distance and age between where its own client drew it when the server applied the hit and the position the server tested (`tested` in the `hit` record; older runs estimate it from another traced client's snapshots or the victim's own timeline). This is what the server's history is behind the victim's screen; the projectile lead does not change it.
-- *Victim screen truth* (if it did not touch me on my screen I take no damage): every enemy released shot that can damage this player reports itself as drawn each frame (`shotPrediction.traceEnemyShot`, called by the Sparrow, Ninja, Ozzy fireball, Gloop slimeball and hook client code, a no-op untraced). `victimScreenTrace.js` keeps the gap between that collision circle and this player's drawn hit box and emits rows only at moments: `es` first shown (shooter, character, lead shown, lead target, R, rtt/2, P), `et` first touch (with the flight age drawn and the lead shown), `eh` hold on body start/end, `ee` no longer drawn (min gap, touching ms, max lead), `ea` the shot's track while within 600 px (time, gap, flight age per frame), and `vh` when this player's health drops (gap at the server's registration, estimated as arrival − half the best RTT, min gap up to it, how long the touch preceded it). The report gives, per client and per shooter character: *screen-agreed* hits (the drawn shot was within 3 px of the drawn body at or before registration) with p50/p95 of the miss gap for the rest (the px by which "it did not touch me" was violated), *phantom touches* (touched or held on the body, never hit; count, share of touched shots, hold p50/p95: the cost of the lead), and the lead drawn with its target and components R, rtt/2 and P. With `netProjectileLead=0` the same rows come with lead 0. *Lead error*: server position history keeps each human sample's own timestamp, so a `hit` carries `vTs`, the victim's Date.now() of the tested frame, and traced rooms write a `near` record per released shot and traced enemy (closest approach to the tested body within 80 px: gap, age, `vTs`; `shotTrace.js`, called by the Sparrow, Ninja and attack runtimes). Client batches carry `dateOffset` (Date.now() − performance.now()), so the report reads the `ea` track at the tested frame: server age − drawn age is the lead error in ms (positive: drawn behind). It is reported for hits whose tested frame had the full lead on screen, apart from `ramp` (first 120 ms) and `unseen` (tested before the shot first showed here, with by how much); phantoms are split the same way with the server's miss distance. A contact the server accepted with no damage (ducked) counts as a hit. Attached hits taken record the gap between the attacker's drawn body and this player's (the remote swing shape is not traced).
+Sample size is bounded by the game, not the script: duels gives each fighter one life, so a dense fight ends the match in 20–40 s; in Bank Bust each respawn walks ~10 s back to the fight; and ammo caps sustained requests (about 1/s for Thorg and Ninja, 0.67/s for Sparrow and Gloop, 0.5/s for Draven, 0.33/s for Ozzy).
+
+The live status line and `probe.json` count presses and the seconds a client was engaged (target within reach and level).
+Bank Bust spawns are ~4400 px apart, so clients were engaged only 4–22 s of 70; `--dense` trades that walk for several short duels whose spawns are close, pooled with `net-report --pool <runs…>` (it pools victim screen truth per client tag).
+No server option is involved.
+
+### Network simulation
+
+`--net <profile>` routes a client's socket.io websocket through Playwright (`routeWebSocket`) and delays each direction: `fast` (no proxy), `wifi` (+40 ms RTT, 8 ms jitter), `4g` (+90, 25, spikes 1%:200 ms), `bad` (+180, 50, 2%:400 ms), or raw `rtt=100,jitter=20,spike=0.01:300`.
+
+Jitter is the peak-to-peak spread of each one-way delay; a spike holds the link an extra `ms` with chance `p` per 100 ms of traffic. Each direction stays ordered like TCP: a message is released at `max(previous release, now + delay)`, so a delayed message holds back later ones.
+
+A list sets clients in order (`fast,4g`; use `;` between raw profiles), cycling. The real path to brobattles.dev (~13 ms) comes on top: measured in-game RTT p50 was 13 (fast), 58 (wifi), 110–116 (4g) and 217 ms (bad).
+
+The probe pings `game:clock` every 1.5 s through the same socket and writes `output/net-traces/<run>/probe.json` (profiles, teams, measured RTT, proxy delay and lateness, attack counters, wall clock per phase), which the report reads. This is gitignored output generated by a probe run.
+
+### Fairness metrics
+
+The report starts with a one-line fairness summary per client (with its `--flags`) and adds, under each client:
+
+- *Attacker truth* (a hit drawn on my screen deals damage): unconfirmed predictions by delivery, each tied to its request by the id the `pred` row carries (else the latest request), with the view rewind requested (`sim - viewMono` of the `action` record) and applied (after the delivery cap; `CAPPED` when lower), and the distance between the contact the attacker drew and where the server would test the target (snapshot truth at contact time minus the applied rewind).
+  For confirmed hits, predicted contact → the `hit` record's `tested` position.
+- *Self-view staleness* (drawn→tested): for each damaging hit a traced client took, the distance and age between where its own client drew it when the server applied the hit and the position the server tested (`tested` in the `hit` record; older runs estimate it from another traced client's snapshots or the victim's own timeline).
+  This is what the server's history is behind the victim's screen; the projectile lead does not change it.
+- *Victim screen truth* (if it did not touch me on my screen I take no damage): every enemy released shot that can damage this player reports itself as drawn each frame (`shotPrediction.traceEnemyShot`, called by the Sparrow, Ninja, Ozzy fireball, Gloop slimeball and hook client code, a no-op untraced).
+  `victimScreenTrace.js` records the gap between the projectile circle and the player's drawn body:
+
+  - `es` when the shot first appears, with shooter, character, shown and target lead, R, RTT/2 and P.
+  - `et` on first touch, with drawn flight age and shown lead.
+  - `eh` when a hold on the body starts or ends.
+  - `ee` when the shot disappears, with minimum gap, touching time and maximum lead.
+  - `ea` for each frame of the track within 600 px, with time, gap and flight age.
+  - `vh` on a health drop, with gap at registration (estimated as arrival minus half the best RTT), minimum gap up to registration and how long the touch preceded it.
+
+  The report gives, per client and shooter character: *screen-agreed* hits (the drawn shot was within 3 px of the drawn body at or before registration) with p50/p95 of the miss gap for the rest (the px by which "it did not touch me" was violated), *phantom touches* (touched or held on the body, never hit; count, share of touched shots, hold p50/p95: the cost of the lead), and the lead drawn with its target and components R, rtt/2 and P.
+  With `netProjectileLead=0` the same rows come with lead 0.
+
+  *Lead error*: server position history keeps each human sample's own timestamp, so a `hit` carries `vTs`, the victim's Date.now() of the tested frame, and traced rooms write a `near` record per released shot and traced enemy (closest approach to the tested body within 80 px: gap, age, `vTs`; `shotTrace.js`, called by the Sparrow, Ninja and attack runtimes).
+  Client batches carry `dateOffset` (Date.now() − performance.now()), so the report reads the `ea` track at the tested frame: server age − drawn age is the lead error in ms (positive: drawn behind).
+  It is reported for hits whose tested frame had the full lead on screen, apart from `ramp` (first 120 ms) and `unseen` (tested before the shot first showed here, with by how much); phantoms are split the same way with the server's miss distance.
+
+  A contact the server accepted with no damage (ducked) counts as a hit. Attached hits taken record the gap between the attacker's drawn body and this player's (the remote swing shape is not traced).
 
 `--compare` prints both runs' fairness lines and per-client rows (character/net, RTT, requests, hits, unconfirmed %, hits taken, self-view px and age, screen-agreed %, miss gap p95, phantom %, phantom hold, lead). What the metrics still estimate is listed in `FAIRNESS_GAPS` (`netReportAnalysis.mjs`).
 
-The report classifies each client snapshot gap ≥100 ms as server-side (the server's own emission gap matched it) or transport, and each rubber-band event as correction, server-stall, transport-gap, client-frame-hitch, client-interpolation or unexplained. Reversals that follow a key press, or that appear in the server's own snapshots, count as ordinary movement. Loop stalls are cross-checked against navigation builds, heavy bot ticks and host overload. Headless Chrome renders in software, so treat client frame hitches with care and compare with `--headed`.
+The report classifies each client snapshot gap ≥100 ms as server-side (the server's own emission gap matched it) or transport, and each rubber-band event as correction, server-stall, transport-gap, client-frame-hitch, client-interpolation or unexplained.
+Reversals that follow a key press, or that appear in the server's own snapshots, count as ordinary movement.
+Loop stalls are cross-checked against navigation builds, heavy bot ticks and host overload.
+Headless Chrome renders in software, so treat client frame hitches with care and compare with `--headed`.
 
 ## Game-thread budget and lag root causes
 
-Everything a player sees waits on the game thread: snapshots, hit confirmations, health and super updates, and the processing of incoming inputs and attacks. When the loop stalls, remote actors freeze and then catch up, predicted hits go unconfirmed, and an `idle` correction can pull the local player back. Production traces (2026-11, `output/net-traces/LOG.md`) found these causes, ranked by how much players felt them:
+Everything a player sees waits on the game thread: snapshots, hit confirmations, health and super updates, and the processing of incoming inputs and attacks.
+When the loop stalls, remote actors freeze and then catch up, predicted hits go unconfirmed, and an `idle` correction can pull the local player back.
+November 2026 production traces identified these causes.
+Historical trace notes under `output/net-traces/` were local artifacts.
 
-1. **Bot planning.** Route search was ~75% of bot planning on the Pi, and a single planning unit (one route query) could take 100+ ms, so the 4 ms planning allowance never bounded it. Bank Bust matches had ~150–190 loop stalls a match and stalls up to 1.6 s. Each navigation graph now gets search tables once (`routeSearchTables` in `bots/navigation.js`): integer state ids, adjacency records and per-surface walk blockers. Searches use typed arrays. Seeded `simulate-bots --deterministic` fingerprints are unchanged. Nothing in a bot tick may run unbounded: long work is a generator consumed by `advancePlanning`, which stops at `_botPlanningDeadline`. Route queries inside planning generators use `context.routeSteps`, which pauses a long search between expansions and resumes it next frame, and a new graph's search tables are built the same way (`routeSearchTablesSteps`). States settle in the same order either way, so answers, random draws and fingerprints are unchanged; only a long search finishes a few frames later. A stuck bot's recovery used to run a whole decision synchronously (up to ~100 ms on the Pi); it is now planned the same way. Bot physics and navigation checks query colliders through an x-bucket broadphase (`nearColliders` in `bots/physics.js`) that returns nearby colliders in their original order, so results are identical and Bank Bust graph builds take ~2.5 s instead of ~6 s on the Pi. Ballistic aim (`clearTrajectory` in `shared/combat/combat.js`) samples an arc once and tests only cover near its flight: testing every collider against each of an arc's ~180 steps, for every arc a decision tried, held the thread for 40–80 ms in one call and was most of the bots' time in Bank Bust (395 → 145 ms/s once fixed). Avoid `require()` inside per-tick functions: module resolution was ~10% of the live game loop in a CPU profile.
-2. **The catch-up spiral.** After a stall the loop runs up to 60 steps in one frame. Each step used to get its own planning allowance, so one stall produced the next. Planning now also stops at `BOT_PLANNING_FRAME_MS` per loop frame (`gameRoomConfig.js`): two-step frames from timer jitter keep the full allowance, long catch-ups do not plan. With three Pi cores busy, stalls ≥200 ms dropped from 50 to 0 a match.
-3. **Synchronous disk writes.** Node writes stdout and stderr synchronously to files and pipes (pm2). On the Pi the SD card is often busy with swap, so one log line held the loop for 1.8–5.1 s (traced at ~5% CPU and 70–94% iowait). `src/server/lib/asyncConsole.js` queues console output and writes it from the threadpool. Do not add synchronous file I/O on the game thread; a worker's disk cache of navigation graphs was tried and removed for the same reason (its writes stalled the loop up to 1.4 s).
-4. **Navigation graphs.** Builds run in one worker thread (a second worker slowed every build and the game thread with it). The worker returns graphs packed into transferred typed arrays (`bots/navigationPack.js`); receiving a structured clone of ~80k frame objects cost the game thread ~150 ms per graph. The queue builds the most recently requested graph first and drops requests no bot has repeated for 3 s. While a Bank Bust wall change rebuilds, bots route with the newest graph for the same character and buffs, checked against the current walls. Different buffs never borrow routes. A wall changes only the moves whose simulated paths came near it, so `buildGraph` records the area each surface's moves covered (`sweeps`) and builds a changed layout from the worker's latest graph for the same character and buffs: surfaces whose area no added or removed collider touches keep their edges, and only the rest are simulated again. The result equals a full build (checked over random wall sequences for every character); a single wall costs about a fifth of a full build.
-5. **Death and respawn presentation fought the snapshot timeline.** With the loop steady, the last remote "bounce" left was on every remote death and respawn. The death event started the death animation, and the next frame the older snapshot (still alive) respawned the corpse until the timeline caught up, playing the death twice. A respawn showed the player at the spawn, then dying again at the death spot for ~70 ms. Each snapshot-driven respawn also moved the sprite once by its collider offset (70–140 px), because Phaser's `body.reset()` records the sprite's top-left as the previous body position. See [Snapshots and clocks](#snapshots-and-clocks).
+1. **Bot planning.** Route search was ~75% of bot planning on the Pi, and a single planning unit (one route query) could take 100+ ms, so the 4 ms planning allowance never bounded it. Bank Bust matches had ~150–190 loop stalls a match and stalls up to 1.6 s.
+
+   Each navigation graph now gets search tables once (`routeSearchTables` in `bots/navigation.js`): integer state ids, adjacency records and per-surface walk blockers. Searches use typed arrays. Seeded `simulate-bots --deterministic` fingerprints are unchanged.
+
+   Keep long bot work in a generator. `advancePlanning` in `src/server/core/bots/controller.js` consumes it in slices capped by `room.botPlanningDeadline`.
+   Route queries inside planning generators use `context.routeSteps`, which pauses a long search between expansions and resumes it next frame, and a new graph's search tables are built the same way (`routeSearchTablesSteps`).
+   States settle in the same order either way, so answers, random draws and fingerprints are unchanged; only a long search finishes a few frames later.
+
+   A stuck bot's recovery used to run a whole decision synchronously (up to ~100 ms on the Pi); it is now planned the same way.
+
+   Bot physics and navigation checks query colliders through an x-bucket broadphase (`nearColliders` in `src/server/core/physics/bodySolver.js`) that returns nearby colliders in their original order, so results are identical and Bank Bust graph builds take ~2.5 s instead of ~6 s on the Pi.
+
+   Ballistic aim (`clearTrajectory` in `shared/combat/combat.js`) samples an arc once and tests only cover near its flight: testing every collider against each of an arc's ~180 steps, for every arc a decision tried, held the thread for 40–80 ms in one call and was most of the bots' time in Bank Bust (395 → 145 ms/s once fixed).
+
+   Avoid `require()` inside per-tick functions: module resolution was ~10% of the live game loop in a CPU profile.
+2. **The catch-up spiral.** After a stall the loop runs up to 60 steps in one frame.
+   Each step used to get its own planning allowance, so one stall produced the next.
+   Planning now also stops at `BOT_PLANNING_FRAME_MS` per loop frame (`matchConfig.js`): two-step frames from timer jitter keep the full allowance, long catch-ups do not plan.
+   With three Pi cores busy, stalls ≥200 ms dropped from 50 to 0 a match.
+3. **Synchronous disk writes.** Node writes stdout and stderr synchronously to files and pipes (pm2).
+   On the Pi the SD card is often busy with swap, so one log line held the loop for 1.8–5.1 s (traced at ~5% CPU and 70–94% iowait).
+   `src/server/lib/asyncConsole.js` queues console output and writes it from the threadpool.
+   Do not add synchronous file I/O on the game thread; a worker's disk cache of navigation graphs was tried and removed for the same reason (its writes stalled the loop up to 1.4 s).
+4. **Navigation graphs.** Builds run in one worker thread (a second worker slowed every build and the game thread with it). The worker returns graphs packed into transferred typed arrays (`bots/navigationPack.js`); receiving a structured clone of ~80k frame objects cost the game thread ~150 ms per graph.
+
+   The queue builds the most recently requested graph first and drops requests no bot has repeated for 3 s.
+
+   While a Bank Bust wall change rebuilds, bots route with the newest graph for the same character and buffs, checked against the current walls. Different buffs never borrow routes.
+
+   A wall changes only the moves whose simulated paths came near it, so `buildGraph` records the area each surface's moves covered (`sweeps`) and builds a changed layout from the worker's latest graph for the same character and buffs: surfaces whose area no added or removed collider touches keep their edges, and only the rest are simulated again.
+   The result equals a full build (checked over random wall sequences for every character); a single wall costs about a fifth of a full build.
+5. **Death and respawn presentation fought the snapshot timeline.** With the loop steady, the last remote "bounce" left was on every remote death and respawn.
+   The death event started the death animation, and the next frame the older snapshot (still alive) respawned the corpse until the timeline caught up, playing the death twice.
+   A respawn showed the player at the spawn, then dying again at the death spot for ~70 ms.
+   Each snapshot-driven respawn also moved the sprite once by its collider offset (70–140 px), because Phaser's `body.reset()` records the sprite's top-left as the previous body position.
+   See [Snapshots and clocks](#snapshots-and-clocks).
 
 To find the next cost, profile the live process (`BB_NET_TRACE_CPU_PROFILE_S`) rather than the simulator: production bots cost about twice per bot what `simulate-bots` shows, because live matches have humans, mode objectives and planning slices cut by real time.
 
-Remaining limits on the 4-core, 4 GB Pi: swap keeps the SD card busy; a bot's takeoff check (`prepareTraversal` from its real state) and per-tick physics still run unsliced; and the game shares the Pi with other apps. Other apps are kept off one core and at a lower priority (see [Deployment](../operations/deployment.md#shared-raspberry-pi)); before that, three busy cores brought back 50–150 ms stalls.
+Remaining limits on the 4-core, 4 GB Pi: swap keeps the SD card busy; a bot's takeoff check (`prepareTraversal` from its real state) and per-tick physics still run unsliced; and the game shares the Pi with other apps.
+Other apps are kept off one core and at a lower priority (see [Deployment](../operations/deployment.md#shared-raspberry-pi)); before that, three busy cores brought back 50–150 ms stalls.
 
 ## Diagnostics and verification
 
@@ -192,7 +455,10 @@ window.__BB_NETWORK_DIAGNOSTICS__()
 window.__BB_SPARROW_DIAGNOSTICS__()
 ```
 
-Network diagnostics report cadence/arrival gaps, jitter, underruns, extrapolation, delivery offset, clock estimates and correction counts/history. Server `[movement:corrections]` logs summarize budget/collision/stale-packet counts per human. Sparrow diagnostics expose prediction and confirmation age/alignment metrics. These measurements do not establish end-to-end input latency or perceptual smoothness.
+Network diagnostics report cadence/arrival gaps, jitter, underruns, extrapolation, delivery offset, clock estimates and correction counts/history.
+Server `[movement:corrections]` logs summarize budget/collision/stale-packet counts per human.
+Sparrow diagnostics expose prediction and confirmation age/alignment metrics.
+These measurements do not establish end-to-end input latency or perceptual smoothness.
 
 ```sh
 npm run test:network
@@ -202,4 +468,6 @@ node scripts/dev/sparrow-network-lab.cjs
 
 The lab runs two isolated clients at http://127.0.0.1:3017 without production accounts or MySQL. `?rtt=100&jitter=1` enables a latency scenario; supported RTT values are 0, 50, 100 and 150 ms.
 
-After transport changes, run relevant tests and the production build, then use two real clients to exercise fresh start, late join, disconnect/reconnect during pregame/countdown/combat, every character's basic/special, wall jumps, reversals, knockback, death/respawn, Bank Bust and results cleanup. Compare steady/variable latency and stalls. Deterministic tests and isolated benchmarks do not establish production capacity or browser frame pacing.
+After transport changes, run relevant tests and the production build, then use two real clients to exercise fresh start, late join, disconnect/reconnect during pregame/countdown/combat, every character's basic/special, wall jumps, reversals, knockback, death/respawn, Bank Bust and results cleanup.
+Compare steady/variable latency and stalls.
+Deterministic tests and isolated benchmarks do not establish production capacity or browser frame pacing.

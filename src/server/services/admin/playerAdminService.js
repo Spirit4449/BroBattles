@@ -1,3 +1,4 @@
+const { httpError } = require("../httpError");
 const { getSkinsCatalog, getCharacterSkins, buildSkinAssetUrl, normalizeSelectedSkinMap } = require("../cosmetics/skinsCatalog");
 const { getProfileIconsCatalog } = require("../cosmetics/profileIconsCatalog");
 const { getPlayerCardsCatalog } = require("../cosmetics/playerCardsCatalog");
@@ -12,7 +13,7 @@ const INVENTORIES = {
   cards: { table: "user_cards", column: "card_id", selected: "selected_card_id" },
   titles: { table: "user_titles", column: "title_id", selected: "selected_title_id" },
 };
-const fail = (status, message) => Object.assign(new Error(message), { status });
+const fail = httpError;
 
 function inventoryCatalogs(user) {
   const cards = getPlayerCardsCatalog();
@@ -33,21 +34,16 @@ async function getPlayerInventory(db, user) {
   const inventory = {};
   await Promise.all(Object.entries(INVENTORIES).map(async ([kind, config]) => {
     const { items, automatic } = catalogs[kind];
-    try {
-      const rows = await db.runQuery(`SELECT ${config.column} FROM ${config.table} WHERE user_id = ?`, [user.user_id]);
-      let selected = kind === "skins" ? normalizeSelectedSkinMap(user.selected_skin_id_by_char) : user[config.selected] || null;
-      if (kind === "titles") {
-        const [row] = await db.runQuery("SELECT selected_title_id FROM users WHERE user_id = ?", [user.user_id]);
-        selected = row?.selected_title_id || null;
-      }
-      const owned = new Set([...rows.map(row => row[config.column]), ...automatic]);
-      inventory[kind] = {
-        items: items.map(({ id, name, assetUrl, rarity, character, color }) => ({ id, name, assetUrl, rarity, character, color, owned: owned.has(id), automatic: automatic.includes(id), equipped: kind === "skins" ? selected[character] === id : selected === id })),
-      };
-    } catch (error) {
-      if (!["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error.code)) throw error;
-      inventory[kind] = { items: [], error: "Inventory unavailable; apply the cosmetic migrations." };
+    const rows = await db.runQuery(`SELECT ${config.column} FROM ${config.table} WHERE user_id = ?`, [user.user_id]);
+    let selected = kind === "skins" ? normalizeSelectedSkinMap(user.selected_skin_id_by_char) : user[config.selected] || null;
+    if (kind === "titles") {
+      const [row] = await db.runQuery("SELECT selected_title_id FROM users WHERE user_id = ?", [user.user_id]);
+      selected = row?.selected_title_id || null;
     }
+    const owned = new Set([...rows.map(row => row[config.column]), ...automatic]);
+    inventory[kind] = {
+      items: items.map(({ id, name, assetUrl, rarity, character, color }) => ({ id, name, assetUrl, rarity, character, color, owned: owned.has(id), automatic: automatic.includes(id), equipped: kind === "skins" ? selected[character] === id : selected === id })),
+    };
   }));
   return inventory;
 }

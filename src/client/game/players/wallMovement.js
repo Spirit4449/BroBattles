@@ -1,3 +1,4 @@
+// CommonJS keeps these mechanics directly loadable by the Node test suite.
 const MOVEMENT_PHYSICS = require('../../../shared/physics/movementPhysics.json');
 const { isStepFace } = require('../../../shared/physics/wallJumpFace');
 

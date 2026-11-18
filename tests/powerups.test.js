@@ -1,3 +1,4 @@
+const roomTransport = require('./helpers/roomTransport.js');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -30,7 +31,7 @@ describe("World pickups and timed effects", () => {
   test("spawn points use a shuffled bag and avoid recently used locations", () => {
     const room = {
       matchData: { map: 1 },
-      _powerups: new Map(),
+      powerups: new Map(),
       _powerupRandom: seededRandom(42),
       _powerupSpawnBag: [],
       _recentPowerupSpawnKeys: [],
@@ -53,13 +54,13 @@ describe("World pickups and timed effects", () => {
   test("active spawn locations are never selected again", () => {
     const room = {
       matchData: { map: 1 },
-      _powerups: new Map(),
+      powerups: new Map(),
       _powerupRandom: seededRandom(7),
       _powerupSpawnBag: [],
       _recentPowerupSpawnKeys: [],
     };
     const first = powerupManager.pickSpawnPoint(room);
-    room._powerups.set(1, {
+    room.powerups.set(1, {
       x: first.x,
       y: first.y - 22,
       _spawnPointKey: first._spawnPointKey,
@@ -78,25 +79,25 @@ describe("World pickups and timed effects", () => {
       status: "active",
       matchData: { map: 1 },
       players: new Map(),
-      _powerups: new Map(),
-      _deathDrops: new Map(),
+      powerups: new Map(),
+      deathDrops: new Map(),
       _nextPowerupId: 1,
       _powerupRandom: seededRandom(3),
       _powerupSpawnBag: [],
       _powerupTypeBag: [],
       _recentPowerupSpawnKeys: [],
-      _loopStartWallTime: now,
+      loopStartWallTime: now,
       _lastPowerupSpawnAt: now,
       _startingPowerupsPending: true,
     };
 
     now += POWERUP_FIRST_SPAWN_DELAY_MS - 1;
     powerupManager.tickPowerups(room);
-    assert.equal(room._powerups.size, 0);
+    assert.equal(room.powerups.size, 0);
 
     now += 1;
     powerupManager.tickPowerups(room);
-    assert.equal(room._powerups.size, POWERUP_STARTING_COUNT);
+    assert.equal(room.powerups.size, POWERUP_STARTING_COUNT);
     assert.equal(room._startingPowerupsPending, false);
   });
 
@@ -195,7 +196,7 @@ describe("World pickups and timed effects", () => {
       connected: true,
       loaded: true,
     };
-    const room = {
+    const room = { ...roomTransport,
       applyKnockback(player, impulse) { require('../src/server/core/gameRoom/participants').applyParticipantKnockback(this, player, impulse); },
       players: new Map([
         [collector.socketId, collector],
@@ -248,7 +249,7 @@ describe("World pickups and timed effects", () => {
     const targets = [0, POWERUP_SHOCKWAVE_RADIUS / 2, POWERUP_SHOCKWAVE_RADIUS].map((x, i) => ({
       x, y: 0, socketId: String(i), isAlive: true, connected: true, loaded: true,
     }));
-    const room = {
+    const room = { ...roomTransport,
       applyKnockback(player, impulse) { require('../src/server/core/gameRoom/participants').applyParticipantKnockback(this, player, impulse); },
       players: new Map([['source', collector], ...targets.map(t => [t.socketId, t])]),
       io: { to: () => ({ emit: (event, payload) => { if (event === "player:knockback") hits.push(payload); } }) },
@@ -271,10 +272,10 @@ describe("Team powerup grants", () => {
     const applied = [], emitted = [];
     const player = (name, team) => ({ name, team, isAlive: true, loaded: true });
     const caster = player('wiz', 'team1');
-    const room = {
+    const room = { ...roomTransport,
       applyKnockback(player, impulse) { require('../src/server/core/gameRoom/participants').applyParticipantKnockback(this, player, impulse); },
       players: new Map([caster, player('ally', 'team1'), player('foe', 'team2')].map(p => [p.name, p])),
-      _applyPowerupToPlayer: (target, type) => applied.push([target.name, type]),
+      applyPowerupToPlayer: (target, type) => applied.push([target.name, type]),
       io: { to: () => ({ emit: (event, payload) => emitted.push(payload) }) },
     };
     const original = Math.random;
@@ -298,4 +299,28 @@ describe("Team powerup grants", () => {
     }
     assert.deepEqual([...seen].sort(), [...surge.SURGE_POWERUPS].sort(), 'the caster can roll any of them, not just rage');
   });
+});
+
+test('visual priority resolves overlapping status tints independently of bubble layering', () => {
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { POWERUP_CATALOG } = require('../src/shared/powerups');
+  const { applyPrimaryStatus, activeBubbleStyles } = createClientModuleGraph({
+    globals: { Math: Object.assign(Object.create(Math), { random: () => 1 }) },
+  }).load('src/client/game/powerups/powerupVisuals.js');
+  let tint;
+  const sprite = { x: 0, setTint(value) { tint = value; }, clearTint() { tint = null; } };
+  const context = { sprite, nowSec: 1, colors: {}, Phaser: {} };
+  const effects = { gravityBoots: 1, poison: 1, health: 1, sparrowBurn: 1, rage: 1, freeze: 1, shield: 1 };
+  assert.deepEqual(Array.from(activeBubbleStyles(effects), style => style.type),
+    ['shield', 'rage', 'health', 'poison', 'gravityBoots']);
+  for (const key of ['freeze', 'rage', 'health']) {
+    applyPrimaryStatus(effects, context);
+    assert.ok(POWERUP_CATALOG[key].visual.tintPulse.includes(tint), key);
+    delete effects[key];
+  }
+  applyPrimaryStatus(effects, context);
+  assert.equal(tint, null, 'poison takes priority over burn');
+  delete effects.poison;
+  applyPrimaryStatus(effects, context);
+  assert.ok(Number.isInteger(tint), 'burn takes priority over boots');
 });

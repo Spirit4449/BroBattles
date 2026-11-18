@@ -1,3 +1,5 @@
+const { resolvePurchaseSettings, BANK_BUST_GOLD_ARRIVAL_MS: RANDOM_GOLD_ARRIVE_MS } = require("../../../../shared/bankBustSettings");
+
 // Bank Bust is built on one server-owned number per team: the coins sitting in
 // that team's vault. Collecting coins adds to it, enemy attacks strip coins out
 // of it, and purchases are paid out of it. There is no wallet, no reserve and
@@ -9,7 +11,6 @@ const RANDOM_GOLD_PICKUP_CAP = 5; // max loose gold pickups on the map at once
 const RANDOM_GOLD_PICKUP_VALUE = 250; // coins added to the collector's vault
 const RANDOM_GOLD_PICKUP_RADIUS = 42; // pickup distance (px)
 const RANDOM_GOLD_SPAWN_INTERVAL_MS = 3600; // one new pickup this often
-const RANDOM_GOLD_ARRIVE_MS = 1300; // drop-and-bounce animation length
 const RANDOM_GOLD_CLAIMABLE_MS = 500; // first floor touch; collectable from here
 
 // Coin ledger entries stay in snapshots this long so the client can play the
@@ -62,8 +63,7 @@ function createModeObjectState(def = {}) {
   } else if (base.type === "claimableTurret") {
     base.state = {
       claimedByTeam: null,
-      claimRadius: Math.max(40, Number(def?.claimRadius) || 110),
-      claimCost: Math.max(0, Number(def?.claimCost) || 3000),
+      ...resolvePurchaseSettings(base.type, def),
       range: Math.max(100, Number(def?.range) || 520),
       fireRateMs: Math.max(200, Number(def?.fireRateMs) || 900),
       damage: Math.max(1, Number(def?.damage) || 115),
@@ -73,10 +73,7 @@ function createModeObjectState(def = {}) {
   } else if (base.type === "wallSlot") {
     base.state = {
       builtByTeam: null,
-      buildRadius: Math.max(30, Number(def?.buildRadius) || 100),
-      cost: Math.max(0, Number(def?.cost) || 1100),
-      width: Math.max(10, Number(def?.width) || 48),
-      height: Math.max(10, Number(def?.height) || 96),
+      ...resolvePurchaseSettings(base.type, def),
     };
   }
 
@@ -159,11 +156,9 @@ function serializeRandomGoldPickup(entry = {}) {
 }
 
 function expireCoinEvents(events = [], now = Date.now()) {
-  return Array.isArray(events)
-    ? events.filter(
-        (entry) => now - (Number(entry?.at) || 0) <= COIN_EVENT_RETENTION_MS,
-      )
-    : [];
+  if (!Array.isArray(events)) return [];
+  if (!events.some(entry => now - (Number(entry?.at) || 0) > COIN_EVENT_RETENTION_MS)) return events;
+  return events.filter(entry => now - (Number(entry?.at) || 0) <= COIN_EVENT_RETENTION_MS);
 }
 
 module.exports = {

@@ -14,7 +14,12 @@ function createBrowserFixture(html = '', { url = 'https://game.test/', imports =
   const querySelector = document.querySelector.bind(document);
   document.querySelector = selector => querySelector(selector.replaceAll(':modal', '[data-fixture-modal]'));
   window.HTMLElement.prototype.showModal = function () { this.setAttribute('open', ''); this.setAttribute('data-fixture-modal', ''); };
-  window.HTMLElement.prototype.close = function () { this.removeAttribute('open'); this.removeAttribute('data-fixture-modal'); };
+  window.HTMLElement.prototype.close = function () {
+    if (!this.hasAttribute('open')) return;
+    this.removeAttribute('open');
+    this.removeAttribute('data-fixture-modal');
+    this.dispatchEvent(new window.Event('close'));
+  };
   const timers = new Map();
   let timerId = 0, now = 0;
   const later = (callback, delay = 0) => { timers.set(++timerId, { callback, delay, at: now + delay }); return timerId; };

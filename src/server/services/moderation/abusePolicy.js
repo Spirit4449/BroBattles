@@ -1,3 +1,5 @@
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
+
 const ABUSE_DECAY_WINDOW_MS = 5 * 60 * 1000;
 const ABUSE_LOG_DECISIONS = true;
 
@@ -21,42 +23,39 @@ const HTTP_BUCKETS = {
 };
 
 const HTTP_ROUTE_POLICIES = {
-  "GET /username-availability": { bucket: "medium", enforceActiveSuspension: false },
-  "POST /signup": { bucket: "strict" },
-  "POST /login": { bucket: "strict", allowBanned: true },
-  "POST /upgrade": { bucket: "strict", countFailuresOnly: true },
-  "POST /buy": { bucket: "strict" },
-  "POST /profile/change-username": { bucket: "strict" },
-  "POST /profile/change-password": { bucket: "strict" },
+  [`GET ${API_PATHS.USERNAME_AVAILABILITY}`]: { bucket: "medium", enforceActiveSuspension: false },
+  [`POST ${API_PATHS.SIGNUP}`]: { bucket: "strict" },
+  [`POST ${API_PATHS.LOGIN}`]: { bucket: "strict", allowBanned: true },
+  [`POST ${API_PATHS.BUY}`]: { bucket: "strict" },
+  [`POST ${API_PATHS.UPGRADE}`]: { bucket: "strict", countFailuresOnly: true },
+  [`POST ${API_PATHS.PROFILE_CHANGE_USERNAME}`]: { bucket: "strict" },
+  [`POST ${API_PATHS.PROFILE_CHANGE_PASSWORD}`]: { bucket: "strict" },
   // Admin endpoints enforce requireAdminUser in their route handlers and stay
   // outside gameplay request counters and matchmaking suspensions.
-  "POST /api/shop/claim-daily": { bucket: "strict" },
-  "POST /api/shop/purchase": { bucket: "strict" },
-  "POST /api/shop/checkout-session": { bucket: "strict" },
+  [`POST ${API_PATHS.API_SHOP_CLAIM_DAILY}`]: { bucket: "strict" },
+  [`POST ${API_PATHS.API_SHOP_PURCHASE}`]: { bucket: "strict" },
+  [`POST ${API_PATHS.API_SHOP_CHECKOUT_SESSION}`]: { bucket: "strict" },
 
-  "POST /create-party": { bucket: "medium" },
-  "POST /partydata": { bucket: "medium" },
-  "POST /leave-party": { bucket: "medium" },
-  "POST /party/kick": { bucket: "medium" },
-  "POST /party/make-owner": { bucket: "medium" },
-  "POST /party/settings/update": { bucket: "medium" },
-  "POST /party/join-request": { bucket: "medium" },
-  "POST /party/join-request/respond": { bucket: "medium" },
-  "POST /selection-preferences": { bucket: "equip" },
-  "POST /player-cards/select": { bucket: "equip" },
-  "POST /player-cards/buy": { bucket: "medium" },
-  "POST /profile-icons/select": { bucket: "equip" },
-  "POST /profile-icons/buy": { bucket: "medium" },
-  "POST /skins/select": { bucket: "equip" },
-  "POST /skins/buy": { bucket: "medium" },
-  "POST /trophies/claim": { bucket: "medium" },
-  "POST /gamedata": { bucket: "medium" },
+  [`POST ${API_PATHS.CREATE_PARTY}`]: { bucket: "medium" },
+  [`POST ${API_PATHS.PARTYDATA}`]: { bucket: "medium" },
+  [`POST ${API_PATHS.LEAVE_PARTY}`]: { bucket: "medium" },
+  [`POST ${API_PATHS.PARTY_KICK}`]: { bucket: "medium" },
+  [`POST ${API_PATHS.PARTY_MAKE_OWNER}`]: { bucket: "medium" },
+  [`POST ${API_PATHS.PARTY_SETTINGS_UPDATE}`]: { bucket: "medium" },
+  [`POST ${API_PATHS.PARTY_JOIN_REQUEST}`]: { bucket: "medium" },
+  [`POST ${API_PATHS.PARTY_JOIN_REQUEST_RESPOND}`]: { bucket: "medium" },
+  [`POST ${API_PATHS.SELECTION_PREFERENCES}`]: { bucket: "equip" },
+  [`POST ${API_PATHS.PLAYER_CARDS_SELECT}`]: { bucket: "equip" },
+  [`POST ${API_PATHS.PROFILE_ICONS_SELECT}`]: { bucket: "equip" },
+  [`POST ${API_PATHS.SKINS_SELECT}`]: { bucket: "equip" },
+  [`POST ${API_PATHS.TROPHIES_CLAIM}`]: { bucket: "medium" },
+  [`POST ${API_PATHS.GAMEDATA}`]: { bucket: "medium" },
 
-  "POST /status": { bucket: "lenient", enforceActiveSuspension: false },
-  "POST /party-members": { bucket: "lenient" },
-  "POST /party/settings": { bucket: "lenient" },
-  "POST /party/discover": { bucket: "lenient" },
-  "POST /party/join-requests": { bucket: "lenient" },
+  [`POST ${API_PATHS.STATUS}`]: { bucket: "lenient", enforceActiveSuspension: false },
+  [`POST ${API_PATHS.PARTY_MEMBERS}`]: { bucket: "lenient" },
+  [`POST ${API_PATHS.PARTY_SETTINGS}`]: { bucket: "lenient" },
+  [`POST ${API_PATHS.PARTY_DISCOVER}`]: { bucket: "lenient" },
+  [`POST ${API_PATHS.PARTY_JOIN_REQUESTS}`]: { bucket: "lenient" },
 };
 
 const HTTP_ESCALATION_STEPS = [

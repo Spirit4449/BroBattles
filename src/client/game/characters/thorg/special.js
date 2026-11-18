@@ -1,3 +1,4 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { setThorgRageVisual } from "./rageVisual";
 import { playerAnchor } from "../shared/rig";
 import { PLAYER_LAYERS } from "../shared/attachToPlayer";
@@ -5,7 +6,9 @@ import { playSpriteAnimation } from "../shared/animationState";
 import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
 import { playPlayerSound } from "../../audio/playerAudio";
 
-const THORG_SPECIAL = getResolvedCharacterSpecialConfig("thorg");
+const { key: NAME } = characterDefinitions.thorg;
+
+const THORG_SPECIAL = getResolvedCharacterSpecialConfig(NAME);
 const THORG_RAGE_DURATION_MS = THORG_SPECIAL.rageDurationMs;
 
 function setLocalRageState(player, enabled) {
@@ -21,21 +24,12 @@ function setLocalRageState(player, enabled) {
   }
 }
 
-export function perform(
-  scene,
-  player,
-  playersInTeam,
-  opponentPlayers,
-  username,
-  gameId,
-  isOwner = false,
-  specialData = null,
-) {
+export function perform({ scene, player, isOwner = false }) {
   if (!scene || !player) return;
   setLocalRageState(player, true);
   player._thorgAttackCleanup?.();
   setThorgRageVisual(scene, player, true);
-  playSpriteAnimation({ scene, sprite: player, character: "thorg", logical: "special", fallback: "idle",
+  playSpriteAnimation({ scene, sprite: player, character: NAME, logical: "special", fallback: "idle",
     holdMs: 600, remote: !isOwner });
 
   // Bursts from the middle of his hitbox, just behind him.

@@ -1,8 +1,7 @@
+import { prefersReducedMotion } from "../../ui/domMotion";
+import { clamp, smoothstep } from "../../../shared/math.js";
 // gameScene/cameraDynamics.js
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
 
 const LIGHT_HIT_DAMAGE_LIMIT = 330;
 const MAX_SHAKE_DAMAGE = 1000;
@@ -77,10 +76,6 @@ export function triggerWallJumpCameraKick(scene, direction) {
   scene._movementZoomRecoveryMs = 0;
 }
 
-function smoothstep(value) {
-  const t = clamp(value, 0, 1);
-  return t * t * (3 - 2 * t);
-}
 
 function updateLandingCamera(scene, player, cam, delta, reducedMotion) {
   const body = player.body;
@@ -148,8 +143,7 @@ export function updateDynamicCamera(scene, player) {
 
   // Smoothly approach the resting framing for the player's height.
   const { zoom: targetZoom, followOffsetY: targetFollowOffsetY } = restingCameraFrame(player.y, scene._mapArena.camera);
-  const reducedMotion = typeof window !== 'undefined' &&
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const reducedMotion = prefersReducedMotion();
   updateLandingCamera(scene, player, cam, followDelta, reducedMotion);
   const previousDashZoom = scene._dashCameraZoom || 0;
   const baseZoom = cam.zoom - previousDashZoom - (scene._wallJumpCameraZoom || 0);

@@ -1,4 +1,6 @@
-import { wireBackdropDismiss } from '../site/dialogDismiss.mjs';
+import { API_PATHS } from "../../shared/net/apiPaths.js";
+import { USERNAME_PATTERN, USERNAME_MIN, USERNAME_MAX } from "../../shared/social/textRules.js";
+import { openModalDialog } from '../ui/nativeDialog.js';
 import { dismissPopup } from '../ui/popupMotion.js';
 import '../styles/nameChangeDialog.css';
 
@@ -29,7 +31,7 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
         <div class="name-change-field">
         <label for="new-username">New name</label>
         <div class="name-change-input-wrap">
-        <input id="new-username" name="username" type="text" minlength="3" maxlength="14" required autocomplete="off" aria-describedby="name-change-policy name-change-availability name-change-validation-reason" />
+        <input id="new-username" name="username" type="text" minlength="${USERNAME_MIN}" maxlength="${USERNAME_MAX}" required autocomplete="off" aria-describedby="name-change-policy name-change-availability name-change-validation-reason" />
         <span id="name-change-validation" class="name-change-validation" aria-hidden="true"></span>
         </div>
         </div>
@@ -82,15 +84,15 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
       const version = ++validationVersion;
       const name = input.value.trim();
       if (!name) return setValidation('', 'Enter a new name');
-      if (!/^[a-zA-Z0-9_.-]{3,14}$/.test(name)) {
-        return setValidation('invalid', 'Use 3–14 letters, numbers, dots, dashes or underscores.');
+      if (!USERNAME_PATTERN.test(name)) {
+        return setValidation('invalid', `Use ${USERNAME_MIN}–${USERNAME_MAX} letters, numbers, dots, dashes or underscores.`);
       }
       if (name === profile.username) return setValidation('available', 'Your current name');
       setValidation('checking', 'Checking availability');
       validationTimer = setTimeout(async () => {
         validationRequest = new AbortController();
         try {
-          const data = await fetchJson(`/username-availability?username=${encodeURIComponent(name)}`, { signal: validationRequest.signal });
+          const data = await fetchJson(`${API_PATHS.USERNAME_AVAILABILITY}?username=${encodeURIComponent(name)}`, { signal: validationRequest.signal });
           if (version !== validationVersion || !dialog.open) return;
           setValidation(data.available ? 'available' : 'taken', data.available ? 'Username available' : 'Username already taken');
         } catch (error) {
@@ -109,28 +111,13 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
       dismissPopup(dialog, () => dialog.close());
     };
     dialog.querySelectorAll('[data-close]').forEach(control => control.addEventListener('click', close));
-    dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
-    // Intercept before the lobby's document-level capture listener closes the parent.
-    const escape = event => {
-      if (event.key !== 'Escape' || !dialog.open) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      close();
-    };
-    window.addEventListener('keydown', escape, true);
-    dialog.addEventListener('keydown', event => event.stopPropagation());
-    wireBackdropDismiss(dialog);
-    let unregisterScope;
-    dialog.addEventListener('close', () => {
-      unregisterScope?.();
+    const cleanup = () => {
       clearTimeout(validationTimer);
       validationRequest?.abort();
       validationVersion += 1;
-      window.removeEventListener('keydown', escape, true);
       dialog.remove();
       if (activeDialog === dialog) activeDialog = null;
-      if (button?.isConnected) button.focus({ preventScroll: true });
-    }, { once: true });
+    };
     form.addEventListener('submit', async event => {
       event.preventDefault();
       if (submit.disabled || saving) return;
@@ -140,7 +127,7 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
       message.hidden = true;
       render();
       try {
-        const data = await fetchJson('/profile/change-username', {
+        const data = await fetchJson(API_PATHS.PROFILE_CHANGE_USERNAME, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username }),
         });
@@ -160,8 +147,7 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
     });
     render();
     document.body.append(dialog);
-    dialog.showModal();
+    openModalDialog(dialog, { escape: true, dismiss: close, onClose: cleanup, trigger: button });
     input.focus();
-    unregisterScope = window.__BB_PAGE_SCOPE__?.onDispose(() => dialog.close());
   });
 }

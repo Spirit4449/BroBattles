@@ -1,8 +1,9 @@
+import { openModalDialog } from "../ui/nativeDialog.js";
 import { createPlayerCardMedia, presentPlayerCardMedia, disposePlayerCardMedia } from './playerCardAnimation.cjs';
 import { dismissPopup } from '../ui/popupMotion.js';
 import { currencyRewardImage } from './rewardPresentation.js';
 import { titleMarkup } from './titleView.js';
-import cards from '../../shared/catalogs/playerCardsCatalog.json';
+import cards from '../../shared/catalogs/playerCardsCatalog.cjs';
 import '../styles/playerCardPreview.css';
 
 const KIND_LABELS = { card: 'Player card', skin: 'Skin', profileIcon: 'Profile icon', title: 'Player title', currency: 'Currency', character: 'Bro', mode: 'Game mode' };
@@ -99,31 +100,21 @@ export function showRewardPreview(grants, { title } = {}) {
     dismissPopup(dialog, () => dialog.close());
   };
   close.addEventListener('click', requestClose);
-  dialog.addEventListener('cancel', event => { event.preventDefault(); requestClose(); });
   header.append(heading, close);
   dialog.append(header, gallery);
-  const previousFocus = document.activeElement;
-  let disposed = false;
-  let unregisterScope;
+  const trigger = document.activeElement;
   const cleanup = () => {
-    if (disposed) return;
-    disposed = true;
-    unregisterScope?.();
     mediaElements.forEach(disposePlayerCardMedia);
     dialog.remove();
-    if (previousFocus?.isConnected) previousFocus.focus();
   };
-  dialog.addEventListener('close', cleanup, { once: true });
-  dialog.addEventListener('keydown', event => event.stopPropagation());
-  dialog.addEventListener('click', event => {
-    if (event.target !== dialog) return;
-    const box = dialog.getBoundingClientRect();
-    if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) requestClose();
-  });
   document.body.append(dialog);
-  dialog.showModal();
+  openModalDialog(dialog, {
+    backdrop: 'click',
+    dismiss: requestClose,
+    trigger,
+    onClose: cleanup,
+  });
   close.focus();
-  unregisterScope = window.__BB_PAGE_SCOPE__?.onDispose(() => { dialog.close(); cleanup(); });
   return dialog;
 }
 

@@ -1,11 +1,11 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { netTrace } = require('./netTraceRecorder');
 const { COLLISION_PACKET_TOLERANCE } = require('../../../shared/physics/movementPrecision');
 const { sweepMovement } = require('../../../shared/physics/sweptCollision');
 const { resolveStomp } = require('./stomp');
 const { acceptDash } = require('../../../shared/physics/dash');
-const { FALL_OUT_DEPTH } = require('../../../shared/gameConstants');
+const { FALL_OUT_DEPTH, WORLD_MARGIN } = require('../../../shared/gameConstants');
 const {
-  WORLD_MARGIN,
   POSITION_HISTORY_DEPTH,
   POSITION_HISTORY_MS,
   MOVE_PLAUSIBLE_SPEED_H,
@@ -20,7 +20,7 @@ const {
 const { isMovementSuppressed } = require("../../../shared/combat/runtime/abilityRuntimeManager.js");
 const netTestLogger = require("./netTestLogger");
 
-const { characterBody } = require("../../../shared/physics/duelGeometry");
+const { characterBody } = require("../../../shared/physics/characterBody");
 const { DUCK_HEIGHT_RATIO, DUCK_REENTRY_DELAY_MS } = require("../../../shared/physics/ducking");
 // Packets sent before the client applied a correction still carry the rejected
 // path. Dropping them (instead of re-correcting) prevents correction cascades.
@@ -33,7 +33,7 @@ const DASH_COLLISION_CORRECTION_PX = 2;
 const MOVING_SURFACE_LAG_S = 0.2;
 const movementPhysics = require("../../../shared/physics/movementPhysics.json");
 const effectManager = require("../../../shared/combat/runtime/effects/effectManager.js");
-const { stepBody } = require("../bots/physics");
+const { stepBody } = require("../physics/bodySolver");
 const { isGhost } = require("../../../shared/combat/targetable.js");
 const { notePlayoutSample, restartPlayout } = require("./humanPlayout");
 
@@ -97,8 +97,8 @@ function correctPosition(room, player, sequence, detail = {}) {
     correctionId: player._correctionId,
     ...detail, reason,
   };
-  room.io?.to(player.socketId).emit("game:correction", payload);
-  if (room._netTrace) netTrace.noteCorrection(room, player, payload);
+  room.sendTo(player, SOCKET_EVENTS.GAME_CORRECTION, payload);
+  if (room.netTrace) netTrace.noteCorrection(room, player, payload);
 }
 
 // A packet tagged with an older correction was sent before the client saw the
@@ -432,7 +432,7 @@ function handlePlayerInput(room, socketId, inputData) {
     // Falling out of the world is decided here, as for bots in their physics step.
     const world = room.geometry.world;
     if (playerData.isAlive && playerData.y > world.y + world.height + FALL_OUT_DEPTH) {
-      room._handlePlayerDeath(playerData, { cause: "fall", at: now });
+      room.handlePlayerDeath(playerData, { cause: "fall", at: now });
     }
     return;
   }
@@ -474,7 +474,7 @@ function stepIdleHumans(room, dtMs, now = Date.now()) {
       playerData._idleFallbackMoved = true;
       pushPositionHistory(playerData, now);
     }
-    if (result.fell) room._handlePlayerDeath(playerData, { cause: "fall", at: now });
+    if (result.fell) room.handlePlayerDeath(playerData, { cause: "fall", at: now });
   }
 }
 

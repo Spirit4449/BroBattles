@@ -1,11 +1,25 @@
+import { BROWSER_EVENTS } from "../lib/browserEvents.js";
+import "../styles/ui-system.css";
+import { BROWSER_GLOBALS, getNavigation, getPageScope } from "../lib/globals.cjs";
+import { setBattleLoading } from "../game/boot/battleLoading.js";
+import { replayQueuedRemoteActions } from "../game/match/replayQueuedRemoteActions";
+import { placeLocalFighter } from "../game/players/localSpawn";
+import { createSpectatorCamera } from "../game/scene/spectatorCamera";
+import { presentRemoteFrame } from "../game/scene/remoteInterpolation";
+import { installMatchMusic } from "../game/audio/matchMusic";
+import { installPhysicsDebugToggle } from "../game/scene/physicsDebug";
+import { createPlayerLookup } from "../game/players/playerLookup";
+import { requestMatchData } from "../navigation/gameData.js";
+import { MATCH_ID_KEY } from "../lib/storageKeys.js";
+import { createRemotePlayer, placeRemoteAtSpawn, applyRemoteRosterState, destroyRemote } from "../game/players/remotePlayerFactory";
+import { supportsSuddenDeath } from "../../shared/modeCapabilities.js";
+import { SOCKET_EVENTS } from "../../shared/net/socketEvents.js";
 import { processPlayerPlatformCollision } from '../game/players/platformCollision';
 import { loadGameFonts } from '../game/scene/loadGameFonts';
 import { installDamageHitboxDebug } from '../game/scene/damageHitboxDebug';
 import { installRigDebug } from '../game/scene/rigDebug';
 import { bindGameAudio, getSettings, graphicsRenderScale, subscribeSettings } from "../site/preferences";
-import { bindMusicEnvelope } from '../lib/musicEnvelope';
-import { ensureLegalAcceptance } from "../site/shell";
-import "../site/shell.js";
+import { ensureLegalAcceptance, initSiteShell } from "../site/shell";
 import { syncLocalEffects } from '../game/players/localStateSync';
 import '../styles/mapPlaytest.css';
 import '../styles/dashHud.css';
@@ -15,12 +29,10 @@ const editorSession = window.location.pathname === '/map-editor/playtest' ? new 
 if (editorSession) document.body.classList.add('editor-playtest');
 import { preloadMapDocument } from '../game/maps/documentRuntime';
 import { buildScenery, preloadScenery } from '../game/maps/sceneryRuntime';
-import { installMovingPlatforms, passesThrough, platformClock, remoteRideOffset } from '../game/maps/movingPlatforms';
+import { installMovingPlatforms, passesThrough } from "../game/maps/movingPlatforms";
 import { installDisplayRatePhysics } from '../game/scene/displayRatePhysics';
 import { attachCharacterNetworks, discardCharacterPresentation } from '../game/characters/networkRegistry';
 import { noteRemoteView, noteLocalBodyFrame } from '../game/characters/shared/shotPrediction';
-// game.js
-
 import {
   buildMap,
   registerMapMetadata,
@@ -38,29 +50,24 @@ import { POST_MATCH_REWARD_STORAGE_KEY } from "../lobby/profile/postMatchRewards
 import { applyMatchBackground } from "../game/scene/matchBackground.js";
 import { installAmbientBezels } from "../game/scene/ambientBezels.js";
 import { releaseRendererContext, rendererContextOf } from "../game/scene/releaseRenderer.js";
-import { fitGameSize, installViewportFit, viewportSize } from "../game/scene/gameViewport.js";
+import { GAME_VIEW, fitGameSize, installViewportFit, viewportSize } from "../game/scene/gameViewport.js";
 import { playMatchEndSound, startSuddenDeathMusic, stopSuddenDeathMusic } from "../game/audio/matchAudio.js";
 import { createGameHudController } from "../game/hud/gameHudController";
 import { createGameOverScreenController } from "../game/hud/gameOverScreenController";
 import { createBattleTutorialController } from "../game/hud/battleTutorialController";
 import { wireFullscreenToggles } from "../ui/fullscreen.js";
 import { createGameChatController } from "../chat/gameChatController.js";
-import { focusBattleInput, isChatInputActive, setChatInputActive } from "../game/players/localPlayer";
+import { getLocalFighterEvents, focusBattleInput, isChatInputActive, setChatInputActive } from "../game/players/localPlayer";
 import "../styles/chat.css";
 import "../styles/mobileControls.css";
 import { isTouchGameDevice } from "../game/scene/mobileControls.js";
 import "../styles/tutorialTips.css";
 import { createSnapshotBuffer, processSnapshotInterpolation } from "../game/match/snapshotBuffer";
-import {
-  readNetworkExperiments,
-  sampleRemoteFrame,
-  followRemotePosition,
-  remoteLifeState,
-} from "../game/scene/remoteSmoothing.js";
+import { readNetworkExperiments } from "../game/scene/remoteSmoothing.js";
 import { createMatchCoordinator } from "../game/match/matchCoordinator";
 import { syncRemoteRoster } from "../game/match/playerRosterMerge";
 import { preloadGameAssets } from "../game/scene/preloadGameAssets";
-import { renderPoisonWater } from "../game/scene/poisonWaterRenderer";
+import { createPoisonState, renderPoisonWater } from "../game/scene/poisonWaterRenderer";
 import { updateDynamicCamera, restingCameraFrame } from "../game/scene/cameraDynamics";
 import { createMatchIntro, FOLLOW_LERP } from "../game/scene/matchIntro";
 import { installRenderResolution } from "../game/scene/renderResolution";
@@ -70,7 +77,7 @@ import { localMovementCorrector } from "../game/players/localMovementCorrector";
 import { getServerClockDiagnostics, serverNowMono } from "../game/match/serverClock";
 import { installNetTrace } from "../game/match/netTrace";
 import { updateHealthBars } from "../game/scene/healthBarRenderer";
-import { createModeRuntime, loadMode, preloadModeAssets, supportsSuddenDeath } from "../game/modes";
+import { createModeRuntime, loadMode, preloadModeAssets } from "../game/modes";
 import {
   POWERUP_TYPES,
   POWERUP_ASSET_DIR,
@@ -79,46 +86,12 @@ import {
 } from "../game/powerups/powerupConfig";
 import { createPowerupRenderer } from "../game/powerups/powerupRenderer";
 import { RENDER_LAYERS } from "../game/scene/renderLayers";
-import {
-  createPlayer,
-  finalizeLocalSpawnPresentation,
-  syncLocalUiPosition,
-  player,
-  handlePlayerMovement,
-  dead,
-  setSuperStats,
-  setPowerupMobility,
-  setPowerupInvisible,
-  applyAuthoritativeState,
-  getAmmoSyncState,
-  getNetworkInputState,
-  getPlayerTutorialState,
-  setLocalNetStateFlusher,
-  setExternalControlLockUntil,
-  destroyMobileControls,
-} from "../game/players/localPlayer";
-import {
-  preloadForRoster,
-  handleLocalAuthoritativeAttack,
-  handleRemoteAttack,
-  setupAll,
-  setupVariantAnimationsForRoster,
-  resolveAnimKey,
-  chooseRemoteAnimation,
-  setAttackDebugState,
-  applyCharacterPowerupFx,
-  drawCharacterPowerupAura,
-  getCharacterEffectTickSounds,
-} from "../game/characters";
-import {
-  clearAction,
-  presentRemoteAction,
-  remoteAnimationLockUntil,
-  playCharacterAnimation,
-} from "../game/characters/shared/animationState.js";
+import { createPlayer, syncLocalUiPosition, player, handlePlayerMovement, dead, setSuperStats, setPowerupMobility, setPowerupInvisible, applyAuthoritativeState, getAmmoSyncState, getNetworkInputState, getPlayerTutorialState, setLocalNetStateFlusher, setExternalControlLockUntil, destroyMobileControls } from "../game/players/localPlayer";
+import { preloadForRoster, handleLocalAuthoritativeAttack, handleRemoteAttack, setupAll, setupVariantAnimationsForRoster, applyCharacterPowerupFx, drawCharacterPowerupAura, getCharacterEffectTickSounds } from "../game/characters";
+import { clearAction } from "../game/characters/shared/animationState.js";
 import socket, { waitForConnect } from "../lib/socket";
 import { netFlagSearch, readNetFlags } from "../lib/netFlags";
-import OpPlayer from "../game/players/RemotePlayer";
+import RemotePlayer from "../game/players/RemotePlayer";
 import {
   configureClientNetTest,
   noteClientFrame,
@@ -127,8 +100,13 @@ import {
 } from "../lib/netTestLogger.js";
 import MOVEMENT_PHYSICS from "../../shared/physics/movementPhysics.json";
 import { POST_BATTLE_LOBBY_RETURN_KEY } from "../lib/storageKeys.js";
+import "../styles/game.css";
+import "../styles/battle-results.css";
+import "../styles/ui-components.css";
+import "../styles/loading.css";
 
 
+initSiteShell();
 wireFullscreenToggles();
 // Touch players get on-screen controls; chat and settings stay desktop-only.
 document.body.classList.toggle("bb-touch-game", isTouchGameDevice());
@@ -147,8 +125,6 @@ window.Phaser = Phaser;
 
 // Path to get assets
 const staticPath = "/assets";
-const BASE_GAME_WIDTH = 2300;
-const BASE_GAME_HEIGHT = 1000;
 
 function initialGameSize() {
   const { width, height } = viewportSize();
@@ -156,7 +132,7 @@ function initialGameSize() {
 }
 
 function getTopPlayfieldPadding() {
-  return Math.max(0, initialGameSize().height - BASE_GAME_HEIGHT);
+  return Math.max(0, initialGameSize().height - GAME_VIEW.height);
 }
 
 const POWERUP_TICK_SOUNDS = createPowerupTickSounds(
@@ -191,7 +167,7 @@ function getMatchIdFromUrl() {
   if (queryMatchId) return queryMatchId;
 
   // Last resort: session storage
-  return sessionStorage.getItem("matchId");
+  return sessionStorage.getItem(MATCH_ID_KEY);
 }
 
 const matchId = getMatchIdFromUrl();
@@ -213,8 +189,11 @@ if (!matchId) {
 let username = null;
 let gameData = null; // Will be fetched from /gamedata endpoint
 // Expose current match session details (level, per-character damages) for character modules
-window.__MATCH_SESSION__ = window.__MATCH_SESSION__ || {};
-window.__BB_LIVE_MATCH_CONTEXT__ = window.__BB_LIVE_MATCH_CONTEXT__ || {};
+window[BROWSER_GLOBALS.matchSession] = window[BROWSER_GLOBALS.matchSession] || {};
+
+function setLocalSession({ level, stats }) {
+  Object.assign(window[BROWSER_GLOBALS.matchSession], { level, stats });
+}
 // Cache join payload for reconnect re-emit safety
 let __joinPayload = { matchId: Number(matchId || 0) };
 
@@ -233,7 +212,6 @@ let readyAckSocketId = null; // socket that last carried our ready signal
 let isLiveGame = false; // server reported active game (late join)
 let pendingAuthoritativeLocalState = null; // apply once local sprite exists
 // Buffer for remote actions that arrive before scene is ready
-const LOCAL_DEATH_PAUSE_MS = 2000; // death screen before spectating
 const PENDING_ACTIONS = [];
 // Spawn coordination
 let SPAWN_VERSION = 0; // increments per scene init to version spawns
@@ -265,7 +243,7 @@ setLocalNetStateFlusher((state) =>
 
 // Server snapshot interpolation
 const snapshotBuffer = createSnapshotBuffer(networkExperiments);
-window.__BB_NETWORK_DIAGNOSTICS__ = () => ({
+window[BROWSER_GLOBALS.networkDiagnostics] = () => ({
   experiments: { ...networkExperiments },
   ...snapshotBuffer.getDiagnostics(),
   corrections: localMovementCorrector.getDiagnostics(),
@@ -298,10 +276,10 @@ const disposeNetTrace = installNetTrace({
       y: rect.top + (cam.y + (y - cam.worldView.y) * cam.zoom) * scale };
   },
 });
-if (disposeNetTrace) window.__BB_PAGE_SCOPE__?.onDispose(disposeNetTrace);
+if (disposeNetTrace) getPageScope()?.onDispose(disposeNetTrace);
 
 // Console check for remote fighters that should be on screen but are not.
-window.__BB_REMOTE_PLAYERS__ = () =>
+window[BROWSER_GLOBALS.remotePlayers] = () =>
   [...Object.entries(opponentPlayers), ...Object.entries(teamPlayers)].map(([name, w]) => ({
     name,
     sprite: !!w?.opponent,
@@ -330,7 +308,7 @@ const hud = createGameHudController({
   getMapBgAsset: mapId => getMapBgAsset(mapId, gameScene),
   getScene: () => gameScene,
   onCountdownFight: () => {
-    window.__BB_NAVIGATION__?.lobbyAudio?.handoff();
+    getNavigation()?.lobbyAudio?.handoff();
     try {
       if (gameScene) gameScene._bgmIntensity = 1;
       gameScene?._startMainBgm?.();
@@ -352,8 +330,8 @@ const hud = createGameHudController({
       }
     } catch (_) {}
   },
-  onSpectatePrevious: () => gameScene?._cycleSpectatedPlayer?.(-1),
-  onSpectateNext: () => gameScene?._cycleSpectatedPlayer?.(1),
+  onSpectatePrevious: () => gameScene?._spectatorCamera?.cycleSpectatedPlayer?.(-1),
+  onSpectateNext: () => gameScene?._spectatorCamera?.cycleSpectatedPlayer?.(1),
 });
 
 // Pregame flythrough + pregame.mp3 between the loading screen and countdown.
@@ -392,9 +370,11 @@ function onGameRevealed() {
     hud.isBattleIntroActive?.();
   if (!skipPregame) matchIntro.beginPregame();
 }
-document.addEventListener("game:ready", onGameRevealed, { once: true });
+document.addEventListener(BROWSER_EVENTS.BATTLE_REVEALED, onGameRevealed, { once: true });
 
+const poisonState = createPoisonState();
 const battleTutorial = createBattleTutorialController({
+  poisonState,
   socket,
   getGameData: () => gameData,
   getScene: () => gameScene,
@@ -417,14 +397,28 @@ const gameOverScreenController = createGameOverScreenController({
 // Wire all server socket event handling for the live match.
 // Function declarations referenced below are hoisted, so this can safely
 // reference helpers that appear later in the file.
+const playerLookup = createPlayerLookup({
+  getUsername: () => username,
+  getLocalPlayer: () => player,
+  getOpponentPlayers: () => opponentPlayers,
+  getTeamPlayers: () => teamPlayers,
+});
 matchCoordinator = createMatchCoordinator({
+  poisonState,
+  noteLocalKiller: name => gameScene?._spectatorCamera?.noteLocalKiller(name),
+  playerLookup,
   socket,
-  onSparrowAmmo: (ammoState) => applyAuthoritativeState({ ammoState }),
+  getLocalFighterEvents,
+  onCharacterNetworksConfigured: () => {
+    if (gameScene && player) attachMatchFighters(gameScene);
+  },
+  onAuthoritativeAmmo: (ammoState) => applyAuthoritativeState({ ammoState }),
   getGameData: () => gameData,
   getUsername: () => username,
   getJoinPayload: () => __joinPayload,
   getGameScene: () => gameScene,
   getPlayer: () => player,
+  setLocalSession,
   setExternalControlLockUntil,
   getGameInitialized: () => gameInitialized,
   setGameInitialized: (v) => {
@@ -465,7 +459,6 @@ matchCoordinator = createMatchCoordinator({
   },
   setLatestModeState: (v) => {
     latestModeState = v;
-    syncLiveMatchContext();
   },
   getLatestModeState: () => latestModeState,
   getLatestDeathDrops: () => latestDeathDrops,
@@ -488,7 +481,7 @@ matchCoordinator = createMatchCoordinator({
   snapshotBuffer,
   hud,
   positionSpawn,
-  OpPlayer,
+  RemotePlayer,
   handleLocalAuthoritativeAttack,
   handleRemoteAttack,
   powerupTickSounds: POWERUP_TICK_SOUNDS,
@@ -509,13 +502,6 @@ function clearTransientPresentation() {
   DEATHDROP_COLLECT_QUEUE.length = 0;
   SHIELD_IMPACT_QUEUE.length = 0;
   discardCharacterPresentation();
-  for (const sprite of [
-    player,
-    ...Object.values(opponentPlayers).map((entry) => entry?.opponent),
-    ...Object.values(teamPlayers).map((entry) => entry?.opponent),
-  ]) {
-    try { sprite?._thorgAttackCleanup?.(); } catch (_) {}
-  }
   try { gameScene?.events?.emit?.("presentation:reset"); } catch (_) {}
   try { gameScene?.sound?.stopAll?.(); } catch (_) {}
 }
@@ -576,32 +562,14 @@ function trackShieldEffectsPresence(effectsSnapshot) {
   }
 }
 
-function syncLiveMatchContext() {
-  try {
-    window.__BB_LIVE_MATCH_CONTEXT__ = {
-      modeState: latestModeState,
-      yourTeam: gameData?.yourTeam || null,
-      mapId: gameData?.map ?? null,
-      modeId: gameData?.modeId || null,
-    };
-  } catch (_) {}
-}
-
 // Fetch game data from server
 // Navigation requests a battle's match data alongside the page and scripts.
 // A failed handoff falls back to a fresh request.
 async function requestGameData() {
-  const handoff = !editorSession && window.__BB_NAVIGATION__?.consumeGameData?.(matchId);
+  const handoff = !editorSession && getNavigation()?.consumeGameData?.(matchId);
   const prefetched = handoff && await handoff.catch(() => null);
   if (prefetched) return prefetched;
-  const response = await fetch(editorSession ? `/api/admin/map-playtests/${editorSession}` : "/gamedata", {
-    method: editorSession ? "GET" : "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: editorSession ? undefined : JSON.stringify({ matchId: Number(matchId) }),
-  });
-  return { ok: response.ok, body: await response.json() };
+  return requestMatchData(matchId, { editorSession });
 }
 
 async function fetchGameData() {
@@ -618,7 +586,7 @@ async function fetchGameData() {
     // Missing consent is resolved by the caller's terms dialog.
     if (error.code === "TERMS_REQUIRED") throw error;
     console.error("Failed to fetch game data:", error);
-    if (!window.__BB_NAVIGATION__) hud.showSystemNotice?.({
+    if (!getNavigation()) hud.showSystemNotice?.({
       title: "Failed To Load Match",
       message: "We couldn't load this match. Returning to the lobby.",
       buttonText: "Lobby",
@@ -666,7 +634,6 @@ async function initializeGame() {
     }
     username = gameData.yourName || username;
     configureClientNetTest({ username, matchId });
-    syncLiveMatchContext();
     initTeamStatusHud(gameData?.players || []);
 
     // 1) Register listeners before join
@@ -696,14 +663,6 @@ function initTimerHud() {
   return hud.initTimerHud();
 }
 
-function updateTimerHud(remainingMs, suddenDeath) {
-  return hud.updateTimerHud(remainingMs, suddenDeath);
-}
-
-function showSuddenDeathBanner() {
-  return hud.showSuddenDeathBanner();
-}
-
 function initKeybindHud() {
   return hud.initKeybindHud();
 }
@@ -712,23 +671,12 @@ function initTeamStatusHud(players) {
   return hud.initTeamStatusHud(players);
 }
 
-function setTeamHudPlayerAlive(name, isAlive) {
-  return hud.setTeamHudPlayerAlive(name, isAlive);
-}
-
-function setTeamHudPlayerPresence(name, connected) {
-  return hud.setTeamHudPlayerPresence(name, connected);
-}
-
-function setTeamHudPlayerLoaded(name, loaded) {
-  return hud.setTeamHudPlayerLoaded(name, loaded);
-}
-
-function syncTeamHudFromSnapshot(playersByName) {
-  return hud.syncTeamHudFromSnapshot(playersByName);
-}
-
 // Initialize players based on server data
+function attachMatchFighters(scene) {
+  attachCharacterNetworks(scene, { localPlayer: player, localUsername: username,
+    opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers });
+}
+
 function initializePlayers(players) {
   const refresh = syncRemoteRoster({
     players,
@@ -737,10 +685,7 @@ function initializePlayers(players) {
     opponentPlayers,
     teamPlayers,
     spritesBuilt: gameScene?._remoteSpritesBuilt === true,
-    destroy: (existing) => {
-      if (typeof existing?.destroy === "function") existing.destroy();
-      else if (existing?.opponent?.destroy) existing.opponent.destroy();
-    },
+    destroy: destroyRemote,
     // The scene turns these into sprites once it is ready.
     placeholder: (playerData) => ({
       name: playerData.name,
@@ -765,15 +710,6 @@ function initializePlayers(players) {
 // Number(null) is 0: a missing coordinate must not read as the map corner.
 function isPosition(value) {
   return value != null && value !== "" && Number.isFinite(Number(value));
-}
-
-// The server's position is authoritative for every placed fighter, loaded or
-// still loading (a hittable ghost); others fall back to the map spawn.
-function hasServerPosition(playerData) {
-  return (
-    isPosition(playerData?.x) &&
-    isPosition(playerData?.y)
-  );
 }
 
 /**
@@ -820,8 +756,8 @@ function attachMapCollidersToSprite(scene, sprite, objects) {
 
 // Initialize game when page loads
 let game = null;
-window.__BB_PAGE_SCOPE__?.onDispose(async () => {
-  document.removeEventListener("game:ready", onGameRevealed);
+getPageScope()?.onDispose(async () => {
+  document.removeEventListener(BROWSER_EVENTS.BATTLE_REVEALED, onGameRevealed);
   matchIntro.dispose();
   matchCoordinator?.dispose();
   battleTutorial?.destroy();
@@ -850,8 +786,8 @@ window.__BB_PAGE_SCOPE__?.onDispose(async () => {
     releaseRendererContext(retiringContext);
   }
 });
-window.__BOOT_GAME__ = () =>
-  onReady(async () => {
+setBattleLoading(50, "Loading arena...");
+onReady(async () => {
     try {
       initKeybindHud();
       if (editorSession) { const controls=document.getElementById("battle-keybind-hud"); if(controls){controls.dataset.state="collapsed";controls.style.display="none";} }
@@ -866,12 +802,12 @@ window.__BOOT_GAME__ = () =>
         }),
         loadGameFonts(document.fonts),
       ]);
-      if (window.__BB_PAGE_SCOPE__ && !window.__BB_PAGE_SCOPE__.active) return;
+      if (getPageScope() && !getPageScope().active) return;
       if (!game) {
         game = new Phaser.Game(config);
       }
     } catch (error) {
-      if (window.__BB_PAGE_SCOPE__?.active) window.__BB_NAVIGATION__?.fail(error);
+      if (getPageScope()?.active) getNavigation()?.fail(error);
       else console.error(error);
     }
   });
@@ -885,20 +821,20 @@ class GameScene extends Phaser.Scene {
 
   // Preloads assets
   preload() {
-    deferSceneAudio(this, { holdDownloads: () => window.__BB_NAVIGATION__?.holdGameplayDownloads?.() });
+    deferSceneAudio(this, { holdDownloads: () => getNavigation()?.holdGameplayDownloads?.() });
     // Prepare cached roster media throughout visual loading. The HUD pauses
     // unfinished decoder work and optional downloads during the flythrough.
     if (!isLiveGame && !gameEnded && !editorSession && !gameData?.editorPlaytest) hud.prepareBattleCards();
     const onVisualProgress = (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
-      updateLoading(pct, "Loading arena...");
+      setBattleLoading(pct, "Loading arena...");
     };
     this.load.on("progress", onVisualProgress);
 
     this.load.once("complete", () => {
       this.load.off("progress", onVisualProgress);
-      updateLoading(95, "Arena ready...");
+      setBattleLoading(95, "Arena ready...");
       // The pregame begins when the loading screen lifts (onGameRevealed);
       // input is enabled at FIGHT, or immediately when joining a live match.
     });
@@ -941,8 +877,10 @@ class GameScene extends Phaser.Scene {
     }
     // Poison water overlay graphics (sudden death - drawn every frame in update)
     // Map bounds are installed later; resolve the inactive level at render time.
-    this._poisonWaterY = null;
-    this._smoothPoisonY = null; // interpolated, set on first use
+    this.events.once("shutdown", () => {
+      poisonState.targetY = null;
+      poisonState.smoothY = null;
+    });
     this._poisonGraphics = this.add.graphics();
     this._poisonGraphics.setDepth(RENDER_LAYERS.POISON);
     // Pre-generate bubble positions (22 bubbles, deterministic so no jitter on re-use)
@@ -956,27 +894,19 @@ class GameScene extends Phaser.Scene {
       speed: 20 + (i % 6) * 8,
       drift: 2.5 + (i % 4) * 1.5,
     }));
-    this._powerupVisuals = Object.create(null); // id -> visual bundle
-    this._deathDropVisuals = Object.create(null); // id -> visual bundle
-    this._pendingDeathDropPickups = new Set();
-    this._powerupAuraGraphics = this.add.graphics();
-    this._powerupAuraGraphics.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-    this._powerupFxGraphics = this.add.graphics();
-    this._powerupFxGraphics.setDepth(RENDER_LAYERS.PLAYER_HUD);
     this._modeObjectiveGraphics = this.add.graphics();
     this._modeObjectiveGraphics.setDepth(RENDER_LAYERS.GAME_OBJECTS);
     this._modeObjectiveUiGraphics = this.add.graphics();
     this._modeObjectiveUiGraphics.setDepth(RENDER_LAYERS.PLAYER_HUD);
     this._modeRuntime = null;
     this._powerupRenderer = createPowerupRenderer({
+      playerLookup,
       scene: this,
       Phaser,
       colors: POWERUP_COLORS,
       getUsername: () => username,
       getGameData: () => gameData,
       getLocalPlayer: () => player,
-      getOpponentPlayers: () => opponentPlayers,
-      getTeamPlayers: () => teamPlayers,
       getLatestPowerups: () => latestPowerups,
       getLatestDeathDrops: () => latestDeathDrops,
       getLatestPlayerEffects: () => latestPlayerEffects,
@@ -996,7 +926,7 @@ class GameScene extends Phaser.Scene {
       } else {
         noteClientLifecycle("wait-gamedata", "");
       }
-      updateLoading(96, "Server error. Refresh or return to lobby.");
+      setBattleLoading(96, "Server error. Refresh or return to lobby.");
       // Poll for game data
       const pollForGameData = () => {
         if (gameData) {
@@ -1018,7 +948,7 @@ class GameScene extends Phaser.Scene {
 
     // Scene is now ready; if server is in starting phase, ack readiness
     trySendReadyAck();
-    updateLoading(100, "Let's battle!");
+    setBattleLoading(100, "Let's battle!");
   }
 
   initializeGameWorld() {
@@ -1036,6 +966,7 @@ class GameScene extends Phaser.Scene {
     });
     // Parallax layers fit themselves to the camera bounds set above.
     buildScenery(this, this._mapDocument);
+    this._spectatorCamera = createSpectatorCamera(this, { getGameData: () => gameData, getUsername: () => username, getPlayer: () => player, opponentPlayers, teamPlayers, hud, followLocalPlayer });
     this._spectatorBounds = {
       centerX:
         Number(this.physics?.world?.bounds?.centerX) ||
@@ -1062,110 +993,13 @@ class GameScene extends Phaser.Scene {
     setupAll(this);
     setupVariantAnimationsForRoster(this, gameData?.players || []);
 
-    // Replay any queued remote actions now that the scene is ready
-    try {
-      if (Array.isArray(PENDING_ACTIONS) && PENDING_ACTIONS.length) {
-        const queued = PENDING_ACTIONS.splice(0, PENDING_ACTIONS.length);
-        const retryActions = [];
-        for (const pkt of queued) {
-          try {
-            const { playerName, character, action } = pkt || {};
-            if (!playerName || !action) continue;
-            if (playerName === username) continue;
-            const pd = (gameData.players || []).find(
-              (p) => p.name === playerName,
-            );
-            const isTeammate = pd && pd.team === gameData.yourTeam;
-            const container = isTeammate ? teamPlayers : opponentPlayers;
-            const wrapper = container[playerName];
-            if (!wrapper?.opponent) {
-              retryActions.push(pkt);
-              continue;
-            }
-            const charKey = (
-              character ||
-              (pd && pd.char_class) ||
-              ""
-            ).toLowerCase();
-            const act = { ...(action || {}) };
-            if (wrapper && wrapper.opponent) {
-              act.x = wrapper.opponent.x;
-              act.y = wrapper.opponent.y;
-              if (typeof act.direction !== "number") {
-                act.direction = wrapper.opponent.flipX ? -1 : 1;
-              }
-            }
-            presentRemoteAction({ scene: this, wrapper, character: charKey, actionType: act.type },
-              () => handleRemoteAttack(this, charKey, act, wrapper));
-          } catch (_) {}
-        }
-        if (retryActions.length) {
-          PENDING_ACTIONS.push(...retryActions);
-        }
-      }
-    } catch (_) {}
+    replayQueuedRemoteActions(this, PENDING_ACTIONS, { username, gameData, teamPlayers, opponentPlayers });
 
-    // Background music: create only the active map's track and start it
-    // as soon as the match scene is live.
-    this._bgmStarted = false;
-    const bgmSrc = gameData?.mapSnapshot?.metadata?.musicAsset || getMapMusicAsset(gameData?.map);
-    const bgmVolume = gameData?.mapSnapshot?.metadata?.musicVolume ?? getMapMusicVolume(gameData?.map);
-    const startBgm = () => {
-      if (this._bgmStarted) return;
-      this._bgmStarted = true;
-      try {
-        if (this._bgmEl && this._bgmSrc !== bgmSrc) {
-          try {
-            this._bgmEl.pause();
-          } catch (_) {}
-          this._bgmEl = null;
-        }
-        if (!this._bgmEl) {
-          const el = new Audio(bgmSrc);
-          el.preload = "auto";
-          el.loop = true;
-          this._bgmEnvelope = bindMusicEnvelope(el, bgmVolume, 0);
-          el.addEventListener('playing', () => {
-            this._bgmEnvelope.fade(this._bgmIntensity ?? (isLiveGame ? 1 : 0.3), 1200);
-          }, { once: true });
-          this.events.once("shutdown", () => this._bgmEnvelope?.dispose());
-          this._bgmSrc = bgmSrc;
-          this._bgmEl = el;
-          // Hook into scene lifecycle for cleanup
-          this.events.once("shutdown", () => {
-            try {
-              this._bgmEl?.pause();
-            } catch (_) {}
-            this._bgmSrc = null;
-            this._bgmEl = null;
-          });
-          this.events.on("pause", () => this._bgmEl?.pause());
-          this.events.on("resume", () => {
-            try {
-              this._bgmEl?.play()?.catch(() => {});
-            } catch (_) {}
-          });
-        }
-        const playingElement = this._bgmEl;
-        const p = playingElement.play();
-        if (p && typeof p.then === "function") p.then(() => {
-          if (this._bgmEl === playingElement) window.__BB_NAVIGATION__?.lobbyAudio?.handoff();
-        }).catch(() => { this._bgmStarted = false; });
-      } catch (e) {}
-    };
-    this._startMainBgm = () => {
-      if (this._bgmStarted) return;
-      if (this.sound.locked) {
-        this.sound.once("unlocked", startBgm);
-        this.input.once("pointerdown", startBgm);
-        this.input.keyboard?.once("keydown", startBgm);
-        return;
-      }
-      startBgm();
-    };
-    // Normal starts stay silent through the pregame hold; the countdown (or
-    // going live) starts the map music.
-    if (isLiveGame) this._startMainBgm();
+    installMatchMusic(this, {
+      src: gameData?.mapSnapshot?.metadata?.musicAsset || getMapMusicAsset(gameData?.map),
+      volume: gameData?.mapSnapshot?.metadata?.musicVolume ?? getMapMusicVolume(gameData?.map),
+      isLive: () => isLiveGame,
+    });
 
     this.events.once("shutdown", () => {
       try {
@@ -1182,30 +1016,19 @@ class GameScene extends Phaser.Scene {
       this._suddenDeathMusicSfx = null;
     });
 
-    // Cache my level and stats BEFORE creating the player so HUD uses server values
-    try {
-      const me = (gameData.players || []).find((p) => p.name === username);
-      if (me) {
-        window.__MATCH_SESSION__ = window.__MATCH_SESSION__ || {};
-        window.__MATCH_SESSION__.level = me.level || 1;
-        window.__MATCH_SESSION__.stats = me.stats || {};
-      }
-    } catch (_) {}
+    // The local HUD and combat setup read the session during player creation.
+    const me = (gameData.players || []).find(p => p.name === username);
+    if (me) setLocalSession({ level: me.level || 1, stats: me.stats || {} });
 
     // Creates player object using game data
-    createPlayer(
-      this,
+    createPlayer(this, {
+      getPlayerEffects: name => latestPlayerEffects?.[name],
       username,
-      gameData.yourCharacter,
-      null,
-      null,
-      (gameData.players || []).filter((p) => p.team === gameData.yourTeam)
-        .length,
-      activeMapId,
+      isSystemNoticeOpen: hud.isSystemNoticeOpen,
+      character: gameData.yourCharacter,
       opponentPlayers,
-      (gameData.players || []).find((p) => p.name === username)
-        ?.selected_skin_id || "",
-    );
+      skinId: me?.selected_skin_id || "",
+    });
 
     attachMapCollidersToSprite(this, player, mapObjects);
     installMovingPlatforms(this, {
@@ -1213,86 +1036,30 @@ class GameScene extends Phaser.Scene {
     });
 
     // Set initial super stats
-    const me = (gameData.players || []).find((p) => p.name === username);
     if (me) {
       setSuperStats(me.superCharge || 0, me.maxSuperCharge || 100);
     }
 
-    // Safety: ensure we never keep an OpPlayer entry for myself
+    // The roster maps are updated in place. Reattach when a scene gets its local fighter.
+    attachMatchFighters(this);
+
+    // Safety: ensure we never keep an RemotePlayer entry for myself
     try {
       if (username) {
         if (opponentPlayers && opponentPlayers[username]) {
           const op = opponentPlayers[username];
-          if (op && op.destroy) op.destroy();
+          destroyRemote(op);
           delete opponentPlayers[username];
         }
         if (teamPlayers && teamPlayers[username]) {
           const tp = teamPlayers[username];
-          if (tp && tp.destroy) tp.destroy();
+          destroyRemote(tp);
           delete teamPlayers[username];
         }
       }
     } catch (_) {}
-    // Before FIGHT the server's spawn is authoritative; in a live game only a
-    // loaded (previously synced) position is.
-    const hasAuthoritativeSpawn =
-      pendingAuthoritativeLocalState &&
-      (!isLiveGame || pendingAuthoritativeLocalState.loaded === true) &&
-      Number.isFinite(pendingAuthoritativeLocalState.x) &&
-      Number.isFinite(pendingAuthoritativeLocalState.y) &&
-      player?.body;
-
-    // After sprite exists and body sized, fall back to the map's spawn slot
-    // only when the server has not sent a position yet.
-    try {
-      if (hasAuthoritativeSpawn) {
-        player.body.reset(
-          pendingAuthoritativeLocalState.x,
-          pendingAuthoritativeLocalState.y,
-        );
-      } else {
-        const serverIdx = SERVER_SPAWN_INDEX[username];
-        const myIndex =
-          typeof serverIdx === "number" ? Math.max(0, serverIdx) : 0;
-        positionSpawn(
-          this,
-          player,
-          activeMapId,
-          gameData.yourTeam,
-          myIndex,
-        );
-      }
-      stabilizeSpawnedSpriteOnMap(this, player, mapObjects);
-    } catch (_) {}
-
-    // If server already has my live state (refresh/reconnect), apply it after spawn snap.
-    try {
-      if (pendingAuthoritativeLocalState) {
-        applyAuthoritativeState(pendingAuthoritativeLocalState);
-        const shouldRestorePosition =
-          !hasAuthoritativeSpawn &&
-          isLiveGame &&
-          pendingAuthoritativeLocalState.connected !== false &&
-          pendingAuthoritativeLocalState.loaded === true;
-        if (
-          shouldRestorePosition &&
-          pendingAuthoritativeLocalState.isAlive !== false &&
-          Number.isFinite(pendingAuthoritativeLocalState.x) &&
-          Number.isFinite(pendingAuthoritativeLocalState.y) &&
-          player?.body
-        ) {
-          player.body.reset(
-            pendingAuthoritativeLocalState.x,
-            pendingAuthoritativeLocalState.y,
-          );
-          stabilizeSpawnedSpriteOnMap(this, player, mapObjects);
-        }
-      }
-    } catch (_) {}
-
-    try {
-      finalizeLocalSpawnPresentation();
-    } catch (_) {}
+    placeLocalFighter(this, player, { state: pendingAuthoritativeLocalState, live: isLiveGame,
+      spawnIndex: SERVER_SPAWN_INDEX[username], mapId: activeMapId, team: gameData.yourTeam, mapObjects });
 
     // Server stats are already applied above prior to createPlayer
 
@@ -1302,41 +1069,7 @@ class GameScene extends Phaser.Scene {
     // Toggle physics debug with Ctrl+M (ensures debug graphic exists)
     if (gameData?.editorPlaytest) installDamageHitboxDebug(this, socket);
     installRigDebug(this);
-    const setHitboxDebug = (enable) => {
-      const world = this.physics?.world;
-      if (!world) return;
-      world.drawDebug = enable;
-      try {
-        setAttackDebugState(gameData?.editorDebugHitboxes ? false : enable);
-      } catch (_) {}
-      if (enable) {
-        // Create debug graphic if Phaser hasn't created it yet
-        try {
-          if (!world.debugGraphic || !world.debugGraphic.scene) {
-            if (typeof world.createDebugGraphic === "function") {
-              world.createDebugGraphic();
-            } else {
-              world.debugGraphic = this.add.graphics();
-            }
-          }
-          world.debugGraphic.setVisible(true);
-        } catch (_) {}
-      } else {
-        try {
-          if (world.debugGraphic) {
-            world.debugGraphic.clear?.();
-            world.debugGraphic.setVisible(false);
-          }
-        } catch (_) {}
-      }
-      // Keep config in sync for any systems that read it
-      const arcadeCfg = this.sys?.game?.config?.physics?.arcade;
-      if (arcadeCfg) arcadeCfg.debug = enable;
-    };
-    setHitboxDebug(gameData?.editorDebugHitboxes === true);
-    this.input.keyboard.on("keydown-M", (e) => {
-      if (e.ctrlKey) setHitboxDebug(!this.physics?.world?.drawDebug);
-    });
+    installPhysicsDebugToggle(this, gameData?.editorDebugHitboxes === true);
 
     // Camera: smooth follow
     const cam = this.cameras.main;
@@ -1348,14 +1081,13 @@ class GameScene extends Phaser.Scene {
     followLocalPlayer(cam);
     if (!this._modeRuntime) {
       this._modeRuntime = createModeRuntime({
+        playerLookup,
         scene: this,
         Phaser,
         getGameData: () => gameData,
         getModeState: () => latestModeState,
         getMapObjects: () => mapObjects,
         getLocalPlayer: () => player,
-        getOpponentPlayers: () => opponentPlayers,
-        getTeamPlayers: () => teamPlayers,
       });
     }
     // End camera setup
@@ -1363,7 +1095,7 @@ class GameScene extends Phaser.Scene {
 
   initializeOtherPlayers() {
     const activeMapId = normalizeMapId(gameData?.map);
-    // Create OpPlayer instances for other players
+    // Create RemotePlayer instances for other players
     gameData.players.forEach((playerData) => {
       if (playerData.name === username) {
         return; // Skip local player
@@ -1371,94 +1103,20 @@ class GameScene extends Phaser.Scene {
 
       const isTeammate = playerData.team === gameData.yourTeam;
       const playerContainer = isTeammate ? teamPlayers : opponentPlayers;
-      const isBotPlayer = playerData?.isBot === true;
-
-      // If an instance already exists for this name in this spawn version, upsert instead of re-create
       const existing = playerContainer[playerData.name];
-      if (
-        existing &&
-        existing.opponent &&
-        existing._spawnVersion === SPAWN_VERSION
-      ) {
-        // Ensure UI position is refreshed and exit
-        try {
-          const idx =
-            typeof existing.spawnIndex === "number"
-              ? existing.spawnIndex
-              : typeof SERVER_SPAWN_INDEX[playerData.name] === "number"
-                ? SERVER_SPAWN_INDEX[playerData.name]
-                : 0;
-          positionSpawn(
-            this,
-            existing.opponent,
-            activeMapId,
-            playerData.team,
-            Math.max(0, idx),
-          );
-          if (hasServerPosition(playerData)) {
-            const serverX = Number(playerData.x);
-            const serverY = Number(playerData.y);
-
-            existing.opponent.body?.reset?.(serverX, serverY);
-          }
-          existing.isBot = isBotPlayer;
-
-          existing.finalizeSpawnPresentation?.();
-          if (existing.updateUIPosition) existing.updateUIPosition();
-        } catch (_) {}
-        this.applyRosterState(existing, playerData);
-        return;
-      }
-
-      // Determine spawn info from plan
-      // Create OpPlayer instance with correct constructor parameters
-      const opPlayer = new OpPlayer(
-        this, // scene
-        playerData.char_class, // character
-        playerData.selected_skin_id || "", // skin
-        playerData.name, // username
-        isTeammate ? "teammate" : playerData.team, // team or teammate flag for ally coloring
-        null,
-        null,
-        (gameData.players || []).filter((p) => p.team === playerData.team)
-          .length,
-        activeMapId,
-      );
-
-      // Tag instance with spawn version and optional server index to support idempotency
-      opPlayer._spawnVersion = SPAWN_VERSION;
-      if (typeof SERVER_SPAWN_INDEX[playerData.name] === "number") {
-        opPlayer.spawnIndex = SERVER_SPAWN_INDEX[playerData.name];
-      }
-      opPlayer.isBot = isBotPlayer;
-
-      // Snap opponent sprite to its map-specific spawn immediately
-      try {
-        const idx =
-          typeof opPlayer.spawnIndex === "number"
-            ? opPlayer.spawnIndex
-            : typeof playerData.spawnIndex === "number"
-              ? playerData.spawnIndex
-              : 0;
-        const index = Math.max(0, idx);
-        positionSpawn(
-          this,
-          opPlayer.opponent,
-          activeMapId,
-          playerData.team,
-          index,
-        );
-        if (hasServerPosition(playerData)) {
-          const serverX = Number(playerData.x);
-          const serverY = Number(playerData.y);
-
-          opPlayer.opponent.body?.reset?.(serverX, serverY);
-        }
-        opPlayer.finalizeSpawnPresentation?.();
-        if (opPlayer.updateUIPosition) opPlayer.updateUIPosition();
-      } catch (_) {}
-
-      this.applyRosterState(opPlayer, playerData);
+      const reuse = existing?.opponent && existing._spawnVersion === SPAWN_VERSION;
+      const opPlayer = reuse ? existing : createRemotePlayer(this, {
+        Player: RemotePlayer, roster: playerData, gameData, spawnVersion: SPAWN_VERSION,
+        getPlayerEffects: name => latestPlayerEffects?.[name],
+      });
+      const serverIndex = SERVER_SPAWN_INDEX[playerData.name];
+      if (!reuse && typeof serverIndex === "number") opPlayer.spawnIndex = serverIndex;
+      const spawnIndex = typeof opPlayer.spawnIndex === "number"
+        ? opPlayer.spawnIndex
+        : reuse ? serverIndex : playerData.spawnIndex;
+      placeRemoteAtSpawn(this, opPlayer, playerData, { positionSpawn, mapId: activeMapId, spawnIndex });
+      applyRemoteRosterState(opPlayer, playerData);
+      if (reuse) return;
 
       playerContainer[playerData.name] = opPlayer;
 
@@ -1466,33 +1124,13 @@ class GameScene extends Phaser.Scene {
       setTimeout(() => {
         try {
           if (playerContainer[playerData.name] !== opPlayer) {
-            if (typeof opPlayer.destroy === "function") opPlayer.destroy();
-            else if (opPlayer.opponent?.destroy) opPlayer.opponent.destroy();
+            destroyRemote(opPlayer);
           }
         } catch (_) {}
       }, 1500);
     });
     // A game:init arriving after this point refreshes these sprites in place.
     this._remoteSpritesBuilt = true;
-  }
-
-  // Server-sent stats and presence for a remote fighter's sprite.
-  applyRosterState(opPlayer, playerData) {
-    if (playerData.stats && typeof playerData.stats.health === "number") {
-      opPlayer.opMaxHealth = playerData.stats.health;
-      opPlayer.opCurrentHealth = playerData.stats.health;
-    }
-    if (typeof playerData.superCharge === "number") {
-      opPlayer.opSuperCharge = playerData.superCharge;
-    }
-    if (typeof playerData.maxSuperCharge === "number") {
-      opPlayer.opMaxSuperCharge = playerData.maxSuperCharge;
-    }
-    if (opPlayer.updateHealthBar) opPlayer.updateHealthBar();
-    opPlayer.setPresenceState?.(
-      playerData.connected !== false,
-      playerData.loaded === true,
-    );
   }
 
   _renderPowerupsAndEffects() {
@@ -1509,190 +1147,17 @@ class GameScene extends Phaser.Scene {
     this._modeRuntime?.render?.();
   }
 
-  _enterSpectatorMode({ holdCamera = false } = {}) {
-    if (!this._spectatorModeActive) {
-      this._spectatorModeActive = true;
-      this._spectatorVignette = true;
-    }
-    this._setSpectatedPlayer(this._spectatedPlayerName, { holdCamera });
-  }
-
-  _getSpectatablePlayers() {
-    const roster = Array.isArray(gameData?.players) ? gameData.players : [];
-    return roster
-      .filter((entry) => {
-        if (!entry?.name || entry.name === username) return false;
-        const wrapper = opponentPlayers[entry.name] || teamPlayers[entry.name];
-        return (
-          entry.isAlive !== false &&
-          entry.connected !== false &&
-          entry.loaded !== false &&
-          !!wrapper?.opponent?.active &&
-          !wrapper._deathPresentationActive &&
-          !wrapper._corpseRemoved
-        );
-      })
-      .map((entry) => ({
-        name: String(entry.name),
-        wrapper: opponentPlayers[entry.name] || teamPlayers[entry.name],
-      }));
-  }
-
-  _noteLocalKiller(name) {
-    this._localKillerName = name ? String(name) : null;
-  }
-
-  // First spectate target after dying: the killer, else the nearest fighter.
-  _pickDeathSpectateTarget() {
-    const candidates = this._getSpectatablePlayers();
-    const killer = candidates.find((entry) => entry.name === this._localKillerName);
-    if (killer) return killer.name;
-    let nearest = null;
-    let nearestDistSq = Infinity;
-    for (const entry of candidates) {
-      const sprite = entry.wrapper.opponent;
-      const distSq = (sprite.x - player.x) ** 2 + (sprite.y - player.y) ** 2;
-      if (distSq < nearestDistSq) {
-        nearestDistSq = distSq;
-        nearest = entry.name;
-      }
-    }
-    return nearest;
-  }
-
-  _setSpectatedPlayer(name, { holdCamera = false } = {}) {
-    const candidates = this._getSpectatablePlayers();
-    const selected =
-      candidates.find((entry) => entry.name === name) || candidates[0] || null;
-    const nextName = selected?.name || null;
-    const changed = nextName !== this._spectatedPlayerName;
-    const candidateCountChanged =
-      candidates.length !== this._spectatorCandidateCount;
-
-    if (changed) {
-      for (const wrapper of [
-        ...Object.values(opponentPlayers),
-        ...Object.values(teamPlayers),
-      ]) {
-        wrapper?.setSpectated?.(!!nextName && wrapper.username === nextName);
-      }
-    }
-
-    this._spectatedPlayerName = nextName;
-    this._spectatedPlayerAudioSprite = selected?.wrapper?.opponent || null;
-    this._spectatorCandidateCount = candidates.length;
-    if (changed || candidateCountChanged) {
-      hud.setSpectatingPlayer?.(nextName, { canSwitch: candidates.length > 1 });
-    }
-
-    const cam = this.cameras.main;
-    // The death pause keeps the camera on the local corpse.
-    if (!cam || holdCamera) return;
-    if (!selected?.wrapper?.opponent) {
-      if (!this._spectatorFallbackActive) {
-        this._spectatorFallbackActive = true;
-        this._spectatorCameraFollowing = false;
-        const bounds = this._spectatorBounds || {};
-        try {
-          cam.stopFollow();
-          cam.pan(
-            Number(bounds.centerX) || 1150,
-            (Number(bounds.centerY) || 500) - 120,
-            500,
-            "Cubic.easeOut",
-          );
-        } catch (_) {}
-      }
-      cam.setZoom(cam.zoom + (1.2 - cam.zoom) * 0.075);
-      return;
-    }
-    this._spectatorFallbackActive = false;
-    const watchedPlayer = selected.wrapper.opponent;
-    const cameraTarget = this._spectatorCameraTarget ||
-      (this._spectatorCameraTarget = { x: 0, y: 0 });
-    if (!this._spectatorCameraFollowing) {
-      // startFollow immediately centers on its target. Seed the proxy from the
-      // camera's current midpoint so entering (or resuming) spectate never snaps.
-      cameraTarget.x = cam.midPoint.x + cam.followOffset.x;
-      cameraTarget.y = cam.midPoint.y + cam.followOffset.y;
-      try {
-        cam.stopFollow();
-        cam.startFollow(
-          cameraTarget,
-          false,
-          0.075,
-          0.06,
-          cam.followOffset.x,
-          cam.followOffset.y,
-        );
-        this._spectatorCameraFollowing = true;
-      } catch (_) {}
-    }
-    // The camera remains attached to this proxy across player changes. Updating
-    // its destination lets Phaser's follow lerp glide between fighters instead
-    // of startFollow snapping straight to the newly selected sprite.
-    cameraTarget.x = watchedPlayer.x;
-    cameraTarget.y = watchedPlayer.y;
-    // Frame the watched fighter exactly as their own follow camera would.
-    const rest = this._mapArena?.camera
-      ? restingCameraFrame(watchedPlayer.y, this._mapArena.camera)
-      : { zoom: 1.55, followOffsetY: 85 };
-    cam.setFollowOffset(
-      0,
-      cam.followOffset.y + (rest.followOffsetY - cam.followOffset.y) * 0.1,
-    );
-    cam.setZoom(cam.zoom + (rest.zoom - cam.zoom) * 0.075);
-  }
-
-  _syncSpectatedPlayer() {
-    this._setSpectatedPlayer(this._spectatedPlayerName);
-  }
-
-  _cycleSpectatedPlayer(direction = 1) {
-    this._deathSpectateTargetLocked = true;
-    const candidates = this._getSpectatablePlayers();
-    if (!candidates.length) {
-      this._setSpectatedPlayer(null);
-      return;
-    }
-    const currentIndex = candidates.findIndex(
-      (entry) => entry.name === this._spectatedPlayerName,
-    );
-    const step = direction < 0 ? -1 : 1;
-    const nextIndex =
-      currentIndex < 0
-        ? 0
-        : (currentIndex + step + candidates.length) % candidates.length;
-    this._setSpectatedPlayer(candidates[nextIndex].name);
-  }
+  _syncSpectatedPlayer(...args) { return this._spectatorCamera?.syncSpectatedPlayer(...args); }
+  _cycleSpectatedPlayer(...args) { return this._spectatorCamera?.cycleSpectatedPlayer(...args); }
 
   update() {
-    attachCharacterNetworks(this, { localPlayer: player, localUsername: username,
-      opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers });
     const suddenDeathEnabled = supportsSuddenDeath(latestModeState?.type || gameData?.modeId);
     const poisonAllowed =
       hasJoined &&
       gameInitialized &&
       !gameEnded &&
       !hud.isBattleIntroActive?.();
-    if (!poisonAllowed || !suddenDeathEnabled) {
-      try {
-        this._poisonGraphics?.clear?.();
-      } catch (_) {}
-      try {
-        const cssDiv = document.getElementById("poison-water-bg");
-        if (cssDiv) cssDiv.style.display = "none";
-      } catch (_) {}
-      try {
-        const vigEl = document.getElementById("water-vignette");
-        if (vigEl) {
-          vigEl.classList.remove("water-danger-active");
-          vigEl.style.opacity = "0";
-        }
-      } catch (_) {}
-    } else {
-      renderPoisonWater(this, { player, dead });
-    }
+    renderPoisonWater(this, { player, dead, poisonState, active: poisonAllowed && suddenDeathEnabled });
 
     // Powerup visuals/effects are rendered for all players every frame.
     this._renderPowerupsAndEffects();
@@ -1712,46 +1177,9 @@ class GameScene extends Phaser.Scene {
     if (!hasJoined || !gameInitialized || gameEnded) return;
 
     if (dead) {
-      // Hold the camera on the corpse before handing it to spectate.
-      const now = performance.now();
-      if (this._localDeathStartedAt == null) {
-        this._localDeathStartedAt = now;
-        hud.showLocalDeath?.();
-      }
-      const holdCamera = now - this._localDeathStartedAt < LOCAL_DEATH_PAUSE_MS;
-      // The killer name can land a few frames after health hits zero, so keep
-      // re-picking until the pause ends or the player chooses someone.
-      if (!this._deathSpectateTargetLocked) {
-        this._spectatedPlayerName = this._pickDeathSpectateTarget();
-        if (!holdCamera) this._deathSpectateTargetLocked = true;
-      }
-      this._enterSpectatorMode({ holdCamera });
+      this._spectatorCamera.updateDeath();
     } else {
-      if (this._localDeathStartedAt != null) {
-        this._localDeathStartedAt = null;
-        this._localKillerName = null;
-        this._deathSpectateTargetLocked = false;
-        hud.hideLocalDeath?.();
-      }
-      this._spectatorVignette = false;
-      if (this._spectatorModeActive) {
-        try {
-          followLocalPlayer(this.cameras.main);
-        } catch (_) {}
-      }
-      this._spectatorModeActive = false;
-      this._spectatedPlayerName = null;
-      this._spectatedPlayerAudioSprite = null;
-      this._spectatorCandidateCount = 0;
-      this._spectatorFallbackActive = false;
-      this._spectatorCameraFollowing = false;
-      for (const wrapper of [
-        ...Object.values(opponentPlayers),
-        ...Object.values(teamPlayers),
-      ]) {
-        wrapper?.setSpectated?.(false);
-      }
-      hud.hideSpectatingPlayer?.();
+      this._spectatorCamera.updateAlive();
       if (!introCamera) updateDynamicCamera(this, player);
       localMovementCorrector.update(player, this.game?.loop?.delta ?? 16.67);
       localInputSync.sync(this, player, {
@@ -1788,348 +1216,24 @@ class GameScene extends Phaser.Scene {
     noteClientFrame(this.game.loop.delta);
   }
 
-  /**
-   * CRITICAL SAFEGUARD (Phase 2 netcode):
-   * This function ONLY updates remote players (opponentPlayers and teamPlayers).
-   * LOCAL PLAYER is NEVER snapped from snapshots and remains 100% Phaser physics-driven.
-   *
-   * Violating this would cause double-application of movement:
-   * 1. handlePlayerMovement() applies physics: player.x += velocity * dt
-   * 2. If snapshot also sets: player.x = snapshot.x
-   * 3. Result: Position applied twice, then corrected → jitter/rubber-banding
-   *
-   * When server-side movement simulation (Phase 2B) is enabled, it will ONLY
-   * be used for hit validation via stored position history. Snapshots will NOT
-   * update the local player's position.
-   */
+  // Interpolate remote fighters only. Local position is owned by local
+  // physics and the explicit movement-correction path.
   interpolatePlayerStates(aState, bState, alpha, frame = null) {
     const baseFrame = frame || { aState, bState, alpha, extrapolationMs: 0 };
-    const hermiteAxis = (aValue, bValue, aVelocity, bVelocity, t, spanMs) => {
-      const p0 = Number(aValue);
-      const p1 = Number(bValue);
-      const v0 = Number(aVelocity);
-      const v1 = Number(bVelocity);
-      const spanSec = Math.max(0.001, Number(spanMs) || 0) / 1000;
-      if (
-        !Number.isFinite(p0) ||
-        !Number.isFinite(p1) ||
-        !Number.isFinite(v0) ||
-        !Number.isFinite(v1)
-      ) {
-        return p0 + t * (p1 - p0);
-      }
-      const tt = t * t;
-      const ttt = tt * t;
-      const m0 = v0 * spanSec;
-      const m1 = v1 * spanSec;
-      return (
-        (2 * ttt - 3 * tt + 1) * p0 +
-        (ttt - 2 * tt + t) * m0 +
-        (-2 * ttt + 3 * tt) * p1 +
-        (ttt - tt) * m1
-      );
-    };
-    const projectAxis = (
-      aValue,
-      bValue,
-      dtMs,
-      velocityValue = null,
-      options = {},
-    ) => {
-      const aNum = Number(aValue);
-      const bNum = Number(bValue);
-      if (!Number.isFinite(aNum) || !Number.isFinite(bNum)) {
-        return Number.isFinite(bNum) ? bNum : aNum;
-      }
-      const velocityNum = Number(velocityValue);
-      const extrapolationMs = Math.max(0, Number(options.extrapolationMs) || 0);
-      if (Number.isFinite(velocityNum) && extrapolationMs > 0) {
-        if (options?.vertical && options?.airborne) {
-          const tSec = extrapolationMs / 1000;
-          const gravity = Number(MOVEMENT_PHYSICS.gravity) || 0;
-          const fallMult =
-            velocityNum > 0
-              ? Number(MOVEMENT_PHYSICS.fallGravityFactor) || 1
-              : 1;
-          return (
-            bNum + velocityNum * tSec + 0.5 * gravity * fallMult * tSec * tSec
-          );
-        }
-        return bNum + velocityNum * (extrapolationMs / 1000);
-      }
-      const safeDtMs = Math.max(1, Number(dtMs) || 0);
-      const velocityPerMs = (bNum - aNum) / safeDtMs;
-      return bNum + velocityPerMs * extrapolationMs;
-    };
-    const applyInterp = (wrapper, name) => {
-      if (!wrapper || !wrapper.opponent) return;
-
-      const now = performance.now();
-      const sample = sampleRemoteFrame(
-        snapshotBuffer,
-        baseFrame,
-        (wrapper._continuousSmoothing ||= {}),
-        {
-          attack:
-            (Number(this._localAttackPrecisionUntil) || 0) > now ||
-            (Number(wrapper._attackPrecisionUntil) || 0) > now,
-          airborne: baseFrame.bState?.players?.[name]?.grounded === false,
-          deltaMs: this.game?.loop?.delta || 16.67,
-          snap: Number(wrapper._networkSnapUntil) > now,
-          legacyLead: networkExperiments.legacyRemoteLead,
-        },
-      );
-      const { aState, bState, alpha } = sample;
-      const extrapolationMs = Math.max(0, Number(sample.extrapolationMs) || 0);
-
-      const spr = wrapper.opponent;
-      const aPosData = aState.players[name];
-      const bPosData = bState.players[name];
-      const respawnShieldRemainingMs = Math.max(
-        0,
-        Number(latestPlayerEffects?.[name]?.respawnShield) || 0,
-      );
-      const inRespawnShield = respawnShieldRemainingMs > 0;
-
-      if (!aPosData && !bPosData) return;
-
-      const life = remoteLifeState(wrapper._lifeEvent, aState, aPosData, bState, bPosData);
-      const isDeadBySnapshot = life.dead;
-      const isConnected =
-        bPosData && typeof bPosData.connected === "boolean"
-          ? bPosData.connected
-          : aPosData && typeof aPosData.connected === "boolean"
-            ? aPosData.connected
-            : true;
-      const isLoaded =
-        bPosData && typeof bPosData.loaded === "boolean"
-          ? bPosData.loaded
-          : aPosData && typeof aPosData.loaded === "boolean"
-            ? aPosData.loaded
-            : true;
-
-      // Render remote players directly from the buffered snapshot timeline.
-      // Every actor is sampled at the render time attack requests report.
-      let targetX = spr.x;
-      let targetY = spr.y;
-      // A loading fighter is still a hittable ghost, so it follows the server's
-      // position too; otherwise it would be drawn where its hitbox is not.
-      {
-        const airborne = !(bPosData?.grounded ?? aPosData?.grounded ?? false);
-        const effectiveAlpha = alpha;
-        const aX = Number(aPosData?.x);
-        const aY = Number(aPosData?.y);
-        const bX = Number(bPosData?.x);
-        const bY = Number(bPosData?.y);
-        if (
-          aPosData &&
-          bPosData &&
-          Number.isFinite(aX) &&
-          Number.isFinite(aY) &&
-          Number.isFinite(bX) &&
-          Number.isFinite(bY)
-        ) {
-          if (life.newestOnly) {
-            targetX = bX;
-            targetY = bY;
-          } else if (inRespawnShield) {
-            if (extrapolationMs > 0) {
-              targetX = bX;
-              targetY = bY;
-            } else {
-              targetX = Phaser.Math.Linear(aX, bX, effectiveAlpha);
-              targetY = Phaser.Math.Linear(aY, bY, effectiveAlpha);
-            }
-          } else if (extrapolationMs > 0) {
-            const stateDeltaMs = Math.max(
-              1,
-              Number(bState?.tMono) - Number(aState?.tMono),
-            );
-            targetX = projectAxis(aX, bX, stateDeltaMs, bPosData?.vx, {
-              extrapolationMs,
-            });
-            targetY = projectAxis(aY, bY, stateDeltaMs, bPosData?.vy, {
-              vertical: true,
-              airborne,
-              extrapolationMs,
-            });
-          } else {
-            const stateDeltaMs = Math.max(
-              1,
-              Number(bState?.tMono) - Number(aState?.tMono),
-            );
-            targetX = hermiteAxis(
-              aX,
-              bX,
-              aPosData?.vx,
-              bPosData?.vx,
-              effectiveAlpha,
-              stateDeltaMs,
-            );
-            targetY = hermiteAxis(
-              aY,
-              bY,
-              aPosData?.vy,
-              bPosData?.vy,
-              effectiveAlpha,
-              stateDeltaMs,
-            );
-          }
-        } else if (bPosData && Number.isFinite(bX) && Number.isFinite(bY)) {
-          targetX = bX;
-          targetY = bY;
-        } else if (aPosData && Number.isFinite(aX) && Number.isFinite(aY)) {
-          targetX = aX;
-          targetY = aY;
-        }
-        if (!airborne) {
-          const ride = remoteRideOffset(this, spr, targetX, targetY, sample.targetMono, platformClock());
-          targetX += ride.x;
-          targetY += ride.y;
-        }
-      }
-      const shouldSnapToTarget =
-        Number(wrapper._networkSnapUntil) > performance.now();
-
-      if (!wrapper._deathPresentationActive && !wrapper._corpseRemoved && !life.holdPosition) {
-        if (shouldSnapToTarget) {
-          spr.x = targetX;
-          spr.y = targetY;
-        } else {
-          followRemotePosition(spr, targetX, targetY, {
-            deltaMs: this.game?.loop?.delta ?? 16.67,
-            attack:
-              (Number(this._localAttackPrecisionUntil) || 0) > now ||
-              (Number(wrapper._attackPrecisionUntil) || 0) > now,
-            airborne: !(bPosData?.grounded ?? aPosData?.grounded ?? false),
-          });
-        }
-      }
-      if (typeof wrapper.setPresenceState === "function") {
-        wrapper.setPresenceState(isConnected, isLoaded);
-      } else {
-        // Fallback visual for wrappers without presence helper.
-        spr.alpha = 1;
-      }
-      setTeamHudPlayerPresence(name, isConnected);
-      setTeamHudPlayerLoaded(name, isLoaded);
-      setTeamHudPlayerAlive(name, !isDeadBySnapshot);
-
-      if (
-        !isDeadBySnapshot &&
-        isConnected &&
-        isLoaded &&
-        (wrapper._deathPresentationActive || wrapper._corpseRemoved)
-      ) {
-        wrapper.handleRespawn?.({
-          x: targetX,
-          y: targetY,
-          at:
-            Number(bState?.timestamp) ||
-            Number(aState?.timestamp) ||
-            Date.now(),
-        });
-      }
-
-      // Orientation/animation: take from newer if present (prefer b then a)
-      const animSrc = bPosData && bPosData.animation ? bPosData : aPosData;
-      if (isDeadBySnapshot) {
-        wrapper.startDeathPresentation?.({
-          x: targetX,
-          y: targetY,
-          at:
-            Number(bState?.timestamp) ||
-            Number(aState?.timestamp) ||
-            Date.now(),
-        });
-      }
-
-      if (
-        animSrc &&
-        !isDeadBySnapshot &&
-        !wrapper._deathPresentationActive &&
-        isConnected &&
-        isLoaded
-      ) {
-        if (typeof wrapper.setDucking === "function") {
-          wrapper.setDucking(animSrc.ducking === true);
-        } else {
-          spr._ducking = animSrc.ducking === true;
-        }
-        const prevFlip = spr.flipX;
-        spr.flipX = !!animSrc.flip;
-        if (
-          spr.flipX !== prevFlip &&
-          typeof wrapper.applyFlipOffset === "function"
-        ) {
-          wrapper.applyFlipOffset();
-        }
-        const lockUntil = remoteAnimationLockUntil(spr);
-        if (performance.now() >= lockUntil) {
-          const chosenAnim = chooseRemoteAnimation(wrapper.character, {
-            animation: animSrc.animation || "idle",
-            previousPosition: aPosData,
-            currentPosition: bPosData,
-            sprite: spr,
-          });
-          playCharacterAnimation({
-            scene: this,
-            sprite: spr,
-            character: wrapper.character,
-            skinId: wrapper.skinId || "",
-            resolveAnimKey,
-            logical: chosenAnim,
-            dashDirection: { x: animSrc.dashX, y: animSrc.dashY },
-            fallback: "idle",
-            force: true,
-          });
-        }
-      }
-
-      if (
-        !isDeadBySnapshot &&
-        !wrapper._deathPresentationActive &&
-        isConnected &&
-        isLoaded
-      ) {
-        wrapper.updateMovementVfx?.(bPosData || aPosData, animSrc);
-      }
-
-      // Keep remote UI positioning centralized in OpPlayer so one offset controls all updates.
-      // Bars are drawn once afterwards by the frame's updateHealthBars pass.
-      if (typeof wrapper.updateUIPosition === "function") {
-        wrapper.updateUIPosition({ drawBars: false });
-      }
-    };
-
+    const context = { snapshotBuffer, latestPlayerEffects, networkExperiments, hud };
     for (const name in opponentPlayers) {
-      applyInterp(opponentPlayers[name], name);
+      presentRemoteFrame(this, opponentPlayers[name], name, baseFrame, context);
     }
     for (const name in teamPlayers) {
-      applyInterp(teamPlayers[name], name);
+      presentRemoteFrame(this, teamPlayers[name], name, baseFrame, context);
     }
   }
 }
 
-function stabilizeSpawnedSpriteOnMap(scene, sprite, objects) {
-  if (!scene?.physics?.world || !sprite || !Array.isArray(objects)) return;
-  try {
-    sprite.body?.updateFromGameObject?.();
-  } catch (_) {}
-  try {
-    sprite.setVelocity?.(0, 0);
-    sprite.setAcceleration?.(0, 0);
-  } catch (_) {}
-  for (const mapObject of objects) {
-    if (!mapObject) continue;
-    try {
-      scene.physics.world.collide(sprite, mapObject);
-    } catch (_) {}
-  }
-}
+
 
 const config = {
-  audio: { context: window.__BB_NAVIGATION__?.getAudioContext() },
+  audio: { context: getNavigation()?.getAudioContext() },
   // Prefer WebGL; Phaser falls back to Canvas when WebGL is unavailable.
   type: Phaser.AUTO,
   transparent: true,
@@ -2142,10 +1246,10 @@ const config = {
   callbacks: {
     postBoot: (game) => {
       game.canvas.dataset.gameRenderer = game.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas';
-      document.dispatchEvent(new Event('bb:rendererchange'));
+      document.dispatchEvent(new Event(BROWSER_EVENTS.RENDERER_CHANGED));
       game.events.once(Phaser.Core.Events.DESTROY, () => {
         delete game.canvas.dataset.gameRenderer;
-        document.dispatchEvent(new Event('bb:rendererchange'));
+        document.dispatchEvent(new Event(BROWSER_EVENTS.RENDERER_CHANGED));
       });
       installViewportFit(game);
       installAmbientBezels(game);
@@ -2200,7 +1304,7 @@ function trySendReadyAck(force = false) {
   if (!force && readyAckSocketId === socket.id) return;
   try {
     readyAckSocketId = socket.id;
-    socket.emit("game:ready", { matchId: Number(matchId) });
+    socket.emit(SOCKET_EVENTS.GAME_READY, { matchId: Number(matchId) });
     if (!shouldMuteClientDefaultLogs()) {
       console.log("Sent game:ready ack");
     } else {
@@ -2227,7 +1331,7 @@ if (editorSession) {
       window.parent.postMessage({type:'bb-map-playtest-exit'},window.location.origin);
     } else if (event.code === 'KeyQ' && !event.repeat && gameData?.editorSoloPlaytest && !isChatInputActive()) {
       event.preventDefault();event.stopImmediatePropagation();
-      socket.emit('editor:self-kill');
+      socket.emit(SOCKET_EVENTS.EDITOR_SELF_KILL);
     }
   },true);
 }

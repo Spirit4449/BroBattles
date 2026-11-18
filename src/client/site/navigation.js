@@ -1,4 +1,9 @@
-import { api, element, openSettings } from './shell';
+import { API_PATHS } from "../../shared/net/apiPaths.js";
+import { SITE_ACCOUNT_CACHE_KEY } from "../lib/storageKeys.js";
+import { remove } from "../lib/safeStorage.js";
+import { api } from './siteApi';
+import { element } from '../ui/dom';
+import { openSettings } from './settingsDialog';
 export function initializeDesktopNavigation() {
   const header=document.querySelector('.site-header');if(!header)return;
   const nav=header.querySelector('.site-desktop-nav');if(!nav)return;
@@ -20,9 +25,9 @@ export function renderSiteAccount(session) {
   }
   let root=header.querySelector('.site-account');if(!root){root=element('div',null,'site-account');header.append(root);}
   const signature=session?.member?(session.username||'My profile'):'guest';if(root.dataset.identity===signature)return;root.dataset.identity=signature;root.replaceChildren();
-  if(!session?.member){const login=element('a','Log in','pixel-menu-button');login.href='/login?next='+encodeURIComponent(location.pathname);root.append(login);return;}
+  if(!session?.member){const login=element('a','Log in','pixel-menu-button');login.href=API_PATHS.LOGIN + "?next="+encodeURIComponent(location.pathname);root.append(login);return;}
   const trigger=element('button',null,'pixel-menu-button site-account-trigger');trigger.type='button';const name=element('span',session.username||'My profile');name.dataset.privateName='';const caret=element('span','▾','site-account-caret');caret.setAttribute('aria-hidden','true');trigger.append(name,caret);trigger.setAttribute('aria-expanded','false');
-  const menu=element('div',null,'site-account-menu');const profile=element('a','My profile','site-account-profile-link');profile.href='/?profile=self';const settings=element('button','Settings');settings.onclick=openSettings;const logout=element('button','Sign out','site-signout');logout.onclick=async()=>{logout.disabled=true;try{await api('/logout',{});try{sessionStorage.removeItem('bb_site_account');}catch(_){}location.assign('/login');}catch(e){logout.disabled=false;logout.textContent='Retry sign out';}};menu.append(profile,settings,logout);root.append(trigger,menu);
+  const menu=element('div',null,'site-account-menu');const profile=element('a','My profile','site-account-profile-link');profile.href='/?profile=self';const settings=element('button','Settings');settings.onclick=openSettings;const logout=element('button','Sign out','site-signout');logout.onclick=async()=>{logout.disabled=true;try{await api(API_PATHS.LOGOUT,{});remove(() => sessionStorage, SITE_ACCOUNT_CACHE_KEY);location.assign(API_PATHS.LOGIN);}catch(e){logout.disabled=false;logout.textContent='Retry sign out';}};menu.append(profile,settings,logout);root.append(trigger,menu);
   const setOpen=on=>{root.classList.toggle('is-open',on);trigger.setAttribute('aria-expanded',String(on));};
   trigger.onclick=()=>setOpen(!root.classList.contains('is-open'));
   root.onmouseenter=()=>setOpen(true);root.onmouseleave=()=>{if(!root.contains(document.activeElement))setOpen(false);};

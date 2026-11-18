@@ -1,5 +1,5 @@
 // A backdrop click must start outside, not merely end there after a drag.
-export function wireBackdropDismiss(dialog) {
+export function wireBackdropDismiss(dialog, close = () => dialog.close()) {
   let startedOutside = false;
   const isOutside = event => {
     const rect = dialog.getBoundingClientRect();
@@ -7,15 +7,24 @@ export function wireBackdropDismiss(dialog) {
       (event.clientX < rect.left || event.clientX > rect.right ||
        event.clientY < rect.top || event.clientY > rect.bottom);
   };
-  dialog.addEventListener('pointerdown', event => {
+  const onPointerDown = event => {
     startedOutside = event.isPrimary !== false && event.button === 0 && isOutside(event);
-  }, true);
-  dialog.addEventListener('pointercancel', () => { startedOutside = false; });
-  dialog.addEventListener('click', event => {
+  };
+  const onPointerCancel = () => { startedOutside = false; };
+  const onClick = event => {
     const dismiss = startedOutside && isOutside(event);
     startedOutside = false;
-    if (dismiss) dialog.close();
-  });
+    if (dismiss) close();
+  };
+
+  dialog.addEventListener('pointerdown', onPointerDown, true);
+  dialog.addEventListener('pointercancel', onPointerCancel);
+  dialog.addEventListener('click', onClick);
+  return () => {
+    dialog.removeEventListener('pointerdown', onPointerDown, true);
+    dialog.removeEventListener('pointercancel', onPointerCancel);
+    dialog.removeEventListener('click', onClick);
+  };
 }
 
 // Non-modal dialogs do not have a backdrop, so outside pointer events land on

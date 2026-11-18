@@ -88,4 +88,4 @@ function step(p, owner, terrain = [], blockers = []) {
   }
   return segments;
 }
-module.exports={VERSION,STEP_MS,config,swarmConfig,swarmShard,launch,outward,step};
+module.exports={VERSION,STEP_MS,config,swarmConfig,launch,outward,step};

@@ -1,3 +1,6 @@
+import { API_PATHS } from "../../shared/net/apiPaths.js";
+import { postJson } from '../lib/http.js';
+
 const PLACEHOLDERS = [
   'How does matchmaking work?',
   'Can I rejoin a battle?',
@@ -154,14 +157,10 @@ export function initializeHelpSearch() {
     debounce = setTimeout(async () => {
       request = new AbortController();
       try {
-        const response = await fetch('/api/site/help-search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query }),
+        const result = await postJson(API_PATHS.API_SITE_HELP_SEARCH, { query }, {
           signal: request.signal,
+          fallbackMessage: 'AI search unavailable',
         });
-        if (!response.ok) throw new Error('AI search unavailable');
-        const result = await response.json();
         if (input.value.trim() === query) render(query, localMatches, result.matches || [], result.available === true);
       } catch (error) {
         if (error.name !== 'AbortError' && input.value.trim() === query) render(query, localMatches, [], false);
@@ -181,5 +180,3 @@ export function initializeHelpSearch() {
   };
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) setInterval(rotatePlaceholder, 2600);
 }
-
-export { scoreDocument };

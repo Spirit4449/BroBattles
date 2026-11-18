@@ -8,10 +8,8 @@ node_modules/
 !.env.example
 todo.md
 
-# Generated map artwork revisions, backup history, and pinned match snapshots
-/data/maps/assets/
-/data/maps/history/
-/data/maps/matches/
+# Map Studio publications, legacy overrides, archive and pinned assets
+/data/maps/
 
 /data/match-results/
 

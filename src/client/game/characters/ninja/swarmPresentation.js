@@ -1,9 +1,12 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { markOneShotAnimation, resolveSpriteAnimationKey } from '../shared/animationState';
 import { playPlayerSound } from '../../audio/playerAudio';
 
+const { key: NAME } = characterDefinitions.ninja;
+
 export function presentSwarmRelease(scene, player, releaseMs, remote = false) {
   if (!player?.active) return;
-  const key = resolveSpriteAnimationKey({scene, sprite:player, character:'ninja', logical:'special', fallback:'throw'});
+  const key = resolveSpriteAnimationKey({scene, sprite:player, character:NAME, logical:'special', fallback:'throw'});
   if (key) {
     const dedicated = key.endsWith('-special');
     // A barrage spans many releases. Advance its row continuously instead of

@@ -1,5 +1,5 @@
-const { characterBody } = require("../../../shared/physics/duelGeometry");
-const { bounds, stepBody, onClimbableWall, forecastGeometry, nearColliders } = require("./physics");
+const { characterBody } = require("../../../shared/physics/characterBody");
+const { bounds, stepBody, onClimbableWall, forecastGeometry, nearColliders } = require("../physics/bodySolver");
 const movement = require("../../../shared/physics/movementPhysics.json");
 const { SD_DAMAGE_PER_SEC } = require('../../../shared/combat/matchConfig.js');
 const graphs = new WeakMap();

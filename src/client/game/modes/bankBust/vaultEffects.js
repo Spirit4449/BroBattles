@@ -1,13 +1,15 @@
+import { between, animateCoinLabel, expandRing } from "./impactFx";
+import { lerp } from "../../../../shared/math.js";
 // Everything a vault does on screen besides being drawn: how it reacts to a
 // hit, how it looks as it empties, and the bust itself. All of it is local
 // decoration driven by the coin numbers in the snapshot, so nothing here can
 // affect the match, and it never reads the server's clock.
 
-import { COIN_FRAME_SIZE, COIN_SPIN_FRAMES, coinSpinFrame } from "./coinMotion.mjs";
+import { createCoinFx } from "./coinFx";
 
-const COIN_TEXTURE = "coin-spin";
 const PIXEL_TEXTURE = "bb-vault-fx-pixel";
-export const PUFF_TEXTURE = "bb-vault-fx-puff";
+import { ensureSoftGlow, VAULT_PUFF as PUFF_TEXTURE } from "../../scene/fx/glowTextures";
+export { PUFF_TEXTURE };
 const RAY_TEXTURE = "bb-vault-fx-ray";
 const TWINKLE_TEXTURE = "bb-vault-fx-twinkle";
 
@@ -21,23 +23,14 @@ const HOT = 0xfff3c4;
 const STEEL = [0x3d4f73, 0x56688f, 0x1f2a44];
 
 const GRAVITY = 1500;
-const COIN_SIZE = 30;
 const COIN_BOUNCE = 0.42;
 const COIN_REST_SPEED = 90;
-// Every coin is a live sprite stepped by hand, so a long fight has a ceiling.
-// Past it the oldest coin already lying on the floor makes way for a new one.
-const MAX_LOOSE_COINS = 260;
-
 // A hit whitens the whole vault only when it is a big one, and not more often
 // than this: a fast attacker would otherwise make it strobe.
 const HIT_FLASH_MIN_STRENGTH = 0.55;
 const HIT_FLASH_GAP_MS = 220;
 const HIT_BLOOM_CAP = 0.3;
 
-const POP_NUMBER_IN_MS = 170;
-const POP_NUMBER_HOLD_MS = 340;
-const POP_NUMBER_OUT_MS = 620;
-const POP_NUMBER_RISE_PX = 54;
 const POP_NUMBER_MERGE_MS = 160;
 
 const BUST_WINDUP_MS = 220;
@@ -51,13 +44,7 @@ const BUST_BLAST_COINS = 80;
 const BUST_GUSH_MS = 2800;
 const BUST_GUSH_INTERVAL_MS = 40;
 
-function between(min, max) {
-  return min + Math.random() * (max - min);
-}
 
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
 
 function mixColour(from, to, t) {
   const channel = (shift) =>
@@ -126,13 +113,14 @@ export function createVaultEffects({
   Phaser,
   layers,
   reducedMotion = false,
+  coinFx: sharedCoins,
   getFloors = () => [],
   getMapCentreX = () => Infinity,
   playSfx = () => {},
   focusCamera = () => {},
 } = {}) {
   const vaults = new Map();
-  const looseCoins = [];
+  const coins = sharedCoins || createCoinFx({ scene, Phaser, reducedMotion });
   const looseDebris = [];
   const popLabels = [];
   const lingering = new Set();
@@ -222,14 +210,7 @@ export function createVaultEffects({
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, 4, 4);
     });
-    drawTexture(PUFF_TEXTURE, 48, 48, (ctx) => {
-      const gradient = ctx.createRadialGradient(24, 24, 2, 24, 24, 24);
-      gradient.addColorStop(0, "rgba(255,255,255,1)");
-      gradient.addColorStop(0.6, "rgba(255,255,255,0.55)");
-      gradient.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 48, 48);
-    });
+    ensureSoftGlow(scene, PUFF_TEXTURE);
     // Drawn pointing up from its bottom edge, so it rotates about the door.
     drawTexture(RAY_TEXTURE, 80, 512, (ctx) => {
       const gradient = ctx.createLinearGradient(0, 512, 0, 0);
@@ -350,10 +331,7 @@ export function createVaultEffects({
   }
 
   function ring(x, y, radius, { color = GOLD, width = 4, duration = 480, delay = 0, depth = SPARK_DEPTH } = {}) {
-    const shape = scene.add.circle(x, y, 8, 0x000000, 0);
-    shape.setStrokeStyle(width, color, 0.95);
-    shape.setDepth(depth);
-    fade(shape, { radius, alpha: 0, duration, delay, ease: "Cubic.easeOut" });
+    expandRing(scene, x, y, { radius, width, color, opacity: 0.95, depth, duration, delay }, lingering);
   }
 
   function flash(x, y, radius, { color = HOT, alpha = 0.9, duration = 260 } = {}) {
@@ -373,21 +351,7 @@ export function createVaultEffects({
     label.setAlpha(1);
     label.setVisible(true);
     label.setScale(fromScale);
-    scene.tweens.add({
-      targets: label,
-      scale: restScale,
-      duration: POP_NUMBER_IN_MS,
-      ease: "Back.easeOut",
-    });
-    scene.tweens.add({
-      targets: label,
-      y: baseY - POP_NUMBER_RISE_PX,
-      alpha: 0,
-      delay: POP_NUMBER_HOLD_MS,
-      duration: POP_NUMBER_OUT_MS,
-      ease: "Quad.easeIn",
-      onComplete: () => label.setVisible(false),
-    });
+    animateCoinLabel(scene, label, { y: baseY, scale: restScale, onComplete: () => label.setVisible(false) });
   }
 
   function popNumber(vaultFx, x, y, coinsLost, strength) {
@@ -425,41 +389,9 @@ export function createVaultEffects({
 
   // -- Loose coins and debris ----------------------------------------------
 
-  function coinScale() {
-    return COIN_SIZE / COIN_FRAME_SIZE;
-  }
-
-  function releaseCoin(index) {
-    const [coin] = looseCoins.splice(index, 1);
-    try {
-      coin.sprite.destroy();
-    } catch (_) {}
-  }
-
   function throwCoin(x, y, vx, vy, { size = 1, restMs = 900, depth = COIN_DEPTH } = {}) {
-    if (reducedMotion || !hasTexture(COIN_TEXTURE)) return;
-    if (looseCoins.length >= MAX_LOOSE_COINS) {
-      const oldest = looseCoins.findIndex((coin) => coin.resting);
-      if (oldest < 0) return;
-      releaseCoin(oldest);
-    }
-    const scale = coinScale() * size;
-    const sprite = scene.add.image(x, y, COIN_TEXTURE);
-    sprite.setDepth(depth);
-    sprite.setScale(scale);
-    looseCoins.push({
-      sprite,
-      x,
-      y,
-      vx,
-      vy,
-      scale,
-      radius: (COIN_SIZE * size) / 2,
-      phase: Math.random() * Math.PI,
-      spin: between(5, 10) * (Math.random() < 0.5 ? -1 : 1),
-      resting: false,
-      restMs,
-      airMs: 0,
+    if (hasTexture("coin-spin")) coins.throwCoin(x, y, vx, vy, {
+      scale: size, depth, floors: getFloors(), radius: 14 * size, restMs,
     });
   }
 
@@ -478,29 +410,6 @@ export function createVaultEffects({
   function stepLooseObjects() {
     const floors = getFloors() || [];
     const ms = delta * 1000;
-    for (let i = looseCoins.length - 1; i >= 0; i--) {
-      const coin = looseCoins[i];
-      stepLoose(coin, delta, floors);
-      if (coin.resting) {
-        coin.restMs -= ms;
-        if (coin.restMs <= 0) {
-          releaseCoin(i);
-          continue;
-        }
-        coin.sprite.setPosition(coin.x, coin.y);
-        // Turns on until it faces front, so none is left as an edge-on sliver.
-        if (coinSpinFrame(coin.phase) % (COIN_SPIN_FRAMES / 2) !== 0) coin.phase += 10 * delta;
-        coin.sprite.setFrame(coinSpinFrame(coin.phase));
-        coin.sprite.setAlpha(Math.min(1, coin.restMs / 400));
-        continue;
-      }
-      coin.sprite.setPosition(coin.x, coin.y);
-      // Spinning through its turn: the flip is what makes a small coin read as one.
-      coin.sprite.setFrame(coinSpinFrame(coin.phase));
-      // One that missed every platform is falling out of the map.
-      coin.airMs += ms;
-      if (coin.airMs > 6000) releaseCoin(i);
-    }
     for (let i = looseDebris.length - 1; i >= 0; i--) {
       const piece = looseDebris[i];
       stepLoose(piece, delta, floors);
@@ -970,6 +879,7 @@ export function createVaultEffects({
   function tick(deltaMs) {
     delta = Math.min(0.05, Math.max(0.001, (Number(deltaMs) || 16.67) / 1000));
     stepLooseObjects();
+    if (!sharedCoins) coins.update(deltaMs);
   }
 
   function destroy() {
@@ -979,7 +889,7 @@ export function createVaultEffects({
         vaultFx.wheel?.destroy?.();
       } catch (_) {}
     }
-    for (const body of [...looseCoins, ...looseDebris]) {
+    for (const body of looseDebris) {
       try {
         body.sprite.destroy();
       } catch (_) {}
@@ -989,7 +899,7 @@ export function createVaultEffects({
         target.destroy();
       } catch (_) {}
     }
-    looseCoins.length = 0;
+    if (!sharedCoins) coins.destroy();
     looseDebris.length = 0;
     popLabels.length = 0;
     lingering.clear();
@@ -1008,6 +918,6 @@ export function createVaultEffects({
     holdingFrame,
     hide,
     destroy,
-    looseCoinCount: () => looseCoins.length,
+    looseCoinCount: coins.looseCoinCount,
   };
 }

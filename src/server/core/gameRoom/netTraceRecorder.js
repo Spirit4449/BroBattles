@@ -1,3 +1,6 @@
+const { getConfig, loadConfig } = require("../../config");
+const { logIgnored } = require("../../lib/logIgnored");
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 // Run-scoped network tracing for production debugging.
 //
 // Off unless BB_NET_TRACE_TOKEN is set. A client opts in by sending
@@ -23,15 +26,6 @@ const TRACED_USER_TTL_MS = 6 * 60 * 60 * 1000;
 const LOOP_STALL_MS = 50;
 const SNAPSHOT_GAP_MS = 100;
 
-function config(env = process.env) {
-  const token = String(env.BB_NET_TRACE_TOKEN || "");
-  return {
-    token,
-    enabled: token.length >= 16,
-    dir: path.resolve(env.BB_NET_TRACE_DIR || path.join(process.cwd(), "data", "net-traces")),
-  };
-}
-
 function tokensMatch(expected, provided) {
   const a = Buffer.from(String(expected || ""));
   const b = Buffer.from(String(provided || ""));
@@ -55,8 +49,13 @@ function round(value, digits = 1) {
   return Math.round(value * k) / k;
 }
 
-function createNetTraceRecorder({ env = process.env, now = () => performance.now(), wall = () => Date.now() } = {}) {
-  const cfg = config(env);
+function createNetTraceRecorder({
+  env,
+  configuration = env ? loadConfig(env).netTrace : getConfig().netTrace,
+  now = () => performance.now(),
+  wall = () => Date.now(),
+} = {}) {
+  const cfg = configuration;
   const runs = new Map(); // runId -> run
   let flushTimer = null;
   let hostTimer = null;
@@ -78,7 +77,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
           fs.rmSync(full, { recursive: true, force: true });
         }
       }
-    } catch (_) {}
+    } catch (error) { logIgnored("network trace expiration cleanup", error); }
   }
 
   function ensureTimers() {
@@ -164,7 +163,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     flushRun(run);
     for (const stream of run.files.values()) stream.end();
     runs.delete(run.runId);
-    for (const room of run.rooms) room._netTrace?.runs.delete(run);
+    for (const room of run.rooms) room.netTrace?.runs.delete(run);
     stopTimersIfIdle();
   }
 
@@ -223,7 +222,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     const run = getRun(trace.runId);
     if (!run.sockets.has(socket.id) && run.sockets.size >= MAX_TRACED_SOCKETS_PER_RUN) return null;
     run.sockets.add(socket.id);
-    socket.once("disconnect", (reason) => {
+    socket.once(SOCKET_EVENTS.DISCONNECT, (reason) => {
       run.sockets.delete(socket.id);
       write(run, "server", { kind: "socket", event: "disconnect", tag: trace.tag, socketId: socket.id, reason });
     });
@@ -255,7 +254,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   function attachRoom(room, socket) {
     const run = attachSocket(socket);
     if (!run) return;
-    const state = room._netTrace ||= createRoomState();
+    const state = room.netTrace ||= createRoomState();
     state.runs.add(run);
     state.sockets.set(socket.id, socket.data.netTrace.tag);
     run.rooms.add(room);
@@ -279,7 +278,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   }
 
   function emitRoom(room, record) {
-    const state = room._netTrace;
+    const state = room.netTrace;
     if (!state) return;
     for (const run of state.runs) write(run, "server", { matchId: room.matchId, ...record });
   }
@@ -289,9 +288,9 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   // when the first traced room goes live. Summarize with cpuprofile-top.cjs.
   let profiling = null;
   function maybeProfile(room) {
-    const seconds = Number(env.BB_NET_TRACE_CPU_PROFILE_S);
+    const seconds = cfg.cpuProfileSeconds;
     if (!(seconds > 0) || profiling || room.status !== "active") return;
-    const run = [...room._netTrace.runs][0];
+    const run = [...room.netTrace.runs][0];
     if (!run || run.profiled) return;
     run.profiled = true;
     try {
@@ -311,7 +310,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   }
 
   function flushRoom(room, t) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s || !s.runs.size) return;
     maybeProfile(room);
     if (room._disposed) {
@@ -360,7 +359,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   // ---- hooks (all cheap no-ops for untraced rooms) ---------------------------
 
   function noteLoopFrame(room, { deltaMs, stepsThisFrame, sleepMs }) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s?.runs.size) return;
     s.loopDeltas.push(deltaMs);
     if (stepsThisFrame > s.maxSteps) s.maxSteps = stepsThisFrame;
@@ -372,11 +371,11 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   }
 
   function noteSnapshotEmit(room, snapshot) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s?.runs.size) return;
     const mono = Number(snapshot?.tMono);
     let bytes = 0;
-    try { bytes = Buffer.byteLength(JSON.stringify(snapshot)); } catch (_) {}
+    try { bytes = Buffer.byteLength(JSON.stringify(snapshot)); } catch (error) { logIgnored("network trace snapshot size", error); }
     s.snapCount++;
     s.snapBytes += bytes;
     if (Number.isFinite(mono) && s.lastSnapMono != null) {
@@ -388,7 +387,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   }
 
   function noteBotTick(room, controller, elapsedMs) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s?.runs.size) return;
     s.botTickMs.push(elapsedMs);
     if (!s.botSlowest || elapsedMs > s.botSlowest.ms) {
@@ -399,7 +398,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   }
 
   function noteInput(room, socketId) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s?.runs.size || !s.sockets.has(socketId)) return;
     const t = now();
     let entry = s.inputs.get(socketId);
@@ -410,7 +409,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   }
 
   function noteCorrection(room, player, payload) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s?.runs.size || !s.sockets.has(player?.socketId)) return;
     emitRoom(room, { kind: "correction", tag: s.sockets.get(player.socketId), id: payload.correctionId,
       reason: payload.reason, sequence: payload.sequence, errorPx: round(Number(payload.errorPx) || 0),
@@ -419,7 +418,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
 
   // One fixed step's phase timings: { bots: ms, attacks: ms, ... }.
   function notePhases(room, phases, totalMs) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s?.runs.size) return;
     for (const k in phases) {
       const v = phases[k];
@@ -431,18 +430,18 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
 
   // An attack request from a traced socket, after the view rewind was stamped.
   function noteAction(room, socketId, event, payload) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s?.runs.size || !s.sockets.has(socketId)) return;
     const id = payload?.id ?? payload?.requestId ?? payload?.clientRequestId ?? null;
     emitRoom(room, { kind: "action", tag: s.sockets.get(socketId), ev: event, type: String(payload?.type || event).slice(0, 40),
       id: id == null ? null : String(id).slice(0, 40), rewindMs: round(Number(payload?.viewRewindMs)),
-      viewMono: round(Number(payload?.viewMono)), sim: round(room._simulationMono), tick: room._tickId });
+      viewMono: round(Number(payload?.viewMono)), sim: round(room.simulationMono), tick: room.tickId });
   }
 
   // Damage applied (or refused) where a traced player is the attacker or the
   // target. `rewindMs` is how far back the target was tested.
   function noteHit(room, attacker, targetName, info = {}) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s?.runs.size) return;
     const tagOf = (p) => (p?.socketId ? s.sockets.get(p.socketId) : null) || null;
     const target = info.target || null;
@@ -451,7 +450,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     emitRoom(room, { kind: "hit", a: attacker?.name || null, aTag, aChar: attacker?.char_class || null,
       aBot: !!attacker?.isBot, v: targetName, vTag, type: info.type || null, dmg: info.dmg ?? null,
       id: info.id == null ? null : String(info.id).slice(0, 40), rewindMs: round(Number(info.rewindMs)),
-      ok: info.ok !== false, reason: info.reason || null, sim: round(room._simulationMono), tick: room._tickId,
+      ok: info.ok !== false, reason: info.reason || null, sim: round(room.simulationMono), tick: room.tickId,
       // How it was delivered and tested: runtime kind, request and projectile
       // ids, projectile sim age, the rewind asked for (before delivery caps),
       // the target where it was tested (rewound) and where it is now, and the
@@ -472,7 +471,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   // been tested against that victim for NEAR_IDLE_MS.
   const NEAR_IDLE_MS = 400, NEAR_MAX_GAP_PX = 80;
   function noteShotGap(room, { pid, attacker, target, gap, age, rewindMs, vTs, character }) {
-    const s = room._netTrace;
+    const s = room.netTrace;
     if (!s?.runs.size || pid == null || !Number.isFinite(gap) || gap > NEAR_MAX_GAP_PX) return;
     const vTag = target?.socketId ? s.sockets.get(target.socketId) : null;
     if (!vTag) return;
@@ -482,10 +481,10 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     if (!n) near.set(key, (n = { pid: String(pid).slice(0, 60), a: attacker?.name || null, aChar: character || attacker?.char_class || null,
       v: target.name, vTag, gap: Infinity, steps: 0 }));
     n.last = now(); n.steps++;
-    if (gap < n.gap) Object.assign(n, { gap, ageMs: age, vTs, rewindMs, sim: room._simulationMono });
+    if (gap < n.gap) Object.assign(n, { gap, ageMs: age, vTs, rewindMs, sim: room.simulationMono });
   }
   function flushNear(room, force = false) {
-    const near = room._netTrace?.near;
+    const near = room.netTrace?.near;
     if (!near?.size) return;
     const t = now();
     for (const [key, n] of near) {
@@ -535,7 +534,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     noteGlobal,
     markTracedUser,
     isTracedUser,
-    isRoomTraced: (room) => !!room?._netTrace?.runs.size,
+    isRoomTraced: (room) => !!room?.netTrace?.runs.size,
     flushAll,
     closeAll: () => { for (const run of [...runs.values()]) closeRun(run); },
   };

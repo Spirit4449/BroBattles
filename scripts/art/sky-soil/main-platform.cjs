@@ -8,6 +8,7 @@
 // soil. This draws the main island on the same 2-world-px grid and palette, with
 // extra texture: soil strata, embedded stone slabs, roots and vines.
 //
+// --install installs assets and updates the shipped map only.
 // The silhouette comes from the previous island art (so the grassy ledges stay
 // on the unchanged invisible collision rows), opened to drop plant overhangs and
 // stray specks. Output keeps the 1100x680 world frame of the old island layer.
@@ -280,13 +281,12 @@ async function build(maskFile, outFile, seed) {
   if (!INSTALL) return;
   const dest = path.join(ROOT, 'public/assets/sky-soil');
   for (const f of ['island-v4.webp', 'island-saved-v4.webp']) fs.copyFileSync(path.join(OUT, f), path.join(dest, f));
-  for (const [file, name] of [['src/shared/maps/2.json', 'island-v4.webp'], ['data/maps/2.json', 'island-saved-v4.webp']]) {
-    const full = path.join(ROOT, file), m = JSON.parse(fs.readFileSync(full, 'utf8'));
-    const base = m.scenery.layers.find(l => l.id === 'island-base');
-    base.url = '/assets/sky-soil/' + name;
-    base.scale = WORLD_W / (W * UP);
-    base.filter = 'nearest';
-    fs.writeFileSync(full, JSON.stringify(m, null, 2) + '\n');
-  }
+  const file = path.join(ROOT, 'src/shared/maps/2.json');
+  const map = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const base = map.scenery.layers.find(layer => layer.id === 'island-base');
+  base.url = '/assets/sky-soil/island-v4.webp';
+  base.scale = WORLD_W / (W * UP);
+  base.filter = 'nearest';
+  fs.writeFileSync(file, JSON.stringify(map, null, 2) + '\n');
   console.log('installed');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -1,6 +1,7 @@
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
 // Context menu on a lobby party slot (profile, friend, kick, promote).
-import { profileFetchJson } from "../ui";
-import { getPartyInteractionContext } from "./party.js";
+import { requestJson } from "../../lib/http.js";
+import { getPartyInteractionContext } from "./partyState.js";
 import { sonner } from "../../ui/sonner.js";
 
 let partySlotMenu = null;
@@ -76,13 +77,13 @@ async function handlePartyMemberAction(action, playerName, profilePopup) {
   if (!Number.isFinite(partyId) || partyId <= 0) return;
   const endpoint =
     action === "owner"
-      ? "/party/make-owner"
+      ? API_PATHS.PARTY_MAKE_OWNER
       : action === "kick"
-        ? "/party/kick"
+        ? API_PATHS.PARTY_KICK
         : "";
   if (!endpoint) return;
   try {
-    await profileFetchJson(endpoint, {
+    await requestJson(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ partyId, targetName: playerName }),

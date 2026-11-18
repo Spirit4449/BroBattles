@@ -2,7 +2,6 @@ import { bankBustMovementSounds } from "../../../../shared/physics/movementSound
 import PROP_FRAMES from "./propFrames.json";
 
 export function preloadBankBustAssets(scene, staticPath) {
-  scene._bankBustMovementAudio = true;
   for (const [key, file] of Object.entries(bankBustMovementSounds)) {
     scene.load.audio(`bank-bust-${key}`, `${staticPath}/bank-bust/movement/${file}.mp3`);
   }
@@ -27,37 +26,6 @@ export function preloadBankBustAssets(scene, staticPath) {
     `${staticPath}/bank-bust/center-crate-debris.webp`,
     { frameWidth: 36, frameHeight: 36 },
   );
-  loadImage("bank-bust-base", `${staticPath}/bank-bust/base.webp`);
-  loadImage("bank-bust-topcase", `${staticPath}/bank-bust/topcase.webp`);
-  loadImage(
-    "bank-bust-staircase",
-    `${staticPath}/bank-bust/staircase.webp`,
-  );
-  loadImage("bank-bust-middle", `${staticPath}/bank-bust/middle.webp`);
-  loadImage(
-    "bank-bust-middlebottom",
-    `${staticPath}/bank-bust/middlebottom.webp`,
-  );
-  loadImage(
-    "bank-bust-middledetail",
-    `${staticPath}/bank-bust/middledetail.webp`,
-  );
-  loadImage(
-    "bank-bust-longplatform",
-    `${staticPath}/bank-bust/longplatform.webp`,
-  );
-  loadImage(
-    "bank-bust-tallplatform",
-    `${staticPath}/bank-bust/tallplatform.webp`,
-  );
-  loadImage(
-    "bank-bust-bigblock",
-    `${staticPath}/bank-bust/bigblock.webp`,
-  );
-  loadImage("bank-bust-2x2", `${staticPath}/bank-bust/2x2square.webp`);
-  loadImage("bank-bust-3x3", `${staticPath}/bank-bust/3x3square.webp`);
-  loadImage("bank-bust-abyss", `${staticPath}/bank-bust/abyss.webp`);
-  loadImage("bank-bust-pipe", `${staticPath}/bank-bust/pipe.webp`);
   loadImage("bank-bust-bullet", `${staticPath}/bank-bust/bullet.webp`);
   // Objective props come in one file per owner rather than being tinted: a
   // multiply tint over dark steel washes it out, so the artwork marks the
@@ -78,7 +46,6 @@ export function preloadBankBustAssets(scene, staticPath) {
   }
   loadImage("bank-bust-wall-slot", `${staticPath}/bank-bust/wall-slot.webp`);
   loadImage("bank-bust-wall-tall-slot", `${staticPath}/bank-bust/wall-tall-slot.webp`);
-  loadImage("bank-bust-base-backdrop", `${staticPath}/bank-bust/base-backdrop.webp`);
 
   // Allow a map-specific turret shoot sound to be used if present (preferred),
   // otherwise fall back to the shared damage sound.
@@ -93,10 +60,6 @@ export function preloadBankBustAssets(scene, staticPath) {
   scene.load.audio(
     "sfx-bankbust-mine-collect",
     `${staticPath}/bank-bust/collect.mp3`,
-  );
-  scene.load.audio(
-    "sfx-bankbust-mine-claim",
-    `${staticPath}/ui-sound/ready.mp3`,
   );
   scene.load.audio(
     "sfx-bankbust-crate-incoming",

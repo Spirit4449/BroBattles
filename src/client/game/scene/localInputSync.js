@@ -1,3 +1,4 @@
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import { encodeWire } from "../../../shared/networkWire";
 import { quantizeMovementPosition } from '../../../shared/physics/movementPrecision';
 // gameScene/localInputSync.js
@@ -210,7 +211,7 @@ export function createLocalInputSync({
       for (const key of ['movementFxType', 'movementFxDirection',
         'movementFxWallSide', 'movementFxFallDistance', 'movementFxImpactVelocity']) delete packet[key];
     }
-    movementEmitter.emit("game:input", encodeWire(packet));
+    movementEmitter.emit(SOCKET_EVENTS.GAME_INPUT, encodeWire(packet));
     localMovementCorrector.recordSent(packetSequence, currentState.x, currentState.y);
     noteClientInputSent({
       now,

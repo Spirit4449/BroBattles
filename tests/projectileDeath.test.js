@@ -21,7 +21,7 @@ function fixture(t, character) {
       type: character === 'ozzy' ? 'ozzy-fireball-release' : 'gloop-slimeball-release',
       id: 'released', start: { x: 130, y: 192 }, angle: 0, direction: 1,
     });
-    return f.room._activeAttacks[0];
+    return f.room.activeAttacks[0];
   };
   return f;
 }
@@ -30,10 +30,10 @@ for (const character of ['ozzy', 'gloop']) {
   test(`${character}: released projectile moves and damages after actual owner death`, t => {
     const f = fixture(t, character), [owner, target] = f.players;
     const shot = f.release(), hp = target.health;
-    f.room._handlePlayerDeath(owner);
+    f.room.handlePlayerDeath(owner);
     f.step(3);
     assert.ok(shot.x > 130);
-    assert.ok(f.room._activeAttacks.includes(shot));
+    assert.ok(f.room.activeAttacks.includes(shot));
     // The projectile owns its collision position even if the owner moves on respawn.
     owner.x = 3000; owner._posHistory = [];
     const center = getAttackCollisionCenter(shot);
@@ -54,18 +54,18 @@ for (const character of ['ozzy', 'gloop']) {
   test(`${character}: surviving flight expires normally and disconnect still cancels it`, t => {
     const f = fixture(t, character), [owner, target] = f.players;
     target.loaded = false;
-    f.release();f.room._handlePlayerDeath(owner);f.step(1000);
-    assert.equal(f.room._activeAttacks.length, 0);
+    f.release();f.room.handlePlayerDeath(owner);f.step(1000);
+    assert.equal(f.room.activeAttacks.length, 0);
     owner.isAlive = true;
-    f.room._recentAttackInstances.clear();
+    f.room.recentAttackInstances.clear();
     f.release();owner.connected = false;f.step();
-    assert.equal(f.room._activeAttacks.length, 0);
+    assert.equal(f.room.activeAttacks.length, 0);
   });
 
   test(`${character}: dead client hits and unregistered server contacts cannot bypass death checks`, t => {
     const f = fixture(t, character), [owner, target] = f.players;
     const shot = f.release(), hp = target.health;
-    f.room._handlePlayerDeath(owner);
+    f.room.handlePlayerDeath(owner);
     const payload = { attacker: owner.name, target: target.name, attackType: shot.attackType, instanceId: shot.instanceId };
     f.room.handleHit(owner.participantId, payload);
     f.room.handleHit(owner.participantId, payload, { server: true, runtimeProjectile: shot });
@@ -81,12 +81,12 @@ for (const character of ['ozzy', 'gloop']) {
       type: character === 'ozzy' ? 'ozzy-fireball' : 'gloop-slimeball', id: 'windup', angle: 0,
     });
     assert.ok(callbacks.length);
-    f.room._handlePlayerDeath(owner);
+    f.room.handlePlayerDeath(owner);
     callbacks.forEach(fn => fn());
     // One tick ends anything attached to the dead caster (the ozzy's charge);
     // a released shot would survive it.
     f.step();
-    assert.equal(f.room._activeAttacks?.length || 0, 0);
+    assert.equal(f.room.activeAttacks?.length || 0, 0);
   });
 }
 
@@ -94,8 +94,8 @@ test('player-attached melee and hook attacks still stop on death', t => {
   for (const [character, type] of [['draven', 'draven-splash'], ['thorg', 'thorg-fall'], ['gloop', 'gloop-hook-release']]) {
     const f = fixture(t, character), [owner, target] = f.players, hp = target.health;
     assert.equal(registerAttackFromAction(f.room, owner, { type, id: type, angle: 0 }), true, type);
-    f.room._handlePlayerDeath(owner);f.step();
-    assert.equal(f.room._activeAttacks.length, 0, type);
+    f.room.handlePlayerDeath(owner);f.step();
+    assert.equal(f.room.activeAttacks.length, 0, type);
     assert.equal(target.health, hp, type);
   }
 });

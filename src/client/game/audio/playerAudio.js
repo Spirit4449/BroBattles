@@ -1,3 +1,4 @@
+import { smoothstep } from "../../../shared/math.js";
 // One listener for every player-created sound. The watched fighter becomes the
 // listener while spectating, so their own actions keep the local mix level.
 const NEARBY_REMOTE_GAIN = 0.9;
@@ -5,11 +6,6 @@ const DISTANCE_SCALE_PX = 850;
 const OFFSCREEN_FADE_PX = 360;
 
 const finitePoint = point => Number.isFinite(point?.x) && Number.isFinite(point?.y);
-const clamp01 = value => Math.max(0, Math.min(1, value));
-const smoothstep = value => {
-  const t = clamp01(value);
-  return t * t * (3 - 2 * t);
-};
 
 export function playerAudioListener(scene) {
   if (scene?._spectatorModeActive) {

@@ -1,9 +1,16 @@
-const crypto = require('node:crypto');
-const { sendEmail } = require('./emailService');
+const { getConfig } = require("../../config");
+const crypto = require("node:crypto");
+const { sendEmail, resendRequest } = require("./resendClient");
 
-function baseUrl() { return String(process.env.PUBLIC_BASE_URL || '').replace(/\/$/, ''); }
-function postalAddress() { return String(process.env.MARKETING_POSTAL_ADDRESS || '').trim(); }
-function marketingApiKey() { return process.env.RESEND_MARKETING_API_KEY || ''; }
+function baseUrl() {
+  return String(getConfig().publicBaseUrl || "").replace(/\/$/, "");
+}
+function postalAddress() {
+  return getConfig().marketing.postalAddress;
+}
+function marketingApiKey() {
+  return getConfig().marketing.apiKey;
+}
 const { escapeHtml: escape } = require("../../../shared/site/html.cjs");
 
 function welcomeEmail(email, unsubscribeId) {
@@ -12,7 +19,7 @@ function welcomeEmail(email, unsubscribeId) {
   const logoUrl = `${baseUrl()}/assets/logos/wordmark.png`;
   const footer = `You are receiving this because you opted in to Bro Battles updates. Unsubscribe: ${unsubscribe}\n${postalAddress()}`;
   return {
-    subject: 'Welcome to Bro Battles',
+    subject: "Welcome to Bro Battles",
     text: `Welcome to Bro Battles!\n\nYour account is ready. Pick a Bro, jump into a match, and make your first battle count.\n\n${footer}`,
     html: `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>Welcome to Bro Battles</title></head>
@@ -49,70 +56,164 @@ function welcomeEmail(email, unsubscribeId) {
     </td></tr>
   </table>
 </body></html>`,
-    headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+    headers: {
+      "List-Unsubscribe": `<${unsubscribe}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
   };
 }
 
 async function setSubscription(q, userId, email, subscribed) {
   const unsubscribeId = crypto.randomUUID();
-  const [existing] = await q('SELECT email FROM email_marketing WHERE user_id=? FOR UPDATE', [userId]);
+  const [existing] = await q("SELECT email FROM email_marketing WHERE user_id=? FOR UPDATE", [
+    userId,
+  ]);
   if (existing) {
-    await q(`UPDATE email_marketing SET email=?,subscribed=?,unsubscribe_id=IF(?,unsubscribe_id,?),
+    await q(
+      `UPDATE email_marketing SET email=?,subscribed=?,unsubscribe_id=IF(?,unsubscribe_id,?),
       consent_at=IF(?,NOW(3),consent_at),unsubscribed_at=IF(?,NULL,NOW(3)),updated_at=NOW(3) WHERE user_id=?`,
-      [email,!!subscribed,existing.email === email,unsubscribeId,!!subscribed,!!subscribed,userId]);
+      [
+        email,
+        !!subscribed,
+        existing.email === email,
+        unsubscribeId,
+        !!subscribed,
+        !!subscribed,
+        userId,
+      ],
+    );
   } else {
     // A collision on the unique email must fail, never update another account's preferences.
-    await q(`INSERT INTO email_marketing (user_id,email,subscribed,unsubscribe_id,consent_at,unsubscribed_at,updated_at)
+    await q(
+      `INSERT INTO email_marketing (user_id,email,subscribed,unsubscribe_id,consent_at,unsubscribed_at,updated_at)
       VALUES (?,?,?,?,IF(?,NOW(3),NULL),IF(?,NULL,NOW(3)),NOW(3))`,
-      [userId,email,!!subscribed,unsubscribeId,!!subscribed,!!subscribed]);
+      [userId, email, !!subscribed, unsubscribeId, !!subscribed, !!subscribed],
+    );
   }
-  await q(`INSERT INTO marketing_contact_sync (email,subscribed,next_attempt_at) VALUES (?,?,NOW(3))
-    ON DUPLICATE KEY UPDATE subscribed=VALUES(subscribed),synced_at=NULL,next_attempt_at=NOW(3),attempts=0`,[email,!!subscribed]);
+  await q(
+    `INSERT INTO marketing_contact_sync (email,subscribed,next_attempt_at) VALUES (?,?,NOW(3))
+    ON DUPLICATE KEY UPDATE subscribed=VALUES(subscribed),synced_at=NULL,next_attempt_at=NOW(3),attempts=0`,
+    [email, !!subscribed],
+  );
 }
 
-async function readSubscription(q, userId) {
-  const [row]=await q('SELECT email,subscribed FROM email_marketing WHERE user_id=? FOR UPDATE',[userId]);
+async function readSubscription(db, userId) {
+  const q = db.runQuery.bind(db);
+  const [row] = await q("SELECT email,subscribed FROM email_marketing WHERE user_id=?", [userId]);
   if (!row?.subscribed || !marketingApiKey()) return !!row?.subscribed;
-  const [sync]=await q('SELECT synced_at FROM marketing_contact_sync WHERE email=?',[row.email]);
-  // An explicit local preference change takes precedence until it reaches Resend.
+  const [sync] = await q("SELECT synced_at FROM marketing_contact_sync WHERE email=?", [row.email]);
   if (!sync?.synced_at) return true;
-  const response=await fetch(`https://api.resend.com/contacts/${encodeURIComponent(row.email)}`,{
-    headers:{Authorization:`Bearer ${marketingApiKey()}`},signal:AbortSignal.timeout(5000)});
-  if (!response.ok) throw new Error('Unable to check email preferences');
-  const contact=await response.json();
+  const response = await resendRequest(`/contacts/${encodeURIComponent(row.email)}`, {
+    headers: { Authorization: `Bearer ${marketingApiKey()}` },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) throw new Error("Unable to check email preferences");
+  const contact = await response.json();
   if (contact.unsubscribed !== true) return true;
-  await q('UPDATE email_marketing SET subscribed=FALSE,unsubscribed_at=NOW(3),updated_at=NOW(3) WHERE user_id=?',[userId]);
-  await q('UPDATE marketing_contact_sync SET subscribed=FALSE WHERE email=?',[row.email]);
-  await q('UPDATE marketing_jobs SET cancelled_at=NOW(3) WHERE user_id=? AND sent_at IS NULL',[userId]);
-  return false;
+  // A preference changed during the provider request takes precedence.
+  return db.withTransaction(async (_conn, write) => {
+    const [current] = await write(
+      "SELECT email,subscribed FROM email_marketing WHERE user_id=? FOR UPDATE",
+      [userId],
+    );
+    if (!current?.subscribed || current.email !== row.email) return !!current?.subscribed;
+    const [latest] = await write(
+      "SELECT synced_at FROM marketing_contact_sync WHERE email=? FOR UPDATE",
+      [current.email],
+    );
+    if (
+      !latest?.synced_at ||
+      Number(new Date(latest.synced_at)) !== Number(new Date(sync.synced_at))
+    )
+      return true;
+    await write(
+      "UPDATE email_marketing SET subscribed=FALSE,unsubscribed_at=NOW(3),updated_at=NOW(3) WHERE user_id=?",
+      [userId],
+    );
+    await write("UPDATE marketing_contact_sync SET subscribed=FALSE WHERE email=?", [row.email]);
+    await write(
+      "UPDATE marketing_jobs SET cancelled_at=NOW(3) WHERE user_id=? AND sent_at IS NULL",
+      [userId],
+    );
+    return false;
+  });
 }
 
-function startMarketingWorker(db) {
-  let running=false;
-  const tick=async()=>{
-    if(running) return;
-    running=true;
-    try {
-      if (marketingApiKey()) await db.withTransaction(async(_conn,q)=>{
-        const [contact]=await q('SELECT * FROM marketing_contact_sync WHERE synced_at IS NULL AND next_attempt_at<=NOW(3) ORDER BY email LIMIT 1 FOR UPDATE SKIP LOCKED');
-        if (!contact) return;
-        const options={headers:{Authorization:`Bearer ${marketingApiKey()}`,'Content-Type':'application/json'},body:JSON.stringify({email:contact.email,unsubscribed:!contact.subscribed}),signal:AbortSignal.timeout(10000)};
-        let response=await fetch(`https://api.resend.com/contacts/${encodeURIComponent(contact.email)}`,{...options,method:'PATCH'});
-        if(response.status===404) response=await fetch('https://api.resend.com/contacts',{...options,method:'POST',signal:AbortSignal.timeout(10000)});
-        if (response.ok) await q('UPDATE marketing_contact_sync SET synced_at=NOW(3),attempts=0 WHERE email=?',[contact.email]);
-        else await q('UPDATE marketing_contact_sync SET attempts=attempts+1,next_attempt_at=DATE_ADD(NOW(3),INTERVAL 30 MINUTE) WHERE email=?',[contact.email]);
-      });
-      if (!postalAddress()) return;
-      await db.withTransaction(async(_conn,q)=>{
-      const [job]=await q(`SELECT j.*,m.unsubscribe_id FROM marketing_jobs j JOIN email_marketing m ON m.user_id=j.user_id AND m.email=j.email WHERE j.sent_at IS NULL AND j.cancelled_at IS NULL AND j.attempts<5 AND j.due_at<=NOW(3) AND m.subscribed=1 ORDER BY j.id LIMIT 1 FOR UPDATE SKIP LOCKED`);
-      if(!job) return;
-      if(!await readSubscription(q,job.user_id))return;
-      try { await sendEmail(job.email,welcomeEmail(job.email,job.unsubscribe_id),`marketing-job-${job.id}`); await q('UPDATE marketing_jobs SET sent_at=NOW(3) WHERE id=?',[job.id]); }
-      catch(error){ await q('UPDATE marketing_jobs SET attempts=attempts+1,last_error=?,due_at=DATE_ADD(NOW(3),INTERVAL 10 MINUTE) WHERE id=?',[String(error.message).slice(0,120),job.id]); }
-      });
-    } catch(error) { console.warn('[marketing] Worker failed:',error.code||error.message); }
-    finally { running=false; }
+async function syncMarketingContact(db) {
+  if (!marketingApiKey()) return;
+  const contact = await db.withTransaction(async (_conn, q) => {
+    const [row] = await q(
+      "SELECT * FROM marketing_contact_sync WHERE synced_at IS NULL AND next_attempt_at<=NOW(3) ORDER BY email LIMIT 1 FOR UPDATE SKIP LOCKED",
+    );
+    if (row)
+      await q(
+        "UPDATE marketing_contact_sync SET next_attempt_at=DATE_ADD(NOW(3),INTERVAL 30 MINUTE),attempts=attempts+1 WHERE email=?",
+        [row.email],
+      );
+    return row;
+  });
+  if (!contact) return;
+  const options = {
+    headers: { Authorization: `Bearer ${marketingApiKey()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: contact.email, unsubscribed: !contact.subscribed }),
   };
-  const timer=setInterval(tick,15000); timer.unref(); return timer;
+  let response = await resendRequest(`/contacts/${encodeURIComponent(contact.email)}`, {
+    ...options,
+    method: "PATCH",
+    signal: AbortSignal.timeout(10000),
+  });
+  if (response.status === 404)
+    response = await resendRequest("/contacts", {
+      ...options,
+      method: "POST",
+      signal: AbortSignal.timeout(10000),
+    });
+  if (!response.ok) throw new Error("Marketing contact sync failed: " + response.status);
+  await db.runQuery(
+    "UPDATE marketing_contact_sync SET synced_at=NOW(3),attempts=0 WHERE email=? AND subscribed=? AND attempts=?",
+    [contact.email, contact.subscribed, Number(contact.attempts) + 1],
+  );
 }
-module.exports={setSubscription,readSubscription,startMarketingWorker,postalAddress,welcomeEmail};
+
+async function deliverMarketingEmail(db) {
+  if (!postalAddress() || !getConfig().email.apiKey) return;
+  const job = await db.withTransaction(async (_conn, q) => {
+    const [row] = await q(
+      `SELECT j.*,m.unsubscribe_id FROM marketing_jobs j JOIN email_marketing m ON m.user_id=j.user_id AND m.email=j.email WHERE j.sent_at IS NULL AND j.cancelled_at IS NULL AND j.attempts<5 AND j.due_at<=NOW(3) AND m.subscribed=1 ORDER BY j.id LIMIT 1 FOR UPDATE SKIP LOCKED`,
+    );
+    if (row)
+      await q("UPDATE marketing_jobs SET due_at=DATE_ADD(NOW(3),INTERVAL 10 MINUTE) WHERE id=?", [
+        row.id,
+      ]);
+    return row;
+  });
+  if (!job) return;
+  try {
+    if (!(await readSubscription(db, job.user_id))) return;
+    const [eligible] = await db.runQuery(
+      "SELECT j.id FROM marketing_jobs j JOIN email_marketing m ON m.user_id=j.user_id AND m.email=j.email WHERE j.id=? AND j.cancelled_at IS NULL AND j.sent_at IS NULL AND m.subscribed=1",
+      [job.id],
+    );
+    if (!eligible) return;
+    await sendEmail(
+      job.email,
+      welcomeEmail(job.email, job.unsubscribe_id),
+      `marketing-job-${job.id}`,
+    );
+  } catch (error) {
+    await db.runQuery(
+      "UPDATE marketing_jobs SET attempts=attempts+1,last_error=? WHERE id=? AND sent_at IS NULL",
+      [String(error.message).slice(0, 120), job.id],
+    );
+    throw error;
+  }
+  await db.runQuery("UPDATE marketing_jobs SET sent_at=NOW(3) WHERE id=?", [job.id]);
+}
+
+module.exports = {
+  setSubscription,
+  readSubscription,
+  syncMarketingContact,
+  deliverMarketingEmail,
+  welcomeEmail,
+};

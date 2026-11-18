@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from "../../ui/domMotion";
 import physics from '../../../shared/physics/movementPhysics.json';
 import { dashDirection } from '../../../shared/physics/dash';
 
@@ -178,8 +179,7 @@ export function spawnDashEffect(scene, sprite, x, y) {
 
 // Local screen feedback only; remote dashes keep their world-space trails.
 function spawnDashScreenEffect(scene, direction) {
-  if (typeof document === 'undefined' || typeof window === 'undefined' ||
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  if (typeof document === 'undefined' || typeof window === 'undefined' || prefersReducedMotion()) return;
   const root = document.createElement('div');
   root.className = 'bb-dash-speed-lines';
   root.setAttribute('aria-hidden', 'true');

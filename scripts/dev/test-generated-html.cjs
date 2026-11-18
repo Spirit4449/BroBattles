@@ -1,6 +1,6 @@
-// Requires Playwright; NODE_PATH may point at an existing installation.
+// Uses installed Google Chrome.
 // CHROME_EXECUTABLE can select an installed Chromium/Chrome binary.
-const { chromium } = require("playwright");
+const { chromium } = require("playwright-core");
 const webpack = require("webpack");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -38,9 +38,9 @@ async function main() {
         res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'font/woff2');
         return res.end(fs.readFileSync(path.join(root, 'public', req.url)));
       }
-      if (req.url === '/styles/ui-system.css' || req.url === '/styles/game.css') {
+      if (/^\/styles\/(ui-system|ui-components|profile-chrome|party-chrome|game|battle-results)\.css$/.test(req.url)) {
         res.setHeader('Content-Type', 'text/css');
-        return res.end(fs.readFileSync(path.join(root, 'public', req.url)));
+        return res.end(fs.readFileSync(path.join(root, 'src/client', req.url)));
       }
       if (/^\/assets\/player-cards\/[a-z0-9-]+\/[a-z0-9-]+\.(webm|webp|mov)$/.test(req.url)) {
         const file = path.join(root, 'public', req.url);
@@ -60,13 +60,13 @@ async function main() {
       }
       if (req.url !== "/") { res.statusCode = 404; return res.end(); }
       res.setHeader("Content-Type", "text/html");
-      res.end('<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/styles/ui-system.css"><style>.hidden,.is-hidden{display:none!important}.character-select-popup,.character-details-popup,.bb-chat-viewers-card{padding:20px}button{min-width:30px;min-height:30px}</style></head><body><button id="trigger">Open</button><button id="outside">Background</button><script src="/test.js"></script></body></html>');
+      res.end('<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/styles/ui-system.css"><link rel="stylesheet" href="/styles/ui-components.css"><style>.hidden,.is-hidden{display:none!important}.character-select-popup,.character-details-popup,.bb-chat-viewers-card{padding:20px}button{min-width:30px;min-height:30px}</style></head><body><button id="trigger">Open</button><button id="outside">Background</button><script src="/test.js"></script></body></html>');
     });
     await new Promise((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", resolve);
     });
-    browser = await chromium.launch({ headless: true, ...(process.env.CHROME_EXECUTABLE ? { executablePath: process.env.CHROME_EXECUTABLE } : {}) });
+    browser = await chromium.launch({ headless: true, ...(process.env.CHROME_EXECUTABLE ? { executablePath: process.env.CHROME_EXECUTABLE } : { channel: 'chrome' }) });
     const page = await browser.newPage();
     // Make playback checks independent of Chrome's estimated host connection.
     // Slow/data-saver policy is exercised separately in preloader.test.js.
@@ -109,9 +109,15 @@ async function main() {
     assert.deepEqual(errors, []);
     console.log(`Generated HTML browser checks passed: ${result.join(", ")}`);
   } finally {
-    await browser?.close();
-    if (server?.listening) await new Promise(resolve => server.close(resolve));
-    fs.rmSync(output, { recursive: true, force: true });
+    try {
+      await browser?.close();
+    } finally {
+      try {
+        if (server?.listening) await new Promise(resolve => server.close(resolve));
+      } finally {
+        fs.rmSync(output, { recursive: true, force: true });
+      }
+    }
   }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

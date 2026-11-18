@@ -1,71 +1,30 @@
+import { formatBadgeCount } from "../chat/badges.mjs";
+import { CHAT_BODY_MAX, nameKey } from "../../shared/social/textRules.js";
+import { SOCKET_EVENTS } from "../../shared/net/socketEvents.js";
 import { createChatScrollController } from "../chat/scrollController.mjs";
 import { createViewersPopup } from "../chat/viewersPopup.js";
-import {
-  bindComposerAutosize,
-  bindChatProfile,
-  buildAvatarUrl,
-  escapeHtml,
-  postJson,
-  renderPartyChatMessage,
-  showChatRequestError,
-} from "../chat/presentation";
+import { bindComposerAutosize } from "../chat/presentation";
 import { sonner } from "../ui/sonner.js";
 import { showUiConfirm } from "../ui/uiConfirm.js";
 import { formatOnlineCount, friendPresenceLabel, friendPresenceTitle, isFriendOnline } from "./friendPresence.mjs";
 import { pixelSprite } from "./pixelArt.js";
-import { PRIVACY_FIELDS, normalizePrivacy, onPrivacyChange, privacyControl, savePrivacy } from "./privacyClient.js";
+import { normalizePrivacy, onPrivacyChange } from "./privacyClient.js";
+import { friendsApi, showFriendError } from "./friendsApi.js";
+import { createFriendsRender } from "./friendsRender.js";
+import { createFriendConversation } from "./friendConversation.js";
 
-const FRIEND_REQUESTS_FIELD = PRIVACY_FIELDS.find((field) => field.key === "friendRequests");
-
-const TYPING_STOP_MS = 1500;
-const TYPING_STALE_MS = 4000;
-const STATUS_ORDER = { online: 0, "End Screen": 1, "In Battle": 2, offline: 3 };
-// Friends who log in close together are announced as one batch.
 const ONLINE_BATCH_MS = 4000;
-
-// Never show raw network/server wording to players.
-function showFriendError(error, title) {
-  showChatRequestError(error, title);
-}
-
-function formatCooldown(ms) {
-  const seconds = Math.max(1, Math.ceil(ms / 1000));
-  return seconds < 60 ? `${seconds}s` : `${Math.ceil(seconds / 60)}m`;
-}
-
-async function getJson(url) {
-  const response = await fetch(url, { credentials: "same-origin" });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data?.error || "Something went wrong. Please try again.");
-    error.statusCode = response.status;
-    error.payload = data;
-    throw error;
-  }
-  return data;
-}
-
-function statusLabel(status) {
-  if (status === "In Battle") return "In Battle";
-  if (status === "End Screen") return "Finishing match";
-  return status === "online" ? "Online" : "Offline";
-}
-
-function statusClass(status) {
-  if (status === "online") return "is-online";
-  if (status === "In Battle" || status === "End Screen") return "is-battle";
-  return "is-offline";
-}
 
 export function createFriendsPanelController({
   socket,
   getPartyContext,
   onOpenProfile,
   onOpen,
+  waitForAccount = false,
 } = {}) {
   const state = {
     isOpen: false,
-    guest: false,
+    guest: waitForAccount ? null : false,
     loaded: false,
     view: "friends",
     me: null,
@@ -84,9 +43,6 @@ export function createFriendsPanelController({
     sending: false,
     friendTyping: false,
     friendTypingTimer: null,
-    localTyping: false,
-    localTypingTimer: null,
-    lastTypingEmitAt: 0,
     inviteCooldowns: {},
     // Friends who reacted to my messages while that chat wasn't in view.
     reactionFrom: new Set(),
@@ -129,7 +85,7 @@ export function createFriendsPanelController({
       <div class="bb-chat-composer">
         <button type="button" class="bb-chat-jump-latest" hidden aria-label="Jump to latest messages"></button>
         <div class="bb-chat-input-row">
-          <textarea class="bb-chat-textarea" rows="1" maxlength="500" placeholder="Write a message..."></textarea>
+          <textarea class="bb-chat-textarea" rows="1" maxlength="${CHAT_BODY_MAX}" placeholder="Write a message..."></textarea>
           <button type="button" class="bb-chat-send">Send</button>
         </div>
       </div>
@@ -219,17 +175,17 @@ export function createFriendsPanelController({
   }
 
   function setCount(el, count) {
-    el.textContent = count > 99 ? "99+" : String(count);
+    el.textContent = formatBadgeCount(count);
     el.hidden = count === 0;
   }
 
   function syncBadge() {
     // Red = unread messages, yellow = friend requests waiting on me.
     const unread = totalUnread();
-    ui.badge.textContent = unread > 99 ? "99+" : String(unread);
+    ui.badge.textContent = formatBadgeCount(unread);
     ui.badge.classList.toggle("hidden", unread === 0);
     const requests = state.incoming.length;
-    ui.requestBadge.textContent = requests > 99 ? "99+" : String(requests);
+    ui.requestBadge.textContent = formatBadgeCount(requests);
     ui.requestBadge.classList.toggle("hidden", requests === 0);
     ui.requestBadge.title = requests === 1 ? "1 friend request" : `${requests} friend requests`;
     // Per-tab counts show where the launcher badge is coming from.
@@ -258,9 +214,9 @@ export function createFriendsPanelController({
   // ---------- data ----------
   async function refresh() {
     // Signing up reloads the page, so a guest stays a guest for this session.
-    if (state.guest) return;
+    if (state.guest !== false) return;
     try {
-      const data = await getJson("/friends");
+      const data = await friendsApi.load();
       state.guest = false;
       state.me = data.me || null;
       state.friendCode = data.friendCode || "";
@@ -282,11 +238,11 @@ export function createFriendsPanelController({
   }
 
   async function loadSuggestions() {
-    if (state.guest) return;
+    if (state.guest !== false) return;
     state.suggestionsLoading = true;
     render();
     try {
-      const data = await getJson("/friends/suggestions");
+      const data = await friendsApi.suggestions();
       state.suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
     } catch (error) {
       state.suggestions = [];
@@ -295,9 +251,9 @@ export function createFriendsPanelController({
     if (state.view === "add") render();
   }
 
-  async function act(url, body, errorTitle) {
+  async function act(action, body, errorTitle) {
     try {
-      return await postJson(url, body);
+      return await action(body);
     } catch (error) {
       showFriendError(error, errorTitle);
       return null;
@@ -305,7 +261,7 @@ export function createFriendsPanelController({
   }
 
   async function sendRequest(target) {
-    const result = await act("/friends/request", target, "Could not send friend request");
+    const result = await act(friendsApi.request, target, "Could not send friend request");
     if (!result) return null;
     const name = result.user?.name || "player";
     sonner(
@@ -369,597 +325,38 @@ export function createFriendsPanelController({
     }
   }
 
-  // ---------- rendering ----------
-  function iconButton(sprite, label, className, onClick) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = `bb-friends-icon-btn ${className || ""}`.trim();
-    b.innerHTML = pixelSprite(sprite, 2);
-    b.title = label;
-    b.setAttribute("aria-label", label);
-    b.addEventListener("click", (event) => {
-      event.stopPropagation();
-      onClick(event);
-    });
-    return b;
-  }
-
-  function textButton(label, className, onClick) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = `bb-friends-btn ${className || ""}`.trim();
-    b.textContent = label;
-    b.addEventListener("click", (event) => {
-      event.stopPropagation();
-      onClick(event);
-    });
-    return b;
-  }
-
   // Clicking the avatar or the name opens the player's profile.
   // With onClick the whole card is the target and only the avatar opens the profile.
-  function userRow(user, { subtitle, actions = [], dot = true, subtitleClass = "", onClick = null } = {}) {
-    const row = document.createElement("div");
-    row.className = "bb-friends-row";
-    if (onClick) {
-      row.classList.add("is-clickable");
-      row.tabIndex = 0;
-      row.setAttribute("role", "button");
-      row.addEventListener("click", () => onClick());
-      row.addEventListener("keydown", (event) => {
-        if (event.target !== row || (event.key !== "Enter" && event.key !== " ")) return;
-        event.preventDefault();
-        onClick();
-      });
-    }
-    const av = document.createElement("div");
-    av.className = `bb-friends-avatar-wrap ${dot ? statusClass(user.status) : ""}`;
-    const img = document.createElement("img");
-    img.className = "bb-friends-avatar";
-    img.src = buildAvatarUrl(user.charClass, user.profileIconId);
-    img.alt = "";
-    img.loading = "lazy";
-    av.appendChild(img);
-    bindChatProfile(av, user.name, openProfile);
-    const text = document.createElement("div");
-    text.className = "bb-friends-text";
-    text.innerHTML = `<div class="bb-friends-name">${escapeHtml(user.name)}</div><div class="bb-friends-sub ${subtitleClass}">${escapeHtml(subtitle ?? statusLabel(user.status))}</div>`;
-    if (subtitle === undefined) {
-      const label = text.querySelector(".bb-friends-sub");
-      label.dataset.friendPresenceId = String(user.userId);
-      label.textContent = friendPresenceLabel(user);
-      label.title = friendPresenceTitle(user);
-    }
-    if (!onClick) bindChatProfile(text.querySelector(".bb-friends-name"), user.name, openProfile);
-    const actionsEl = document.createElement("div");
-    actionsEl.className = "bb-friends-actions";
-    for (const action of actions) if (action) actionsEl.appendChild(action);
-    row.append(av, text, actionsEl);
-    return row;
-  }
-
-  function section(title) {
-    const h = document.createElement("h3");
-    h.className = "bb-friends-section";
-    h.textContent = title;
-    return h;
-  }
-
-  function emptyArt(art, title, text) {
-    const wrap = document.createElement("div");
-    wrap.className = "bb-friends-empty-art";
-    wrap.innerHTML = `<div class="bb-friends-empty-sprite">${art}</div><div class="bb-friends-empty-title">${escapeHtml(title)}</div>${text ? `<p>${escapeHtml(text)}</p>` : ""}`;
-    return wrap;
-  }
-
-  function loading() {
-    const p = document.createElement("p");
-    p.className = "bb-friends-loading";
-    p.textContent = "Loading";
-    return p;
-  }
-
-  function renderGuest() {
-    const wrap = emptyArt(
-      `${pixelSprite("heart", 4, "bb-friends-float")}${pixelSprite("friends", 6)}`,
-      "Friends",
-      "Create an account to add friends, chat, and invite them to your party.",
-    );
-    const link = document.createElement("a");
-    link.className = "bb-friends-btn is-primary";
-    link.href = "/signup";
-    link.textContent = "Sign up";
-    wrap.appendChild(link);
-    ui.content.appendChild(wrap);
-  }
-
-  function setInviteCooldown(friendId, untilMs) {
-    const until = Number(untilMs) || 0;
-    if (until <= Date.now()) {
-      delete state.inviteCooldowns[friendId];
-      return;
-    }
-    state.inviteCooldowns[friendId] = until;
-  }
-
-  async function inviteFriend(friend) {
-    try {
-      const result = await postJson("/friends/party-invite", { friendId: friend.userId });
-      setInviteCooldown(friend.userId, result.cooldownUntilMs);
-      sonner(null, `You invited ${friend.name} to your party.`, "OK", undefined, { tone: "success", duration: 3000 });
-    } catch (error) {
-      setInviteCooldown(friend.userId, error?.payload?.cooldownUntilMs);
-      showFriendError(error, "Could not invite friend");
-    }
-    render();
-  }
 
   // Disabled with a countdown while the server's invite cooldown runs.
-  function inviteButton(friend) {
-    const remaining = (state.inviteCooldowns[friend.userId] || 0) - Date.now();
-    const coolingDown = remaining > 0;
-    const btn = iconButton(
-      "invite",
-      coolingDown ? `You can invite ${friend.name} again in ${formatCooldown(remaining)}` : `Invite ${friend.name} to your party`,
-      "is-invite",
-      async () => {
-        btn.disabled = true;
-        await inviteFriend(friend);
-      },
-    );
-    if (coolingDown) {
-      btn.disabled = true;
-      btn.classList.add("is-cooling");
-      const timer = document.createElement("span");
-      timer.className = "bb-friends-cooldown";
-      timer.textContent = formatCooldown(remaining);
-      btn.appendChild(timer);
-      scheduleCooldownTick();
-    }
-    return btn;
-  }
-
-  let cooldownTick = 0;
-  function scheduleCooldownTick() {
-    if (cooldownTick) return;
-    cooldownTick = window.setTimeout(() => {
-      cooldownTick = 0;
-      if (state.isOpen && state.view === "friends") render();
-    }, 1000);
-  }
-
-  function renderFriends() {
-    if (!state.friends.length) {
-      const wrap = emptyArt(
-        `${pixelSprite("heart", 4, "bb-friends-float")}${pixelSprite("friends", 6)}`,
-        "No friends yet",
-        "Share your friend code or add players you've battled with.",
-      );
-      wrap.appendChild(textButton("Add friends", "is-primary", () => setView("add")));
-      ui.content.appendChild(wrap);
-      return;
-    }
-    const sorted = [...state.friends].sort(
-      (a, b) => (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3) || a.name.localeCompare(b.name),
-    );
-    const online = sorted.filter((f) => f.status !== "offline");
-    const offline = sorted.filter((f) => f.status === "offline");
-    const inParty = currentPartyId() > 0;
-    const addRows = (list) => {
-      for (const friend of list) {
-        const unread = Number(state.unread[friend.userId]) || 0;
-        const indicators = document.createElement("div");
-        indicators.className = "bb-friends-indicators";
-        if (state.reactionFrom.has(friend.userId)) {
-          const heart = document.createElement("span");
-          heart.className = "bb-friends-heart";
-          heart.title = `${friend.name} reacted to your message`;
-          heart.innerHTML = `<img src="/assets/heart-filled.svg" alt="" width="10" height="10" />`;
-          indicators.appendChild(heart);
-        }
-        if (unread) {
-          const dot = document.createElement("span");
-          dot.className = "bb-friends-unread";
-          dot.textContent = unread > 9 ? "9+" : String(unread);
-          indicators.appendChild(dot);
-        }
-        const invite = inParty && friend.status === "online" && friend.acceptsPartyInvites !== false
-          ? inviteButton(friend)
-          : null;
-        const row = userRow(friend, {
-          subtitleClass: statusClass(friend.status),
-          actions: [indicators.childElementCount ? indicators : null, invite],
-          onClick: () => setView("chat", friend.userId),
-        });
-        row.setAttribute("aria-label", `Chat with ${friend.name}`);
-        ui.content.appendChild(row);
-      }
-    };
-    if (online.length) {
-      ui.content.appendChild(section(`Online ${online.length}`));
-      addRows(online);
-    }
-    if (offline.length) {
-      ui.content.appendChild(section(`Offline ${offline.length}`));
-      addRows(offline);
-    }
-  }
-
-  function renderRequests() {
-    if (!state.incoming.length && !state.outgoing.length) {
-      ui.content.appendChild(emptyArt(
-        pixelSprite("envelope", 5, "bb-friends-float"),
-        "No requests",
-        "Friend requests you send or receive show up here.",
-      ));
-      return;
-    }
-    for (const req of state.incoming) {
-      ui.content.appendChild(userRow(req.user, {
-        subtitle: "Wants to be friends",
-        subtitleClass: "is-incoming",
-        dot: false,
-        actions: [
-          iconButton("check", `Accept ${req.user.name}`, "is-accept", async (event) => {
-            event.currentTarget.disabled = true;
-            if (await act("/friends/respond", { requestId: req.requestId, accept: true }, "Could not update friend request")) await refresh();
-          }),
-          iconButton("cross", `Decline ${req.user.name}`, "is-danger", async (event) => {
-            event.currentTarget.disabled = true;
-            if (await act("/friends/respond", { requestId: req.requestId, accept: false }, "Could not update friend request")) await refresh();
-          }),
-        ],
-      }));
-    }
-    // Sent requests: status reads under the name; one quiet Cancel action.
-    for (const req of state.outgoing) {
-      ui.content.appendChild(userRow(req.user, {
-        subtitle: "Pending",
-        subtitleClass: "is-pending",
-        dot: false,
-        actions: [
-          textButton("Cancel", "is-quiet", async (event) => {
-            event.currentTarget.disabled = true;
-            if (await act("/friends/cancel", { requestId: req.requestId }, "Could not update friend request")) await refresh();
-          }),
-        ],
-      }));
-    }
-  }
-
-  function renderAdd() {
-    const code = document.createElement("div");
-    code.className = "bb-friends-code";
-    code.innerHTML = `<div><div class="bb-friends-sub">Your friend code</div><div class="bb-friends-code-value">${escapeHtml(state.friendCode || "...")}</div></div>`;
-    code.appendChild(textButton("Copy", "", async (event) => {
-      const btn = event.currentTarget;
-      try {
-        await navigator.clipboard.writeText(state.friendCode);
-        btn.textContent = "Copied";
-      } catch (_) {
-        btn.textContent = "Couldn't copy";
-      }
-      window.setTimeout(() => { btn.textContent = "Copy"; }, 1600);
-    }));
-    ui.content.appendChild(code);
-
-    const requestsRow = document.createElement("div");
-    requestsRow.className = "bb-friends-privacy-row";
-    requestsRow.innerHTML = `<div class="bb-friends-privacy-label">Accept requests from</div>`;
-    const requestsSelect = privacyControl(FRIEND_REQUESTS_FIELD, state.privacy.friendRequests, async (value) => {
-      requestsSelect.setDisabled(true);
-      try {
-        await savePrivacy({ friendRequests: value });
-      } catch (error) {
-        requestsSelect.setValue(state.privacy.friendRequests);
-        showFriendError(error, "Could not save setting");
-      }
-      requestsSelect.setDisabled(false);
-    }, { compact: true });
-    requestsRow.appendChild(requestsSelect.element);
-    ui.content.appendChild(requestsRow);
-
-    // Not a <form>, and a search-type input, so password managers leave it alone.
-    const addRow = document.createElement("div");
-    addRow.className = "bb-friends-add-form";
-    addRow.innerHTML = `<input type="search" name="bb-friend-lookup" maxlength="50" placeholder="Code or username" aria-label="Friend code or username" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other" />`;
-    const input = addRow.querySelector("input");
-    const submit = textButton("Add", "is-primary", () => void submitAdd());
-    addRow.appendChild(submit);
-    async function submitAdd() {
-      const query = input.value.trim();
-      if (!query || submit.disabled) return;
-      submit.disabled = true;
-      const result = await sendRequest({ query });
-      submit.disabled = false;
-      if (result) input.value = "";
-    }
-    input.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") return;
-      event.preventDefault();
-      void submitAdd();
-    });
-    ui.content.appendChild(addRow);
-
-    ui.content.appendChild(section("Played with recently"));
-    if (state.suggestionsLoading && !state.suggestions.length) {
-      ui.content.appendChild(loading());
-      return;
-    }
-    if (!state.suggestions.length) {
-      ui.content.appendChild(emptyArt(
-        pixelSprite("controller", 4, "bb-friends-float"),
-        "No suggestions",
-        "Play a few matches with the same people and they'll show up here.",
-      ));
-      return;
-    }
-    for (const s of state.suggestions) {
-      ui.content.appendChild(userRow(s, {
-        subtitle: `${s.gamesTogether} games together`,
-        actions: [iconButton("invite", `Add ${s.name} as a friend`, "is-accept", async (event) => {
-          event.currentTarget.disabled = true;
-          if (!(await sendRequest({ userId: s.userId }))) event.currentTarget.disabled = false;
-        })],
-      }));
-    }
-  }
-
-  function toChatMessage(m) {
-    const mine = m.senderId === state.me?.userId;
-    const friend = friendById(state.chatFriendId);
-    const sender = mine
-      ? { name: state.me?.name || "You", charClass: state.me?.charClass, profileIconId: state.me?.profileIconId || null }
-      : { name: friend?.name || "Friend", charClass: friend?.charClass, profileIconId: friend?.profileIconId };
-    // Shape reactions the way the shared party-chat renderer expects.
-    const counts = new Map();
-    const reactionUsers = {};
-    let myReaction = null;
-    for (const r of Array.isArray(m.reactions) ? m.reactions : []) {
-      counts.set(r.reaction, (counts.get(r.reaction) || 0) + 1);
-      (reactionUsers[r.reaction] ||= []).push({ name: r.name });
-      if (r.userId === state.me?.userId) myReaction = r.reaction;
-    }
-    return {
-      id: m.messageId,
-      sender,
-      body: m.body,
-      createdAt: m.createdAt,
-      reactions: [...counts].map(([reaction, count]) => ({ reaction, count })),
-      reactionUsers,
-      myReaction,
-      _reactionPulse: m._reactionPulse || null,
-      // Read receipt: in a 1:1 chat the only possible viewer is the friend.
-      viewCount: mine && m.readAt ? 1 : 0,
-      viewers: mine && m.readAt
-        ? [{ userId: friend?.userId, name: friend?.name || "Friend", charClass: friend?.charClass, profileIconId: friend?.profileIconId, readAt: m.readAt }]
-        : [],
-    };
-  }
-
-  function renderMessageRow(m) {
-    return renderPartyChatMessage(toChatMessage(m), {
-      currentUserName: state.me?.name,
-      onOpenProfile: openProfile,
-      onReact: (target, reaction) => void reactToMessage(target?.id, reaction),
-      onOpenViewers: (message, anchor) => viewersPopup.open(message, anchor),
-      showReply: false,
-      // Receipts only matter on messages I sent.
-      showViewCount: m.senderId === state.me?.userId,
-    });
-  }
 
   // Friend read my messages: flip receipts in place without moving the scroll.
-  function applyFriendRead(upToMessageId, readAt) {
-    for (const m of state.messages) {
-      if (m.senderId !== state.me?.userId || m.readAt || m.messageId > upToMessageId) continue;
-      upsertMessage({ ...m, readAt });
-    }
-  }
 
   // Swap one row in place so reacting doesn't jump the scroll position.
-  function upsertMessage(next, { pulse = null } = {}) {
-    const index = state.messages.findIndex((m) => m.messageId === next.messageId);
-    if (index < 0) return false;
-    state.messages[index] = { ...next, _reactionPulse: pulse };
-    const row = ui.messages.querySelector(`[data-message-id="${next.messageId}"]`);
-    row?.replaceWith(renderMessageRow(state.messages[index]));
-    // Pop once; later full re-renders shouldn't replay it.
-    state.messages[index]._reactionPulse = null;
-    return true;
-  }
-
-  async function reactToMessage(messageId, reaction) {
-    if (!messageId) return;
-    try {
-      const data = await postJson("/friends/messages/react", { messageId, reaction });
-      if (data.message) upsertMessage(data.message, { pulse: reaction });
-    } catch (error) {
-      showFriendError(error, "Could not update reaction");
-    }
-  }
 
   // Rebuilds the log; keeps the reader's place unless forced to the bottom.
-  function renderMessages({ force = true, snapshot = null } = {}) {
-    const snap = snapshot || chatScroll.capture();
-    ui.messages.replaceChildren();
-    if (state.chatLoading && !state.messages.length) ui.messages.appendChild(loading());
-    else if (!state.messages.length) {
-      ui.messages.appendChild(emptyArt(pixelSprite("chat", 5, "bb-friends-float"), "Say hi!", "Messages are saved so you can pick up later."));
-    }
-    if (state.hasMore) {
-      ui.messages.appendChild(textButton("Load older", "bb-friends-older", () => void loadConversation({ older: true })));
-    }
-    for (const m of state.messages) ui.messages.appendChild(renderMessageRow(m));
-    chatScroll.restore(snap, { force });
-  }
-
-  function appendMessage(message) {
-    if (state.messages.some((m) => m.messageId === message.messageId)) return;
-    const mine = message.senderId === state.me?.userId;
-    const snap = chatScroll.capture();
-    state.messages.push(message);
-    // The first message replaces the empty-state art.
-    if (state.messages.length === 1) return renderMessages();
-    ui.messages.appendChild(renderMessageRow(message));
-    chatScroll.restore(snap, { force: mine, added: mine ? 0 : 1 });
-  }
 
   // Header status line; "Typing" replaces the presence while the friend types.
-  function syncChatStatus() {
-    const friend = friendById(state.chatFriendId);
-    if (state.friendTyping) {
-      ui.subtitle.innerHTML = `<span class="bb-chat-typing-dot" aria-hidden="true"></span>Typing`;
-      ui.subtitle.title = `${friend?.name || "Friend"} is typing`;
-      ui.subtitle.className = "bb-chat-subtitle is-typing";
-      return;
-    }
-    ui.subtitle.textContent = friendPresenceLabel(friend);
-    ui.subtitle.title = friendPresenceTitle(friend);
-    ui.subtitle.className = `bb-chat-subtitle ${statusClass(friend?.status)}`;
-  }
-
-  function render() {
-    const inChat = state.view === "chat";
-    const friend = inChat ? friendById(state.chatFriendId) : null;
-    ui.tabs.hidden = inChat || state.guest;
-    ui.back.hidden = !inChat;
-    ui.chat.hidden = !inChat;
-    ui.content.hidden = inChat;
-    panel.classList.toggle("is-chatting", inChat);
-    ui.title.textContent = inChat ? friend?.name || "Chat" : "Friends";
-    ui.chatAvatarWrap.hidden = !inChat || !friend;
-    ui.chatAvatarWrap.className = `bb-friends-avatar-wrap bb-friends-chat-avatar-wrap ${inChat ? statusClass(friend?.status) : ""}`;
-    const profileLink = inChat && !!friend;
-    ui.chatProfile.classList.toggle("is-link", profileLink);
-    ui.chatProfile.tabIndex = profileLink ? 0 : -1;
-    if (profileLink) {
-      ui.chatProfile.setAttribute("role", "button");
-      ui.chatProfile.setAttribute("aria-label", `View ${friend.name}'s profile`);
-    } else {
-      ui.chatProfile.removeAttribute("role");
-      ui.chatProfile.removeAttribute("aria-label");
-    }
-    if (inChat && friend) ui.chatAvatar.src = buildAvatarUrl(friend.charClass, friend.profileIconId);
-    if (inChat) syncChatStatus();
-    else {
-      ui.subtitle.textContent = state.guest
-        ? "Registered players only"
-        : `${state.friends.filter((f) => f.status !== "offline").length} online`;
-      ui.subtitle.title = "";
-      ui.subtitle.className = "bb-chat-subtitle";
-    }
-    // History stays readable when the friend has turned messages off.
-    const canMessage = !inChat || friend?.acceptsMessages !== false;
-    ui.textarea.disabled = !canMessage;
-    ui.send.disabled = !canMessage || state.sending;
-    ui.textarea.placeholder = canMessage ? "Write a message..." : `${friend?.name || "This friend"} isn't accepting messages`;
-    for (const tab of ui.tabs.querySelectorAll("[data-view]")) {
-      const active = tab.dataset.view === state.view;
-      tab.classList.toggle("is-active", active);
-      tab.setAttribute("aria-selected", active ? "true" : "false");
-    }
-    if (inChat) return;
-    ui.content.replaceChildren();
-    if (!state.loaded) {
-      ui.content.appendChild(loading());
-      return;
-    }
-    if (state.guest) return renderGuest();
-    if (state.view === "requests") renderRequests();
-    else if (state.view === "add") renderAdd();
-    else renderFriends();
-  }
-
-  // ---------- conversation ----------
-  async function loadConversation({ older = false } = {}) {
-    const friendId = state.chatFriendId;
-    if (!friendId) return;
-    state.chatLoading = true;
-    if (!older) {
-      state.messages = [];
-      renderMessages();
-    }
-    const snapshot = chatScroll.capture();
-    try {
-      const data = await postJson("/friends/messages/history", {
-        friendId,
-        beforeMessageId: older ? state.messages[0]?.messageId : undefined,
-      });
-      if (state.chatFriendId !== friendId) return;
-      const incoming = Array.isArray(data.messages) ? data.messages : [];
-      state.messages = older ? [...incoming, ...state.messages] : incoming;
-      state.hasMore = !!data.hasMore;
-    } catch (error) {
-      showFriendError(error, "Could not load messages");
-    }
-    state.chatLoading = false;
-    renderMessages({ force: !older, snapshot });
-    if (!older && state.isOpen) {
-      void markRead();
-      focusComposer();
-    }
-  }
-
-  async function markRead() {
-    const friendId = state.chatFriendId;
-    if (!friendId) return;
-    state.unread[friendId] = 0;
-    syncBadge();
-    try { await postJson("/friends/messages/read", { friendId }); } catch (_) {}
-  }
-
-  async function sendMessage() {
-    const body = ui.textarea.value.trim();
-    const friendId = state.chatFriendId;
-    if (!body || !friendId || state.sending) return;
-    state.sending = true;
-    ui.send.disabled = true;
-    try {
-      const data = await postJson("/friends/messages/send", { friendId, body });
-      ui.textarea.value = "";
-      composerSize.resize();
-      setLocalTyping(false);
-      // The socket echo may arrive first; appendMessage dedupes by id.
-      if (data.message) appendMessage(data.message);
-    } catch (error) {
-      showFriendError(error, "Message not sent");
-    }
-    state.sending = false;
-    ui.send.disabled = false;
-    ui.textarea.focus();
-  }
-
-  function setLocalTyping(isTyping) {
-    window.clearTimeout(state.localTypingTimer);
-    if (!state.chatFriendId) {
-      state.localTyping = false;
-      return;
-    }
-    if (isTyping) {
-      state.localTypingTimer = window.setTimeout(() => setLocalTyping(false), TYPING_STOP_MS);
-      // Refresh the friend's indicator at most once a second while typing.
-      if (state.localTyping && Date.now() - state.lastTypingEmitAt < 1000) return;
-    } else if (!state.localTyping) {
-      return;
-    }
-    state.localTyping = isTyping;
-    state.lastTypingEmitAt = Date.now();
-    socket?.emit?.("friends:typing", { friendId: state.chatFriendId, isTyping });
-  }
-
-  function setFriendTyping(isTyping) {
-    window.clearTimeout(state.friendTypingTimer);
-    state.friendTyping = isTyping;
-    if (state.view === "chat") syncChatStatus();
-    if (isTyping) state.friendTypingTimer = window.setTimeout(() => setFriendTyping(false), TYPING_STALE_MS);
-  }
 
   function openProfile(username) {
     if (typeof onOpenProfile !== "function") return;
     setOpen(false);
     onOpenProfile(username);
   }
+
+  const conversation = createFriendConversation({
+    state, ui, socket, viewersPopup, chatScroll, composerSize, openProfile,
+    friendById, focusComposer, syncBadge,
+  });
+  const {
+    loadConversation, markRead, sendMessage, setLocalTyping, setFriendTyping,
+    syncChatStatus, appendMessage, upsertMessage, applyFriendRead, destroyTyping,
+  } = conversation;
+  const renderer = createFriendsRender({
+    state, ui, panel, currentPartyId, openProfile, setView, act, refresh, sendRequest,
+    friendById, syncChatStatus,
+  });
+  const { render } = renderer;
 
   // ---------- events ----------
   launcher.addEventListener("click", () => setOpen(!state.isOpen));
@@ -991,12 +388,12 @@ export function createFriendsPanelController({
     }
   });
 
-  listen("friends:changed", () => {
+  listen(SOCKET_EVENTS.FRIENDS_CHANGED, () => {
     void refresh();
     if (state.view === "add" && state.isOpen) void loadSuggestions();
   });
 
-  listen("friends:request", ({ from } = {}) => {
+  listen(SOCKET_EVENTS.FRIENDS_REQUEST, ({ from } = {}) => {
     sonner(null, `${from?.name || "Someone"} sent you a friend request.`, "View", (close) => {
       close();
       setOpen(true);
@@ -1004,7 +401,7 @@ export function createFriendsPanelController({
     }, { duration: 8000, sound: "notification" });
   });
 
-  listen("friends:presence", ({ userId, status, lastSeenAt, lastSeenHidden } = {}) => {
+  listen(SOCKET_EVENTS.FRIENDS_PRESENCE, ({ userId, status, lastSeenAt, lastSeenHidden } = {}) => {
     const friend = friendById(userId);
     if (!friend) return;
     const wasOnline = isFriendOnline(friend);
@@ -1020,7 +417,7 @@ export function createFriendsPanelController({
     if (state.isOpen) render();
   });
 
-  listen("friends:message", ({ message } = {}) => {
+  listen(SOCKET_EVENTS.FRIENDS_MESSAGE, ({ message } = {}) => {
     if (!message) return;
     const mine = message.senderId === state.me?.userId;
     const otherId = mine ? message.recipientId : message.senderId;
@@ -1042,7 +439,7 @@ export function createFriendsPanelController({
     if (state.isOpen && state.view === "friends") render();
   });
 
-  listen("friends:reaction", ({ message, reactorId, reaction, added } = {}) => {
+  listen(SOCKET_EVENTS.FRIENDS_REACTION, ({ message, reactorId, reaction, added } = {}) => {
     if (!message) return;
     const me = state.me?.userId;
     const mine = message.senderId === me;
@@ -1058,7 +455,7 @@ export function createFriendsPanelController({
   });
 
   // Reading in another tab clears the badge here too.
-  listen("friends:read", ({ readerId, friendId, upToMessageId, readAt } = {}) => {
+  listen(SOCKET_EVENTS.FRIENDS_READ, ({ readerId, friendId, upToMessageId, readAt } = {}) => {
     if (readerId === state.chatFriendId && state.view === "chat") {
       applyFriendRead(Number(upToMessageId) || Infinity, readAt || new Date().toISOString());
       return;
@@ -1069,12 +466,12 @@ export function createFriendsPanelController({
     if (state.isOpen && state.view === "friends") render();
   });
 
-  listen("friends:typing", ({ userId, isTyping } = {}) => {
+  listen(SOCKET_EVENTS.FRIENDS_TYPING, ({ userId, isTyping } = {}) => {
     if (state.view !== "chat" || Number(userId) !== state.chatFriendId) return;
     setFriendTyping(!!isTyping);
   });
 
-  listen("friends:party-invite", ({ partyId, from } = {}) => {
+  listen(SOCKET_EVENTS.FRIENDS_PARTY_INVITE, ({ partyId, from } = {}) => {
     if (!partyId || Number(partyId) === currentPartyId()) return;
     sonner(null, `${from?.name || "A friend"} invited you to their party.`, "Join", (close) => {
       close();
@@ -1088,10 +485,10 @@ export function createFriendsPanelController({
     if (state.isOpen && state.view === "add") render();
   }
   const offPrivacy = onPrivacyChange(applyPrivacy);
-  listen("friends:privacy", ({ privacy } = {}) => applyPrivacy(privacy));
+  listen(SOCKET_EVENTS.FRIENDS_PRIVACY, ({ privacy } = {}) => applyPrivacy(privacy));
 
   // Socket reconnects can miss pushes, so resync.
-  listen("connect", () => void refresh());
+  listen(SOCKET_EVENTS.CONNECT, () => void refresh());
 
   // Refresh relative times without rebuilding rows or disturbing chat scroll/focus.
   const presenceTimer = window.setInterval(() => {
@@ -1119,29 +516,36 @@ export function createFriendsPanelController({
     close: () => setOpen(false),
     isOpen: () => state.isOpen,
     refresh,
-    isGuest: () => state.guest,
+    setAccountGuest(isGuest) {
+      state.guest = isGuest;
+      if (!isGuest) return refresh();
+      state.loaded = true;
+      syncBadge();
+      render();
+    },
+    isGuest: () => state.guest === true,
     // Used by the party slot menu and profile modal.
     relationshipFor(name) {
-      const key = String(name || "").trim().toLowerCase();
-      if (!key || state.guest) return "unavailable";
-      if (state.me?.name?.toLowerCase() === key) return "self";
-      if (state.friends.some((f) => f.name.toLowerCase() === key)) return "friends";
-      if (state.outgoing.some((r) => r.user.name.toLowerCase() === key)) return "outgoing";
-      if (state.incoming.some((r) => r.user.name.toLowerCase() === key)) return "incoming";
+      const key = nameKey(name);
+      if (!key || state.guest !== false) return "unavailable";
+      if (nameKey(state.me?.name) === key) return "self";
+      if (state.friends.some((f) => nameKey(f.name) === key)) return "friends";
+      if (state.outgoing.some((r) => nameKey(r.user.name) === key)) return "outgoing";
+      if (state.incoming.some((r) => nameKey(r.user.name) === key)) return "incoming";
       return "none";
     },
     addFriend: (target) => sendRequest(target),
     // Profile modal: asks first, resolves true once removed.
     async removeFriend(name) {
-      const key = String(name || "").trim().toLowerCase();
-      const friend = state.friends.find((f) => f.name.toLowerCase() === key);
+      const key = nameKey(name);
+      const friend = state.friends.find((f) => nameKey(f.name) === key);
       if (!friend) return false;
       const ok = await showUiConfirm({
         title: "Remove friend",
         message: `Remove ${friend.name} from your friends?`,
         confirmLabel: "Remove",
       });
-      if (!ok || !(await act("/friends/remove", { friendId: friend.userId }, "Could not remove friend"))) return false;
+      if (!ok || !(await act(friendsApi.remove, { friendId: friend.userId }, "Could not remove friend"))) return false;
       await refresh();
       return true;
     },
@@ -1157,7 +561,8 @@ export function createFriendsPanelController({
       offPrivacy();
       for (const [event, handler] of socketListeners) socket?.off?.(event, handler);
       window.clearTimeout(state.friendTypingTimer);
-      window.clearTimeout(state.localTypingTimer);
+      destroyTyping();
+      renderer.destroy();
       launcherObserver?.disconnect();
       composerSize.destroy();
       viewersPopup.destroy();

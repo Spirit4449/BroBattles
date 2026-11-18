@@ -1,8 +1,12 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { burstOzzyFireball } from "./attack";
 
 // The server ends a fireball where it first touches something (or a wall, or
 // the end of its range) and splashes everyone nearby. Every viewer's drawn
 // flight, the caster's included, stops and explodes at that same point.
+
+const { key: NAME } = characterDefinitions.ozzy;
+
 function handleOzzyPacket(scene, packet) {
   if (String(packet?.action?.type || "").toLowerCase() !== "ozzy-fireball-impact") return false;
   burstOzzyFireball(scene, packet.action);
@@ -11,7 +15,7 @@ function handleOzzyPacket(scene, packet) {
 
 const noop = () => {};
 export const networkAdapter = {
-  key: "ozzy",
+  key: NAME,
   joinFields: {},
   bootstrapKey: "ozzyCombat",
   configure: noop,

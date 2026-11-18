@@ -1,7 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadClientModule } = require('./helpers/clientModule');
-const vm = require('node:vm');
+const { createClientModuleGraph } = require('./helpers/clientModule');
 const flush = async () => { for (let n = 0; n < 4; n++) await new Promise(resolve => setImmediate(resolve)); };
 
 function setup(handler) {
@@ -10,7 +9,7 @@ function setup(handler) {
   const setTimer = (fn, delay = 0) => { const id = ++nextId; timers.set(id, { fn, at: now + delay }); return id; };
   const document = { hidden: false, addEventListener: (name, fn) => { listeners[name] = fn; } };
   const connection = { addEventListener: (_, fn) => { listeners.connection = fn; } };
-  const context = vm.createContext({
+  const context = {
     URL, AbortController, DOMException, Blob, document, navigator: { connection }, location: new URL('https://game.test/'),
     setTimeout: setTimer, clearTimeout: id => timers.delete(id),
     window: { requestIdleCallback: fn => setTimer(fn, 1), cancelIdleCallback: id => timers.delete(id) },
@@ -22,8 +21,9 @@ function setup(handler) {
       if (url.endsWith('/battle-preload.json')) return new Response(JSON.stringify(['/bundles/mode-bank-bust.js', '/bundles/mode-other.js', '/assets/game-sounds/death.mp3']));
       return new Response('asset');
     },
-  });
-  const api = loadClientModule(require.resolve('../src/client/navigation/preload.js'), context);
+  };
+  const { load } = createClientModuleGraph({ globals: context });
+  const api = load(require.resolve('../src/client/navigation/preload.js'));
   return {
     preloader: api.createBattlePreloader(), calls, connection, document, listeners, context,
     async advance(ms) {

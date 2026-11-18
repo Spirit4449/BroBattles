@@ -143,4 +143,4 @@ function launchPoint(character, name, pose, angle = 0) {
   return { x: muzzle.pivot.x + ux * muzzle.reach, y: muzzle.pivot.y + uy * muzzle.reach };
 }
 
-module.exports = { rigOf, rigPointArt, artToWorld, rigErrors, artScale, rigWorldPoint, muzzleOf, launchPoint };
+module.exports = { rigOf, rigPointArt, artToWorld, rigErrors, rigWorldPoint, muzzleOf, launchPoint };

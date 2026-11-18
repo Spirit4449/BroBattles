@@ -12,7 +12,7 @@ describe("Slime presentation", () => {
     loadClientModule(file, {exports});
     return exports;
   };
-  const pixelShapes=transformModule('src/client/game/powerups/pixelShapes.js');
+  const pixelShapes=transformModule('src/client/game/scene/fx/pixelShapes.js');
   loadClientModule('src/client/game/characters/gloop/slimeVisual.js', {exports:api,require:name=>name.includes('pixelShapes') ? pixelShapes : name.includes('projectilePresentation') ? require('../src/shared/projectilePresentation') : name.includes('renderLayers')
     ? {RENDER_LAYERS:{ATTACKS:20}} : require('../src/shared/characters/gloopProjectile')});
   function setup(owner) {
@@ -132,9 +132,13 @@ describe("Hook presentation", () => {
       add: { sprite: object, graphics: object }, sound: { play: key => sounds.push(key) } };
     const owner = object(100, 200); owner.setDepth(10); owner.displayWidth = 80; owner.displayHeight = 100;
     scene._localPlayerAudioSprite = owner;
+    const hookPull = loadClientModule('src/client/game/characters/gloop/hookPull.js', {
+      require: () => require('../src/shared/characters/characterTuning.js'),
+    });
     loadClientModule('src/client/game/characters/gloop/special.js', { exports: api, require: name => name.includes('handAnimation') ? { ...animationApi, prepareHandAnimation: () => animated } : name.includes('characterTuning')
       ? { getResolvedCharacterSpecialConfig: () => ({ visualScale: 0.28, range: 500, speed: 1000,
         collisionRadius: 44, collisionForwardOffset: 28, collisionOffsetY: 50 }) }
+      : name === './hookPull' ? hookPull
       : name.includes('shotPrediction') ? shots
       : name.includes('shotContact') ? require('../src/shared/combat/shotContact')
       : name.includes('packetDedupe') ? packetDedupe
@@ -161,6 +165,21 @@ describe("Hook presentation", () => {
     assert.equal(f.objects[1].x, 150);
     for (let i = 0; i < 12; i++) f.frame();
     assert.equal(f.scene.events.listenerCount('update'), 0);
+  });
+
+  test('a catch without a pull duration uses the current Gloop hook tuning', () => {
+    const { getResolvedCharacterSpecialConfig } = require('../src/shared/characters/characterTuning.js');
+    const { pullDurationMs } = getResolvedCharacterSpecialConfig('gloop', 'hook');
+    const f = setup();
+    f.launch();
+    f.api.playHookCatchAction(f.scene, f.owner, {
+      id: 'hook1', start: { x: 300, y: 180 }, end: { x: 150, y: 180 },
+    });
+    for (let elapsed = 0; elapsed < pullDurationMs; elapsed += 50) {
+      assert.ok(f.objects[1].x > 150, 'the hand has not reached the pull destination');
+      f.frame(Math.min(50, pullDurationMs - elapsed));
+    }
+    assert.equal(f.objects[1].x, 150);
   });
   test('duplicate launch, recast, owner destruction and shutdown clean up visuals', () => {
     const f = setup(); f.launch(); f.launch();

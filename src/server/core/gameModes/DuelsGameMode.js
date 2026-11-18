@@ -1,6 +1,9 @@
 const { BaseGameMode } = require("./BaseGameMode");
 
 class DuelsGameMode extends BaseGameMode {
+  // Duels has a static world-state descriptor.
+  get stateVersion() { return 0; }
+
   buildModeState() {
     return {
       type: "duels",

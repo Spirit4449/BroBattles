@@ -1,3 +1,4 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { THORG_SWEEP, thorgAttackFrameAt } from "../../../../shared/characters/thorgSweep";
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
@@ -6,13 +7,16 @@ import { inHitstop } from "../shared/shotPrediction";
 
 // The video frames already contain the complete attack and mace. Drive their
 // poses from the combat clock; the sweep effect is baked into the atlas.
+
+const { key: NAME } = characterDefinitions.thorg;
+
 export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 } = {}) {
   body._thorgAttackCleanup?.();
   body.flipX = direction < 0;
   const unlock = lockPlayerFlip(body);
   const duration = THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs + THORG_SWEEP.recoveryMs;
   body._thorgSweepActive = true;
-  playSpriteAnimation({ scene, sprite: body, character: 'thorg', logical: 'throw', fallback: 'idle', restart: true });
+  playSpriteAnimation({ scene, sprite: body, character: NAME, logical: 'throw', fallback: 'idle', restart: true });
   markOneShotAnimation(body, 'throw', duration);
   body.anims?.pause?.();
   body.setFrame('throw00');
@@ -31,6 +35,7 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
     scene.events.off('presentation:reset', cleanup);
     scene.events.off('shutdown', cleanup);
     body.off?.('destroy', cleanup);
+    body.off?.('attack:interrupted', cleanup);
     sound?.stop();
     sound?.destroy();
     body._thorgSweepActive = false;
@@ -45,7 +50,7 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
     body.setFrame(thorgAttackFrameAt(elapsed).frame);
     if (elapsed >= duration) {
       cleanup();
-      playSpriteAnimation({ scene, sprite: body, character: 'thorg', logical: 'idle' });
+      playSpriteAnimation({ scene, sprite: body, character: NAME, logical: 'idle' });
     }
   };
   body._thorgAttackCleanup = cleanup;
@@ -53,5 +58,6 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
   scene.events.once('presentation:reset', cleanup);
   scene.events.once('shutdown', cleanup);
   body.once?.('destroy', cleanup);
+  body.once?.('attack:interrupted', cleanup);
   return body;
 }

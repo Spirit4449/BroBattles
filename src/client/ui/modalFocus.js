@@ -8,6 +8,10 @@ function canFocus(element) {
     element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden";
 }
 
+export function hasModalFocus(document) {
+  return document[STACK_KEY]?.some(entry => entry.root.isConnected) || false;
+}
+
 export function createModalFocus(root, { initialFocus, onEscape, fallbackFocus } = {}) {
   const document = root.ownerDocument;
   const stack = document[STACK_KEY] ||= [];

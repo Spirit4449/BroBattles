@@ -1,3 +1,4 @@
+import { advanceAmmoClock } from "../../../../shared/combat/ammoClock.js";
 import { TEAM_GREEN, TEAM_RED } from '../../../../shared/projectilePresentation';
 import { advanceShownLead } from '../../../../shared/characters/sparrowReplication';
 
@@ -58,12 +59,7 @@ export function ownerTeamLook(context, name, sprite = displayedPlayer(context, n
 // cooldown counts down and reloads finish in between.
 export function catchUpAmmo(ammoState, elapsedMs) {
   const ammo = { ...ammoState };
-  ammo.nextFireInMs = Math.max(0, ammo.nextFireInMs - elapsedMs);
-  if (ammo.charges < ammo.capacity) {
-    const reload = ammo.reloadTimerMs + elapsedMs;
-    ammo.charges = Math.min(ammo.capacity, ammo.charges + Math.floor(reload / ammo.reloadMs));
-    ammo.reloadTimerMs = ammo.charges === ammo.capacity ? 0 : reload % ammo.reloadMs;
-  }
+  advanceAmmoClock(ammo, elapsedMs);
   return ammo;
 }
 

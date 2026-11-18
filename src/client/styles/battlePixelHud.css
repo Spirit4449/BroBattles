@@ -2,15 +2,14 @@
    over the mosaic fill, with no extra border or drop-shadow stacked on top. */
 body :is(#game-timer-hud, .fullscreen-toggle, .bb-dash-hud,
   .bb-chat-button, #battle-keybind-hud .controls-mini-toggle,
-  .game-status-banner, #spectate-hud) {
+  #spectate-hud) {
   --battle-pixel-frame: var(--bb-hud-frame);
   border: 0;
   border-radius: 0;
   background: var(--bb-hud-bg);
   box-shadow: var(--battle-pixel-frame);
 }
-body #game-timer-hud.sudden-death,
-body .game-status-banner.variant-danger {
+body #game-timer-hud.sudden-death {
   background: var(--bb-hud-bg-danger);
 }
 /* Settings, Controls, and Battle Chat share one outer shell; their controls
@@ -348,3 +347,24 @@ body .bb-dash-hud[data-dashing="true"] .bb-dash-hud__fill {
   body .bb-dash-hud[data-idle="true"] [data-dash-status],
   body .bb-dash-hud[data-idle="true"] .bb-dash-hud__fill { opacity: 1; filter: none; }
 }
+
+
+/* A buy prompt, not a sentence. A key cap, what you get, what it costs:
+         the old one spelled out "Press E - wall costs 5500 vault coins", which
+         is a line of prose to read mid-fight.
+
+         It floats over the thing being bought rather than sitting in the
+         bottom-centre lane, where it covered the ability readout and told you
+         nothing about which slot it meant. Its left and top are written each
+         frame from the object's screen position. */
+      #bank-bust-interact-prompt{position:fixed;left:0;top:0;transform:translate(-50%,-100%);display:none;align-items:center;gap:10px;z-index:100000;background:var(--bb-hud-bg);padding:8px 14px;color:var(--bb-text);font:10px/1 var(--bb-font-display);text-transform:uppercase;text-shadow:2px 2px 0 var(--bb-ink);box-shadow:var(--bb-hud-frame);white-space:nowrap;will-change:left,top}
+      #bank-bust-interact-prompt.open{display:flex}
+      #bank-bust-interact-prompt .bb-key{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 4px;background:var(--bb-text);color:var(--bb-ink);text-shadow:none;box-shadow:inset -2px -2px 0 rgba(0,0,0,.35)}
+      #bank-bust-interact-prompt .bb-lines{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+      #bank-bust-interact-prompt .bb-act{letter-spacing:.06em}
+      #bank-bust-interact-prompt .bb-cost{display:inline-flex;align-items:center;gap:5px;color:#ffd264}
+      #bank-bust-interact-prompt .bb-coin{width:12px;height:12px;background:url(/assets/icons/coin.webp) center/contain no-repeat;image-rendering:pixelated}
+      /* Affordable but blocked by the vault's spend floor: the price turns red
+         and the key cap goes away, because pressing it would do nothing. */
+      #bank-bust-interact-prompt.blocked .bb-cost{color:#ff8e8e}
+      #bank-bust-interact-prompt.blocked .bb-coin{filter:grayscale(.6) brightness(.9)}

@@ -1,5 +1,51 @@
 # Browser lifecycle, rendering, and audio
 
+## Where to make a change
+
+| Area | Entry point and owning modules |
+| --- | --- |
+| Lobby | `src/client/pages/lobby.js` mounts the screen and handles route changes. `src/client/lobby/` contains party, matchmaking, profile and shop controllers. |
+| Battle | `src/client/game/boot/battleBoot.js` starts the early loading screen. `src/client/pages/game.js` wires the scene and controllers. `src/client/game/boot/battleLoading.js` updates loading progress, `game/match/matchCoordinator.js` handles match messages, and `game/hud/` owns the DOM battle HUD and results. |
+| Public site and shell | `src/client/site/index.js` is the site entry. `site/shell.js` composes menu, session, runtime status, legal, settings and support modules. |
+| Admin | `src/client/pages/admin.js` wires the dashboard. `src/client/admin/adminNavigation.js` owns hash views and `adminState.js` holds shared dashboard state. Edit player management in `players.js` and its player tools, inbox list and thread under `inbox*.js`, or store sections and editors under `admin/shop/`. |
+| Map Studio | `src/client/pages/mapEditor.js` wires the editor and drawing loop. `src/client/editor/studioState.js` holds editor state, `mapSession.js` owns map operations, and `inspector.js`, `objectEdits.js`, `canvasInteraction.js` and `playtestControls.js` cover the editing surface. |
+
+See [Map Studio](maps.md) for publication, asset and playtest workflows.
+Entry points and names are defined in [webpack.config.js](../../webpack.config.js).
+
+Import browser-owned CSS from its webpack entry or feature module. Shared
+client CSS lives in `src/client/styles/`, public-site CSS in `src/client/site/`,
+and feature-specific CSS can stay with its controller, as in `src/client/editor/mapEditor.css`.
+`public/styles/` contains directly served styles such as the local Lato font sheet.
+
+### Lobby module state and slots
+
+`resetLobbyRoute` in `src/client/lobby/party/party.js` runs while retaining the
+lobby's DOM, socket and module instances. Reset party-specific state and UI
+there when adding fields or controllers. Use the route's AbortSignal and
+current-route check before applying late results. Keep user state in
+`src/client/lobby/session.mjs` and party context in `partyState.js`.
+Feature controllers can use `src/client/lib/http.js` for JSON requests.
+Party socket handlers, roster rendering and readiness live in `partySocket.js`,
+`partyRoster.js` and `readyController.js`.
+
+Roster and interaction code share `.character-slot` elements.
+`data-player-name` identifies humans via the shared name-key rules.
+`data-is-current-user="true"` identifies the local player, even after a slot move.
+`data-player-team` and `data-is-owner` describe the occupant.
+`data-bot-character` identifies a configured bot, and `data-character` holds the
+displayed selection, which can be `Random` or `Hidden`. Read the authoritative
+roster from party context. Use `slotDom.js` to locate a player or the
+`.username`, `.status` and `.character-sprite` fields. The
+`#your-slot-1` fallback is opt-in for initial and solo rendering.
+
+`partyState.js` owns party route lookup. `checkIfInParty()` matches
+`/party/:id` with an optional trailing slash and returns the ID segment or
+`false`. Character selection uses `getRoutePartyId()` for a positive finite
+numeric ID from the current URL. `getActivePartyId()` prefers the retained
+party context, then checks the URL. Both numeric lookups return `null` when
+they cannot resolve an ID.
+
 ## Death drop visuals
 
 Coins and gems fan out from a defeated player with their server supplied launch
@@ -13,7 +59,7 @@ and award.
 The battle intro keeps a responsive center gap between the player cards for the
 countdown. Its FIGHT cue uses blue lettering with an orange outline to echo the
 wordmark, with a compact entrance zoom so the text stays readable over the arena.
-These presentation styles live in `public/styles/game.css`.
+These presentation styles live in `src/client/styles/game.css`.
 
 `public/game.html` groups the team rosters, match clock, Bank Bust vault panels,
 and mode notices in `#battle-top-hud`. The shared grid in
@@ -33,7 +79,8 @@ a 360 ms expanding column of soft light, a broad pixel dissolve, and four
 staggered block-edged square/diamond accents and brief pixel-star sparkles. The light has no moving head or scan line. Shapes remain translucent; a short
 original synthesized sweep/shimmer plays on skin selection through the UI sound
 system, respecting SFX volume and restarting rather than stacking on rapid clicks. One canvas stays pinned to the portrait’s
-layout box, with no scattered particles or layout shift. New skin choices interrupt the effect immediately rather than queuing. Browsing skins cancels the automatic switch
+layout box, with no scattered particles or layout shift. New skin choices interrupt the
+effect immediately rather than queuing. Browsing skins cancels the automatic switch
 to Animations, including when the stage is still loading.
 
 The expanded character panel previews all characters by default (reduced motion
@@ -49,12 +96,11 @@ Animation demonstrations use normal game speed and animation rate, grass
 footsteps, landing audio and shared dust.
 
 Fight participants use the panel's level for health and damage. Gloop spars with
-Ninja; higher-damage characters normally face Thorg. Ozzy faces one opponent with a green teammate standing behind him as a
+Thorg; higher-damage characters normally face Thorg. Ozzy faces one opponent with a green teammate standing behind him as a
 bystander, so Arcane Surge visibly grants a real powerup to an ally. `showcaseRoster` returns
 participant IDs, teams and positions; simulation and presentation have no two-player
 assumption. Fights start with empty super bars. Charge is earned through hits and carried
-between practice rounds, allowing kits such as Gloop to charge across multiple
-Ninja opponents. Ammo consumption, reloads, shuriken return refunds, damage
+between practice rounds, allowing fighters to charge across rounds. Ammo consumption, reloads, shuriken return refunds, damage
 and effects are real match outcomes. Defeated fighters stay down until the active
 fighters on one side are eliminated, followed by a new round; bystanders do not
 keep a defeated side fighting. Buff presentation is allowed to finish before reset.
@@ -70,7 +116,9 @@ stand still, do not attack, and stay behind the featured fighter's movement boun
 Supers require earned charge and have a director pacing interval. Effect modifiers
 affect movement. The local ammo bar reuses `scene/ammoBarRenderer.js`, including
 its pixel frame, red segments and gradual refill, with super below it as in matches.
-The preview physics world uses the combat arena bounds, and simulation contact boxes follow the fitted stage bodies. Thorg’s starting pair is shifted left to reserve room for repeated knockback.
+The preview physics world uses the combat arena bounds, and simulation contact boxes
+follow the fitted stage bodies. Thorg’s starting pair is shifted left to reserve room
+for repeated knockback.
 
 `showcaseFight.js` renders events from `shared/combat/previewSession.js`, which hosts
 the same attack, damage, ability and effect modules as GameRoom. Ninja's return
@@ -91,9 +139,12 @@ See [Add a character](contributing.md#add-a-character) for the extension contrac
 
 ## Lobby and battle navigation
 
-`navigation.bundle.js` owns `/`, `/party/:id`, and `/game/:id` within one
-browser document. Supported transitions never reload the page. Server route
-requests still enforce existing redirects and missing-party/match handling.
+`src/client/navigation/index.js` owns `/`, `/party/:id`, and `/game/:id`
+within one browser document. `routePrefetch.js` and `gameData.js` own route and
+match-data requests. `routeStyles.js` loads ordered styles, `scriptRunner.js`
+runs page scripts, and `transitionOverlay.js` and `routeRecovery.js` handle
+loading and retry. The server still enforces redirects and missing-party or
+missing-match responses.
 
 Party-to-party and solo-to-party transitions retain the lobby DOM, scripts,
 styles, page scope, and Socket.IO connection. The lobby route handler refreshes
@@ -110,19 +161,40 @@ Phaser startup explicitly waits for both canvas HUD fonts to decode. The route
 loading bar stays above the game template until `game:ready`, keeping its position
 stable while the game reports progress. Errors expose retry.
 
-The entry bundles contain module-level state and execute fresh when changing
-screen type. PageRuntimePlugin scopes JavaScript only, including lazy chunks;
-CSS must never receive the JavaScript wrapper. Disposal cancels timers, browser
-listeners, observers, requests, and HTML audio. Hooks disconnect the outgoing
-screen socket and await Phaser destruction. Party-only changes skip all of this.
-The chunk registration array resets between screen mounts, and script tags carry
-a scope ID so late downloads cannot execute against a newer screen. Native method
-bindings are cached per facade instead of allocated on every property access.
+### Page scope and cleanup
 
-Register additional external cleanup with
-`window.__BB_PAGE_SCOPE__?.onDispose(callback)`. Phaser resources should use scene
-shutdown/destroy events. Avoid `globalThis` for screen-owned browser effects.
-Async work outside scoped fetch/timers must check the scope after awaits.
+`scripts/build/pageRuntime.cjs` wraps page JavaScript and lazy chunks in
+lexical browser bindings from `src/client/navigation/pageScope.js`.
+The navigation bundle owns the scope and stays alive across screen changes.
+CSS is emitted independently. On documents without navigation, page bundles
+use the native browser APIs.
+
+The scope removes listeners attached through its `window` and `document`
+facades and cancels scoped timers, animation frames and fetch requests.
+It also disconnects scoped observers and releases audio created through its
+`Audio` constructor. Register those resources once per mount and rely on the
+scope for screen retirement. Shorter-lived features, such as dialogs and
+party routes, still need their own teardown while the screen remains mounted.
+
+Register external teardown through `getPageScope()?.onDispose(callback)`.
+Socket.IO subscriptions and Phaser objects have their own lifetimes. Screen
+hooks disconnect outgoing sockets and battle cleanup awaits Phaser destruction.
+Scene-owned resources should release on scene shutdown or destruction.
+Use the lexical browser APIs in mounted code and check scope activity after
+awaiting unscoped work. `globalThis` bypasses the wrapper.
+
+`src/client/lib/globals.cjs` names the cross-bundle browser globals.
+Use its getters for navigation (`__BB_NAVIGATION__`), the current page scope
+(`__BB_PAGE_SCOPE__`) and match session (`__MATCH_SESSION__`).
+The HUD provides `isSystemNoticeOpen()` to the local fighter’s pointer input.
+`__BB_FORCE_MOBILE_CONTROLS`, `__BB_REMOTE_PLAYERS__`,
+`__BB_NETWORK_DIAGNOSTICS__`, `__BB_NET_TRACE__` and
+`__BB_NET_TRACE_SOCKET__` support browser diagnostics and tooling.
+The scope restores scoped double-underscore properties when it retires.
+During mounting, navigation resets the webpack chunk registration array and
+tags scripts with the scope ID so late chunks cannot register in a newer screen.
+
+### Battle warming
 
 After lobby readiness, battle warming waits 1.2 seconds and an idle callback.
 It discovers deployed bundle URLs from the static game template (including
@@ -133,6 +205,8 @@ screen's code or creates a Phaser instance. All discovery and asset requests
 share one concurrent download and a 24 MiB session budget. Hidden tabs, data
 saver, and 2G connections pause warming; navigation cancels it. Failed downloads
 retry up to three times, and pauses do not consume retries.
+
+### Animated player cards
 
 Speculative card animation downloads share this queue and its 24 MiB session budget. They
 run after queued gameplay assets, one at a time, with the equipped local card
@@ -179,7 +253,7 @@ Bundles and shop offers containing cards have an info button opening a native pr
 dialog (`showRewardPreview`) listing everything the offer grants: player cards
 animate, other rewards show their artwork with a name and type caption.
 The preview uses the canonical `bb-popup` header, square frame tokens,
-`bb-close` control, and shared popup dismissal motion from `ui-system.css`.
+`bb-close` control, and shared popup dismissal motion from `ui-components.css`.
 Each preview card shows its rarity beneath the art. Closing a preview immediately
 disposes its media and unregisters its page-disposal callback, including a close
 before visibility observers have seen the dialog. Disconnected observers also
@@ -208,8 +282,8 @@ holding up gameplay or repeatedly retrying the same request.
 alignment, decoded green-spill pixels on Shuriken/Amethyst/Anvil/Ozzy (including
 later orb and particle effects), hover/visibility behavior,
 preview effect bounds and cleanup, and reward reveals. Use `--preview-layout`
-or `--reward-layout` for focused desktop/mobile layout checks. Playwright is
-required; `NODE_PATH` and `CHROME_EXECUTABLE` can select existing installations.
+or `--reward-layout` for focused desktop/mobile layout checks. The harness uses
+Google Chrome by default. Set `CHROME_EXECUTABLE` to select a Chrome or Chromium executable.
 Use `--battle-media` to check six animated cards sharing one decoder and teardown.
 
 Visible playback allows up to 20 seconds per request, with at most three attempts
@@ -226,6 +300,8 @@ visual loading and the deferred audio queue, releasing on audio completion or
 scene teardown. A cached animation can still play during those holds. New
 gameplay warming preempts an in-flight card download. The game-ready event starts
 the optional queue without awaiting it or adding cards to game-loader progress.
+
+### Match entry and return
 
 The results screen calls `warmLobby()` to download the static lobby template and
 its bundles/styles. It never pre-joins a party. On actual return,
@@ -277,20 +353,24 @@ on narrow screens. Pixel icons and blue (add), gold (pending), or green
 (accept/friends) treatments distinguish relationship states; pending and friends
 remain fully legible when disabled.
 
+### Bundles and portraits
+
 During a foreground screen change, script preload hints start as soon as HTML
 arrives, alongside stylesheet loading and outgoing cleanup. Execution remains
 ordered and starts only after cleanup and styles complete. Hashed production
 JS/CSS and content-versioned card videos receive one-year immutable caching.
 The production build also writes Brotli and gzip copies of each hashed bundle,
-which `middleware/precompressed.js` serves instead of compressing on every
+which `src/server/middleware/precompressed.js` serves instead of compressing on every
 request. Other `/assets/` files are cached for ten minutes, so assets warmed in
 the lobby are used without a revalidation round trip (replaced art can show for
 up to ten minutes after a deploy). HTML, manifests, map revisions, unversioned
 card videos and development files continue revalidating. The build removes
 hashed bundles that are outside the newest five versions and over a day old.
+Development middleware builds in memory. To discard stale disk output on a
+development checkout, run `npm run cleanbuild` before rebuilding.
 No service worker or hidden running lobby is used.
 
-Character portraits are inlined into the lobby, game and profile bundles from
+Character portraits are inlined into the lobby and game bundles from
 small `portrait.webp` copies of each `body.webp`. After changing body art run
 `node scripts/art/build-portraits.cjs`; `npm run validate:content` reports
 missing or stale portraits. Roster slots, bot pickers, matchmaking and HUD
@@ -299,7 +379,9 @@ avatars also display these copies through `bodyDisplayUrl()` in
 Google Fonts. Lobby backgrounds are separate from the larger `gameBg` scenery
 layers and are kept at roughly 2.7K wide.
 
-Validation: navigation tests cover repeated party routes without remounting,
+### Navigation verification
+
+Navigation tests cover repeated party routes without remounting,
 superseded requests, and cancellation. Preloader tests exercise scheduling,
 selection priority, cancellation, retries, visibility/data-saver restrictions,
 and budget exhaustion. Return tests cover single-use status, party/solo routes,
@@ -337,7 +419,7 @@ It follows actual rendered movement, skips invisible fighters and teleport
 jumps, and cleans up on sprite destruction or scene shutdown.
 
 Indeterminate loading uses the shared `.bb-battle-loader` in
-`public/styles/ui-system.css`: steel pixel blades clash around a gold spark. Only their
+`src/client/styles/ui-components.css`: steel pixel blades clash around a gold spark. Only their
 inset guard gems use the logo’s ice/cobalt-blue and gold/orange palettes. The transparent two-cell sprite sheet lives at
 `public/assets/ui/loading-swords.webp`; its source prompt is recorded beside it.
 Shop/checkout, lobby recovery, Trophy Road, leaderboard, account forms, and help
@@ -353,7 +435,7 @@ remain still after their entrance unless the equipped frame has an
 `animationUrl`; those transparent videos loop, with still posters for
 reduced-motion users. Fighter portraits remain still.
 `gameHudController.js` fits both teams to the available space and staggers each
-team's reveal; `public/styles/game.css` owns the pixel grid
+team's reveal; `src/client/styles/game.css` owns the pixel grid
 and entrance styling. Reduced-motion preferences disable overlay animations and
 transitions. Battle frames use a single uniform scale to fit their measured visible
 bounds inside the shared card box, preserving the original artwork's aspect
@@ -424,15 +506,22 @@ pending startup and restores patched methods; Phaser owns active loader cleanup.
 
 `node --test tests/renderResolution.test.js tests/renderResolution.test.mjs tests/deferredAudio.test.mjs`
 
-`node scripts/dev/test-rendering.cjs` requires Playwright with Chromium and WebKit
-installed. `NODE_PATH` can point to an existing Playwright package directory;
-`CHROME_EXECUTABLE` optionally selects an installed Chrome. The harness needs no
+`node scripts/dev/test-rendering.cjs` requires Google Chrome and Playwright WebKit.
+Install WebKit with `npx playwright-core install webkit`. Set `CHROME_EXECUTABLE`
+to select a Chrome or Chromium executable. The harness needs no
 database or game server. It checks actual rendered pixels, transparency, clipping,
 generated textures, WebGL render textures, quality changes, camera mapping,
 resize, automatic Canvas fallback, slow/failed audio, and teardown in both engines.
 The preserved drawing buffer is enabled only in the harness for pixel inspection.
 
 ## Character animation
+
+The playable roster comes from `src/shared/characters/index.js` and the client
+registrations in `src/client/game/characters/manifest.js`. Follow the runtime's
+hooks in `shared/characterEntityBase.js` when adding presentation.
+`characters/special.js` dispatches supers; `characters/networkRegistry.js`
+installs Ninja, Sparrow and Ozzy adapters and Gloop's special predictor.
+See [Add a character](contributing.md#add-a-character) for assets and validation.
 
 Every fighter, local or remote, is animated through
 `src/client/game/characters/shared/animationState.js`. Character code never
@@ -482,29 +571,73 @@ disables this landing effect. Tuning lives in `cameraDynamics.js`.
 
 ## Mobile battle controls
 
-`src/client/game/scene/mobileControls.js` owns touch input; `src/client/styles/mobileControls.css` owns its look. It turns on for touch devices (`isTouchGameDevice`), or when `window.__BB_FORCE_MOBILE_CONTROLS = true` is set for desktop testing. The overlay is plain DOM above the canvas, and `localPlayer.js` reads it each frame through `isMovingLeft/Right`, `isJumpHeld`, `isDuckHeld`, `isAimingUp/Down` and the one-shot `consumeJumpFreshPress`/`consumeDashFreshPress`.
+`src/client/game/scene/mobileControls.js` owns touch input;
+`src/client/styles/mobileControls.css` owns its look. It turns on for touch devices
+(`isTouchGameDevice`), or when `window.__BB_FORCE_MOBILE_CONTROLS = true` is set for
+desktop testing. The overlay is plain DOM above the canvas, and `localPlayer.js` reads
+it each frame through `isMovingLeft/Right`, `isJumpHeld`, `isDuckHeld`,
+`isAimingUp/Down` and the one-shot `consumeJumpFreshPress`/`consumeDashFreshPress`.
 
 - The left half is a floating movement stick. Pulling it straight down ducks, and up/down steers a dash.
-- The right-thumb cluster is ordered by use. Attack is largest and nearest the corner, then jump, then super and dash, then a small duck button. Tapping attack or super auto-aims at the nearest opponent; dragging aims manually. Super fills from the bottom as it charges; dash shows its cooldown as a lifting shutter, so the keyboard dash bar is hidden. When either is available its face turns solid, slowly fades brighter, and a highlight runs around its outline.
-- The look follows the battle HUD: a stepped pixel-circle ink outline around a lightly tinted see-through face, with solid colour-coded 12×12 pixel-art icons. `--bbm-px` (one art pixel) scales with the controls.
-- Positions scale with the shorter viewport side and respect safe-area insets. The overlay hides while the local player is dead so the spectate controls stay reachable.
+- The right-thumb cluster is ordered by use. Attack is largest and nearest the corner,
+  then jump, then super and dash, then a small duck button. Tapping attack or super
+  auto-aims at the nearest opponent; dragging aims manually. Super fills from the bottom
+  as it charges; dash shows its cooldown as a lifting shutter, so the keyboard dash bar
+  is hidden. When either is available its face turns solid, slowly fades brighter, and a
+  highlight runs around its outline.
+- The look follows the battle HUD: a stepped pixel-circle ink outline around a lightly
+  tinted see-through face, with solid colour-coded 12×12 pixel-art icons. `--bbm-px`
+  (one art pixel) scales with the controls.
+- Positions scale with the shorter viewport side and respect safe-area insets. The
+  overlay hides while the local player is dead so the spectate controls stay reachable.
 - `body.bb-touch-game` hides the in-game chat, the settings button and the keyboard reference on touch devices.
 
 ## Hit feedback
 
-Every attack that damages a fighter plays the same reaction, from `src/client/game/characters/shared/hitFeedback.js` (`playHitFeedback`): a white flash over the fighter's current frame, the shared damage burst (`spawnDamageImpact`), the duck-guard bubble when they were ducking, and an animation hold sized by the attack's delivery (`hitstopForDelivery`). The flash is a copy drawn over the sprite, so team, power-up and invisibility tints are untouched.
+Every attack that damages a fighter plays the same reaction, from
+`src/client/game/characters/shared/hitFeedback.js` (`playHitFeedback`): a white flash
+over the fighter's current frame, the shared damage burst (`spawnDamageImpact`), the
+duck-guard bubble when they were ducking, and an animation hold sized by the attack's
+delivery (`hitstopForDelivery`). The flash is a copy drawn over the sprite, so team,
+power-up and invisibility tints are untouched.
 
-Each viewer sees it once, as early as they know of the hit. The attacker plays it at its predicted contact (`notePredictedHit` in `shotPrediction.js`), and the health update that follows skips it (`takePredictedHit(name, "feedback")`). Everyone else plays it on the `health-update`, whose combat updates carry the attack's `delivery`. Burn ticks and other non-blow damage flash and burst without a hold; poison plays none. The local victim also gets the screen pulse and camera shake.
+Each viewer sees it once, as early as they know of the hit. The attacker plays it at its
+predicted contact (`notePredictedHit` in `shotPrediction.js`), and the health update
+that follows skips it (`takePredictedHit(name, "feedback")`). Everyone else plays it on
+the `health-update`, whose combat updates carry the attack's `delivery`. Burn ticks and
+other non-blow damage flash and burst without a hold; poison plays none. The local
+victim also gets the screen pulse and camera shake.
 
-Attack-specific presentation stays in each character's folder and plays alongside: each character's `hit` sound, fireball bursts, explosions. Do not add a per-character hit flash; route new attacks through `notePredictedHit` instead.
+Attack-specific presentation stays in each character's folder and plays alongside: each
+character's `hit` sound, fireball bursts, explosions. Do not add a per-character hit
+flash; route new attacks through `notePredictedHit` instead.
 
 ## Player sound distance
 
-Player-created effects use `src/client/game/audio/playerAudio.js`. Pass the acting player's sprite (or an impact point when the owner is unavailable) and the effect's local volume to `playPlayerSound`. Use `playerSoundVolume` for sound instances that need their own playback lifecycle. Dash, duck, attack, special, hit, death, and power-up tick cues use this path.
+Player-created effects use `src/client/game/audio/playerAudio.js`. Pass the acting
+player's sprite (or an impact point when the owner is unavailable) and the effect's
+local volume to `playPlayerSound`. Use `playerSoundVolume` for sound instances that need
+their own playback lifecycle. Dash, duck, attack, special, hit, death, and power-up tick
+cues use this path.
 
-The local player hears their own sounds at the requested volume. The watched fighter becomes that listener in spectator mode, so their sounds also play at full volume. Other fighters start at 90% of the same effect's volume when close. Their volume falls smoothly with distance from the listener and fades to silence 360 px beyond the visible camera area. This keeps distant combat on large maps, including Bank Bust, quiet. Sustained sounds should recalculate volume during playback when the fighter or spectator target moves.
+The local player hears their own sounds at the requested volume. The watched fighter
+becomes that listener in spectator mode, so their sounds also play at full volume. Other
+fighters start at 90% of the same effect's volume when close. Their volume falls
+smoothly with distance from the listener and fades to silence 360 px beyond the visible
+camera area. This keeps distant combat on large maps, including Bank Bust, quiet.
+Sustained sounds should recalculate volume during playback when the fighter or spectator
+target moves.
 
-Movement clouds (landing, jump, run, turn skid, wall slide, wall kick) come from a small simulation in `src/client/game/scene/clouds/`. A cloud is a set of soft blobs that puff out, break into smaller pieces along their path and wear away. `cloudRaster.js` merges overlapping blobs into one pixel-art silhouette and shades each lobe from the field, and `cloudLayer.js` draws them into two world-space canvases per scene (behind and in front of fighters) aligned to a fixed cloud pixel grid. `cloudEmitters.js` turns contacts into blobs from a contact point, surface normal, impact strength and momentum, so every floor and wall collision uses the same rules. `effects.js` calls these emitters; the simulation, rasterizer and emitters are plain modules tested in `tests/movementClouds.test.js`.
+Movement clouds (landing, jump, run, turn skid, wall slide, wall kick) come from a small
+simulation in `src/client/game/scene/clouds/`. A cloud is a set of soft blobs that puff
+out, break into smaller pieces along their path and wear away. `cloudRaster.js` merges
+overlapping blobs into one pixel-art silhouette and shades each lobe from the field, and
+`cloudLayer.js` draws them into two world-space canvases per scene (behind and in front
+of fighters) aligned to a fixed cloud pixel grid. `cloudEmitters.js` turns contacts into
+blobs from a contact point, surface normal, impact strength and momentum, so every floor
+and wall collision uses the same rules. `effects.js` calls these emitters; the
+simulation, rasterizer and emitters are plain modules tested in
+`tests/movementClouds.test.js`.
 
 Shockwave hits broadcast `shockwave:hit` for each affected fighter, including bots.
 `powerups/shockwaveHit.js` uses the shared cloud system to follow the fighter for
@@ -512,9 +645,17 @@ Shockwave hits broadcast `shockwave:hit` for each affected fighter, including bo
 spaced by distance travelled, drawn behind the fighter on every client, and
 dissipate after emission stops.
 
-Opponent movement uses `src/client/game/audio/remoteMovementAudio.js`: terrain-specific footsteps and landings, jump and wall-jump cues, and wall-slide and falling-air loops. Event sequence IDs prevent repeated snapshots from replaying cues; older senders use movement transitions. Footsteps follow movement speed. Loops recalculate distance after each rendered frame and stop on landing, death, disconnect, respawn, presentation reset, or scene shutdown. Invisible fighters remain audible. The spawn intro suppresses movement audio.
+Opponent movement uses `src/client/game/audio/remoteMovementAudio.js`: terrain-specific
+footsteps and landings, jump and wall-jump cues, and wall-slide and falling-air loops.
+Event sequence IDs prevent repeated snapshots from replaying cues; older senders use
+movement transitions. Footsteps follow movement speed. Loops recalculate distance after
+each rendered frame and stop on landing, death, disconnect, respawn, presentation reset,
+or scene shutdown. Invisible fighters remain audible. The spawn intro suppresses
+movement audio.
 
-Falling wind uses `fallingAirVolume` in `movementAudio.js` for both local and remote fighters, at 45% of the original gain while retaining speed/time swell and playback fades.
+Falling wind uses `fallingAirVolume` in `movementAudio.js` for both local and remote
+fighters, at 45% of the original gain while retaining speed/time swell and playback
+fades.
 
 ## Lobby and match audio
 
@@ -522,48 +663,112 @@ Bank Bust vault damage reuses the shared coin-pickup sound, with randomized
 pitch and volume that scales with damage. Rapid hits are throttled, including
 when reduced motion is enabled.
 
-`public/assets/music/lobby-aligned.mp3` is the supplied 決戦の鐘 lobby render. `matchmaking-aligned.mp3` is the supplied lower-pitched 決戦の鐘 (0.76x) render. They stream through two persistent HTML audio elements owned by navigation; party changes preserve playback. Both play continuously, with the inactive version silent, keeping memory use bounded without decoding both full songs into Web Audio buffers.
+`public/assets/music/lobby-aligned.mp3` is the supplied 決戦の鐘 lobby render.
+`matchmaking-aligned.mp3` is the supplied lower-pitched 決戦の鐘 (0.76x) render. They stream
+through two persistent HTML audio elements owned by navigation; party changes preserve
+playback. Both play continuously, with the inactive version silent, keeping memory use
+bounded without decoding both full songs into Web Audio buffers.
 
-The lobby pair and sudden death music remain encoded as MP3 at 128 kbit/s stereo or 64 kbit/s mono. Bank Bust, Candyland, and the default map music use 96 kbit/s stereo; Mangrove and Serenity use 56 kbit/s mono. The lobby pair's alignment timing is unchanged.
+The lobby pair and sudden death music remain encoded as MP3 at 128 kbit/s stereo or 64
+kbit/s mono. Bank Bust, Candyland, and the default map music use 96 kbit/s stereo;
+Mangrove and Serenity use 56 kbit/s mono. The lobby pair's alignment timing is
+unchanged.
 
-`src/client/navigation/lobbyAudio.mjs` uses the original version in the lobby and the relaxed version during ready, searching, found, and loading. It waits for the next quarter-note boundary and crossfades over approximately one beat. Cancellation switches back using the same rule. Both versions use the same base level, multiplied by the user's music setting. New matchmaking participants play `/assets/player-join.mp3`; your own arrival, the initial roster, reordering, and repeated updates are silent. Match found and loading do not play a sound effect. Party join notifications also use the player-join cue. There is no runtime speed change, pitch shift, or low-pass filtering. If the relaxed stream is unavailable, the original continues until it can switch; media errors fall back to the available stream.
+`src/client/navigation/lobbyAudio.mjs` uses the original version in the lobby and the
+relaxed version during ready, searching, found, and loading. It waits for the next
+quarter-note boundary and crossfades over approximately one beat. Cancellation switches
+back using the same rule. Both versions use the same base level, multiplied by the
+user's music setting. New matchmaking participants play `/assets/player-join.mp3`; your
+own arrival, the initial roster, reordering, and repeated updates are silent. Match
+found and loading do not play a sound effect. Party join notifications also use the
+player-join cue. There is no runtime speed change, pitch shift, or low-pass filtering.
+If the relaxed stream is unavailable, the original continues until it can switch; media
+errors fall back to the available stream.
 
-The relaxed track continues at its existing level over the loading screen. Successful map music playback fades both lobby streams out, then pauses them. Map music fades in at 30% of its configured level during the intro/countdown and rises to its configured level at FIGHT. Joining a live match fades straight to the configured level. FIGHT also ends any remaining lobby audio if map playback was unavailable.
+The relaxed track continues at its existing level over the loading screen. Successful
+map music playback fades both lobby streams out, then pauses them. Map music fades in at
+30% of its configured level during the intro/countdown and rises to its configured level
+at FIGHT. Joining a live match fades straight to the configured level. FIGHT also ends
+any remaining lobby audio if map playback was unavailable.
 
-Music and SFX retain independent user settings across separately bundled pages. Hidden tabs pause lobby audio; returning resumes its existing position. State changes and duplicate matchmaking messages do not restart tracks or replay confirmation cues.
+Music and SFX retain independent user settings across separately bundled pages. Hidden
+tabs pause lobby audio; returning resumes its existing position. State changes and
+duplicate matchmaking messages do not restart tracks or replay confirmation cues.
 
 Lobby and matchmaking music use a base gain of 0.264, multiplied by the user's music setting.
 
-Both exports use a 109.703 BPM pulse grid. Offline Rubber Band R3 time maps anchor 448 detected lobby pulses and 396 relaxed pulses, preserving each source's pitch. Initial silence is about 0.075 seconds for the lobby and 0.435 seconds for matchmaking. The original needs only small timing corrections; the relaxed version is approximately 4.4% faster than its source to match the grid. Fixed gains match their loudness at approximately -17.5/-17.6 LUFS, with decoded true peaks below -1.6 dBFS. No synthesized layers, echoes, or reverb are added.
+Both exports use a 109.703 BPM pulse grid. Offline Rubber Band R3 time maps anchor 448
+detected lobby pulses and 396 relaxed pulses, preserving each source's pitch. Initial
+silence is about 0.075 seconds for the lobby and 0.435 seconds for matchmaking. The
+original needs only small timing corrections; the relaxed version is approximately 4.4%
+faster than its source to match the grid. Fixed gains match their loudness at
+approximately -17.5/-17.6 LUFS, with decoded true peaks below -1.6 dBFS. No synthesized
+layers, echoes, or reverb are added.
 
-The separate renders have different arrangements and lengths: they cannot be aligned as identical instrument stems. Full source content is retained, followed by enough silence for loops of 113 and 100 four-beat bars. `lobbyMusicTiming.mjs` records those lengths and the common beat interval. Every two seconds, and before a switch, the controller corrects bar-phase drift on the silent standby only, allowing the decoder to seek before the crossfade. Audible streams are never seeked during a reversed fade. All media playback rates remain 1. Lobby return explicitly resumes the shared audio context because Phaser suspends it when the battle is destroyed.
+The separate renders have different arrangements and lengths: they cannot be aligned as
+identical instrument stems. Full source content is retained, followed by enough silence
+for loops of 113 and 100 four-beat bars. `lobbyMusicTiming.mjs` records those lengths
+and the common beat interval. Every two seconds, and before a switch, the controller
+corrects bar-phase drift on the silent standby only, allowing the decoder to seek before
+the crossfade. Audible streams are never seeked during a reversed fade. All media
+playback rates remain 1. Lobby return explicitly resumes the shared audio context
+because Phaser suspends it when the battle is destroyed.
 
-Each switch prepares the incoming stream at most once. A `seeked` event completes that preparation instead of repeatedly seeking against an advancing reference. Periodic standby synchronization skips a prepared switch. Returning from battle clears stale playback readiness and waits for the resumed stream's `playing` event or resolved play promise before fading it in; a rejected start can be retried on the next gesture or state change.
+Each switch prepares the incoming stream at most once. A `seeked` event completes that
+preparation instead of repeatedly seeking against an advancing reference. Periodic
+standby synchronization skips a prepared switch. Returning from battle clears stale
+playback readiness and waits for the resumed stream's `playing` event or resolved play
+promise before fading it in; a rejected start can be retried on the next gesture or
+state change.
 
-Export measurements in earlier work logs were local observations. The shipped tracks and `src/client/navigation/lobbyMusicTiming.mjs` are the retained runtime references.
+Export measurements in earlier work logs were local observations. The shipped tracks and
+`src/client/navigation/lobbyMusicTiming.mjs` are the retained runtime references.
 
-Relevant checks: `node --test tests/lobbyAudio.test.mjs tests/musicEnvelope.test.js tests/matchPresentation.test.js tests/navigation.test.js tests/navigationTransitions.test.js tests/rewardPresentation.test.js`.
+Relevant checks: `node --test tests/lobbyAudio.test.mjs tests/musicEnvelope.test.js
+tests/matchPresentation.test.js tests/navigation.test.js
+tests/navigationTransitions.test.js tests/rewardPresentation.test.js`.
 
 The battle countdown plays its beeps and the final `/assets/game-sounds/start.mp3` FIGHT cue. Both cues are preloaded when the countdown starts.
 
-On the match results screen, Escape, Enter, or Space activates Exit. The Exit button preloads and plays the UI click cue before returning to the lobby. The automatic countdown return is silent.
+On the match results screen, Escape, Enter, or Space activates Exit. The Exit button
+preloads and plays the UI click cue before returning to the lobby. The automatic
+countdown return is silent.
 
 ## Map terrain and footsteps
 
 Set each map document's `metadata.terrain` through Map Studio/API (built-in defaults live in `src/shared/maps/<id>.json`):
 
 - `grass`: Lushy Peaks, Mangrove Meadow, Serenity. Four natural foot-on-grass steps and the soft “smush” landing.
-- `hard`: Industrial terrain defaults to the original three footsteps and concrete landing. Bank Bust overrides only the footsteps with a ready-made metal contact.
+- `hard`: Industrial terrain defaults to the original three footsteps and concrete
+  landing. Bank Bust overrides only the footsteps with a ready-made metal contact.
 
-Bank Bust uses three individual metal footsteps and a heavier metal landing extracted from SoftDistortionFX’s CC0 `Metal Footsteps`. The landing layers a short bass thud with the recorded impact and plays at increased gain capped at full volume. Footstep and hard-terrain landing keys are overridden for local and remote fighters; other movement retains shared samples. `src/shared/physics/movementSounds.js` owns the isolated key mapping. Source and processing details live in `public/assets/bank-bust/movement/README.md`.
+Bank Bust uses three individual metal footsteps and a heavier metal landing extracted
+from SoftDistortionFX’s CC0 `Metal Footsteps`. The landing layers a short bass thud with
+the recorded impact and plays at increased gain capped at full volume. Footstep and
+hard-terrain landing keys are overridden for local and remote fighters; other movement
+retains shared samples. `src/shared/physics/movementSounds.js` owns the isolated key
+mapping. Source and processing details live in
+`public/assets/bank-bust/movement/README.md`.
 
 This is a map-wide material, not automatic texture detection. Missing or unknown materials safely fall back to `hard`.
 
-To add another material, add a named entry to `src/shared/physics/terrainAudio.json` with a label, `volumeScale`, `landing`, and a nonempty `steps` array. Sound entries need a unique `key` and `files` paths relative to `public/assets`. Add the files, then set the map's `terrain` to the new name. Preloading and selection use this registry automatically; no character-specific edits are needed. Keep asset licenses beside the files.
+To add another material, add a named entry to `src/shared/physics/terrainAudio.json`
+with a label, `volumeScale`, `landing`, and a nonempty `steps` array. Sound entries need
+a unique `key` and `files` paths relative to `public/assets`. Add the files, then set
+the map's `terrain` to the new name. Preloading and selection use this registry
+automatically; no character-specific edits are needed. Keep asset licenses beside the
+files.
 
-`footstepVolumeScale` is the master multiplier. Grass uses four individual foot contacts extracted from a real walking recording and normalized to −22 LUFS with a −4 dB true-peak ceiling. Its landing volume is independently reduced through `landing.volumeScale`. The untouched CC0 preview remains alongside the game-ready files. Speed-dependent pitch/volume and nonrepeating variants are retained.
+`footstepVolumeScale` is the master multiplier. Grass uses four individual foot contacts
+extracted from a real walking recording and normalized to −22 LUFS with a −4 dB
+true-peak ceiling. Its landing volume is independently reduced through
+`landing.volumeScale`. The untouched CC0 preview remains alongside the game-ready files.
+Speed-dependent pitch/volume and nonrepeating variants are retained.
 
-The initial player spawn is marked for a silent landing. The marker is consumed on the first grounded frame (or cleared on a deliberate jump or a real fall). Later gameplay landings retain their normal audio. This only suppresses the landing sound, not spawn visuals.
+The initial player spawn is marked for a silent landing. The marker is consumed on the
+first grounded frame (or cleared on a deliberate jump or a real fall). Later gameplay
+landings retain their normal audio. This only suppresses the landing sound, not spawn
+visuals.
 
 Tests: `node --test tests/playerAudio.test.js`.
 
@@ -580,14 +785,17 @@ level to the new one alongside the stat count-up. Reduced motion shows the new
 badge immediately. Stat gain labels reserve their space before confirmation so
 revealing the plus amounts does not resize the panel. Purchase confirmations use the shared pixel window styles. Server-confirmed
 purchase confirmations stay on Body. Successful unlocks shake and enlarge the
-existing lock icon, then split the existing crossed-chain artwork; upgrades use a gold halo behind the body and a simple Level Up label. Result labels stay brief. Stat headers always reserve
+existing lock icon, then split the existing crossed-chain artwork; upgrades use a gold
+halo behind the body and a simple Level Up label. Result labels stay brief. Stat headers
+always reserve
 gain space so confirmation does not change the panel height. Reduced motion skips the
 burst and stat count-up while retaining the result message.
 
-`src/client/ui/uiSounds.js` owns delegated click/hover sounds, lazy loading and manual cue suppression. [UI sound usage and credits](../../public/assets/ui-sound/README.md), [reward sound sources](../../public/assets/ui-sound/rewards/README.md), and [movement sound provenance](../../public/assets/movement/README.md) stay beside their assets.
+`src/client/ui/uiSounds.js` owns delegated click and hover sounds, lazy loading,
+and manual cue suppression.
 
-Profile battle logs share `battleLogView.js` on the lobby popup and standalone
-profile page. Only recorded victories, defeats, and draws appear in the list and
+Profile battle logs use `src/client/views/battleLogView.js` in the lobby popup.
+Only recorded victories, defeats, and draws appear in the list and
 past-ten summary; legacy matches with unknown results are hidden. The pixel-font
 summary labels net trophies, wins, losses, and draws when present. Match rows show
 only the result, mode, map, time, and recorded trophy change; combat stats and
@@ -596,9 +804,14 @@ rewards are omitted. Recorded zero trophy changes remain visible.
 Match results play separate win, loss, and draw cues. Null and explicit `draw`
 outcomes use `/assets/game-sounds/draw.mp3`, a short original suspended-fifth
 chime; result playback pauses map music and respects the existing SFX settings
-and audio-unlock handling. [Draw sound source](../../public/assets/game-sounds/README.md).
+and audio-unlock handling.
 
-Both the lobby profile and standalone profile use `src/client/account/nameChangeDialog.js` for name changes. They open a dedicated native modal using the shared popup frame, chroma header and close button. The dialog states the 50-gem cost and once-per-month limit, shows the next eligible date or current balance, and keeps validation errors inside the dialog. Its blue Change Name action includes the gem icon and price. Escape, Cancel and backdrop dismissal restore focus to the opener.
+The lobby profile opens `src/client/account/nameChangeDialog.js` for name changes. The
+native dialog uses the shared popup frame, chroma header and close button. The dialog
+states the 50-gem cost and once-per-month limit, shows the next eligible date or current
+balance, and keeps validation errors inside the dialog. Its blue Change Name action
+includes the gem icon and price. Escape, Cancel and backdrop dismissal restore focus to
+the opener.
 
 Projectile damage uses one fading red screen pulse. While its tween is active,
 the poison-water renderer leaves opacity to the tween and pauses the looping
@@ -616,9 +829,12 @@ expires. Super flames are larger, with a brief bow-side spark cue and a held-dra
 release animation. These cosmetics do not change burn damage or projectile timing.
 The renderer caps flame objects and clears them on presentation reset/shutdown.
 
-Gloop spars with Thorg, who retreats while hurt and slimed. Gloop prioritizes his earned hook over another basic attack once charged. Preview rounds clear packet deduplication and slime splat history because their action IDs restart.
+In Gloop’s showcase, Thorg retreats while hurt and slimed. Gloop prioritizes his earned
+hook over another basic attack once charged. Preview rounds clear packet deduplication
+and slime splat history because their action IDs restart.
 
-Showcase run animation, footstep cadence, and dust cadence follow simulated movement speed, including slime slows. Attack and super animations retain their normal timing.
+Showcase run animation, footstep cadence, and dust cadence follow simulated movement
+speed, including slime slows. Attack and super animations retain their normal timing.
 
 ## Ready restriction badges
 
@@ -647,7 +863,7 @@ Apply `npm run migrate:apply -- party-hidden-bros` for the additive
 
 ## Rarity labels
 
-`public/styles/ui-system.css` gives displayed rarity labels a shared square,
+`src/client/styles/ui-components.css` gives displayed rarity labels a shared square,
 ink-framed badge with white pixel text and a solid rarity-colored fill. This
 covers shop offers, collection cards and icons, skin details, card preview
 captions, and admin offer previews. Rarity classes supply `--bb-rarity-fill`;
@@ -657,7 +873,7 @@ keep new rarity labels consistent with this shared treatment.
 
 Every arrow in the UI is one of four pixel SVGs in `public/assets/ui/arrows/`
 (`arrow-right`, `arrow-left`, `arrow-up`, `arrow-down`). Use the `.bb-arrow`
-class from `public/styles/ui-system.css` rather than a text glyph: build it with
+class from `src/client/styles/ui-components.css` rather than a text glyph: build it with
 `pixelArrow(direction, size)` from `src/client/ui/pixelArrow.js`, or
 `arrowHtml()` from `src/shared/site/html.cjs` in server-rendered pages. The
 arrow is a mask tinted by `currentColor`; `bb-arrow-sm` and `bb-arrow-lg` change

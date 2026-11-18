@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from "../../ui/domMotion";
 // gameScene/matchIntro.js
 //
 // The pregame: when this client's loading screen lifts, pregame.mp3 plays and
@@ -37,10 +38,6 @@ function centroid(points) {
   const sum = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
   return { x: sum.x / points.length, y: sum.y / points.length };
 }
-
-const prefersReducedMotion = () =>
-  typeof window !== "undefined" &&
-  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
 /**
  * @param {object} deps

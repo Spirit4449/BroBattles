@@ -1,8 +1,10 @@
+import { EMAIL_RESEND_SECONDS, VERIFICATION_CODE_PATTERN } from "../../shared/social/verificationCode.js";
+import { API_PATHS } from "../../shared/net/apiPaths.js";
 import { sonner } from '../ui/sonner.js';
 import '../styles/emailControls.css';
 import '../styles/sonner.css';
-import { wireBackdropDismiss } from '../site/dialogDismiss.mjs';
-import { createCooldown, wireCodeInputs } from './emailVerificationUI';
+import { openModalDialog } from '../ui/nativeDialog.js';
+import { codeInputMarkup, createCooldown, wireCodeInputs } from './emailVerificationUI';
 
 export function wireEmailSettings(fetchJson, profile) {
   // Guest profiles can see the account panel while its member controls are
@@ -19,7 +21,7 @@ export function wireEmailSettings(fetchJson, profile) {
     if (status) status.textContent = currentEmail;
     toggle.textContent = currentEmail ? 'Change Email Address' : 'Add Email Address';
   };
-  fetchJson('/profile/email').then(data => show(data.email)).catch(() => {});
+  fetchJson(API_PATHS.PROFILE_EMAIL).then(data => show(data.email)).catch(() => {});
   toggle.addEventListener('click', () => {
     if (activeDialog?.open) return;
     const dialog = document.createElement('dialog');
@@ -38,7 +40,7 @@ export function wireEmailSettings(fetchJson, profile) {
       </form>
       <section data-code-step class="email-step" hidden>
         <div class="verification-destination"><span data-destination></span><button type="button" class="email-edit pixel-menu-button" aria-label="Edit email address">Edit</button></div>
-        <div class="email-code-inputs" role="group" aria-label="Six-digit verification code">${Array.from({length:6}, (_,i) => `<input type="text" inputmode="numeric" autocomplete="${i ? 'off' : 'one-time-code'}" maxlength="${i ? 1 : 6}" aria-label="Digit ${i+1}" />`).join('')}</div>
+        <div class="email-code-inputs" role="group" aria-label="Verification code">${codeInputMarkup()}</div>
         <button type="button" class="profile-btn" data-verify>Verify email</button>
         <button type="button" class="email-text-button" data-resend>Resend code</button>
       </section>
@@ -77,11 +79,11 @@ export function wireEmailSettings(fetchJson, profile) {
       if (busy) return;
       busy = true; tell(); refresh();
       try {
-        const result = await post('/profile/email/send-code', { email: target });
+        const result = await post(API_PATHS.PROFILE_EMAIL_SEND_CODE, { email: target });
         if (!dialog.open) return;
         sentEmail = target.trim().toLowerCase();
         correctionUsed = !!result.correctionUsed;
-        cooldown.set(result.resendAfter ?? 60);
+        cooldown.set(result.resendAfter ?? EMAIL_RESEND_SECONDS);
         showCode();
       } catch (error) { tell(error.message, true); }
       finally { busy = false; refresh(); }
@@ -93,10 +95,10 @@ export function wireEmailSettings(fetchJson, profile) {
     resume.addEventListener('click', () => { email.value = sentEmail; tell(); showCode(); });
     verify.addEventListener('click', async () => {
       if (busy) return;
-      if (!/^\d{6}$/.test(digits.value())) { tell('Enter all six digits.', true); digits.focus(); return; }
+      if (!VERIFICATION_CODE_PATTERN.test(digits.value())) { tell('Enter the complete verification code.', true); digits.focus(); return; }
       busy = true; tell(); refresh();
       try {
-        const result = await post('/profile/email/verify', { code: digits.value() });
+        const result = await post(API_PATHS.PROFILE_EMAIL_VERIFY, { code: digits.value() });
         show(result.email); dialog.close();
         sonner('Email address updated.', undefined, 'success');
       } catch (error) { tell(error.message, true); digits.clear(); digits.focus(); }
@@ -105,7 +107,7 @@ export function wireEmailSettings(fetchJson, profile) {
     marketing.addEventListener('change', async () => {
       const next = marketing.checked;
       busy = true; tell(); refresh();
-      try { await post('/profile/email/marketing', { subscribed: next }); subscribed = next; notify('Email preference saved.', undefined, 'success'); }
+      try { await post(API_PATHS.PROFILE_EMAIL_MARKETING, { subscribed: next }); subscribed = next; notify('Email preference saved.', undefined, 'success'); }
       catch (error) { marketing.checked = subscribed; notify('Could not save email preference', error.message, 'error'); }
       finally { busy = false; refresh(); }
     });
@@ -118,18 +120,20 @@ export function wireEmailSettings(fetchJson, profile) {
       if (dialog.open) sonner(header, text, 'OK', undefined, { tone, containerId: toastWrap.id });
       else sonner(header, text, 'OK', undefined, { tone });
     };
-    const escape = event => {
-      if (event.key !== 'Escape' || !dialog.open) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      dialog.close();
-    };
-    window.addEventListener('keydown', escape, true);
     dialog.querySelector('.email-dialog-close').onclick = () => dialog.close();
-    wireBackdropDismiss(dialog);
-    dialog.addEventListener('close', () => { window.removeEventListener('keydown', escape, true); cooldown.dispose(); dialog.remove(); activeDialog = null; toggle.focus({preventScroll:true}); }, { once: true });
-    document.body.append(dialog); dialog.showModal(); email.value = currentEmail; showAddress();
-    Promise.allSettled([fetchJson('/profile/email'), fetchJson('/profile/email/marketing')]).then(([accountResult, preferenceResult]) => {
+    document.body.append(dialog);
+    openModalDialog(dialog, {
+      escape: true,
+      trigger: toggle,
+      onClose() {
+        cooldown.dispose();
+        dialog.remove();
+        activeDialog = null;
+      },
+    });
+    email.value = currentEmail;
+    showAddress();
+    Promise.allSettled([fetchJson(API_PATHS.PROFILE_EMAIL), fetchJson(API_PATHS.PROFILE_EMAIL_MARKETING)]).then(([accountResult, preferenceResult]) => {
       if (!dialog.open) return;
       if (accountResult.status !== 'fulfilled') throw accountResult.reason;
       const data = accountResult.value;

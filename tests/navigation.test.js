@@ -224,8 +224,12 @@ test('lobby menus work before deferred setup and later setup reuses them, preser
   assert.equal(calls.filter(call => call === 'profile-open').length, 2);
   assert.equal(calls.filter(call => call === 'shop-notifications').length, 1);
   assert.equal(f.window.location.search, '?shop=currency');
+  const { applyWallet } = f.load('src/client/lobby/wallet.mjs');
+  const { getUser } = f.load('src/client/lobby/session.mjs');
+  applyWallet(shopOptions.userData, { coins: 40, gems: 50 });
   shopOptions.onWalletChange({ coins: 40, gems: 50 });
-  assert.equal(user.coins, 40); assert.equal(user.gems, 50);
+  assert.equal(getUser().coins, 40); assert.equal(getUser().gems, 50);
+  assert.equal(user.coins, 10, 'rendering the account leaves the status response intact');
   assert.equal(f.document.getElementById('coin-count').textContent, '40');
   assert.equal(f.document.getElementById('gem-count').textContent, '50');
   assert.equal(calls.at(-1), 'wallet');
@@ -247,4 +251,156 @@ test('Escape closes the foremost viewers popup before dismissing the underlying 
   assert.equal(panel.classList.contains('is-open'), true);
   f.event(f.document, 'keydown', { key: 'Escape' });
   assert.equal(panel.classList.contains('is-open'), false);
+});
+
+test('profile Escape and close button both clear the password editor and status message', async () => {
+  const userData = { name: 'Owner', char_class: 'ninja', coins: 10, gems: 20, guest: false };
+  const f = createLobbyFixture({ globals: {
+    fetch: async url => ({ ok: true, json: async () => {
+      if (url === '/status') return { userData, guest: false };
+      if (url === '/profile/data') return { profile: { username: 'Owner', guest: false } };
+      return { success: true, friends: [], messages: [], members: [] };
+    } }),
+  } });
+  f.load('src/client/pages/lobby.js');
+  await f.settle();
+  f.document.dispatchEvent(new f.window.Event('DOMContentLoaded'));
+  await f.settle();
+  const id = value => f.document.getElementById(value);
+  const overlay = id('profile-overlay');
+  const passwordForm = id('profile-password-form');
+  const toggle = f.document.querySelector('[aria-controls="profile-password-form"]');
+  for (const dismiss of [
+    () => f.event(f.document, 'keydown', { key: 'Escape' }),
+    () => id('profile-close').click(),
+  ]) {
+    id('username-button').click();
+    await f.settle();
+    assert.equal(overlay.getAttribute('aria-hidden'), 'false');
+    toggle.click();
+    assert.equal(passwordForm.hidden, false);
+    id('profile-current-password').value = 'temporary current password';
+    id('profile-new-password').value = 'temporary new password';
+    id('profile-message').textContent = 'Unable to update password';
+    dismiss();
+    assert.equal(overlay.getAttribute('aria-hidden'), 'true');
+    assert.equal(passwordForm.hidden, true);
+    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+    assert.equal(id('profile-current-password').value, '');
+    assert.equal(id('profile-new-password').value, '');
+    assert.equal(id('profile-message').textContent, '');
+  }
+});
+
+test('retiring a screen closes its native dialog and removes its Escape capture immediately', () => {
+  const f = createLobbyFixture();
+  const cleanups = new Set();
+  const captureListeners = new Set();
+  f.window.__BB_PAGE_SCOPE__ = {
+    onDispose(callback) {
+      cleanups.add(callback);
+      return () => cleanups.delete(callback);
+    },
+  };
+  const add = f.window.addEventListener;
+  const remove = f.window.removeEventListener;
+  f.window.addEventListener = (type, listener, capture) => {
+    if (type === 'keydown' && capture) captureListeners.add(listener);
+    add(type, listener, capture);
+  };
+  f.window.removeEventListener = (type, listener, capture) => {
+    if (type === 'keydown' && capture) captureListeners.delete(listener);
+    remove(type, listener, capture);
+  };
+  const { openModalDialog } = f.load('src/client/ui/nativeDialog.js');
+  const dialog = f.document.createElement('dialog');
+  const trigger = f.document.createElement('button');
+  let focusCalls = 0;
+  let closeCalls = 0;
+  trigger.focus = () => { focusCalls++; };
+  f.document.body.append(trigger, dialog);
+  // Chrome schedules the close event, so retirement must complete before it fires.
+  dialog.close = () => {
+    dialog.removeAttribute('open');
+    dialog.removeAttribute('data-fixture-modal');
+  };
+  openModalDialog(dialog, {
+    trigger,
+    escape: true,
+    onClose() { closeCalls++; dialog.remove(); },
+  });
+  assert.equal(captureListeners.size, 1);
+  for (const dispose of [...cleanups]) dispose();
+  assert.equal(dialog.isConnected, false);
+  assert.equal(captureListeners.size, 0);
+  assert.equal(cleanups.size, 0);
+  assert.equal(closeCalls, 1);
+  assert.equal(focusCalls, 0);
+  f.event(dialog, 'close');
+  assert.equal(closeCalls, 1);
+});
+
+test('battle loading is monotonic and reveals only after the background and route presentation are ready', async () => {
+  const f = createLobbyFixture();
+  f.document.body.innerHTML = '<div id="game-bg"></div><div id="matchmaking-screen"></div><div id="loading-wrap"><div id="loading-bar-fill"></div><div id="loading-text"></div><span id="loading-percent"></span></div>';
+  const reports = [];
+  let present;
+  f.window.__BB_NAVIGATION__ = {
+    beginBattleLoading: () => new Promise(resolve => { present = resolve; }),
+    progress: (percent, message) => reports.push({ percent, message }),
+  };
+  f.window.__BB_PAGE_SCOPE__ = { active: true };
+  let ready = 0;
+  f.document.addEventListener('game:ready', () => ready++);
+  const { setBattleLoading, markBattleBackgroundReady } = f.load('src/client/game/boot/battleLoading.js');
+  setBattleLoading(48, 'Downloading the engine');
+  setBattleLoading(22, 'Engine ready');
+  assert.equal(f.document.querySelector('#loading-percent').textContent, '48%');
+  assert.deepEqual(reports.map(report => report.percent), [48, 48]);
+  setBattleLoading(100);
+  assert.equal(ready, 0);
+  markBattleBackgroundReady();
+  assert.equal(ready, 0);
+  present();
+  await f.settle();
+  assert.equal(ready, 1);
+  assert.ok(f.document.getElementById('loading-wrap').classList.contains('hidden'));
+  assert.ok(f.document.getElementById('game-bg').classList.contains('visible'));
+  markBattleBackgroundReady();
+  await f.settle();
+  assert.equal(ready, 1);
+});
+
+test('a retired battle loader leaves the next route untouched', async () => {
+  const f = createLobbyFixture();
+  f.document.body.innerHTML = '<div id="game-bg"></div><div id="loading-wrap"></div>';
+  let present;
+  f.window.__BB_NAVIGATION__ = {
+    beginBattleLoading: () => new Promise(resolve => { present = resolve; }),
+    progress() {},
+  };
+  const scope = { active: true };
+  f.window.__BB_PAGE_SCOPE__ = scope;
+  let ready = 0;
+  f.document.addEventListener('game:ready', () => ready++);
+  const { setBattleLoading, markBattleBackgroundReady } = f.load('src/client/game/boot/battleLoading.js');
+  markBattleBackgroundReady();
+  setBattleLoading(100);
+  scope.active = false;
+  present();
+  await f.settle();
+  assert.equal(ready, 0);
+  assert.ok(!f.document.getElementById('loading-wrap').classList.contains('hidden'));
+});
+
+test('opening and resizing Trophy Road leave the server progression unchanged', async () => {
+  const model = Object.freeze({ tiers: Object.freeze([]), player: Object.freeze({ trophies: 10 }) });
+  const f = createLobbyFixture({ globals: { fetch: async () => ({ ok: true, json: async () => model }) } });
+  const controller = f.load('src/client/lobby/profile/trophyController.js').createTrophyController({});
+  await controller.openTrophyProgressionOverlay({ preserveScroll: true });
+  assert.equal(f.document.querySelector('.trophy-rewards-state strong')?.textContent,
+    'No reward milestones yet');
+  f.window.dispatchEvent(new f.window.Event('resize'));
+  await f.advance(32);
+  assert.deepEqual(Object.keys(model), ['tiers', 'player']);
 });

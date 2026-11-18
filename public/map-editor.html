@@ -6,7 +6,6 @@
   <title>Map Studio · Bro Battles</title>
   <link rel="shortcut icon" href="/assets/logos/logo-small.webp" type="image/webp">
   <link rel="stylesheet" href="/styles/lato.css">
-  <link rel="stylesheet" href="/styles/ui-system.css">
   <link rel="stylesheet" href="/bundles/mapEditor.css">
 </head>
 <body>
@@ -80,6 +79,7 @@
   <footer><span id="status" role="status" aria-live="polite">Opening map…</span><span class="footer-keys"><kbd>⌘Z</kbd> undo <kbd>D</kbd> duplicate <kbd>Del</kbd> remove <kbd>Esc</kbd> playtest <kbd>?</kbd> all shortcuts</span></footer>
 </div>
 <dialog id="dialog"><form method="dialog"><header><h2 id="dialog-title"></h2><button value="cancel" class="dialog-close" aria-label="Close">×</button></header><div id="dialog-content"></div><div class="dialog-actions"><button id="dialog-cancel" value="cancel">Cancel</button><button id="dialog-apply" value="default" class="primary">Apply</button></div></form></dialog>
+<script src="/bundles/phaser-arcade-physics.min.js"></script>
 <script src="/bundles/mapEditor.bundle.js"></script>
 </body>
 </html>

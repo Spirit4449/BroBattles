@@ -5,7 +5,7 @@ function isDetachedProjectile(attack) {
 
 // The contact a live server runtime is reporting right now.
 function isRuntimeContact(room, attack, payload) {
-  return !!attack && room._activeAttacks?.includes(attack) &&
+  return !!attack && room.activeAttacks?.includes(attack) &&
     attack.attackerName === payload.attacker &&
     attack.attackType === payload.attackType &&
     attack.instanceId === payload.instanceId &&

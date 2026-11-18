@@ -1,3 +1,5 @@
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
+
 // Maps a server `game:error` to what the notice's button should do, so OK
 // takes the player somewhere useful instead of leaving them on a dead match.
 
@@ -28,4 +30,11 @@ export function resolveGameErrorAction(error, { editorPlaytest = false } = {}) {
     return { action: "dismiss", buttonText: "OK" };
   }
   return resolved;
+}
+
+export function performGameErrorAction(action, returnToLobby) {
+  if (action === "reload") window.location.reload();
+  else if (action === "login") window.location.replace(API_PATHS.LOGIN);
+  else if (action === "banned") window.location.replace("/banned");
+  else if (action === "lobby") return returnToLobby();
 }

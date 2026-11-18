@@ -45,8 +45,55 @@ Reimport with `node scripts/art/import-trophy-video.cjs <source.mp4>` (FFmpeg,
 img2webp, and the Sprite Workshop's Sharp dependency). Run content validation
 and inspect the alpha edges and loop after importing.
 
+### Gloop and Crystal Gloop
+
+- **Source and packing.** Both use 128px logical frames and named duck/wall poses. Base Gloop's
+  `pack-gloop-refresh.cjs` samples the canonical `public/assets/gloop/body.webp` portrait onto
+  native 128px canvases with nearest-neighbor sampling, using baseline atlas metadata
+  under the local, Git-ignored `output/gloop-hq/`. The generated approximation was replaced with portrait artwork. The original
+  silhouette is preserved; only the very top tier is shortened by roughly one native sprite pixel
+  (four rows in the intermediate master), reducing the raised cap from two steps to one. It strips
+  baked outlines before deformation and adds one uniform native-pixel black contour afterward,
+  including throwing poses. Enlarged previews use nearest-neighbor sampling. All base poses deform
+  the same canonical portrait artwork: throw uses a windup, forward crest extension, delayed body
+  compression, recoil, and damped recovery; airborne poses use an impulse-aligned vertical launch
+  stretch, subtle lower-body lag, relaxation toward a rounded apex, and modest vertical descent
+  stretch with a full rounded leading underside; column-wise ellipse remapping preserves the
+  detailed core without lateral airborne wobble; wall slide flattens only the right contact side,
+  mirrored by normal wall-facing logic. Frames share consistent foot registration.
+
+- **Movement and animation.** Base Gloop additionally has three-frame `dashright`, `dashdiagonal`,
+  and `dashup` tracks at y=640, selected for local and remote dash direction and timed to the shared
+  dash duration; dash poses keep the core artwork upright and morph the silhouette toward travel
+  without rotating it; width/height tradeoffs keep their size near the resting body. Horizontal and
+  angled left dashes mirror the right-facing art. Crystal retains its existing shared pose set. The
+  base running loop has ten gradual poses with a restrained forward rolling crest, delayed
+  lower-body sway, and a small traveling ripple; width and height change inversely to keep the
+  apparent jelly volume steady. The loop uses authored elastic poses. Idle
+  breathes over 3.5 seconds. Base running cadence covers roughly two visible body widths per roll
+  and scales with horizontal velocity. Base jump/fall frames are selected by vertical velocity using
+  `bbMotion` metadata, rather than fixed clip time; remote playback uses replicated velocity.
+  Production still uses the regular atlas: only frame selection and playback rate are
+  physics-driven. Skin clips without that metadata retain timed playback.
+
+- **Skin and pose edits.** The Crystal skin retains the internal ID/path `gloop-amethyst`. Full
+  atlas packing and targeted pose packing are separate operations; `pack-gloop-poses.cjs` changes
+  duck/wall frames and `pack-crystal-falling.cjs` changes Crystal falling frames. These older
+  packers can overwrite the refreshed base poses. The procedural projectile renderer chooses its
+  skin presentation while collision remains shared.
+
+- **Hook super.** Gloop’s hook super uses the refreshed eight-pose `hand-grip.webp` with genuine
+  alpha, plus matching open/closed fallback images. `pack-gloop-super-refresh.cjs` packs the
+  generated reference sheet from the local, Git-ignored `output/gloop-super-refresh/` onto the
+  existing coarse grid.
+  Preserve pale mint highlights when uploading the atlas; the retired neutral-background color key
+  would erase them. The tether and debris palette in `special.js` matches the black edge, royal-blue
+  core, and mint jelly. The tether and trail droplets render behind the player layer; the hand
+  remains in the attack foreground.
+
+### Other fighter assets
+
 - **Thorg:** current shared sweep phases are defined in `src/shared/characters/thorg.json`. `thorgAttackFrames.json` supplies the attack track. The atlas includes baked weapon/sweep artwork. Thorg has only his default appearance; separate weapon sprites and the old skin orbit are removed. Held pose imports use `thorg_duck.png` and `thorg_slide.png` with source alpha preserved. Straight-down stomp uses duck presentation; old falling-only dash notes are superseded.
-- **Gloop / Crystal Gloop:** use 128px logical frames and named duck/wall poses. Base Gloop's `pack-gloop-refresh.cjs` samples the canonical `public/assets/gloop/body.webp` portrait onto native 128px canvases with nearest-neighbor sampling, using baseline atlas metadata under `output/gloop-hq/`. The generated approximation was replaced with portrait artwork. The original silhouette is preserved; only the very top tier is shortened by roughly one native sprite pixel (four rows in the intermediate master), reducing the raised cap from two steps to one. It strips baked outlines before deformation and adds one uniform native-pixel black contour afterward, including throwing poses. Enlarged previews use nearest-neighbor sampling. All base poses deform the same canonical portrait artwork: throw uses a windup, forward crest extension, delayed body compression, recoil, and damped recovery; airborne poses use an impulse-aligned vertical launch stretch, subtle lower-body lag, relaxation toward a rounded apex, and modest vertical descent stretch with a full rounded leading underside; column-wise ellipse remapping preserves the detailed core without lateral airborne wobble; wall slide flattens only the right contact side, mirrored by normal wall-facing logic. Frames share consistent foot registration. Base Gloop additionally has three-frame `dashright`, `dashdiagonal`, and `dashup` tracks at y=640, selected for local and remote dash direction and timed to the shared dash duration; dash poses keep the core artwork upright and morph the silhouette toward travel without rotating it; width/height tradeoffs keep their size near the resting body. Horizontal and angled left dashes mirror the right-facing art. Crystal retains its existing shared pose set. The base running loop has ten gradual poses with a restrained forward rolling crest, delayed lower-body sway, and a small traveling ripple; width and height change inversely to keep the apparent jelly volume steady. These are authored elastic poses, not a fluid simulation. Idle breathes over 3.5 seconds. Base running cadence covers roughly two visible body widths per roll and scales with horizontal velocity. Base jump/fall frames are selected by vertical velocity using `bbMotion` metadata, rather than fixed clip time; remote playback uses replicated velocity. Production still uses the regular atlas: only frame selection and playback rate are physics-driven. Skin clips without that metadata retain timed playback. The Crystal skin retains the internal ID/path `gloop-amethyst`. Full atlas packing and targeted pose packing are separate operations; `pack-gloop-poses.cjs` changes duck/wall frames and `pack-crystal-falling.cjs` changes Crystal falling frames. These older packers can overwrite the refreshed base poses. The procedural projectile renderer chooses its skin presentation while collision remains shared. Gloop’s hook super uses the refreshed eight-pose `hand-grip.webp` with genuine alpha, plus matching open/closed fallback images. `pack-gloop-super-refresh.cjs` packs the generated reference sheet under `output/gloop-super-refresh/` onto the existing coarse grid. Preserve pale mint highlights when uploading the atlas; the retired neutral-background color key would erase them. The tether and debris palette in `special.js` matches the black edge, royal-blue core, and mint jelly. The tether and trail droplets render behind the player layer; the hand remains in the attack foreground.
 - **Arena Sovereign Ninja:** padded 72px logical atlas frames, explicit duck/falling overrides, crown projectile and upright crown-spin assets are supplied through skin assets. Preserve animation names and inspect both predicted and remote flight after repacking.
 - **Ozzy / Draven:** friendly and enemy `*-bb` atlases have matching JSON. Ozzy's fireball is drawn in code (`src/client/game/characters/ozzy/fireballArt.js`, blue and red palettes) with procedural pixel trails in `fireballParticles.js`; Draven uses `explosion-bb` and `special-bb` pairs. Team affiliation is viewer-relative and retained on released attacks. The shared team presentation contract is `src/shared/projectilePresentation.js`.
 
@@ -61,7 +108,7 @@ Site waffle-menu icons live in `public/assets/icons/menu/` (96×96 lossless
 WebP, shown at 24px, 20px for the legal links). They were generated with Codex
 `image_gen` on flat `#FF00FF`, one asset per run, using `gem.webp` and
 `lock.webp` as style references. `node scripts/art/install-menu-icons.cjs
-[sourceDir] [--preview]` keys, trims and installs them from
+[sourceDir] [--preview]` keys, trims and installs them from the local, Git-ignored
 `output/menu-icons/<name>.png`.
 
 ## Tools and regeneration
@@ -101,3 +148,9 @@ records and unfinished character migration sources. Completed export directories
 old diagnostics, generated `dist`, and webpack caches can be regenerated or removed;
 they are not asset sources. Do not delete editable Workshop projects, live data,
 credentials, or Git history as cache cleanup.
+
+## Storage for future source artwork
+
+Keep shipped WebP, audio, spritesheets and other runtime assets in Git so an ordinary checkout can build and serve the game. For new large editable masters and video takes, use a versioned external project archive and record its asset ID, checksum and export instructions alongside the in-repo art recipe. Git LFS would be a good fit if an editor needs a master at a fixed path in every checkout. Adopting it would require the art workstation and any CI or deployment job that reads that master to fetch LFS objects.
+
+On November 17, 2026, Git objects reachable from the cleanup branch tip occupied about 495 MiB in their existing on-disk representations. MP4 and PNG accounted for about 130 MiB each, WebP 117 MiB and MP3 63 MiB. The largest individual historical blobs included a 37 MiB background video and a 26 MiB WAV. The local object packs for all refs occupied 802 MiB and the current public assets occupied 102 MiB. Pack compression and the refs requested affect an actual clone's transfer size. This assessment keeps the existing history.

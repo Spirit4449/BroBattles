@@ -1,3 +1,5 @@
+const { BANK_BUST_VAULT_DEFAULT_WIDTH, BANK_BUST_VAULT_DEFAULT_HEIGHT } = require("../../../bankBustSettings");
+const { SOCKET_EVENTS } = require("../../../net/socketEvents.js");
 const { isPlaced } = require('../../targetable.js');
 const { combatNow } = require("../clock");
 const { exposeDamageHitbox } = require('../damageHitboxes.js');
@@ -91,8 +93,8 @@ function getEnemyVaultTarget(room, attacker) {
   const x = Number(vault.x);
   const y = Number(vault.y);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  const width = Math.max(40, Number(vault.width) || 150);
-  const height = Math.max(40, Number(vault.height) || 180);
+  const width = Math.max(40, Number(vault.width) || BANK_BUST_VAULT_DEFAULT_WIDTH);
+  const height = Math.max(40, Number(vault.height) || BANK_BUST_VAULT_DEFAULT_HEIGHT);
   return {
     team: enemyTeam,
     targetName: `vault:${enemyTeam}`,
@@ -143,7 +145,7 @@ function emitHitAction(room, attack, descriptor, attacker, target, now) {
   const anchor = String(eventCfg.anchor || "target").toLowerCase();
   const baseX = anchor === "attacker" ? Number(attacker.x) : Number(target.x);
   const baseY = anchor === "attacker" ? Number(attacker.y) : Number(target.y);
-  room.io.to(`game:${room.matchId}`).emit("game:action", {
+  room.broadcast(SOCKET_EVENTS.GAME_ACTION, {
     playerName: attacker.name,
     character: attacker.char_class,
     origin: { x: attacker.x, y: attacker.y },
@@ -198,7 +200,7 @@ function hitCircleTargets(
     const lastHitAt = Number(attack.hitTimes[target.name]) || 0;
     if (repeatCooldownMs > 0 && now - lastHitAt < repeatCooldownMs) continue;
     const targetBounds = shotTargetBounds(attack, target, now);
-    if (room._netTrace) traceRuntimeShot(room, attack, attacker, target, { x: cx, y: cy }, null, radius, targetBounds);
+    if (room.netTrace) traceRuntimeShot(room, attack, attacker, target, { x: cx, y: cy }, null, radius, targetBounds);
     if (!circleAabbOverlap(cx, cy, radius, targetBounds)) continue;
     attack.hitSet?.add(target.name);
     attack.hitTimes[target.name] = now;
@@ -223,7 +225,7 @@ function circleTouch(room, attack, cx, cy, radius, now) {
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
     const bounds = shotTargetBounds(attack, target, now);
-    if (room._netTrace) traceRuntimeShot(room, attack, attacker, target, { x: cx, y: cy }, null, radius, bounds);
+    if (room.netTrace) traceRuntimeShot(room, attack, attacker, target, { x: cx, y: cy }, null, radius, bounds);
     if (!circleAabbOverlap(cx, cy, radius, bounds)) continue;
     const x = (bounds.left + bounds.right) / 2, y = (bounds.top + bounds.bottom) / 2;
     const distance = Math.hypot(x - cx, y - cy);
@@ -279,7 +281,7 @@ function capsuleTouch(room, attack, start, end, radius, now) {
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
     const bounds = shotTargetBounds(attack, target, now);
-    if (room._netTrace) traceRuntimeShot(room, attack, attacker, target, start, end, radius, bounds);
+    if (room.netTrace) traceRuntimeShot(room, attack, attacker, target, start, end, radius, bounds);
     if (sweep(start, end, bounds, radius) === null) continue;
     const x = (bounds.left + bounds.right) / 2, y = (bounds.top + bounds.bottom) / 2;
     const distance = Math.hypot(x - mid.x, y - mid.y);
@@ -306,7 +308,7 @@ function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
     const bounds = shotTargetBounds(attack, target, now);
-    if (room._netTrace) traceRuntimeShot(room, attack, attacker, target, start, end, radius, bounds);
+    if (room.netTrace) traceRuntimeShot(room, attack, attacker, target, start, end, radius, bounds);
     if (sweep(start, end, bounds, radius) === null) continue;
     attack.hitSet?.add(target.name);
     emitServerHit(room, attack, target.name, { damage: attack.damage });
@@ -316,4 +318,4 @@ function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
   return hitCount;
 }
 
-module.exports = { CENTER_CRATE_TARGET, shotTargetBounds, emitServerHit, applyDescriptorHitEffect, getEnemyVaultTarget, getCenterCrateTarget, getObjectiveTargets, buildTargetList, emitHitAction, hitCircleTargets, circleTouch, capsuleTouch, hitRectTargets, hitCapsuleTargets };
+module.exports = { CENTER_CRATE_TARGET, shotTargetBounds, emitServerHit, applyDescriptorHitEffect, getCenterCrateTarget, getObjectiveTargets, buildTargetList, emitHitAction, hitCircleTargets, circleTouch, capsuleTouch, hitRectTargets, hitCapsuleTargets };

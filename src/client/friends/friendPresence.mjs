@@ -1,4 +1,6 @@
-export function lastSeenDate(value) {
+import { formatBadgeCount } from "../chat/badges.mjs";
+
+function lastSeenDate(value) {
   if (value === null || value === undefined || value === "") return null;
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date : null;
@@ -32,7 +34,7 @@ export function isFriendOnline(friend) {
 }
 
 export function formatOnlineCount(count) {
-  return count > 9 ? "9+" : String(count);
+  return formatBadgeCount(count, 9);
 }
 
 export function friendsOnlineMessage(names = []) {

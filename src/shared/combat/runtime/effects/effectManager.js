@@ -6,7 +6,6 @@
 //
 //   effectManager.apply(player, "rage", now)
 //   effectManager.isActive(player, "rage", now)       // → boolean
-//   effectManager.getRemaining(player, "rage", now)   // → ms remaining (0 if inactive)
 //   effectManager.getModifiers(player, now)           // → { damageMult, damageTakenMult, speedMult, jumpMult }
 //   effectManager.tickAll(player, room, now)          // call each game tick per player
 //   effectManager.snapshotAll(player, now)            // → { rage: msRemaining, shield: msRemaining, ... }
@@ -74,13 +73,6 @@ function isActive(player, effectKey, now) {
 /**
  * Returns the remaining duration in ms (0 if not active).
  */
-function getRemaining(player, effectKey, now) {
-  const state = _state(player);
-  const entry = state[effectKey];
-  if (!entry || entry.until <= now) return 0;
-  return entry.until - now;
-}
-
 /**
  * Returns the combined stat modifiers for all active effects.
  * Multipliers are stacked multiplicatively.
@@ -160,7 +152,6 @@ function snapshotActive(player, now) {
 module.exports = {
   apply,
   isActive,
-  getRemaining,
   getModifiers,
   tickAll,
   snapshotAll,

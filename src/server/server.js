@@ -1,260 +1,105 @@
-// server.js (moved to src/server)
+async function startServer() {
+  // Console output must never block the game loop on a busy disk.
+  require("./lib/asyncConsole").installAsyncConsole();
 
-// Console output must never block the game loop on a busy disk.
-require("./lib/asyncConsole").installAsyncConsole();
+  // Load environment variables from .env file
+  require("dotenv").config();
+  const config = require("./config").initializeConfig();
+  if (!config.admin.users.length)
+    console.warn("[auth] ADMIN_USERS is empty: no administrator accounts exist.");
 
-// Load environment variables from .env file
-require("dotenv").config();
-
-const express = require("express");
-const http = require("http");
-const socketIo = require("socket.io");
-const path = require("path");
-const cookieParser = require("cookie-parser");
-
-// Resolve repository root (two levels up from src/server)
-const ROOT_DIR = path.resolve(__dirname, "..", "..");
-
-// Core & modular routes/jobs
-const db = require("./core/sql.js");
-const { registerRoutes } = require("./routes/routes.js");
-const { resolveCookieSecret } = require("./lib/utils");
-const { registerEconomyRoutes } = require("./routes/modules/economy.js");
-const { makeAuthHelpers } = require("./services/auth/auth.js");
-const { startCleanupJobs } = require("./jobs/cleanup.js");
-const { initSocket } = require("./core/socket.js");
-require('./core/bots/navigationService').enableAsyncNavigation();
-const { createRuntimeConfig } = require("./lib/runtimeConfig.js");
-const { registerAdminRoutes } = require("./routes/modules/admin.js");
-const { createPartyChatService } = require("./services/social/chatService.js");
-const { createFriendService } = require("./services/social/friendService.js");
-const { createAbuseControlService } = require("./services/moderation/abuseControlService");
-const { createShopService } = require("./services/shop/shopService");
-const { createStripeShopService } = require("./services/shop/stripeShopService");
-const { registerStripeWebhookRoute } = require("./routes/modules/stripeWebhook");
-const {
-  createAbuseHttpMiddleware,
-} = require("./middleware/abuseHttpMiddleware");
-
-const app = express();
-const server = http.createServer(app);
-const io = socketIo(server);
-const port = Number(process.env.PORT) || 3002;
-
-app.disable("x-powered-by");
-app.use(require("./middleware/httpCompression"));
-app.use((_req, res, next) => {
-  // Only same-origin framing (Map Studio playtest) is allowed.
-  res.set({ "X-Frame-Options": "SAMEORIGIN", "X-Content-Type-Options": "nosniff" });
-  next();
-});
-
-// Config
-const IS_PROD = process.env.NODE_ENV === "production";
-// Allow overriding cookie security for HTTP deployments (e.g., Raspberry Pi dev)
-// Production defaults to Secure; plain HTTP development can explicitly disable it.
-const SECURE_COOKIES =
-  String(process.env.SECURE_COOKIES || (IS_PROD ? "true" : "false")).toLowerCase() === "true";
-const PUBLIC_DIR = path.join(ROOT_DIR, "public");
-const DIST_DIR = path.join(ROOT_DIR, "dist");
-const PAGE_ROOT = IS_PROD ? DIST_DIR : PUBLIC_DIR;
-
-// Resolve a persistent cookie secret (env, then file, then random persisted)
-const COOKIE_SECRET = resolveCookieSecret(ROOT_DIR, process.env.COOKIE_SECRET);
-process.env.EMAIL_VERIFICATION_SECRET ||= COOKIE_SECRET;
-
-const SIGNED_COOKIE_OPTS = {
-  httpOnly: true,
-  sameSite: "lax",
-  secure: SECURE_COOKIES,
-  signed: true,
-};
-const DISPLAY_COOKIE_OPTS = { sameSite: "lax", secure: SECURE_COOKIES };
-
-// Expose cookie opts for downstream modules
-app.locals.SIGNED_COOKIE_OPTS = SIGNED_COOKIE_OPTS;
-app.locals.DISPLAY_COOKIE_OPTS = DISPLAY_COOKIE_OPTS;
-
-// Runtime overrides editable via admin dashboard
-const runtimeConfig = createRuntimeConfig({ rootDir: ROOT_DIR });
-app.locals.runtimeConfig = runtimeConfig;
-app.get("/api/site/runtime", (_req, res) => {
-  const current = runtimeConfig.get();
-  res.set("Cache-Control", "no-store").json({ maintenanceMode: !!current.maintenanceMode, maintenanceUntil: current.maintenanceUntil, serverTime: Date.now(), announcements: String(current.announcements || "").slice(0, 500) });
-});
-const chatService = createPartyChatService({ db, io });
-app.locals.chatService = chatService;
-const friendService = createFriendService({ db, io });
-app.locals.friendService = friendService;
-const abuseControl = createAbuseControlService({ db, io });
-app.locals.abuseControl = abuseControl;
-const shopService = createShopService({ db });
-const stripeShopService = createStripeShopService({ db, shopService });
-app.locals.shopService = shopService;
-app.locals.stripeShopService = stripeShopService;
-
-// Stripe signature verification requires the unparsed request body.
-registerStripeWebhookRoute({ app, stripeShopService });
-
-app.use(["/api/admin/maps", "/api/admin/map-playtests"], express.json({ limit: "12mb" }));
-app.use("/api/admin/shop/catalog", express.json({ limit: "1mb" }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser(COOKIE_SECRET));
-// If running behind a reverse proxy, trust it so req.secure works when HTTPS is terminated at proxy
-// Trust only explicitly named proxies; direct connections ignore forwarded headers.
-app.set("trust proxy", process.env.TRUST_PROXY ? process.env.TRUST_PROXY.split(",").map(x => x.trim()).filter(Boolean) : false);
-
-const auth = makeAuthHelpers(db, { SIGNED_COOKIE_OPTS, DISPLAY_COOKIE_OPTS });
-app.locals.authSessions = auth.sessions;
-// Static middleware can serve the lobby without reaching the page routes.
-app.get(["/", "/index.html", "/game.html"],
-  require("./routes/modules/pageRoutes").createBanPageGuard({ db, requireCurrentUser: auth.requireCurrentUser }));
-
-// Static and dev middleware
-if (!IS_PROD) {
-  const webpack = require("webpack");
-  const webpackDevMiddleware = require("webpack-dev-middleware");
-  const webpackHotMiddleware = require("webpack-hot-middleware");
-  const config = require(path.join(ROOT_DIR, "webpack.config.js"))({}, { mode: "development" });
-  const compiler = webpack(config);
-  app.use(
-    require("./middleware/devAssetMiddleware").isolateDevAssetResponse(webpackDevMiddleware(compiler, {
-      publicPath: config.output.publicPath,
-      serverSideRender: false,
-      // Revalidate mutable development URLs without downloading unchanged
-      // bundles/assets again after background warming or route navigation.
-      ...config.devServer.devMiddleware,
-    })),
-  );
-  app.use(webpackHotMiddleware(compiler));
-  app.use(express.static(PUBLIC_DIR));
-} else {
-  app.use(require('./middleware/precompressed').servePrecompressed(DIST_DIR));
-  app.use(express.static(DIST_DIR, {
-    setHeaders: require('./middleware/staticCache').setStaticCacheHeaders,
-  }));
-}
-
-// Bootstrap sockets early and attach to app.locals
-const matchResults = require("./services/match/matchResultService").createMatchResultService({ db, journalDir: process.env.MATCH_RESULT_DIR || path.join(ROOT_DIR, "data", "match-results") });
-const socketApi = initSocket({
-  io,
-  COOKIE_SECRET,
-  sessions: auth.sessions,
-  matchResults,
-  db,
-  runtimeConfig,
-  chatService,
-  abuseControl,
-  friendService,
-});
-app.locals.socketApi = socketApi;
-
-// Prepare auth helpers
-require('./services/maps/mapPlaytestService').mapPlaytests.attach(io, async socket => {
-  const cookies = require('cookie').parse(socket.handshake.headers.cookie || '');
-  const signed = cookieParser.signedCookies(cookies, COOKIE_SECRET);
-  return auth.sessions.authenticateSocket(socket, signed.user_id);
-}, auth.isAdminUser);
-
-
-app.use(
-  createAbuseHttpMiddleware({
-    abuseControl,
-    db,
-    resolveUser: (req, res) => auth.requireCurrentUser(req, res, { allowBanned: true }),
-  }),
-);
-
-// Register routes
-registerEconomyRoutes({ app, db, auth, io });
-registerAdminRoutes({
-  io,
-  app,
-  db,
-  auth,
-  pageRoot: PAGE_ROOT,
-  distDir: DIST_DIR,
-  runtimeConfig,
-  shopService,
-  stripeShopService,
-});
-registerRoutes({
-  app,
-  io,
-  db,
-  auth,
-  pageRoot: PAGE_ROOT,
-  distDir: DIST_DIR,
-  chatService,
-  abuseControl,
-  shopService,
-  stripeShopService,
-  friendService,
-});
-
-// Server start
-(async function startServer() {
+  const db = require("./core/sql.js");
+  const { createApplication } = require("./application");
+  const { app, server, io, socketApi, matchResults, stripeShopService, stripeListener, dispose } =
+    await createApplication({ db, config });
+  const { port } = config;
+  let ownership, jobs, stopping;
+  function stop() {
+    if (!stopping)
+      stopping = (async () => {
+        process.off("SIGTERM", shutdown);
+        process.off("SIGINT", shutdown);
+        if (!config.isProd) process.off("SIGUSR2", shutdown);
+        const tasks = [jobs?.stop(), dispose()];
+        const results = await Promise.allSettled(tasks);
+        try {
+          await db.closePool();
+        } finally {
+          await ownership?.release();
+        }
+        for (const result of results) if (result.status === "rejected") throw result.reason;
+      })();
+    return stopping;
+  }
+  function shutdown(signal) {
+    setTimeout(() => process.exit(1), 15000).unref();
+    void stop().then(
+      () => {
+        // Nodemon waits for its child to finish handling SIGUSR2 before restart.
+        if (signal === "SIGUSR2") process.kill(process.pid, "SIGUSR2");
+        else process.exit(0);
+      },
+      (error) => {
+        console.error("[shutdown]", error);
+        process.exit(1);
+      },
+    );
+  }
   try {
-    const ownership = await require("./services/runtimeOwnershipService").acquireRuntimeOwnership({
-      connect: db.openRuntimeConnection, database: db.databaseName,
-      onLost: error => { console.error("[runtime] ownership lost", error.message); process.exit(1); },
+    ownership = await require("./services/runtimeOwnershipService").acquireRuntimeOwnership({
+      connect: db.openRuntimeConnection,
+      database: db.databaseName,
+      onLost: (error) => {
+        console.error("[runtime] ownership lost", error.message);
+        process.exit(1);
+      },
     });
-    // Public site writes require the additive support migration before rollout.
-    for (const table of ['legal_acceptances', 'site_requests', 'site_request_messages', 'account_emails', 'email_outbox', 'pending_signups', 'email_marketing', 'marketing_jobs', 'marketing_contact_sync', 'email_webhook_events']) {
-      try { await db.runQuery(`SELECT 1 FROM ${table} LIMIT 0`); }
-      catch (error) { throw new Error(`Apply the email, signup, and marketing migrations before starting: ${table} unavailable (${error.code || 'database error'})`); }
-    }
-    for (const table of ['account_emails', 'pending_signups']) {
-      try { await db.runQuery(`SELECT correction_used FROM ${table} LIMIT 0`); }
-      catch (_) { throw new Error('Apply scripts/db/apply-migration.cjs email-polish before starting.'); }
-    }
-    // Fail at startup if the hardening migration has not been applied.
-    await db.runQuery("SELECT token_hash FROM auth_sessions LIMIT 0");
-    await db.runQuery("SELECT match_id FROM match_reward_commits LIMIT 0");
-    await db.runQuery("SELECT event_id FROM shop_webhook_inbox LIMIT 0");
-    if (!(await abuseControl.ensureSchema())) throw new Error("Apply the abuse controls migration before starting the server");
     await matchResults.prepare();
     await matchResults.reconcile();
     // A stopped process cannot resume an in-memory simulation from its initial roster.
     // Preserve unsettled outcomes so journal reconciliation can finish their rewards.
     const pendingIds = await matchResults.pendingMatchIds();
-    await db.withTransaction(async (_conn, q) => {
-      const exclusion = pendingIds.length ? ` AND m.match_id NOT IN (${pendingIds.map(() => "?").join(",")})` : "";
-      await q(`UPDATE parties p JOIN match_participants mp ON mp.party_id = p.party_id JOIN matches m ON m.match_id = mp.match_id SET p.status = 'idle' WHERE m.status = 'live'${exclusion}`, pendingIds);
-      await q(`UPDATE matches m SET m.status = 'cancelled' WHERE m.status = 'live'${exclusion}`, pendingIds);
+    await require("./services/match/matchLifecycleService").cancelInterruptedMatches(
+      db,
+      pendingIds,
+    );
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, "0.0.0.0", () => {
+        server.off("error", reject);
+        resolve();
+      });
     });
-    // A rejected promise outside a request/socket handler should not take
-    // down every live match. Log it with its stack; programming errors
-    // (uncaughtException) still crash so a supervisor restarts clean state.
-    process.on("unhandledRejection", (reason) => {
-      console.error("[process] unhandled promise rejection", reason?.stack || reason);
-    });
-    // io.close() drops live websockets so server.close() can finish instead of
-    // waiting out the hard-exit timer; the nav worker is a separate thread.
-    process.once("SIGTERM", () => {
-      setTimeout(() => process.exit(0), 5000).unref();
-      void require("./core/bots/navigationService").closeAsyncNavigation().catch(() => {});
-      io.close(() => { void ownership.release().finally(() => process.exit(0)); });
-    });
-    startCleanupJobs({ db, io, matchResults, getGameRoom: socketApi.getGameRoom });
-    setInterval(() => { void matchResults.reconcile().catch(error => console.error("[rewards] reconciliation failed", error.message)); }, 30000).unref();
-    setInterval(() => { void stripeShopService.reconcileWebhooks().catch(error => console.error("[shop:stripe] reconciliation failed", error.message)); }, 60000).unref();
+    jobs = require("./jobs").startJobs({ db, io, matchResults, stripeShopService, socketApi });
+    socketApi.start();
+    process.once("SIGTERM", shutdown);
+    process.once("SIGINT", shutdown);
+    if (!config.isProd) process.once("SIGUSR2", shutdown);
     console.log("✅ Database connected");
     // Parse map metadata once up front so the first /status requests don't.
-    try { require("./services/maps/mapRepository").mapRepository.listMetadata(); }
-    catch (error) { console.warn("[maps] unable to warm metadata cache", error.message); }
-    server.listen(port, "0.0.0.0", () => {
-      void stripeShopService.listener.start(port);
-      console.log(
-        `Server listening on 0.0.0.0:${port} (cookies secure=${SECURE_COOKIES}, env=${
-          process.env.NODE_ENV || "undefined"
-        })`,
-      );
-    });
+    try {
+      require("./services/maps/mapRepository").mapRepository.listMetadata();
+    } catch (error) {
+      console.warn("[maps] unable to warm metadata cache", error.message);
+    }
+    void stripeListener
+      .start(port)
+      .catch((error) => console.error("[shop:stripe] listener failed", error));
+    console.log(
+      `Server listening on 0.0.0.0:${port} (cookies secure=${config.cookies.secure}, env=${config.nodeEnv})`,
+    );
+    return { app, server, stop };
   } catch (e) {
-    console.error("❌ Failed to connect to DB:", e);
-    process.exit(1);
+    console.error("[server] startup failed", e);
+    await stop().catch((error) => console.error("[server] startup cleanup failed", error));
+    throw e;
   }
-})();
+}
+
+if (require.main === module) {
+  process.on("unhandledRejection", (reason) =>
+    console.error("[process] unhandled promise rejection", reason),
+  );
+  startServer().catch(() => process.exit(1));
+}
+module.exports = { startServer };

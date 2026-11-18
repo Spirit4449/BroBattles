@@ -1,3 +1,4 @@
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import { CombatClock } from "../../../shared/characters/sparrowReplication";
 import { readNetFlags } from "../../lib/netFlags";
 
@@ -26,7 +27,7 @@ function ping() {
   const current = generation;
   const epoch = serverClock.epoch;
   const sent = performance.now();
-  socket.timeout(1500).emit("game:clock", {}, (error, response) => {
+  socket.timeout(1500).emit(SOCKET_EVENTS.GAME_CLOCK, {}, (error, response) => {
     if (error || !response || current !== generation || serverClock.epoch !== epoch) return;
     serverClock.synchronize(response, sent, performance.now());
   });
@@ -69,9 +70,9 @@ export function observeServerClockSnapshot(snapshot, received = performance.now(
 function acknowledgeLatency(_data, ack) { if (typeof ack === 'function') ack(); }
 
 export function startServerClockSync(socket) {
-  socketRef?.off?.('game:latency', acknowledgeLatency);
+  socketRef?.off?.(SOCKET_EVENTS.GAME_LATENCY, acknowledgeLatency);
   socketRef = socket;
-  socketRef?.on?.('game:latency', acknowledgeLatency);
+  socketRef?.on?.(SOCKET_EVENTS.GAME_LATENCY, acknowledgeLatency);
   clearInterval(steadyTimer);
   steadyTimer = setInterval(ping, STEADY_INTERVAL_MS);
   if (serverClock.epoch) startBurst();
@@ -87,7 +88,7 @@ export function stopServerClockSync() {
   clearInterval(steadyTimer);
   steadyTimer = null;
   clearBurst();
-  socketRef?.off?.('game:latency', acknowledgeLatency);
+  socketRef?.off?.(SOCKET_EVENTS.GAME_LATENCY, acknowledgeLatency);
   socketRef = null;
 }
 

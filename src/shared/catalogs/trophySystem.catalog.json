@@ -13,6 +13,7 @@
       "max": 30
     }
   },
+  "drawRangeScale": 0.55,
   "lossRangeScale": 0.5,
   "lossPerformanceMitigation": 0.35,
   "performanceWeights": {

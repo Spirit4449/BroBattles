@@ -1,18 +1,22 @@
+const { logIgnored } = require("../../lib/logIgnored");
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { appendPartyChatLog } = require("./partyChatLog");
 const { emitRoster, selectPartyById } = require("./party");
 
 function createPartyPresenceService({ db, io }) {
+  const restores = new Map();
+  let disposed = false;
   async function setUserPresence(name, status, partyId = null, { strict = false } = {}) {
     try {
       await db.setUserStatus(name, status);
       if (partyId) {
         try {
           await db.updateLastSeen(partyId, name);
-        } catch (_) {}
+        } catch (error) { logIgnored("party last seen", error); }
       }
       const targetPartyId = partyId || (await db.getPartyIdByName(name));
       if (targetPartyId) {
-        io.to(`party:${targetPartyId}`).emit("status:update", {
+        io.to(`party:${targetPartyId}`).emit(SOCKET_EVENTS.STATUS_UPDATE, {
           partyId: targetPartyId,
           name,
           status,
@@ -21,6 +25,7 @@ function createPartyPresenceService({ db, io }) {
       }
     } catch (error) {
       if (strict) throw error;
+      logIgnored("party presence", error);
     }
   }
 
@@ -32,9 +37,14 @@ function createPartyPresenceService({ db, io }) {
     durationMs = 1500,
   }) {
     await setUserPresence(name, status, partyId || null);
-    setTimeout(() => {
+    if (disposed) return;
+    clearTimeout(restores.get(name));
+    const timer = setTimeout(() => {
+      restores.delete(name);
       void setUserPresence(name, restoreStatus, partyId || null);
     }, durationMs);
+    timer.unref?.();
+    restores.set(name, timer);
   }
 
   async function emitPartyRosterById(partyId) {
@@ -46,6 +56,7 @@ function createPartyPresenceService({ db, io }) {
   }
 
   return {
+    dispose() { disposed = true; for (const timer of restores.values()) clearTimeout(timer); restores.clear(); },
     setUserPresence,
     setTransientPresence,
     emitPartyRosterById,
@@ -54,7 +65,7 @@ function createPartyPresenceService({ db, io }) {
       if (["map", "mode"].includes(notice?.type)) {
         appendPartyChatLog(io, partyId, { kind: notice.type, body: notice.title });
       }
-      io.to(`party:${partyId}`).emit("party:notice", { ...notice, partyId });
+      io.to(`party:${partyId}`).emit(SOCKET_EVENTS.PARTY_NOTICE, { ...notice, partyId });
     },
   };
 }

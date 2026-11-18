@@ -1,24 +1,142 @@
-ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS chat_offense_level INT NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS chat_last_violation_at DATETIME NULL,
-  ADD COLUMN IF NOT EXISTS chat_suspended_until DATETIME NULL,
-  ADD COLUMN IF NOT EXISTS chat_decay_anchor_at DATETIME NULL,
-  ADD COLUMN IF NOT EXISTS http_offense_level INT NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS http_last_violation_at DATETIME NULL,
-  ADD COLUMN IF NOT EXISTS mm_suspended_until DATETIME NULL,
-  ADD COLUMN IF NOT EXISTS http_decay_anchor_at DATETIME NULL,
-  ADD COLUMN IF NOT EXISTS is_banned TINYINT(1) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS banned_at DATETIME NULL,
-  ADD COLUMN IF NOT EXISTS ban_reason VARCHAR(255) NULL;
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'chat_offense_level'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN chat_offense_level INT NOT NULL DEFAULT 0'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
 
-CREATE INDEX IF NOT EXISTS idx_users_chat_suspended_until
-  ON users (chat_suspended_until);
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'chat_last_violation_at'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN chat_last_violation_at DATETIME NULL'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
 
-CREATE INDEX IF NOT EXISTS idx_users_mm_suspended_until
-  ON users (mm_suspended_until);
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'chat_suspended_until'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN chat_suspended_until DATETIME NULL'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
 
-CREATE INDEX IF NOT EXISTS idx_users_is_banned
-  ON users (is_banned);
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'chat_decay_anchor_at'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN chat_decay_anchor_at DATETIME NULL'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'http_offense_level'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN http_offense_level INT NOT NULL DEFAULT 0'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'http_last_violation_at'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN http_last_violation_at DATETIME NULL'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'mm_suspended_until'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN mm_suspended_until DATETIME NULL'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'http_decay_anchor_at'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN http_decay_anchor_at DATETIME NULL'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'is_banned'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN is_banned TINYINT(1) NOT NULL DEFAULT 0'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'banned_at'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN banned_at DATETIME NULL'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'ban_reason'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN ban_reason VARCHAR(255) NULL'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_chat_suspended_until'),
+  'SELECT 1',
+  'CREATE INDEX idx_users_chat_suspended_until ON users (chat_suspended_until)'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_mm_suspended_until'),
+  'SELECT 1',
+  'CREATE INDEX idx_users_mm_suspended_until ON users (mm_suspended_until)'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
+
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_is_banned'),
+  'SELECT 1',
+  'CREATE INDEX idx_users_is_banned ON users (is_banned)'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
 
 CREATE TABLE IF NOT EXISTS user_abuse_events (
   event_id BIGINT NOT NULL AUTO_INCREMENT,

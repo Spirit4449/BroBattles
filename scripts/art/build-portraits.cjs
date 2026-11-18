@@ -2,12 +2,12 @@
 // Writes a small `portrait.webp` beside every character/skin `body.webp`.
 // The client inlines these into its bundles (see src/client/views/
 // bodyPortraitAssets.js), so they must stay small: full-size bodies added
-// ~2.5 MB of base64 to each of the lobby, game and profile bundles.
+// ~2.5 MB of base64 to each of the lobby and game bundles.
 //
 // Usage: node scripts/art/build-portraits.cjs   (needs ffmpeg and cwebp)
 // `npm run validate:content` reports portraits whose source body changed.
 const { execFileSync } = require('child_process');
-const crypto = require('crypto');
+const { artAssetVersion } = require('./asset-version.cjs');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -33,10 +33,6 @@ function bodySources() {
   return found.sort();
 }
 
-function sourceHash(file) {
-  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 16);
-}
-
 const publicUrl = file => '/' + path.relative(path.join(ROOT, 'public'), file).split(path.sep).join('/');
 
 function buildPortraits() {
@@ -52,7 +48,7 @@ function buildPortraits() {
       execFileSync('cwebp', ['-quiet', '-q', '92', '-sharp_yuv', '-alpha_q', '100', '-m', '6', png, '-o', out]);
       // Some bodies already compress below a lossy portrait; keep those as-is.
       if (fs.statSync(out).size >= fs.statSync(body).size) fs.copyFileSync(body, out);
-      manifest[publicUrl(body)] = sourceHash(body);
+      manifest[publicUrl(body)] = artAssetVersion(body);
       console.log(`${publicUrl(out)}  ${fs.statSync(body).size} -> ${fs.statSync(out).size} bytes`);
     }
   } finally {
@@ -68,7 +64,7 @@ function portraitErrors() {
   for (const body of bodySources()) {
     const url = publicUrl(body);
     if (!fs.existsSync(path.join(path.dirname(body), 'portrait.webp'))) errors.push(`${url}: missing portrait.webp`);
-    else if (manifest[url] !== sourceHash(body)) errors.push(`${url}: portrait.webp is stale`);
+    else if (manifest[url] !== artAssetVersion(body)) errors.push(`${url}: portrait.webp is stale`);
   }
   return errors.map(error => `${error}; run node scripts/art/build-portraits.cjs`);
 }

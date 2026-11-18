@@ -483,7 +483,7 @@ test('preview and GameRoom hosts produce identical combat outcomes for every cha
     const serverHero = room.players.get('hero'), serverEnemy = room.players.get('enemy');
     const advance = ticks => {
       for (let i = 0; i < ticks; i++) {
-        session.step(); room._tickId = session._tickId; room._simulationMono = session._simulationMono;
+        session.step(); room.tickId = session.tickId; room.simulationMono = session.simulationMono;
         const due = room._scheduledActions.filter(a => a.at <= session.now);
         room._scheduledActions = room._scheduledActions.filter(a => a.at > session.now);
         for (const a of due) a.callback();
@@ -560,7 +560,7 @@ test('showcase presentation shares centered projectile bounds and displayed cont
       if (name.endsWith('/sparrowReplication')) return require('../src/shared/characters/sparrowReplication');
       if (name.endsWith('/networkRegistry')) return { createCharacterNetworkAdapters: () => [] };
       if (name.endsWith('/characters')) return { getCharacterSocketEvents: () => [], getCharacterEffectTickSounds: () => [] };
-      if (name.endsWith('/powerupRenderer')) return { createPowerupRenderer: () => ({}) };
+      if (name.endsWith('/powerupRenderer')) return { createPowerupRenderer: () => ({ destroy() {} }) };
       if (name.endsWith('/powerupConfig')) return { createPowerupTickSounds: () => ({}) };
       if (name.endsWith('/showcaseDirector')) return { seededRandom: () => () => 0, createShowcaseDirector: () => () => {} };
       return {};
@@ -697,4 +697,41 @@ test('title collection only equips owned titles and keeps the confirmed selectio
   assert.equal(profile.selectedTitleId, null);
   assert.equal(document.getElementById('display').textContent, '');
   assert.equal(profile.ownedTitleIds.length, 1);
+});
+
+test('character upgrades and unlocks surface failed HTTP responses without spending currency', async () => {
+  const user = { name: 'Owner', char_class: 'ninja', char_levels: { ninja: 1 }, coins: 5000, gems: 500 };
+  const f = createLobbyFixture({ globals: {
+    fetch: async url => {
+      if (url === '/upgrade') {
+        return { ok: false, status: 500, json: async () => { throw new SyntaxError('HTML error page'); } };
+      }
+      if (url === '/buy') {
+        // An HTTP error takes precedence even if its body looks successful.
+        return { ok: false, status: 409, json: async () => ({ success: true, newLevel: 1, gems: 1 }) };
+      }
+      return { ok: true, json: async () => ({ ownedSkinIds: [] }) };
+    },
+  } });
+  const picker = f.load('src/client/lobby/profile/characterSelectController.js');
+  picker.initializeCharacterSelect(user);
+  await f.settle();
+  picker.openCharacterSelect();
+
+  f.document.querySelector('[data-char="ninja"]').click();
+  f.document.querySelector('.upgrade-button').click();
+  f.document.querySelector('.upgrade-button.is-confirming').click();
+  await f.settle();
+  assert.match(f.document.body.textContent, /Upgrade failed\./);
+  assert.equal(user.coins, 5000);
+  assert.equal(user.char_levels.ninja, 1);
+
+  f.document.querySelector('[aria-label="Close character details"]').click();
+  f.document.querySelector('[data-char="ozzy"]').click();
+  f.document.querySelector('.buy-button').click();
+  f.document.querySelector('.cs-unlock-confirm .cs-btn.confirm').click();
+  await f.settle();
+  assert.match(f.document.body.textContent, /Unlock failed\./);
+  assert.equal(user.gems, 500);
+  assert.equal(user.char_levels.ozzy, undefined);
 });

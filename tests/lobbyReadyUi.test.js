@@ -94,7 +94,7 @@ describe('Ready and party state', () => {
       console: { log() {}, warn() {}, error() {} },
     } });
     const member = { name: 'Member', char_class: 'ninja', trophies: 0, trophy_peak: 0 };
-    f.window.__BRO_BATTLES_USERDATA__ = member;
+    f.session.setUser(member);
     const catalog = f.load('src/client/lib/gameSelectionCatalog.js');
     catalog.setSelectionProgressionUser(() => member);
     const selection = { modeId: 'bank-bust', modeVariantId: 'bank-bust-3v3', mapId: 4 };
@@ -168,7 +168,10 @@ describe("Deferred lobby initialization", () => {
       },
       console: { warn: (...args) => errors.push(args) },
     };
-    const api = loadClientModule(require.resolve('../src/client/lobby/deferredSetup.js'), context);
+    const api = loadClientModule(require.resolve('../src/client/lobby/deferredSetup.js'), {
+      ...context,
+      require: (name) => name === '../lib/browserEvents.js' ? require('../src/client/lib/browserEvents.js') : undefined,
+    });
     function step(queue) {
       const entry = queue.entries().next().value;
       if (!entry) return;
@@ -268,7 +271,7 @@ describe('Account restriction page', () => {
     let response = { ok: false, json: async () => ({ banned: true }) };
     const window = { setInterval: fn => intervals.push(fn), location: { replace: url => redirects.push(url) } };
     const { createClientModuleGraph } = require('./helpers/clientModule');
-    const { initBanPage } = createClientModuleGraph().load('public/scripts/banned.js');
+    const { initBanPage } = createClientModuleGraph().load('src/client/pages/banned.js');
     initBanPage({ document, window, now: () => time, fetch: async () => { calls++; return response; } });
     return { document, intervals, redirects, get calls() { return calls; }, setTime(value) { time = value; },
       setResponse(value) { response = value; }, async settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); } };

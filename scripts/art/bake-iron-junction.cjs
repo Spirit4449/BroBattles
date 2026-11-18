@@ -1198,11 +1198,6 @@ async function main() {
     await bake(shape).save(`shape-${shape.id}.webp`);
     console.log(`  shape-${shape.id}.webp ${shape.width}x${shape.height}`);
   }
-  const keep = new Set(shapes.map((s) => `shape-${s.id}.webp`));
-  for (const file of fs.readdirSync(OUT)) {
-    if (file.startsWith("shape-") && !keep.has(file)) { fs.unlinkSync(path.join(OUT, file)); console.log(`  removed ${file}`); }
-  }
-
   await saveTunnelShade(tunnelShade, paint, tunnelLamps, shaft, shelf);
   for (const [name, img] of Object.entries(bakeVaults())) await img.save(name);
   const PROP_FRAMES_COUNT = 4;

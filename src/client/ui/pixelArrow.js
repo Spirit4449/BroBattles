@@ -1,4 +1,4 @@
-// The shared pixel arrow (styles in public/styles/ui-system.css). Decorative:
+// The shared pixel arrow (styles in src/client/styles/ui-components.css). Decorative:
 // the control around it carries the accessible name.
 export function pixelArrow(direction = "right", size = "") {
   const arrow = document.createElement("span");

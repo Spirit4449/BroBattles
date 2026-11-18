@@ -1,6 +1,10 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { trackDebugShape } from "../shared/attackDebugDraw";
 import { advanceSlimeball, slimeLaunch } from "../../../../shared/characters/gloopProjectile";
 import { attachToPlayer } from "../shared/attachToPlayer";
 import rigData from "../../../../shared/characters/characterRig.js";
+
+const { key: NAME } = characterDefinitions.gloop;
 
 const { launchPoint } = rigData;
 import { createSlimeVisual, createSlimeBud, slimeRadius } from "./slimeVisual";
@@ -15,7 +19,6 @@ import { predictShotContact, shotBlockersFor, notePredictedHit, isEnemyShooter, 
 import { releasedFlightAge, roomTerrain } from "../shared/projectileReplication";
 import { serverClock } from "../../match/serverClock";
 
-const NAME = "gloop";
 const SLIMEBALL = getResolvedCharacterAttackConfig(NAME, "slimeball");
 // Each release is drawn once, whether predicted locally or echoed by the server.
 export const consumeGloopRelease = (scene, id) => consumeOnce(scene, "gloop-release", id, 5000);
@@ -25,25 +28,12 @@ function resolveWorldBounds(scene) {
   return { minX: x, maxX: x + width, minY: y, maxY: y + height };
 }
 
-let DEBUG_DRAW = false;
-const ACTIVE_DEBUG_SHAPES = new Set();
-
-function registerDebugShape(shape) {
-  if (!shape) return null;
-  ACTIVE_DEBUG_SHAPES.add(shape);
-  shape.setVisible(DEBUG_DRAW);
-  shape.once("destroy", () => {
-    ACTIVE_DEBUG_SHAPES.delete(shape);
-  });
-  return shape;
-}
-
 function createDebugCircle(scene, radius) {
   if (!scene?.add) return null;
   const circle = scene.add.circle(0, 0, radius, 0x55c7ff, 0.08);
   circle.setStrokeStyle(1, 0xb8f3ff, 0.8);
   circle.setDepth(RENDER_LAYERS.ATTACKS + 20);
-  return registerDebugShape(circle);
+  return trackDebugShape(circle);
 }
 
 function playAttackAnimation(scene, sprite, id = null) {
@@ -109,7 +99,7 @@ function resolveStart(payload = {}, ownerSprite = null, angle = 0) {
   const from = Number.isFinite(originX) && Number.isFinite(originY)
     ? { x: originX, y: originY }
     : { x: Number(ownerSprite?.x) || 0, y: Number(ownerSprite?.y) || 0 };
-  return launchPoint("gloop", SLIMEBALL.muzzle, { ...from, flip: Math.cos(angle) < 0 }) || from;
+  return launchPoint(NAME, SLIMEBALL.muzzle, { ...from, flip: Math.cos(angle) < 0 }) || from;
 }
 
 export function handleGloopSlimeSplat(scene, payload) {
@@ -129,7 +119,7 @@ export function spawnGloopSlimeBud(scene, ownerSprite, payload = {}) {
   const angle = Number.isFinite(payload.angle) ? payload.angle : direction < 0 ? Math.PI : 0;
   const bud = createSlimeBud(scene, ownerSprite, {
     offsetX: start.x - ownerSprite.x, offsetY: start.y - ownerSprite.y, angle,
-    radius: slimeRadius(Number(SLIMEBALL.collisionRadius) || 18, Number(SLIMEBALL.visualScale) || 1.5),
+    radius: slimeRadius(SLIMEBALL.collisionRadius, Number(SLIMEBALL.visualScale) || 1.5),
     durationMs: Math.max(60, Number(payload.startup) || Number(SLIMEBALL.castDelayMs) || 120),
   });
   scene._gloopBuds ||= new Map();
@@ -314,7 +304,7 @@ export function spawnGloopSlimeballVisual(
         // Drawn on this player's body until the server splats it there.
         const body = victimHold.body;
         if (body?.active) { state.x = body.x + victimHold.offset.x; state.y = body.y + victimHold.offset.y; }
-        if (enemyShotTraced()) traceEnemyShot(payload.id, ownerSprite?.username, "gloop", state.x, state.y, state.collisionRadius, ageState.shown || 0, payload.viewRewindMs, 1,
+        if (enemyShotTraced()) traceEnemyShot(payload.id, ownerSprite?.username, NAME, state.x, state.y, state.collisionRadius, ageState.shown || 0, payload.viewRewindMs, 1,
           aged ? releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) : null);
         if (performance.now() - victimHold.at <= victimHold.windowMs) return;
         // No splat: withdrawn like an unconfirmed prediction.
@@ -340,10 +330,10 @@ export function spawnGloopSlimeballVisual(
           offset: { x: state.x - origin.x, y: state.y - origin.y } };
       }
       if (enemy && !state.done && enemyShotTraced()) {
-        traceEnemyShot(payload.id, ownerSprite?.username, "gloop", state.x, state.y, state.collisionRadius, ageState.shown || 0, payload.viewRewindMs, victimHold ? 1 : 0, flightAge);
+        traceEnemyShot(payload.id, ownerSprite?.username, NAME, state.x, state.y, state.collisionRadius, ageState.shown || 0, payload.viewRewindMs, victimHold ? 1 : 0, flightAge);
       }
       if (struck) {
-        notePredictedHit({ delivery: "released", character: "gloop", target: struck.target });
+        notePredictedHit({ delivery: "released", character: NAME, target: struck.target });
         splat({ id: payload.id, target: struck.target.name });
         return;
       }
@@ -451,11 +441,4 @@ export function performGloopSlimeball(instance, attackContext = null) {
       start: { x: payload.start.x + p.x - castOrigin.x, y: payload.start.y + p.y - castOrigin.y } }, p, { predictHits: true });
   });
   return payload;
-}
-
-export function changeDebugState(state) {
-  DEBUG_DRAW = !!state;
-  for (const shape of ACTIVE_DEBUG_SHAPES) {
-    if (shape?.active) shape.setVisible(DEBUG_DRAW);
-  }
 }

@@ -1,3 +1,4 @@
+import { getJson } from '../lib/http.js';
 // Plays a character's idle loop from its game spritesheet on a canvas, sized
 // and planted the way the lobby shows Bros. Shared by "Meet the Bros" and the
 // cosmetics showcase (skins ship their own sheets).
@@ -34,7 +35,7 @@ function drawnBounds(image, frames) {
 export function loadIdleSheet(sheetUrl, atlasUrl) {
   const key = `${sheetUrl}|${atlasUrl}`;
   if (!sheets.has(key)) {
-    sheets.set(key, Promise.all([loadImage(sheetUrl), fetch(atlasUrl).then(response => response.json())]).then(([image, atlas]) => {
+    sheets.set(key, Promise.all([loadImage(sheetUrl), getJson(atlasUrl)]).then(([image, atlas]) => {
       const frames = atlas.frames.filter(item => /^idle\d+$/.test(item.filename)).sort((a, b) => a.filename.localeCompare(b.filename));
       if (!frames.length) throw new Error('No idle frames');
       return { image, frames, bounds: drawnBounds(image, frames) };

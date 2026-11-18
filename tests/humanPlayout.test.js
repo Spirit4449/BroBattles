@@ -1,3 +1,4 @@
+const roomTransport = require('./helpers/roomTransport.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const input = require('../src/server/core/gameRoom/inputManager');
@@ -15,7 +16,7 @@ function run(t, { sendEveryMs = 25, jitter = () => 0, timestamps = true, duratio
   t.mock.method(Date, 'now', () => now);
   const speed = movement.maxSpeed;
   const player = { socketId: 'p', name: 'P', char_class: 'ninja', x: 0, y: 0, vx: 0, vy: 0, isAlive: true, connected: true };
-  const room = { players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
+  const room = { ...roomTransport, players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
   input.resetMovementBudget(player, now);
   const start = now;
   const packets = [];

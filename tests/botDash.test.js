@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { bounds, startDash, stepBody, applyImpulse } = require('../src/server/core/bots/physics');
+const { bounds, startDash, stepBody, applyImpulse } = require('../src/server/core/physics/bodySolver');
 const { previewDash, tryDashSteps } = require('../src/server/core/bots/dash');
 const { standOn } = require('../src/server/core/bots/navigation');
 const { incomingThreat, maneuverDanger } = require('../src/server/core/bots/perception');

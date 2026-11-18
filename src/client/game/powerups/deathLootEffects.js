@@ -1,6 +1,6 @@
 import { RENDER_LAYERS } from "../scene/renderLayers";
 
-const GLOW_TEXTURE = "death-loot-soft-glow";
+import { ensureSoftGlow, DEATH_LOOT_GLOW } from "../scene/fx/glowTextures";
 
 export function handleDeathLootContact(visual, now, onImpact) {
   const body = visual?.sprite?.body;
@@ -24,19 +24,8 @@ export function createDeathLootEffects(scene, Phaser) {
   }
 
   function glow(x, y, size, tint, alpha, depth = RENDER_LAYERS.POWERUPS) {
-    if (!scene.textures.exists(GLOW_TEXTURE)) {
-      const texture = scene.textures.createCanvas(GLOW_TEXTURE, 64, 64);
-      const context = texture.context;
-      const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
-      gradient.addColorStop(0, "rgba(255,255,255,1)");
-      gradient.addColorStop(0.2, "rgba(255,255,255,0.65)");
-      gradient.addColorStop(0.5, "rgba(255,255,255,0.18)");
-      gradient.addColorStop(1, "rgba(255,255,255,0)");
-      context.fillStyle = gradient;
-      context.fillRect(0, 0, 64, 64);
-      texture.refresh();
-    }
-    return scene.add.image(x, y, GLOW_TEXTURE)
+    ensureSoftGlow(scene, DEATH_LOOT_GLOW);
+    return scene.add.image(x, y, DEATH_LOOT_GLOW)
       .setDisplaySize(size, size).setTint(tint).setAlpha(alpha)
       .setDepth(depth).setBlendMode(Phaser.BlendModes.ADD);
   }

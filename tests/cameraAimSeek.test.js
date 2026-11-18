@@ -1,14 +1,9 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
 const exportsObject = {};
-const { code } = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/cameraDynamics.js'), 'utf8'), {
-  babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-});
 let reducedMotion = false;
-vm.runInNewContext(code, { exports: exportsObject, window: { matchMedia: () => ({ matches: reducedMotion }) } });
+loadClientModule(require.resolve('../src/client/game/scene/cameraDynamics.js'), { exports: exportsObject, window: { matchMedia: () => ({ matches: reducedMotion }) } });
 const { updateDynamicCamera, restingCameraFrame, triggerWallJumpCameraKick } = exportsObject;
 
 const { arenaFor, arenaIds } = require('../src/shared/maps/arenas');
@@ -150,4 +145,24 @@ test('every arena rests the player at the same height on screen, at any zoom', (
     for (const value of offsets) assert.ok(Math.abs(value - offsets[0]) < 1e-6, `${at}: ${offsets.join(', ')}`);
   }
   assert.ok(screenOffset('duels-1v1', 'top') >= screenOffset('duels-1v1', 'floor'), 'climbing frames the player lower');
+});
+
+test('world overlays round-trip through a scaled canvas and offset Phaser viewport', () => {
+  const screen = loadClientModule(require.resolve('../src/client/game/scene/screenSpace'));
+  const camera = new Camera(80, 40, 640, 360);
+  camera.setZoom(2).centerOn(500, 300);
+  camera.preRender();
+  const scene = {
+    cameras: { main: camera },
+    game: { canvas: { getBoundingClientRect: () => ({ left: 16, top: 24, width: 400, height: 200 }) } },
+    scale: { width: 800, height: 500 },
+  };
+  // The camera center lands at game pixels (400, 220), then CSS scales the
+  // canvas on each axis before the DOM overlay uses its viewport coordinates.
+  const point = screen.worldToPage(scene, 500, 300);
+  assert.equal(point.x, 216);
+  assert.equal(point.y, 112);
+  const inverse = screen.pageToWorld(scene, point.x, point.y);
+  assert.equal(inverse.x, 500);
+  assert.equal(inverse.y, 300);
 });

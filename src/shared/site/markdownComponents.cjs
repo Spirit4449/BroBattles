@@ -108,4 +108,4 @@ function useMarkdownComponents(md) {
   return md;
 }
 
-module.exports = { useMarkdownComponents, plainComponents, renderInline };
+module.exports = { useMarkdownComponents, plainComponents };

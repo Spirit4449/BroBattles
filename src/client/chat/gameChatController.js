@@ -1,3 +1,7 @@
+import { renderUnreadBadge } from "./badges.mjs";
+import { createComposerCooldown } from "./composerCooldown.js";
+import { GAME_CHAT_BODY_MAX } from "../../shared/social/textRules.js";
+import { SOCKET_EVENTS } from "../../shared/net/socketEvents.js";
 
 import { makeChatShell, renderGameChatLineMessage, GAME_CHAT_RECENT_LIMIT } from './presentation';
 import {
@@ -31,8 +35,6 @@ export function createGameChatController({
       team: "",
       all: "",
     },
-    cooldownTimer: null,
-    cooldownDraftValue: "",
     messagesByScope: {
       team: [],
       all: [],
@@ -46,7 +48,7 @@ export function createGameChatController({
     launcherLabel: "Chat",
     launcherClassName: "bb-chat-game-launcher",
   });
-  ui.textarea.maxLength = 220;
+  ui.textarea.maxLength = GAME_CHAT_BODY_MAX;
   ui.clearReplyBtn.style.display = "none";
   ui.replyBanner.style.display = "none";
   ui.titleEl.textContent = "Battle Chat";
@@ -83,17 +85,6 @@ export function createGameChatController({
     return String(scope || "team").toLowerCase() === "all" ? "all" : "team";
   }
 
-  function setUnreadBadge(count) {
-    const total = Math.max(0, Number(count) || 0);
-    if (total > 0) {
-      ui.badge.textContent = total > 99 ? "99+" : String(total);
-      ui.badge.classList.remove("hidden");
-    } else {
-      ui.badge.textContent = "";
-      ui.badge.classList.add("hidden");
-    }
-  }
-
   function syncUnreadUi() {
     const teamCount = Math.max(0, Number(state.unreadByScope.team) || 0);
     const allCount = Math.max(0, Number(state.unreadByScope.all) || 0);
@@ -102,14 +93,13 @@ export function createGameChatController({
       const count = scope === "all" ? allCount : teamCount;
       const countEl = button.querySelector(".bb-chat-tab-count");
       if (!countEl) continue;
-      countEl.textContent = count > 99 ? "99+" : String(count || "");
-      countEl.classList.toggle("hidden", count <= 0);
+      renderUnreadBadge(countEl, count);
       button.setAttribute(
         "aria-label",
         `${scope === "all" ? "All" : "Team"} chat${count > 0 ? `, ${count} unread` : ""}`,
       );
     }
-    setUnreadBadge(teamCount + allCount);
+    renderUnreadBadge(ui.badge, teamCount + allCount);
   }
 
   function incrementUnread(scope) {
@@ -308,48 +298,17 @@ export function createGameChatController({
     return true;
   }
 
-  function clearCooldownFeedback() {
-    if (state.cooldownTimer) {
-      window.clearTimeout(state.cooldownTimer);
-      state.cooldownTimer = null;
-    }
-    if (!ui.textarea.disabled) return;
-    ui.textarea.disabled = false;
-    ui.sendBtn.disabled = false;
-    for (const button of audienceButtons) button.disabled = false;
-    ui.textarea.value = String(state.cooldownDraftValue || "");
-    ui.resizeComposer();
-    syncAudienceUi();
-    state.cooldownDraftValue = "";
-  }
-
-  function applyInlineRateLimitMessage(message, durationMs = 2200) {
-    const duration = Math.max(900, Number(durationMs) || 2200);
-    if (!ui.textarea.disabled) {
-      state.cooldownDraftValue = String(ui.textarea.value || "");
-    }
-    ui.textarea.disabled = true;
-    ui.sendBtn.disabled = true;
-    for (const button of audienceButtons) button.disabled = true;
-    ui.textarea.value = String(message || "Slow down.");
-    ui.resizeComposer();
-    ui.textarea.placeholder = ui.textarea.value;
-
-    if (state.cooldownTimer) {
-      window.clearTimeout(state.cooldownTimer);
-      state.cooldownTimer = null;
-    }
-    state.cooldownTimer = window.setTimeout(() => {
-      state.cooldownTimer = null;
-      ui.textarea.disabled = false;
-      ui.sendBtn.disabled = false;
+  const cooldown = createComposerCooldown(ui, {
+    defaultMs: 2200,
+    minimumMs: 900,
+    onLock() {
+      for (const button of audienceButtons) button.disabled = true;
+    },
+    onRelease() {
       for (const button of audienceButtons) button.disabled = false;
-      ui.textarea.value = String(state.cooldownDraftValue || "");
-      ui.resizeComposer();
       syncAudienceUi();
-      state.cooldownDraftValue = "";
-    }, duration);
-  }
+    },
+  });
 
   async function sendMessage() {
     if (state.sending || ui.textarea.disabled || state.destroyed) return;
@@ -367,7 +326,7 @@ export function createGameChatController({
     try {
       const ack = await new Promise((resolve, reject) => {
         if (!socket?.connected) { reject(new Error("Chat disconnected. Try again when connected.")); return; }
-        socket.timeout(8000).emit("game:chat:send", payload, (timeoutError, result) => {
+        socket.timeout(8000).emit(SOCKET_EVENTS.GAME_CHAT_SEND, payload, (timeoutError, result) => {
           if (timeoutError) { reject(new Error("Chat send timed out. Check chat before retrying.")); return; }
           if (result?.ok) {
             resolve(result.message);
@@ -392,9 +351,9 @@ export function createGameChatController({
       const base = String(error?.message || "Failed to send chat");
       const finalMessage = banWarning ? `${base} ${banWarning}` : base;
       if (errType === "warn" || errType === "chat_limited") {
-        applyInlineRateLimitMessage(finalMessage, 2200);
+        cooldown.apply(finalMessage, 2200);
       } else {
-        applyInlineRateLimitMessage(base, 1800);
+        cooldown.apply(base, 1800);
       }
       console.warn("[chat] game send failed", error?.message || error);
     } finally {
@@ -558,7 +517,7 @@ export function createGameChatController({
     }
     incrementUnread(incomingScope);
   };
-  socket?.on?.("game:chat:message", onChatMessage);
+  socket?.on?.(SOCKET_EVENTS.GAME_CHAT_MESSAGE, onChatMessage);
 
   ui.messagesEl.addEventListener("scroll", () => {
     if (state.isOpen && ui.scroll.atBottom()) clearUnread(state.audience);
@@ -573,11 +532,11 @@ export function createGameChatController({
     destroy: () => {
       ui.destroyComposer();
       state.destroyed = true;
-      socket?.off?.("game:chat:message", onChatMessage);
+      socket?.off?.(SOCKET_EVENTS.GAME_CHAT_MESSAGE, onChatMessage);
       document.removeEventListener("keydown", keyHandler, true);
       document.removeEventListener("pointerdown", outsidePointerHandler, true);
       setInputCapture(false);
-      clearCooldownFeedback();
+      cooldown.clear();
       clearVisibilityTimer();
       ui.root.remove();
       ui.launcher.remove();

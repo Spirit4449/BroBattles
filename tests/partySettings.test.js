@@ -1,47 +1,61 @@
+const { createFakeIo } = require('./helpers/fakeIo');
+const { createFakeDb } = require('./helpers/fakeDb');
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createPartyStateService } = require("../src/server/services/party/partyStateService");
 const { createPartyRouteService } = require("../src/server/services/party/partyRouteService");
 const { registerPartyEvents } = require("../src/server/core/socketEvents/partyEvents");
 
+test("party route lookup ignores retained context and similarly named pages", () => {
+  const { createLobbyFixture } = require("./helpers/lobbyFixture");
+  const fixture = createLobbyFixture();
+  const { checkIfInParty, getRoutePartyId, getActivePartyId, replacePartyContext } =
+    fixture.load("src/client/lobby/party/partyState.js");
+  replacePartyContext(7);
+  fixture.window.location.pathname = "/party/12/";
+  assert.equal(checkIfInParty(), "12");
+  assert.equal(getRoutePartyId(), 12);
+  assert.equal(getActivePartyId(), 7);
+  fixture.window.location.pathname = "/partynotfound";
+  assert.equal(checkIfInParty(), false);
+  assert.equal(getRoutePartyId(), null);
+});
+
 function fixture(allow = 1) {
   const party = { party_id: 7, mode: 1, map: 1, is_public: 0, public_name: null, allow_member_selection: allow, hide_enemy_bros: 0 };
   const members = [{ name: "Owner", team: "team1", slot_index: 0 }, { name: "Member", team: "team1", slot_index: 1 }];
   const writes = [];
   const emissions = [];
-  const db = {
-    fetchPartyMembersDetailed: async () => members,
-    withTransaction: async fn => fn(null, db.runQuery.bind(db)),
-    async runQuery(sql, params) {
-      const query = sql.replace(/\s+/g, " ").trim();
-      if (query.startsWith("SELECT 1 FROM party_members")) {
-        const name = typeof params[0] === "string" ? params[0] : params[1];
-        return members.some((member) => member.name === name) ? [{ 1: 1 }] : [];
-      }
-      if (query.startsWith("SELECT party_id FROM parties")) return [{ ...party }];
-      if (query.startsWith("SELECT name, team, slot_index")) return members.map(m => ({ ...m }));
-      if (query.startsWith("UPDATE party_members SET team")) {
-        Object.assign(members.find(m => m.name === params[3]), { team: params[0], slot_index: params[1] });
-        return { affectedRows: 1 };
-      }
-      if (query.startsWith("SELECT name FROM party_members")) return [members[0]];
-      if (query.startsWith("SELECT * FROM parties")) return [{ ...party }];
-      if (query.startsWith("UPDATE parties SET is_public")) {
-        writes.push(query);
-        party.is_public = params[0];
-        party.public_name = params[1];
-        if (query.includes("allow_member_selection = ?")) party.allow_member_selection = params[2];
-        if (query.includes("hide_enemy_bros = ?")) party.hide_enemy_bros = params[query.includes("allow_member_selection = ?") ? 3 : 2];
-        return { affectedRows: 1 };
-      }
-      if (query.startsWith("UPDATE parties SET mode")) {
-        writes.push(query);
-        return { affectedRows: 1 };
-      }
-      throw new Error(`Unexpected query: ${query}`);
-    },
-  };
-  const io = { to: () => ({ emit: (event, data) => emissions.push({ event, data }) }) };
+  const db = createFakeDb(async (sql, params) => {
+    const query = sql.replace(/\s+/g, " ").trim();
+    if (query.startsWith("SELECT 1 FROM party_members")) {
+      const name = typeof params[0] === "string" ? params[0] : params[1];
+      return members.some((member) => member.name === name) ? [{ 1: 1 }] : [];
+    }
+    if (query.startsWith("SELECT party_id FROM parties")) return [{ ...party }];
+    if (query.startsWith("SELECT name, team, slot_index")) return members.map(m => ({ ...m }));
+    if (query.startsWith("UPDATE party_members SET team")) {
+      Object.assign(members.find(m => m.name === params[3]), { team: params[0], slot_index: params[1] });
+      return { affectedRows: 1 };
+    }
+    if (query.startsWith("SELECT name FROM party_members")) return [members[0]];
+    if (query.startsWith("SELECT * FROM parties")) return [{ ...party }];
+    if (query.startsWith("UPDATE parties SET is_public")) {
+      writes.push(query);
+      party.is_public = params[0];
+      party.public_name = params[1];
+      if (query.includes("allow_member_selection = ?")) party.allow_member_selection = params[2];
+      if (query.includes("hide_enemy_bros = ?")) party.hide_enemy_bros = params[query.includes("allow_member_selection = ?") ? 3 : 2];
+      return { affectedRows: 1 };
+    }
+    if (query.startsWith("UPDATE parties SET mode")) {
+      writes.push(query);
+      return { affectedRows: 1 };
+    }
+    throw new Error(`Unexpected query: ${query}`);
+  });
+  db.fetchPartyMembersDetailed = async () => members;
+  const io = createFakeIo({ onEmit: (_room, event, data) => emissions.push({ event, data }) });
   const state = createPartyStateService({ db, io });
   return { party, writes, emissions, db, io, state, view: createPartyRouteService({ db }) };
 }
@@ -57,7 +71,6 @@ test("owner can save permissions, read them back, and broadcast them to members"
   assert.equal(result.settings.allowMemberSelection, false);
   const read = await f.view.getPartySettingsView({ partyId: 7, username: "Owner" });
   assert.equal(read.payload.allowMemberSelection, false);
-  assert.equal(read.payload.memberSelectionSupported, true);
   assert.equal(f.emissions.find(({ event }) => event === "party:members").data.allowMemberSelection, false);
   assert.equal((await f.view.getPartyMembersView({ partyId: 7, username: "Member" })).payload.allowMemberSelection, false);
 });
@@ -93,16 +106,11 @@ test("omitted permission leaves the saved setting unchanged", async () => {
 
 test("new parties use the creator's current lobby selection", async () => {
   const queries = [];
-  const db = {
-    async withTransaction(callback) {
-      const q = async (sql, params) => {
-        queries.push({ sql: sql.replace(/\s+/g, " ").trim(), params });
-        if (sql.includes("INSERT INTO parties")) return { insertId: 42 };
-        return { affectedRows: 1 };
-      };
-      return callback({}, q);
-    },
-  };
+  const db = createFakeDb(async (sql, params) => {
+    queries.push({ sql: sql.replace(/\s+/g, " ").trim(), params });
+    if (sql.includes("INSERT INTO parties")) return { insertId: 42 };
+    return { affectedRows: 1 };
+  }, { connection: {} });
   const state = createPartyStateService({ db, io: {} });
 
   const partyId = await state.createPartyForUser("Owner", {
@@ -124,13 +132,10 @@ test("new parties use the creator's current lobby selection", async () => {
   ]);
 });
 
-test("old schemas retain selection access and report the missing setting", async () => {
+test("party settings propagate storage failures", async () => {
   const f = fixture();
-  delete f.party.allow_member_selection;
-  const read = await f.view.getPartySettingsView({ partyId: 7, username: "Owner" });
-  assert.equal(read.payload.memberSelectionSupported, false);
-  assert.equal(read.payload.allowMemberSelection, true);
-  await f.state.setPartySelection({ partyId: 7, actorName: "Member", selection });
+  f.db.runQuery = async () => { throw new Error("unavailable"); };
+  await assert.rejects(f.view.getPartySettingsView({ partyId: 7, username: "Owner" }), /unavailable/);
 });
 
 for (const event of ["mode-change", "map-change"]) {
@@ -206,13 +211,81 @@ for (const hidden of [true, false]) {
     assert.equal(f.party.hide_enemy_bros, Number(hidden));
   });
 }
-test('hidden Bros remains unavailable on old schemas and owner-only on new ones', async () => {
+test('hidden Bros is owner-only', async () => {
   const f = fixture();
   const result = await f.state.setPartyVisibility({ partyId: 7, actorName: 'Member', hideEnemyBros: true });
   assert.equal(result.ok, false);
   assert.equal(f.writes.length, 0);
-  delete f.party.hide_enemy_bros;
-  const view = await f.view.getPartySettingsView({ partyId: 7, username: 'Owner' });
-  assert.equal(view.payload.hideEnemyBros, false);
-  assert.equal(view.payload.hideEnemyBrosSupported, false);
+
+});
+
+test('party discovery renders the search result and keeps settings restricted to the owner', async () => {
+  const { createLobbyFixture } = require('./helpers/lobbyFixture');
+  const requests = [];
+  const f = createLobbyFixture({
+    url: 'https://game.test/party/7',
+    globals: {
+      fetch: async (url, options) => {
+        requests.push({ url, options });
+        return { ok: true, json: async () => ({ parties: [{ partyId: 7, ownerName: 'Owner', publicName: 'Castle Team', capacity: 4, members: [] }] }) };
+      },
+    },
+  });
+  f.load('src/client/lobby/party/partyState.js').replacePartyContext(7, { ownerName: 'Owner' });
+  const overlays = f.load('src/client/lobby/party/partyOverlays.js');
+  const settings = f.document.getElementById('party-settings-button');
+  overlays.syncPartySettingsButtonVisibility('Member');
+  assert.equal(settings.classList.contains('hidden'), true);
+  overlays.syncPartySettingsButtonVisibility('Owner');
+  assert.equal(settings.classList.contains('hidden'), false);
+  f.document.getElementById('party-discovery-input').value = 'Castle';
+  await overlays.openPartyDiscoveryOverlay();
+  const search = requests.find(request => request.url === '/party/discover');
+  assert.equal(JSON.parse(search.options.body).query, 'Castle');
+  assert.match(f.document.getElementById('party-discovery-list').textContent, /Castle Team/);
+});
+
+test('solo selection saves normalized state locally and accepts the server selection', async () => {
+  const { createLobbyFixture } = require('./helpers/lobbyFixture');
+  const requests = [];
+  const accountSelection = { modeId: 'duels', modeVariantId: 'duels-2v2', mapId: 1 };
+  const f = createLobbyFixture({ globals: { fetch: async (url, options) => {
+    requests.push({ url, options });
+    return { ok: true, json: async () => ({ selection: accountSelection }) };
+  } } });
+  const selection = f.load('src/client/lobby/party/soloSelection.js');
+  await selection.persistSoloSelection({ modeId: 'duels', modeVariantId: 'duels-1v1', mapId: 1 });
+  assert.equal(selection.getSoloSelection(selection.SOLO_MODE_VARIANT_STORAGE_KEY), 'duels-1v1');
+  assert.equal(selection.getSoloSelection(selection.SOLO_MAP_STORAGE_KEY), '1');
+  assert.equal(requests[0].options.method, 'POST');
+  assert.equal(JSON.parse(requests[0].options.body).selection.modeVariantId, 'duels-1v1');
+  assert.equal(selection.getSavedSelectionFromUserData().modeVariantId, accountSelection.modeVariantId);
+});
+
+test('join request overlay ignores mismatched responses and cancels pending work when dismissed', async () => {
+  const { createLobbyFixture } = require('./helpers/lobbyFixture');
+  const f = createLobbyFixture();
+  const controller = f.load('src/client/lobby/party/joinRequestController.js').createJoinRequestController({
+    socket: f.socket, checkIfInParty: () => null, getActivePartyId: () => null,
+  });
+  f.document.getElementById('username-text').textContent = 'Owner';
+  const overlay = f.document.getElementById('party-join-request-overlay');
+  const submit = f.document.getElementById('party-join-request-submit');
+  const banner = f.document.getElementById('party-join-request-banner');
+  let reloads = 0;
+  f.window.location.reload = () => reloads++;
+  controller.initialize();
+  controller.registerEvents();
+  controller.showPartyJoinRequestScreen({ partyId: 7, ownerName: 'Host', requestState: { status: 'pending' } });
+  assert.equal(submit.disabled, true);
+  f.socket.emit('party:join-request:status', { partyId: 8, requesterName: 'Owner', status: 'accepted' });
+  f.socket.emit('party:join-request:status', { partyId: 7, requesterName: 'Someone Else', status: 'accepted' });
+  assert.equal(banner.dataset.status, 'pending');
+  f.socket.emit('party:join-request:status', { partyId: 7, requesterName: 'Owner', status: 'accepted' });
+  assert.equal(banner.dataset.status, 'accepted');
+  controller.hidePartyJoinRequestScreen();
+  await f.advance(60_000);
+  assert.equal(overlay.classList.contains('hidden'), true);
+  assert.equal(f.document.body.classList.contains('join-request-overlay-open'), false);
+  assert.equal(reloads, 0);
 });

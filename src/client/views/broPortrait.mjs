@@ -40,7 +40,7 @@ const CHROMA_CORNERS = [
     [6, 48, .1], [0, 54, .09], [12, 30, .08], [6, 60, .08], [0, 72, .05], [6, 78, .04]],
 ];
 
-export function buildPortraitChromaCells(color, corner = 0) {
+function buildPortraitChromaCells(color, corner = 0) {
   const cells = CHROMA_CORNERS[corner];
   return `<g fill="${color}" shape-rendering="crispEdges">${cells.map(([x, y, opacity]) =>
     `<rect x="${x}" y="${y}" width="6" height="6" opacity="${opacity}"/>`
@@ -66,20 +66,37 @@ export function buildBroPortraitSvg(bodyUrl, palette) {
       <path fill="${highlight}" fill-opacity=".38" d="M120 2H136V3.5H120Z"/>
       <path d="M43 4H54M202 4H213" fill="none" stroke="${highlight}" stroke-opacity=".24" stroke-width="1.5"/>
     </g>`).join('');
+  const rimCorners = [
+    'translate(0 0)', 'translate(256 0) scale(-1 1)',
+    'translate(0 256) scale(1 -1)', 'translate(256 256) scale(-1 -1)',
+  ].map(transform => `<g transform="${transform}" shape-rendering="crispEdges">
+    <path fill="${shadow}" d="M2 2H27L18 9H9V18L2 27Z"/>
+    <path fill="${main}" d="M3 3H22L16 7H7V16L3 22Z"/>
+    <path fill="${highlight}" fill-opacity=".9" d="M4 4H17L12 6H6V12L4 17Z"/>
+    <path fill="${highlight}" fill-opacity=".7" d="M20 4L24 6L20 8L16 6ZM4 20L6 16L8 20L6 24Z"/>
+  </g>`).join('');
   return `<svg id="bro-portrait" xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
     <defs>
       <linearGradient id="rim" x2=".75" y2="1"><stop stop-color="${highlight}" stop-opacity=".6"/><stop offset=".45" stop-color="${main}" stop-opacity=".7"/><stop offset="1" stop-color="${shadow}"/></linearGradient>
       <radialGradient id="glow" cx=".5" cy=".5" r=".65"><stop stop-color="${main}" stop-opacity=".32"/><stop offset=".5" stop-color="${main}" stop-opacity=".12"/><stop offset="1" stop-color="${main}" stop-opacity="0"/></radialGradient>
-      <clipPath id="portrait"><rect x="6" y="6" width="244" height="244" rx="18"/></clipPath>
+      <pattern id="rim-chroma" width="28" height="28" patternUnits="userSpaceOnUse" patternTransform="translate(3 5)">
+        <rect x="2" y="3" width="10" height="7" fill="${highlight}" opacity=".22"/>
+        <rect x="17" y="1" width="7" height="10" fill="${shadow}" opacity=".35"/>
+        <rect x="7" y="17" width="12" height="8" fill="${main}" opacity=".42"/>
+        <rect x="22" y="19" width="5" height="6" fill="${highlight}" opacity=".18"/>
+      </pattern>
+      <clipPath id="portrait"><rect x="9" y="9" width="238" height="238"/></clipPath>
     </defs>
-    <rect width="256" height="256" rx="24" fill="#101018"/>
-    <rect x="2" y="2" width="252" height="252" rx="22" fill="url(#rim)"/>
+    <rect width="256" height="256" fill="#101018"/>
+    <rect x="2" y="2" width="252" height="252" fill="url(#rim)"/>
+    <rect x="2" y="2" width="252" height="252" fill="url(#rim-chroma)"/>
     <g clip-path="url(#portrait)">
-      <path fill="#020504" d="M6 6H250V250H6Z"/>
-      <path fill="url(#glow)" d="M6 6H250V250H6Z"/>
+      <path fill="#020504" d="M9 9H247V247H9Z"/>
+      <path fill="url(#glow)" d="M9 9H247V247H9Z"/>
       ${cornerDetails}
     </g>
     <image href="${bodyUrl}" x="25" y="32" width="206" height="218" preserveAspectRatio="xMidYMax meet" clip-path="url(#portrait)"/>
     ${rimAccents}
+    ${rimCorners}
   </svg>`;
 }

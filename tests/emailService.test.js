@@ -1,8 +1,8 @@
+const { createFakeDb } = require('./helpers/fakeDb');
+const { installFakeClock } = require('./helpers/fakeClock');
+const { loadClientModule } = require('./helpers/clientModule');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
 
 describe("Server email workflows", () => {
   const { test, describe, beforeEach } = require('node:test');
@@ -28,6 +28,16 @@ describe("Server email workflows", () => {
      assert.ok(result.text.includes('<img'));
      assert.match(template('Verify','Hello','123456').html,/123456/);
     });
+    test('generated verification codes pass the shared validator and show the policy expiry in both formats', () => {
+      const { VERIFICATION_CODE_PATTERN } = require('../src/shared/social/verificationCode');
+      const { generateVerificationCode, VERIFICATION_CODE_TTL_MINUTES } = require('../src/server/services/email/verificationCode');
+      const code = generateVerificationCode();
+      assert.match(code, VERIFICATION_CODE_PATTERN);
+      const message = template('Verify', 'Hello', code);
+      assert.ok(message.html.includes(code));
+      assert.ok(message.html.includes(`EXPIRES IN ${VERIFICATION_CODE_TTL_MINUTES} MINUTES`));
+      assert.ok(message.text.includes(`expires in ${VERIFICATION_CODE_TTL_MINUTES} minutes`));
+    });
     test('verification digest is bound to account, address and code',()=>{
      process.env.EMAIL_VERIFICATION_SECRET='test-secret';
      assert.equal(hashCode(1,'a@example.com','123456').length,64);
@@ -46,11 +56,48 @@ describe("Server email workflows", () => {
     const {hashCode}=require('../src/server/services/email/emailService');
 
     function harness(row){const routes={};const queries=[];const db={withTransaction:async fn=>fn(null,async(sql,args)=>{queries.push({sql,args});if(sql.startsWith('SELECT'))return row?[row]:[];return {affectedRows:1};}),runQuery:async()=>row?[row]:[]};registerEmailRoutes({app:{get:(p,f)=>routes[p]=f,post:(p,f)=>routes[p]=f},db,requireCurrentUser:async()=>({user_id:1})});return {queries,call:async(path,body={},site='same-origin')=>{const res={statusCode:200,set(){return this},status(n){this.statusCode=n;return this},json(data){this.data=data;return this}};await routes[path]({method:'POST',ip:'test',get:k=>k==='sec-fetch-site'?site:null,body},res);return res;}};}
-    test('invalid codes increment attempts without verifying email',async()=>{const row={code_hash:hashCode(1,'a@example.com','123456'),pending_email:'a@example.com',expires_at:new Date(Date.now()+60000),attempts:0};const h=harness(row);const r=await h.call('/profile/email/verify',{code:'111111'});assert.equal(r.statusCode,400);assert.ok(h.queries.some(q=>q.sql.includes('attempts=attempts+1')));assert.ok(!h.queries.some(q=>q.sql.includes('email=pending_email')));});
-    test('valid code verifies address and consumes the challenge',async()=>{const h=harness({code_hash:hashCode(1,'a@example.com','123456'),pending_email:'a@example.com',expires_at:new Date(Date.now()+60000),attempts:0});const r=await h.call('/profile/email/verify',{code:'123456'});assert.equal(r.data.email,'a@example.com');assert.ok(h.queries.some(q=>q.sql.includes('code_hash=NULL')));});
-    test('expired, exhausted and consumed challenges fail closed',async()=>{for(const row of [{code_hash:'x',expires_at:new Date(0),attempts:0},{code_hash:'x',expires_at:new Date(Date.now()+60000),attempts:5},{}]){const h=harness(row);assert.equal((await h.call('/profile/email/verify',{code:'123456'})).statusCode,400);assert.equal(h.queries.length,1);}});
+    test('invalid codes increment attempts without verifying email',async t=>{installFakeClock(t);const row={code_hash:hashCode(1,'a@example.com','123456'),pending_email:'a@example.com',expires_at:new Date(Date.now()+60000),attempts:0};const h=harness(row);const r=await h.call('/profile/email/verify',{code:'111111'});assert.equal(r.statusCode,400);assert.ok(h.queries.some(q=>q.sql.includes('attempts=attempts+1')));assert.ok(!h.queries.some(q=>q.sql.includes('email=pending_email')));});
+    test('valid code verifies address and consumes the challenge',async t=>{installFakeClock(t);const h=harness({code_hash:hashCode(1,'a@example.com','123456'),pending_email:'a@example.com',expires_at:new Date(Date.now()+60000),attempts:0});const r=await h.call('/profile/email/verify',{code:'123456'});assert.equal(r.data.email,'a@example.com');assert.ok(h.queries.some(q=>q.sql.includes('code_hash=NULL')));});
+    test('expired, exhausted and consumed challenges fail closed',async t=>{installFakeClock(t);for(const row of [{code_hash:'x',expires_at:new Date(0),attempts:0},{code_hash:'x',expires_at:new Date(Date.now()+60000),attempts:5},{}]){const h=harness(row);assert.equal((await h.call('/profile/email/verify',{code:'123456'})).statusCode,400);assert.equal(h.queries.length,1);}});
     test('cross-site writes and invalid email are rejected before database access',async()=>{const h=harness();assert.equal((await h.call('/profile/email/send-code',{email:'a@example.com'},'cross-site')).statusCode,403);assert.equal((await h.call('/profile/email/send-code',{email:'bad'})).statusCode,400);assert.equal(h.queries.length,0);});
-    test('resend cooldown and persistent hourly cap prevent sending',async()=>{for(const row of [{sent_at:new Date(),window_start:new Date(),send_count:1},{sent_at:new Date(Date.now()-120000),window_start:new Date(),send_count:5}]){const h=harness(row);assert.equal((await h.call('/profile/email/send-code',{email:'a@example.com'})).statusCode,429);}});
+    test('resend cooldown and persistent hourly cap prevent sending',async t=>{installFakeClock(t);for(const row of [{sent_at:new Date(),window_start:new Date(),send_count:1},{sent_at:new Date(Date.now()-120000),window_start:new Date(),send_count:5}]){const h=harness(row);assert.equal((await h.call('/profile/email/send-code',{email:'a@example.com'})).statusCode,429);}});
+
+    test('profile and signup challenges reserve their shared expiry on the database clock', async t => {
+      installFakeClock(t);
+      const { resendSignup } = require('../src/server/services/auth/signupVerificationService');
+      const { EMAIL_RESEND_SECONDS } = require('../src/server/services/email/emailCooldown');
+      const { VERIFICATION_CODE_TTL_MINUTES } = require('../src/server/services/email/verificationCode');
+      const originalFetch = global.fetch;
+      global.fetch = async () => ({ ok: true });
+      t.after(() => { global.fetch = originalFetch; });
+      process.env.EMAIL_API_KEY = 'test-key';
+
+      const profile = harness({ send_count: 0 });
+      const profileResponse = await profile.call('/profile/email/send-code', { email: 'test@example.com' });
+      assert.equal(profileResponse.data.resendAfter, EMAIL_RESEND_SECONDS);
+      const profileWrite = profile.queries.find(({ sql }) => sql.startsWith('UPDATE account_emails SET pending_email'));
+      assert.match(profileWrite.sql, /TIMESTAMPADD\(MINUTE,\?,NOW\(3\)\)/);
+      assert.equal(profileWrite.args[2], VERIFICATION_CODE_TTL_MINUTES);
+
+      let signupWrite;
+      const signup = await resendSignup({
+        req: { body: { challengeId: 'challenge' }, signedCookies: {} },
+        requireCurrentUser: async () => ({ user_id: 1, expires_at: new Date(Date.now() + 60000) }),
+        db: {
+          withTransaction: async work => work(null, async (sql, args) => {
+            if (sql.startsWith('SELECT')) return [{
+              challenge_id: 'challenge', username: 'Tester', email: 'test@example.com',
+              password_hash: 'hashed', send_count: 0,
+            }];
+            signupWrite = { sql, args };
+            return { affectedRows: 1 };
+          }),
+        },
+      });
+      assert.equal(signup.payload.resendAfter, EMAIL_RESEND_SECONDS);
+      assert.match(signupWrite.sql, /TIMESTAMPADD\(MINUTE,\?,NOW\(3\)\)/);
+      assert.equal(signupWrite.args[5], VERIFICATION_CODE_TTL_MINUTES);
+    });
 
     test('unsubscribe is login-free, escapes display content, and rejects missing tokens',async()=>{
      const routes={},queries=[];let row={user_id:1,email:'<test>@example.com'},fail=false;
@@ -89,7 +136,8 @@ describe("Server email workflows", () => {
       }
     });
 
-    test('Broadcast opt-outs cancel pending welcome mail and update local preferences',async()=>{
+    test('Broadcast opt-outs cancel pending welcome mail and update local preferences',async t=>{
+      installFakeClock(t);
       const {readSubscription}=require('../src/server/services/email/marketingService');
       const originalFetch=global.fetch,previousKey=process.env.RESEND_MARKETING_API_KEY;
       process.env.RESEND_MARKETING_API_KEY='test-key';
@@ -97,10 +145,10 @@ describe("Server email workflows", () => {
       const q=async(sql)=>{queries.push(sql);if(sql.startsWith('SELECT email,'))return [{email:'test@example.com',subscribed:1}];if(sql.startsWith('SELECT synced_at'))return [{synced_at:new Date()}];return {};};
       try{
         global.fetch=async()=>({ok:true,json:async()=>({unsubscribed:true})});
-        assert.equal(await readSubscription(q,1),false);
+        assert.equal(await readSubscription(createFakeDb(q),1),false);
         assert.ok(queries.some(sql=>sql.includes('UPDATE marketing_jobs SET cancelled_at')));
         global.fetch=async()=>({ok:false});
-        await assert.rejects(readSubscription(q,1),/Unable to check/);
+        await assert.rejects(readSubscription(createFakeDb(q),1),/Unable to check/);
       }finally{global.fetch=originalFetch;if(previousKey===undefined)delete process.env.RESEND_MARKETING_API_KEY;else process.env.RESEND_MARKETING_API_KEY=previousKey;}
     });
 
@@ -110,7 +158,7 @@ describe("Server email workflows", () => {
       process.env.RESEND_MARKETING_API_KEY='test-key';
       try{
         global.fetch=async()=>{throw new Error('Must not fetch stale provider preferences');};
-        assert.equal(await readSubscription(async sql=>sql.startsWith('SELECT email,')?[{email:'test@example.com',subscribed:1}]:[{synced_at:null}],1),true);
+        assert.equal(await readSubscription(createFakeDb(async sql=>sql.startsWith('SELECT email,')?[{email:'test@example.com',subscribed:1}]:[{synced_at:null}]),1),true);
       }finally{global.fetch=originalFetch;if(previousKey===undefined)delete process.env.RESEND_MARKETING_API_KEY;else process.env.RESEND_MARKETING_API_KEY=previousKey;}
     });
   });
@@ -131,25 +179,29 @@ describe("Server email workflows", () => {
       const app={locals:{authSessions:createAuthSessionService({db,cookieOptions:{}})}};
       return {cookies,queries,events,context:{app,db,res,requireCurrentUser:async()=>guest,req:{body:{challengeId:'challenge',code:invalid?'000000':'123456'},signedCookies:{}}}};
     }
-    test('signup activation issues permanent cookies only after verification commits',async()=>{
+    test('signup activation issues permanent cookies only after verification commits',async t=>{
+      installFakeClock(t);
       const h=harness();const result=await verifySignup(h.context);
       assert.equal(result.statusCode,201);
       assert.deepEqual(h.events,['commit','cookie','cookie']);
       assert.ok(h.queries.some(q=>q.startsWith('DELETE FROM auth_sessions')));
       assert.ok(h.queries.some(q=>q.startsWith('INSERT INTO marketing_jobs')));
     });
-    test('wrong signup code leaves guest account and cookies untouched',async()=>{
+    test('wrong signup code leaves guest account and cookies untouched',async t=>{
+      installFakeClock(t);
       const h=harness({invalid:true});assert.equal((await verifySignup(h.context)).statusCode,400);
       assert.equal(h.cookies.length,0);assert.ok(h.queries.some(q=>q.includes('attempts=attempts+1')));
       assert.ok(!h.queries.some(q=>q.startsWith('UPDATE users')||q.startsWith('DELETE FROM auth_sessions')));
     });
-    test('activation collision or failed commit never issues an account cookie',async()=>{
+    test('activation collision or failed commit never issues an account cookie',async t=>{
+      installFakeClock(t);
       const collision=harness({collision:true});assert.equal((await verifySignup(collision.context)).statusCode,409);
       assert.deepEqual(collision.events,['rollback']);assert.equal(collision.cookies.length,0);
       const failed=harness({commitFailure:true});await assert.rejects(verifySignup(failed.context),/commit failed/);
       assert.deepEqual(failed.events,['rollback']);assert.equal(failed.cookies.length,0);
     });
-    test('editing cancels the challenge without deleting cooldown history',async()=>{
+    test('editing cancels the challenge without deleting cooldown history',async t=>{
+      installFakeClock(t);
       const h=harness();assert.equal((await cancelSignup(h.context)).statusCode,200);
       assert.ok(h.queries[0].includes('code_hash=NULL'));assert.ok(!h.queries[0].includes('sent_at='));assert.ok(!h.queries[0].includes('correction_used='));
     });
@@ -158,14 +210,10 @@ describe("Server email workflows", () => {
 
 describe("Client email settings", () => {
   test('email settings request is made only for a confirmed member profile', async () => {
-    const source = babel.transformSync(fs.readFileSync('src/client/account/emailSettings.js', 'utf8'), {
-      babelrc: false, configFile: false,
-      presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-    }).code;
     const toggle = { dataset: {}, addEventListener() {} };
     const status = { textContent: '' };
     const api = {};
-    vm.runInNewContext(source, {
+    loadClientModule('src/client/account/emailSettings.js', {
       exports: api,
       require: () => ({}),
       document: { getElementById: id => id === 'email-toggle' ? toggle : status },
@@ -187,10 +235,6 @@ describe("Client email settings", () => {
   });
 
   test('preference feedback uses modal Sonner and Escape leaves the underlying profile alone', async () => {
-    const source = babel.transformSync(fs.readFileSync('src/client/account/emailSettings.js', 'utf8'), {
-      babelrc: false, configFile: false,
-      presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-    }).code;
     function node() {
       return { dataset: {}, handlers: {}, value: '', textContent: '', hidden: false,
         classList: { toggle() {} }, addEventListener(type, fn) { this.handlers[type] = fn; },
@@ -205,11 +249,21 @@ describe("Client email settings", () => {
     dialog.close = () => { dialog.open = false; dialog.handlers.close(); };
     const listeners = new Map(), toasts = [], api = {};
     const cooldown = { remaining: () => 32, set() {}, dispose() {} };
-    vm.runInNewContext(source, {
+    const nativeDialog = { exports: {}, require: () => ({ wireBackdropDismiss() {} }) };
+    loadClientModule('src/client/ui/nativeDialog.js', nativeDialog);
+    dialog.ownerDocument = { defaultView: {
+      addEventListener: (type, fn) => listeners.set(type, fn),
+      removeEventListener: type => listeners.delete(type),
+    } };
+    dialog.isConnected = true;
+    dialog.hasAttribute = name => name === 'open' && dialog.open;
+    dialog.removeEventListener = () => {};
+    loadClientModule('src/client/account/emailSettings.js', {
       exports: api,
       require: name => name.includes('sonner.js') ? { sonner: (...args) => toasts.push(args) }
-        : name.includes('emailVerificationUI') ? { createCooldown: () => cooldown, wireCodeInputs: () => ({clear() {},focus() {},value: () => '123456'}) }
-        : { wireBackdropDismiss() {} },
+        : name.includes('emailVerificationUI') ? { codeInputMarkup: () => '', createCooldown: () => cooldown, wireCodeInputs: () => ({clear() {},focus() {},value: () => '123456'}) }
+        : name.includes('social/verificationCode') ? require('../src/shared/social/verificationCode')
+        : nativeDialog.exports,
       window: { addEventListener: (type, fn) => listeners.set(type, fn), removeEventListener: type => listeners.delete(type) },
       document: { getElementById: id => id === 'email-toggle' ? toggle : status,
         createElement: tag => tag === 'dialog' ? dialog : node(), body: {append() {}} },
@@ -240,4 +294,79 @@ describe("Client email settings", () => {
     assert.ok(prevented && stopped);
     assert.equal(listeners.has('keydown'), false);
   });
+});
+
+test("notification delivery releases its database lease before contacting the provider", async t => {
+  const { deliverNotification } = require("../src/server/services/email/emailService");
+  const before = { key: process.env.EMAIL_API_KEY, to: process.env.EMAIL_NOTIFICATIONS_TO };
+  process.env.EMAIL_API_KEY = "fake-key";
+  process.env.EMAIL_NOTIFICATIONS_TO = "test@example.com";
+  t.after(() => {
+    for (const [key, value] of [["EMAIL_API_KEY", before.key], ["EMAIL_NOTIFICATIONS_TO", before.to]]) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  const events = [];
+  const db = {
+    async withTransaction(work) {
+      const job = await work(null, async sql => {
+        if (sql.startsWith("SELECT")) return [{ id: 7, request_id: 8 }];
+        events.push("lease"); return {};
+      });
+      events.push("commit");
+      return job;
+    },
+    async runQuery(sql) { if (sql.includes("sent_at=NOW")) events.push("sent"); },
+  };
+  t.mock.method(global, "fetch", async (_url, options) => {
+    assert.equal(options.headers["Idempotency-Key"], "site-request-8");
+    events.push("deliver");
+    return { ok: true };
+  });
+  await deliverNotification(db);
+  assert.deepEqual(events, ["lease", "commit", "deliver", "sent"]);
+});
+
+test("failed verification delivery restores only its own reservation and cooldown", async t => {
+  const { deliverReservedCode } = require("../src/server/services/email/challengeDelivery");
+  t.mock.method(global, "fetch", async () => ({ ok: false, status: 503 }));
+  const prior = process.env.EMAIL_API_KEY;
+  process.env.EMAIL_API_KEY = "fake";
+  t.after(() => { if (prior == null) delete process.env.EMAIL_API_KEY; else process.env.EMAIL_API_KEY = prior; });
+  for (const kind of ["profile", "signup"]) {
+    const updates = [];
+    const db = { runQuery: async (sql, params) => updates.push({ sql, params }) };
+    await assert.rejects(deliverReservedCode(db, kind, {
+      token: "reservation", userId: 8, email: "test@example.com", code: "123456",
+      previous: { send_count: 2, attempts: 1, code_hash: "previous" },
+    }, "Verify", "Enter your code."), /503/);
+    assert.equal(updates.length, 1);
+    assert.match(updates[0].sql, /WHERE user_id=\? AND (challenge_id|code_hash)=\?$/);
+    assert.deepEqual(updates[0].params.slice(-2), [8, "reservation"]);
+    assert.ok(updates[0].params.includes("previous"));
+  }
+});
+
+test("a local opt-in during a remote opt-out check wins before welcome mail is cancelled", async t => {
+  const { readSubscription } = require("../src/server/services/email/marketingService");
+  const old = process.env.RESEND_MARKETING_API_KEY;
+  process.env.RESEND_MARKETING_API_KEY = "fake";
+  t.after(() => { if (old == null) delete process.env.RESEND_MARKETING_API_KEY; else process.env.RESEND_MARKETING_API_KEY = old; });
+  let inside = false, writes = 0;
+  const row = { email: "fan@example.com", subscribed: 1 };
+  const query = async sql => {
+    if (sql.startsWith("SELECT email,")) return [row];
+    if (sql.startsWith("SELECT synced_at")) return [{ synced_at: inside ? null : new Date(1000) }];
+    writes++;
+  };
+  t.mock.method(global, "fetch", async () => {
+    assert.equal(inside, false);
+    return { ok: true, json: async () => ({ unsubscribed: true }) };
+  });
+  const db = { runQuery: query, withTransaction: async fn => {
+    inside = true;
+    try { return await fn(null, query); } finally { inside = false; }
+  } };
+  assert.equal(await readSubscription(db, 1), true);
+  assert.equal(writes, 0);
 });

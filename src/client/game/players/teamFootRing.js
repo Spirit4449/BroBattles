@@ -1,5 +1,5 @@
 import { RENDER_LAYERS } from "../scene/renderLayers.js";
-import { fillPixelBlob, rasterizePixelBlob } from "../powerups/pixelShapes.js";
+import { fillPixelBlob, rasterizePixelBlob } from "../scene/fx/pixelShapes.js";
 import { PIXEL_INK, snapPixel } from "../scene/pixelBar.js";
 import { playerAnchor, rigRingDrop } from "../characters/shared/rig.js";
 

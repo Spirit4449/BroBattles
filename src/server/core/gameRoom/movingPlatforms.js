@@ -4,7 +4,7 @@
 // humans in the idle fallback (see inputManager.stepIdleHumans) are carried
 // and pushed here, before their physics step.
 const { advanceGeometry } = require('../../../shared/maps/platformMotion');
-const { carryOnPlatforms } = require('../bots/physics');
+const { carryOnPlatforms } = require('../physics/bodySolver');
 
 function tickMovingPlatforms(room, timeMs) {
   const geometry = room.geometry;

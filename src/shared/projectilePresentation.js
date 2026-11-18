@@ -9,6 +9,10 @@ function remoteLaunchCorrection(actor, origin, ageMs, now) {
 }
 const TEAM_GREEN = 0x50ce88;
 const TEAM_RED = 0xff413f;
+function isAllyTeam(team) {
+  return team === "teammate" || team === "ally" || team === true;
+}
+
 function teamColor(owner) {
   return owner?._bbTeamColor === TEAM_RED ? TEAM_RED : TEAM_GREEN;
 }
@@ -17,11 +21,6 @@ function teamColor(owner) {
 // frames, so animation and skin geometry remain intact without per-frame pixels.
 const coloredSources = new WeakMap();
 const coloredFrames = new WeakMap();
-function teamPalette(owner) {
-  return teamColor(owner) === TEAM_RED
-    ? { edge: 0xd92f46, mid: 0xff6253, light: 0xffc18a, core: 0xfff2d4 }
-    : { edge: 0x179968, mid: 0x4ee59a, light: 0xb0ffd1, core: 0xf1fff6 };
-}
 // Strength of the enemy body filter in Canvas; WebGL draws a red overlay at
 // ENEMY_BODY_OVERLAY_ALPHA instead (see RemotePlayer).
 const ENEMY_BODY_RED = 0.18;
@@ -51,8 +50,6 @@ function materialPixel(value, color, style, x = 0, width = 1) {
   return value;
 }
 // Kept for effects that deliberately retain their existing palette.
-function attackColor(_owner, original) { return original; }
-
 function coloredFrame(frame, color, style) {
   if (!frame?.source?.image || typeof document === "undefined") return frame;
   const cacheKey = `${color}:${style}`;
@@ -111,4 +108,4 @@ function reconcileFlight(from, to, now, speed) {
   const duration = Math.max(100, Math.min(1200, 2000 * Math.hypot(x, y) / Math.max(100, speed || 0)));
   return { x, y, at: now, duration };
 }
-module.exports = { remoteLaunchCorrection, reconcileFlight, TEAM_GREEN, TEAM_RED, ENEMY_BODY_OVERLAY_ALPHA, teamColor, applyTeamVisual, materialPixel, teamPalette, attackColor };
+module.exports = { remoteLaunchCorrection, reconcileFlight, TEAM_GREEN, TEAM_RED, ENEMY_BODY_OVERLAY_ALPHA, isAllyTeam, teamColor, applyTeamVisual };

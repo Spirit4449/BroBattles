@@ -1,3 +1,4 @@
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import { decodeWire } from "../../../shared/networkWire.js";
 // One renderer for server-authoritative damage volumes; no sprite-size guesses.
 export function installDamageHitboxDebug(scene, socket) {
@@ -40,10 +41,10 @@ export function installDamageHitboxDebug(scene, socket) {
       }
     }
   };
-  socket.on('game:snapshot', receive);
+  socket.on(SOCKET_EVENTS.GAME_SNAPSHOT, receive);
   scene.events.on('postupdate', draw);
   scene.events.once('shutdown', () => {
-    socket.off('game:snapshot', receive);
+    socket.off(SOCKET_EVENTS.GAME_SNAPSHOT, receive);
     scene.events.off('postupdate', draw);
     graphics.destroy();
   });

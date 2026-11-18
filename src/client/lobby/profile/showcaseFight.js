@@ -1,3 +1,5 @@
+import { createPlayerLookup } from "../../game/players/playerLookup";
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
 import { basicAim, requestBasic } from "../../../shared/combat/combat";
 import { isMovementSuppressed } from "../../../shared/combat/runtime/abilityRuntimeManager";
@@ -29,27 +31,24 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
   const clock = new CombatClock();
   // Local simulation has no transport latency. Render at its exact clock,
   // including pauses, instead of estimating an offset from wall time.
-  clock.now = () => session?._simulationMono || 0;
+  clock.now = () => session?.simulationMono || 0;
   const options = { clock, ensureEpoch: epoch => { if (clock.epoch !== epoch) clock.reset(epoch); } };
   const networks = createCharacterNetworkAdapters({ ...options, arrowLength: 28 });
   const characterEvents = new Map(getCharacterSocketEvents());
   const tickSounds = createPowerupTickSounds(getCharacterEffectTickSounds());
   let session, elapsed = 0, endedAt = null, presentationUntil = 0, disposed = false;
-  scene._powerupVisuals = {}; scene._deathDropVisuals = {};
-  const powerups = createPowerupRenderer({ scene, Phaser: window.Phaser, colors: POWERUP_COLORS,
+  const powerups = createPowerupRenderer({ scene, Phaser: window.Phaser, colors: POWERUP_COLORS, auraDepth: 31, fxDepth: 32,
     getUsername: () => '', getGameData: () => ({}), getLocalPlayer: () => null,
-    getOpponentPlayers: () => wrappers, getTeamPlayers: () => ({}),
+    playerLookup: createPlayerLookup({ getOpponentPlayers: () => wrappers }),
     getLatestPowerups: () => [], getLatestDeathDrops: () => [], getMapObjects: () => [], getDead: () => false,
     getLatestPlayerEffects: () => Object.fromEntries([...session.players.values()].map(p => [p.name, p.isAlive ? snapshotActive(p, session.now) : {}])),
     powerupCollectQueue: [], deathdropCollectQueue: [], shieldImpactQueue: [], socket: null,
     applyCharacterPowerupFx, drawCharacterPowerupAura,
   });
-  scene._powerupAuraGraphics = scene.add.graphics().setDepth(31);
-  scene._powerupFxGraphics = scene.add.graphics().setDepth(32);
 
   function receive(type, packet) {
     if (disposed) return;
-    if (type === 'game:action') {
+    if (type === SOCKET_EVENTS.GAME_ACTION) {
       const fighter = byId.get(packet.playerName);
       if (!fighter) return;
       if (networks.some(network => network.handlePacket(scene, packet, context))) return;
@@ -60,15 +59,13 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
       }
       fighter.sprite.anims.timeScale = 1;
       handleRemoteAttack(scene, fighter.character, packet.action, { opponent: fighter.sprite });
-    } else if (type === 'player:special') {
+    } else if (type === SOCKET_EVENTS.PLAYER_SPECIAL) {
       presentationUntil = scene.time.now + 3500;
       const fighter = byId.get(packet.username);
       if (!fighter) return;
-      const allies = fighters.filter(f => f.team === fighter.team && f !== fighter).map(f => f.sprite);
-      const enemies = fighters.filter(f => f.team !== fighter.team).map(f => f.sprite);
       fighter.sprite.anims.timeScale = 1;
-      performSpecial(fighter.character, scene, fighter.sprite, allies, enemies, fighter.id, null, false, packet.aim);
-    } else if (type === 'health-update') {
+      performSpecial(fighter.character, { scene, player: fighter.sprite, aim: packet.aim });
+    } else if (type === SOCKET_EVENTS.HEALTH_UPDATE) {
       const fighter = byId.get(packet.username);
       const delta = packet.health - fighter.health;
       fighter.health = packet.health;
@@ -77,9 +74,9 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
     } else if (type === 'player:death') {
       const fighter = byId.get(packet.username);
       fighter.health = 0; fighter.defeated = true; showDefeat(fighter);
-    } else if (type === 'shockwave:hit') {
+    } else if (type === SOCKET_EVENTS.SHOCKWAVE_HIT) {
       spawnShockwaveHitSmoke(scene, byId.get(packet.username)?.sprite, packet);
-    } else if (type === 'powerup:tick') {
+    } else if (type === SOCKET_EVENTS.POWERUP_TICK) {
       const sound = tickSounds[packet.type];
       if (sound) playPlayerSound(scene, byId.get(packet.username)?.sprite, sound.key, sound.options);
     } else if (characterEvents.has(type)) {
@@ -127,7 +124,6 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
       fighter.ammo = p.ammoState;
       fighter.status = snapshotActive(p, session.now);
       if (autoplay || isMovementSuppressed(p, session.now)) sprite.setPosition(p.x, fighter.standY + p.y - p.groundY);
-      sprite._powerupEffects = fighter.status;
       sprite._bbAnimationVelocity = { x: p.vx, y: p.vy };
       fighter.movementSpeedRatio = Math.min(1, Math.abs(p.vx) / movementPhysics.maxSpeed);
       if (!p.isAlive || !autoplay) continue;
@@ -146,7 +142,7 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
         fighter.nextDustAt = time + 140 / Math.max(0.15, fighter.movementSpeedRatio); movementStep(fighter, Math.sign(p.vx));
       }
     }
-    for (const network of networks) network.observe({ snapshotEpoch: session._snapshotEpoch, sentMono: performance.now(), tMono: session._simulationMono });
+    for (const network of networks) network.observe({ snapshotEpoch: session.snapshotEpoch, sentMono: performance.now(), tMono: session.simulationMono });
     powerups.renderPowerupsAndEffects();
     const teams = new Set([...session.players.values()].filter(p => p.isAlive && p.role !== 'bystander').map(p => p.team));
     if (autoplay && teams.size < 2) endedAt ??= time;
@@ -164,8 +160,7 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
     disposed = true; scene.events.off('update', update);
     for (const network of networks) network.reset();
     session.dispose();
-    scene._powerupAuraGraphics?.destroy(); scene._powerupFxGraphics?.destroy();
-    scene._powerupAuraGraphics = scene._powerupFxGraphics = null;
+    powerups.destroy();
     delete scene.showcaseSession;
   }
   return { session, dispose,

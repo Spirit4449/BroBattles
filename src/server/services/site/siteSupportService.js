@@ -1,18 +1,19 @@
+const { httpError } = require("../httpError");
 const config = require('../../../shared/site/siteConfig.json');
-const CATEGORIES = ['bug', 'idea', 'gameplay', 'account', 'purchase', 'safety', 'privacy', 'other'];
+const { PLAYER_REPORT_MESSAGE_MIN, PLAYER_REPORT_MESSAGE_MAX } = require("../../../shared/social/textRules.js");
+const { CATEGORIES, REPORT_CATEGORY, INBOX_CATEGORIES, STATUSES, SUBJECT_MIN, SUBJECT_MAX, MESSAGE_MIN, MESSAGE_MAX, INBOX_PAGE_SIZE } = require('../../../shared/site/supportRules');
 const REPORT_REASONS = require('../../../shared/social/profileReports.json');
-const INBOX_CATEGORIES = [...CATEGORIES, 'reports'];
 const { reportTargetId, loadReportCounts, loadReportReview } = require('./profileReportReview');
-function invalid(message, status = 400) { return Object.assign(new Error(message), { status }); }
+function invalid(message, status = 400) { return httpError(status, message); }
 function field(value, min, max, label) {
   if (typeof value !== 'string' || value.trim().length < min || value.trim().length > max) throw invalid(`${label} must be ${min}–${max} characters.`);
   return value.trim();
 }
 function validateSubmission(body, reply = false, categories = CATEGORIES) {
-  const result = { body: field(body.message, 5, 4000, 'Message'), key: field(body.submissionKey, 16, 64, 'Submission reference') };
+  const result = { body: field(body.message, MESSAGE_MIN, MESSAGE_MAX, 'Message'), key: field(body.submissionKey, 16, 64, 'Submission reference') };
   if (!/^[a-zA-Z0-9-]+$/.test(result.key)) throw invalid('Invalid submission reference.');
   if (!reply) {
-    result.subject = field(body.subject, 3, 120, 'Subject');
+    result.subject = field(body.subject, SUBJECT_MIN, SUBJECT_MAX, 'Subject');
     if (!categories.includes(body.category)) throw invalid('Choose a category.');
     result.category = body.category;
   }
@@ -40,11 +41,11 @@ function createSiteSupportService(db) {
     if (targetId === Number(user.user_id)) throw invalid('You cannot report yourself.');
     const reason = REPORT_REASONS.find(item => item.value === body.reason);
     if (!reason) throw invalid('Choose a report reason.');
-    const message = field(body.message, 5, 3500, 'Message');
+    const message = field(body.message, PLAYER_REPORT_MESSAGE_MIN, PLAYER_REPORT_MESSAGE_MAX, 'Message');
     const [target] = await db.runQuery('SELECT user_id, name FROM users WHERE user_id=? LIMIT 1', [targetId]);
     if (!target) throw invalid('Player not found.', 404);
     return create(user, 'support', {
-      category: 'reports',
+      category: REPORT_CATEGORY,
       subject: `Report: ${target.name} (#${target.user_id})`,
       message: `Reported player: ${target.name}\nAccount ID: ${target.user_id}\nReason: ${reason.label}\n\n${message}`,
       submissionKey: body.submissionKey,
@@ -55,7 +56,7 @@ function createSiteSupportService(db) {
     const page = Math.max(1, Math.min(100000, parseInt(query.page, 10) || 1));
     const clauses = ['r.kind = ?']; const params = [kind];
     if (!admin) { clauses.push('r.user_id = ?'); params.push(user.user_id); }
-    if (['open','in_progress','closed'].includes(query.status)) { clauses.push('r.status = ?'); params.push(query.status); }
+    if (STATUSES.includes(query.status)) { clauses.push('r.status = ?'); params.push(query.status); }
     if (INBOX_CATEGORIES.includes(query.category)) { clauses.push('r.category = ?'); params.push(query.category); }
     const reader = admin ? 'admin_read_at' : 'player_read_at';
     const sender = admin ? 'player' : 'admin';
@@ -67,7 +68,7 @@ function createSiteSupportService(db) {
       (SELECT COUNT(*) FROM site_request_messages m WHERE m.request_id=r.id) AS messageCount` : '';
     const items = await db.runQuery(`SELECT r.id, r.kind, r.category, r.subject, r.status, r.created_at, r.updated_at, r.version,
       EXISTS(SELECT 1 FROM site_request_messages m WHERE m.request_id=r.id AND m.sender=? AND (r.${reader} IS NULL OR m.created_at>r.${reader})) AS unread${adminColumns}
-      FROM site_requests r ${admin ? 'LEFT JOIN users u ON u.user_id=r.user_id ' : ''}WHERE ${where} ORDER BY r.updated_at DESC, r.id DESC LIMIT 20 OFFSET ?`, [sender, ...params, (page - 1) * 20]);
+      FROM site_requests r ${admin ? 'LEFT JOIN users u ON u.user_id=r.user_id ' : ''}WHERE ${where} ORDER BY r.updated_at DESC, r.id DESC LIMIT ${INBOX_PAGE_SIZE} OFFSET ?`, [sender, ...params, (page - 1) * INBOX_PAGE_SIZE]);
     if (admin) {
       const counts = await loadReportCounts((sql, params) => db.runQuery(sql, params), items.map(reportTargetId));
       for (const item of items) {
@@ -104,7 +105,7 @@ function createSiteSupportService(db) {
     });
   }
   async function setStatus(id, status) {
-    if (!['open','in_progress','closed'].includes(status)) throw invalid('Invalid status.');
+    if (!STATUSES.includes(status)) throw invalid('Invalid status.');
     const result = await db.runQuery("UPDATE site_requests SET status=?, updated_at=NOW(3), closed_at=IF(?='closed',NOW(3),NULL) WHERE id=?", [status,status,id]);
     if (!result.affectedRows) throw invalid('Request not found.',404);
     return { success:true };

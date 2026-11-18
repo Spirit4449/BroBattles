@@ -4,14 +4,15 @@ const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
 const combat = require('../src/shared/combat/runtime/sparrowCombat.js');
 const model = require('../src/shared/characters/sparrowProjectile');
-const { characterBody, getDuelGeometry } = require('../src/shared/physics/duelGeometry');
+const { characterBody } = require('../src/shared/physics/characterBody');
+const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
 const { SparrowReplica, CombatClock } = require('../src/shared/characters/sparrowReplication');
 
 function fixture(t, map = 1) {
   const f = makeRoom({ characters: ['sparrow', 'ninja'], map });
 
-  f.room._simulationMono = 10000;
-  f.room._tickId = 0;
+  f.room.simulationMono = 10000;
+  f.room.tickId = 0;
   f.room.geometry = { ...f.room.geometry, colliders: [] };
   for (const [i, p] of f.players.entries()) {
     Object.assign(p, { x: 100 + 500 * i, y: 200, _bodyHalfWidth: 30, _bodyHalfHeight: 60,
@@ -19,7 +20,7 @@ function fixture(t, map = 1) {
     p.isBot = false; // Exercise the previously browser-authoritative path.
   }
   f.step = (n = 1) => { for (let i = 0; i < n; i++) {
-    f.room._tickId++; f.room._simulationMono += model.STEP_MS; combat.tick(f.room);
+    f.room.tickId++; f.room.simulationMono += model.STEP_MS; combat.tick(f.room);
   } };
   f.actions = type => f.events.filter(e => e.type === 'game:action' && e.payload.action.type === type).map(e => e.payload.action);
   t.after(() => f.room.cleanup());
@@ -36,8 +37,8 @@ test('human and bot launches share canonical tuning, windup, muzzle and ammuniti
     assert.equal(room.handlePlayerAction(p.participantId, data), true);
     room.handlePlayerAction(p.participantId, data);
     assert.equal(p.ammoState.charges, initial - 1);
-    step(5); assert.equal(room._sparrow.active.size, 0);
-    step(); assert.equal(room._sparrow.active.size, 3);
+    step(5); assert.equal(room.sparrowCombatState.active.size, 0);
+    step(); assert.equal(room.sparrowCombatState.active.size, 3);
     assert.equal(actions('sparrow-projectiles').length, 1);
     const center = actions('sparrow-projectiles')[0].projectiles[1], body = characterBody('sparrow');
     const muzzle = launchPoint('sparrow', model.attackConfig().muzzle, { x: p.x, y: p.y }, 0);
@@ -55,7 +56,7 @@ test('forged client hits/releases, invalid power, cooldown and uncharged special
   const hp = target.health;
   room.handleHit(p.participantId, { attacker: p.name, target: target.name, attackType: 'sparrow-arrow', instanceId: 'forged' });
   room.handlePlayerAction(p.participantId, { type: 'sparrow-arrow-release', id: 'forged' });
-  assert.equal(target.health, hp); assert.equal(room._sparrow.active.size, 0);
+  assert.equal(target.health, hp); assert.equal(room.sparrowCombatState.active.size, 0);
   assert.equal(room.handlePlayerAction(p.participantId, { type: 'sparrow-arrow', id: 'bad', angle: 0, power: 1.1 }), false);
   assert.equal(room.requestSpecial(p.participantId, { id: 'special', aim: { angle: 0 } }), false);
   assert.equal(room.handlePlayerAction(p.participantId, { type: 'sparrow-arrow', id: 'ok', angle: 0 }), true);
@@ -67,14 +68,14 @@ test('a registered arrow can damage after its shooter moves beyond legacy range;
   const { room, players: [p, target], step, actions } = fixture(t);
   room.handlePlayerAction(p.participantId, { type: 'sparrow-arrow', id: 'range', angle: 0 });
   step(6);
-  const arrow = [...room._sparrow.active.values()][1];
-  for (const [id, a] of room._sparrow.active) if (a !== arrow) room._sparrow.active.delete(id);
+  const arrow = [...room.sparrowCombatState.active.values()][1];
+  for (const [id, a] of room.sparrowCombatState.active) if (a !== arrow) room.sparrowCombatState.active.delete(id);
   p.x = 1900;
   target.x = arrow.x + 100; target.y = arrow.y;
   const before = target.health;
   step(20);
   assert.equal(target.health, before - model.attackConfig().damagePerArrow);
-  assert.equal(room._sparrow.active.size, 0);
+  assert.equal(room.sparrowCombatState.active.size, 0);
   assert.equal(actions('sparrow-terminal').length, 1);
   assert.equal(actions('sparrow-terminal')[0].accepted, true);
   step(20); assert.equal(target.health, before - model.attackConfig().damagePerArrow);
@@ -134,8 +135,8 @@ test('burning arrows consume charge once, apply burn once, and publish precise t
   p.superCharge=p.maxSuperCharge;
   assert.equal(room.requestSpecial(p.participantId,{id:'burn',aim:{angle:0}}),true);
   step(14);
-  const arrow=[...room._sparrow.active.values()][2];
-  for(const [id,a] of room._sparrow.active) if(a!==arrow) room._sparrow.active.delete(id);
+  const arrow=[...room.sparrowCombatState.active.values()][2];
+  for(const [id,a] of room.sparrowCombatState.active) if(a!==arrow) room.sparrowCombatState.active.delete(id);
   target.x=arrow.x+40;target.y=arrow.y;
   step(10);
   assert.equal(p.superCharge,1);
@@ -151,11 +152,11 @@ test('released basic and burning arrows survive owner death, damage and remain i
     p.superCharge=p.maxSuperCharge;
     assert.equal(combat.request(room,p,{id:'death',angle:0,aim:{angle:0}},special),true);
     step(special?14:6);
-    const arrow=[...room._sparrow.active.values()][special?2:1];
-    for(const [id,a]of room._sparrow.active)if(a!==arrow)room._sparrow.active.delete(id);
+    const arrow=[...room.sparrowCombatState.active.values()][special?2:1];
+    for(const [id,a]of room.sparrowCombatState.active)if(a!==arrow)room.sparrowCombatState.active.delete(id);
     target.x=arrow.x+150;target.y=arrow.y;
     const hp=target.health,startX=arrow.x;
-    room._handlePlayerDeath(p);step();
+    room.handlePlayerDeath(p);step();
     assert.ok(arrow.x>startX);
     assert.equal(combat.bootstrap(room).projectiles.length,1);
     step(20);
@@ -170,8 +171,8 @@ test('released basic and burning arrows survive owner death, damage and remain i
 test('death during sparrow windup cancels unreleased arrows', t => {
   const {room,players:[p],step,actions}=fixture(t);
   room.handlePlayerAction(p.participantId,{type:'sparrow-arrow',id:'windup',angle:0});
-  room._handlePlayerDeath(p);step(10);
-  assert.equal(room._sparrow.active.size,0);
+  room.handlePlayerDeath(p);step(10);
+  assert.equal(room.sparrowCombatState.active.size,0);
   assert.equal(actions('sparrow-projectiles').length,0);
   assert.equal(actions('sparrow-result').at(-1).reason,'cancelled');
 });
@@ -180,8 +181,8 @@ test('shielded contact consumes the arrow without damage or super charge', t => 
   const {room,players:[p,target],step,actions}=fixture(t);
   require('../src/shared/combat/runtime/effects/effectManager.js').apply(target,'respawnShield',Date.now(),{durationMs:3000},room);
   room.handlePlayerAction(p.participantId,{type:'sparrow-arrow',id:'shield',angle:0});step(6);
-  const arrow=[...room._sparrow.active.values()][1];
-  for(const [id,a]of room._sparrow.active)if(a!==arrow)room._sparrow.active.delete(id);
+  const arrow=[...room.sparrowCombatState.active.values()][1];
+  for(const [id,a]of room.sparrowCombatState.active)if(a!==arrow)room.sparrowCombatState.active.delete(id);
   target.x=arrow.x+40;target.y=arrow.y;const hp=target.health;
   step(10);
   assert.equal(target.health,hp);assert.equal(p.superCharge,0);
@@ -196,8 +197,8 @@ test('vault contacts use authoritative flight even when the shooter has moved aw
   const vault={x:500,y:300,width:100,height:100,coins:10000};
   room.gameMode={getVaultState:()=>vault,damageVault(_team,damage){vault.coins-=damage;return vault;}};
   room.handlePlayerAction(p.participantId,{type:'sparrow-arrow',id:'vault',angle:0});step(6);
-  const arrow=[...room._sparrow.active.values()][1];
-  for(const [id,a]of room._sparrow.active)if(a!==arrow)room._sparrow.active.delete(id);
+  const arrow=[...room.sparrowCombatState.active.values()][1];
+  for(const [id,a]of room.sparrowCombatState.active)if(a!==arrow)room.sparrowCombatState.active.delete(id);
   vault.x=arrow.x+50;vault.y=arrow.y;p.x=2200;step(10);
   assert.equal(vault.coins,10000-model.attackConfig().damagePerArrow);
   assert.equal(actions('sparrow-terminal')[0].target,'vault:team2');
@@ -253,8 +254,8 @@ test('arrows still damage a player after their socket disconnects', t => {
   const { room, players: [p, target], step } = fixture(t);
   room.handlePlayerAction(p.participantId, { type: 'sparrow-arrow', id: 'offline-target', angle: 0 });
   step(6);
-  const arrow = [...room._sparrow.active.values()][1];
-  for (const [id, a] of room._sparrow.active) if (a !== arrow) room._sparrow.active.delete(id);
+  const arrow = [...room.sparrowCombatState.active.values()][1];
+  for (const [id, a] of room.sparrowCombatState.active) if (a !== arrow) room.sparrowCombatState.active.delete(id);
   target.x = arrow.x + 100; target.y = arrow.y;
   target.connected = false; target.socketId = null;
   const hp = target.health;

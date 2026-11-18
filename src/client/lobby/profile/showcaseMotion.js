@@ -32,11 +32,6 @@ export function showcaseOpaqueBounds(frame, pixels, imageWidth) {
     width: right - left, height: bottom - top };
 }
 
-export function showcaseApproachX(x, targetX, range = Infinity) {
-  const gap = Math.abs(targetX - x);
-  return gap > range ? targetX - Math.sign(targetX - x) * range : x;
-}
-
 // An untruncated ballistic jump. Reserve camera room for it instead of reducing
 // the launch velocity to fit. Falling uses the game's stronger fall gravity.
 export function showcaseJumpMotion(physics = movementPhysics) {

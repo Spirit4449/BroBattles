@@ -1,7 +1,7 @@
 // Usage: node scripts/art/player-card-versions.cjs
 // Stamps each card animation's content hash into the catalog. Clients request
 // `?v=<hash>`, which the server caches as immutable while the bytes match.
-const crypto = require('node:crypto');
+const { artAssetVersion } = require('./asset-version.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -10,7 +10,7 @@ const CATALOG_PATH = path.resolve(__dirname, '../../src/shared/catalogs/playerCa
 const FIELDS = [['animationUrl', 'animationVersion'], ['animationAppleUrl', 'animationAppleVersion']];
 
 function playerCardAssetVersion(url) {
-  return crypto.createHash('sha256').update(fs.readFileSync(path.join(PUBLIC_DIR, url))).digest('hex').slice(0, 16);
+  return artAssetVersion(path.join(PUBLIC_DIR, url));
 }
 
 function stampPlayerCardVersions(card) {

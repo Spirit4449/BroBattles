@@ -1,23 +1,17 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { playSpriteAnimation } from "../shared/animationState.js";
 import rigData from "../../../../shared/characters/characterRig.js";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { aimAngle, aimFacesLeft, faceAttack } from "../shared/flipLock.js";
 import { sparrowAimVariant } from "./aimPoses";
 
+const { key: NAME } = characterDefinitions.sparrow;
+
 const SPECIAL_HOLD_MS = 450;
 
 const { launchPoint } = rigData;
 
-export function perform(
-  scene,
-  player,
-  playersInTeam,
-  opponentPlayers,
-  username,
-  gameId,
-  isOwner = false,
-  specialData = null,
-) {
+export function perform({ scene, player, isOwner = false, aim: specialData = null }) {
   if (!scene || !player || !player.active) return;
   player._specialCastLockUntil = Date.now() + SPECIAL_HOLD_MS;
   const angle = aimAngle(specialData?.angle, player);
@@ -26,7 +20,7 @@ export function perform(
   playSpriteAnimation({
     scene,
     sprite: player,
-    character: "sparrow",
+    character: NAME,
     logical: "special",
     fallback: "throw",
     holdMs: SPECIAL_HOLD_MS,
@@ -42,7 +36,7 @@ export function perform(
   // A quick bow-side ignition: separated square embers leave the silhouette clear.
   const direction = player.flipX ? -1 : 1;
   // Where her arrows leave the bow (sparrow.json rig.points.bow).
-  const bow = launchPoint("sparrow", "bow", { x: player.x, y: player.y, flip: player.flipX }, angle)
+  const bow = launchPoint(NAME, "bow", { x: player.x, y: player.y, flip: player.flipX }, angle)
     || { x: player.x + direction * 18, y: player.y + 12 };
   const sparks = scene.add.graphics().setPosition(bow.x, bow.y);
   sparks.setDepth((player.depth || 10) + 4);

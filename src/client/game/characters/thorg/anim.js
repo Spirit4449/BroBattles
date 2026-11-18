@@ -1,8 +1,11 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { createAnimationBuilder } from "../shared/animationBuilder";
 import { THORG_SWEEP, THORG_ATTACK_FRAMES } from "../../../../shared/characters/thorgSweep";
 import movementPhysics from "../../../../shared/physics/movementPhysics.json";
 
-export function animations(scene, NAME = "thorg") {
+const { key: THORG_KEY } = characterDefinitions.thorg;
+
+export function animations(scene, NAME = THORG_KEY) {
   const { make, getFrame, findFrames } = createAnimationBuilder(scene, NAME);
   const makeSweep = () => {
     if (scene.anims.exists(`${NAME}-throw`)) return;

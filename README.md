@@ -3,11 +3,11 @@
 A multiplayer browser arena built with Phaser 3, Express, Socket.IO, and MySQL.
 Human movement is simulated by the browser with server validation; the server owns combat outcomes, bots, match state, and rewards.
 
-Playable modes are Duels (1v1, 2v2) and Bank Bust (3v3). The six fighters are Ninja, Thorg, Draven, Wizard, Huntress, and Gloop. Other catalog modes are marked Coming Soon. Map Studio edits the four built-in maps and saved custom maps.
+Playable modes are Duels (1v1, 2v2) and Bank Bust (3v3). The six fighters are Ninja, Thorg, Draven, Ozzy, Sparrow, and Gloop. Other catalog modes are marked Coming Soon. Map Studio edits the [shipped maps](src/shared/maps/index.js) and saved custom maps.
 
 ## Run locally
 
-Use Node.js 18 or newer and a MySQL installation compatible with the repository's SQL. The repository has incremental migrations, **not a complete empty-database bootstrap**. Obtain a sanitized base schema from the maintainer and follow [database setup](docs/operations/database.md) before starting the server.
+Use Node.js 22.13 or later on the 22.x release line, or Node.js 24 and newer. Follow [database setup](docs/operations/database.md) to bootstrap an empty MySQL database or verify an existing database before starting the server.
 
 ```sh
 npm ci
@@ -44,10 +44,11 @@ Start at the [documentation index](docs/README.md).
 
 ```sh
 npm run validate:content
+npm run lint
 npm test
 npm run build
 ```
 
-Focused suites include `test:network`, `test:bots`, `test:shop`, `test:trophies`, and `test:battle-log`. Exhaustive bot movement sweeps run separately with `npm run test:slow`; `npm run test:all` runs everything. See [Testing](docs/development/contributing.md#testing). Database checks (`npm run test:db`) require configured MySQL; see their prerequisites in the database guide. Browser rendering harnesses have separate Playwright requirements described in the client guide.
+Focused suites include `test:network`, `test:bots`, `test:shop`, `test:trophies`, and `test:battle-log`. Run the longer bot movement and route sweeps with `npm run test:slow`. `npm run test:all` combines the default and slow suites. See [Testing](docs/development/contributing.md#testing). Database checks require configured MySQL. Browser rendering harnesses require local browsers. [Database setup](docs/operations/database.md) · [Browser verification](docs/development/client.md#verification)
 
 Run commands from the repository root unless a guide says otherwise. `package.json` is the command reference; `src/shared/` owns gameplay definitions and catalogs.

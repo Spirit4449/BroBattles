@@ -1,8 +1,9 @@
+import { getPageScope } from "../lib/globals.cjs";
 // Only the public About page uses video; no game engine or socket is loaded.
 // Clips play start to finish, one after another, and loop back to the first.
 import clips from '../../shared/site/aboutClips.json';
 
-export const ABOUT_CLIPS = clips;
+const ABOUT_CLIPS = clips;
 
 export function initializeAboutReel(root = document.querySelector('[data-about-reel]')) {
   if (!root) return;
@@ -77,7 +78,7 @@ export function initializeAboutReel(root = document.querySelector('[data-about-r
   // A restored back/forward-cache page retains the same controls and decoder.
   window.addEventListener('pagehide', () => video.pause());
   window.addEventListener('pageshow', sync);
-  window.__BB_PAGE_SCOPE__?.onDispose(dispose);
+  getPageScope()?.onDispose(dispose);
   // Visibility observation initiates autoplay, avoiding an offscreen download.
   renderProgress(0);
   renderToggle();

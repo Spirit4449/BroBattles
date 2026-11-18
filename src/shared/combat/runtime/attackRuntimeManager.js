@@ -1,3 +1,4 @@
+const { ATTACK_REPLAY_WINDOW_MS } = require("../matchConfig.js");
 const { combatNow } = require("./clock");
 const { participantId } = require('./participants');
 const { FIXED_DT_MS } = require('../../gameConstants');
@@ -8,25 +9,25 @@ const {
 } = require("./characterAttackRegistry.js");
 
 function ensureAttackState(room) {
-  if (!room._activeAttacks) room._activeAttacks = [];
-  return room._activeAttacks;
+  if (!room.activeAttacks) room.activeAttacks = [];
+  return room.activeAttacks;
 }
 
 function claimAttackInstance(room, playerData, actionData, now = combatNow(room)) {
   const instanceId = String(actionData?.id || "").trim();
   if (!instanceId) return true;
-  room._recentAttackInstances = room._recentAttackInstances || new Map();
+  room.recentAttackInstances = room.recentAttackInstances || new Map();
   const key =
     `${String(participantId(playerData) || "")}|` +
     `${String(actionData?.type || "").toLowerCase()}|` +
     instanceId;
-  for (const [seenKey, seenAt] of room._recentAttackInstances.entries()) {
-    if (now - seenAt > 12000) {
-      room._recentAttackInstances.delete(seenKey);
+  for (const [seenKey, seenAt] of room.recentAttackInstances.entries()) {
+    if (now - seenAt > ATTACK_REPLAY_WINDOW_MS) {
+      room.recentAttackInstances.delete(seenKey);
     }
   }
-  if (room._recentAttackInstances.has(key)) return false;
-  room._recentAttackInstances.set(key, now);
+  if (room.recentAttackInstances.has(key)) return false;
+  room.recentAttackInstances.set(key, now);
   return true;
 }
 
@@ -61,16 +62,16 @@ function registerAttackFromAction(
 // is first advanced by the next step. Release packets carry it so clients
 // draw the flight by server age instead of from packet arrival.
 function releaseLaunchMono(room) {
-  const sim = Number(room?._simulationMono);
+  const sim = Number(room?.simulationMono);
   if (!Number.isFinite(sim)) return null;
-  return room._attacksAdvancedTick === room._tickId ? sim : sim - (Number(room.FIXED_DT_MS) || FIXED_DT_MS);
+  return room.attacksAdvancedTick === room.tickId ? sim : sim - (Number(room.FIXED_DT_MS) || FIXED_DT_MS);
 }
 
 function tickActiveAttacks(room, now = combatNow(room)) {
-  room._attacksAdvancedTick = room._tickId;
+  room.attacksAdvancedTick = room.tickId;
   const attacks = ensureAttackState(room);
   if (attacks.length) {
-    room._activeAttacks = attacks.filter((attack) => {
+    room.activeAttacks = attacks.filter((attack) => {
       try {
         return !tickRuntimeAttack(room, attack, now);
       } catch (error) {
@@ -84,7 +85,6 @@ function tickActiveAttacks(room, now = combatNow(room)) {
 
 module.exports = {
   releaseLaunchMono,
-  ensureAttackState,
   registerAttackFromAction,
   tickActiveAttacks,
 };

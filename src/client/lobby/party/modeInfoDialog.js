@@ -10,10 +10,6 @@ import { playSound } from "../../ui/uiSounds.js";
 const FALLBACK_ART = "/assets/fightImage.webp";
 let active = null;
 
-export function closeModeInfoDialog() {
-  active?.close();
-}
-
 export function openModeInfoDialog(mode) {
   if (!mode) return;
   active?.close({ instant: true });

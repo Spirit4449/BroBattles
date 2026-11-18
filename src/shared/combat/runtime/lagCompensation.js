@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../net/socketEvents.js");
 const { HIT_STALENESS_MAX_MS } = require("../matchConfig.js");
 const { getHistoricalPosition } = require("./combatValidation.js");
 const { characterBody } = require('../../physics/characterBody');
@@ -33,7 +34,7 @@ function createLatencyProbe(room, socket) {
     const sent = performance.now();
     if (state.pending || sent - state.lastProbe < 100 || typeof socket.timeout !== 'function') return;
     state.pending = true; state.lastProbe = sent;
-    socket.timeout(1500).emit('game:latency', {}, error => {
+    socket.timeout(1500).emit(SOCKET_EVENTS.GAME_LATENCY, {}, error => {
       state.pending = false;
       if (error || !room.players.has(socket.id) || socket.connected === false) return;
       const at = performance.now();
@@ -55,7 +56,7 @@ const STAMP_WITH_SIMULATION_CLOCK = typeof process !== 'undefined' && process.en
 function stampViewRewind(room, request, latency) {
   if (!request || typeof request !== "object") return request;
   const view = request.viewMono;
-  const now = Number(STAMP_WITH_SIMULATION_CLOCK ? room?._simulationMono : combatMono(room));
+  const now = Number(STAMP_WITH_SIMULATION_CLOCK ? room?.simulationMono : combatMono(room));
   request.viewRewindMs = Number.isFinite(view) && Number.isFinite(now) ? Math.min(clampViewRewind(now - view), rewindAllowance(latency)) : 0;
   // The part of that rewind the client reports as its render buffer: never
   // more than the client maximum or the rewind itself. Deliveries cap only
@@ -121,5 +122,5 @@ function collisionPose(player) {
     _bodyCenterOffsetY: player._bodyCenterOffsetY ?? body.offsetY + (body.height - height) / 2,
   };
 }
-module.exports = { stampViewRewind, clampViewRewind, positionAt, poseAt, collisionPose, clientTimeAt,
+module.exports = { stampViewRewind, positionAt, poseAt, collisionPose, clientTimeAt,
   createLatencyProbe, rewindAllowance, VIEW_BUFFER_ALLOWANCE_MS };

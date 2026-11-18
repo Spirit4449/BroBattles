@@ -1,14 +1,10 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
 const { BotController } = require('../src/server/core/bots/controller');
 const { reconcileFlight } = require('../src/shared/projectilePresentation');
 const animation = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'), 'utf8'), {
-  babelrc:false, configFile:false, presets:[['@babel/preset-env',{targets:{node:'current'}}]],
-}).code, { exports:animation, performance:{now:()=>1000} });
+loadClientModule(require.resolve('../src/client/game/characters/shared/animationState'), { exports:animation, performance:{now:()=>1000} });
 
 test('remote physical velocity overrides stale jumping, falling and wall-slide labels', () => {
   for (const character of ['ninja','sparrow','ozzy','thorg','draven','gloop']) {
@@ -93,9 +89,9 @@ test('flight error converges without a constant-speed shot stopping or reversing
 test('planning yields, resumes, and never executes when the room budget is exhausted', () => {
   let units=0;
   const brain=Object.create(BotController.prototype);
-  Object.assign(brain,{room:{_botPlanningDeadline:performance.now()-1},player:{lastDamagedAt:0},metrics:{},planning:{at:100,damageAt:0,steps:(function*(){for(let i=0;i<300;i++){units++;yield;}})()}});
+  Object.assign(brain,{room:{botPlanningDeadline:performance.now()-1},player:{lastDamagedAt:0},metrics:{},planning:{at:100,damageAt:0,steps:(function*(){for(let i=0;i<300;i++){units++;yield;}})()}});
   brain.advancePlanning(100);assert.equal(units,0);
-  brain.room._botPlanningDeadline=Infinity;
+  brain.room.botPlanningDeadline=Infinity;
   brain.advancePlanning(116);assert.ok(units>0&&units<=128);assert.ok(brain.planning);
   for(let i=0;i<20&&brain.planning;i++)brain.advancePlanning(132+i);
   assert.equal(units,300);assert.equal(brain.planning,null);

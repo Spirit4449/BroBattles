@@ -1,3 +1,11 @@
+import { VERIFICATION_CODE_LENGTH } from '../../shared/social/verificationCode.js';
+
+export function codeInputMarkup() {
+  return Array.from({ length: VERIFICATION_CODE_LENGTH }, (_, index) =>
+    `<input type="text" inputmode="numeric" autocomplete="${index === 0 ? 'one-time-code' : 'off'}" maxlength="${index === 0 ? VERIFICATION_CODE_LENGTH : 1}" aria-label="Digit ${index + 1}" />`,
+  ).join('');
+}
+
 export function wireCodeInputs(root, onSubmit) {
   const inputs = [...root.querySelectorAll('input')];
   const fill = (text, start = 0) => {
@@ -9,7 +17,7 @@ export function wireCodeInputs(root, onSubmit) {
     input.addEventListener('focus', () => input.select());
     input.addEventListener('input', () => {
       const value = input.value.replace(/\D/g, '');
-      if (value.length > 1) { fill(value, value.length === 6 ? 0 : index); return; }
+      if (value.length > 1) { fill(value, value.length === inputs.length ? 0 : index); return; }
       input.value = value;
       if (value) inputs[index + 1]?.focus();
     });
@@ -17,7 +25,7 @@ export function wireCodeInputs(root, onSubmit) {
       const text = event.clipboardData.getData('text');
       if (!/\d/.test(text)) return;
       event.preventDefault();
-      fill(text, text.replace(/\D/g, '').length === 6 ? 0 : index);
+      fill(text, text.replace(/\D/g, '').length === inputs.length ? 0 : index);
     });
     input.addEventListener('keydown', event => {
       if (event.key === 'Enter') { event.preventDefault(); onSubmit(); }

@@ -1,9 +1,13 @@
-import { pixelArrow } from "../../ui/pixelArrow.js";
-import { applyWallet, subscribeWallet } from "../wallet.mjs";
-import { mountWallet, releaseWallet, renderWalletBalances } from "../walletView.js";
-import { escapeHtml } from "../../../shared/site/html.cjs";
+import { getUser, setUser, updateUser } from "../session.mjs";
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
+import { postJson } from "../../lib/http.js";
+import { getSelfSlot, slotField } from "../party/slotDom.js";
+import { getRoutePartyId } from "../party/partyState.js";
+import { ensureLobbySelectingRing, triggerLobbyCharacterSplash } from "../party/slotEffects.js";
+import { subscribeWallet } from "../wallet.mjs";
+import { renderWalletBalances } from "../walletView.js";
 import { renderCharacterStatus } from "./characterStatusView.js";
-import { createModalFocus } from "../../ui/modalFocus.js";
 import {
   getCharacterStats,
   getCharacterDisplayName,
@@ -18,268 +22,51 @@ import {
 import { getSharedSelectionPopupShell } from "../../ui/selectionPopupShell.js";
 import socket from "../../lib/socket.js";
 import { warmBattleSelection } from '../preloadBattle';
-import { playSound, preloadSound } from "../../ui/uiSounds.js";
+import { playSound } from "../../ui/uiSounds.js";
 import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
-import { dismissPopup } from "../../ui/popupMotion.js";
-import { disposeSkinCarousel, switchSkinPreview } from "./skinCarousel.mjs";
-import { hideCharacterShowcase, showCharacterShowcaseBody, mountCharacterShowcase, updateCharacterShowcaseSkin } from "./characterShowcase.js";
 import { sonner } from "../../ui/sonner.js";
-import { resolveBodyPortrait, buildFramedBodyPortrait } from "../../views/bodyPortraitAssets.js";
-import { BRO_PORTRAIT_PALETTES, buildPortraitChromaTile } from "../../views/broPortrait.mjs";
+import { buildFramedBodyPortrait } from "../../views/bodyPortraitAssets.js";
 import { createLevelBadge, setSlotLevelBadge } from "../../views/levelBadgeView.js";
-import SKINS_CATALOG from "../../../shared/catalogs/skinsCatalog.json";
+import { createCharacterSkins, normalizeCharacterId } from "./characterSkins.js";
+import { createCharacterPurchases, showErrorDialog } from "./characterPurchases.js";
+import { createCharacterDetailsPopup } from "./characterDetailsPopup.js";
 
-// Keep a reference to user data for confirmations and currency display
-let _userDataRef = null;
-let _charactersGrid = null;
-let _characterDetailsUi = null;
-let _skinsCatalog = SKINS_CATALOG;
-let _ownedSkinIds = new Set();
-let _skinBootstrapPromise = null;
-let _characterSelectionPromise = null;
-let _confirmedSkinSelections = Object.create(null);
-let _deferredSkinRender = null;
-let _upgradePreview = null;
-let _pendingUpgradeAnimation = null;
+const state = {
+  get userData() { return getUser(); },
+  detailsUi: null,
+  selectionPromise: null,
+  confirmedSkinSelections: Object.create(null),
+  deferredSkinRender: null,
+  upgradePreview: null,
+  pendingUpgradeAnimation: null,
+};
+let picker;
 
-const SUPPORTED_RARITIES = new Set([
-  "common",
-  "rare",
-  "epic",
-  "legendary",
-]);
+const skins = createCharacterSkins(state, {
+  selectCharacter,
+  blockCharacterChangeWhileReady,
+  updateSkinDetails: (character, direction) => details.updateSkinDetails(character, direction),
+});
+const { resetSkinOwnership, bootstrapSkinState, getSelectedSkin, resolveCharacterPreviewAsset } = skins;
 
-function normalizeRarity(rarity) {
-  const normalized = String(rarity || "common").trim().toLowerCase();
-  return SUPPORTED_RARITIES.has(normalized) ? normalized : "common";
-}
+const purchases = createCharacterPurchases(state, {
+  getSelectedSkin,
+  getCharacterCardState,
+  rerenderCharacterCard,
+  refreshUpgradeButtonAffordability,
+  renderCharacterDetails: character => details.renderCharacterDetails(character),
+  playCharacterDetailsSuccessAnimation: type => details.playCharacterDetailsSuccessAnimation(type),
+});
+const details = createCharacterDetailsPopup(state, {
+  skins,
+  getCharacterCardState,
+  closeCharacterSelectAfterSelection,
+  selectCharacter,
+  purchases,
+});
+const { openCharacterDetails, hideCharacterDetails, renderCharacterDetails } = details;
 
-async function fetchJsonSafe(path) {
-  try {
-    const response = await fetch(path, { credentials: "same-origin" });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (_) {
-    return null;
-  }
-}
-
-async function bootstrapSkinState() {
-  if (_skinBootstrapPromise) return _skinBootstrapPromise;
-  _skinBootstrapPromise = fetchJsonSafe("/skins/owned")
-    .then((ownedRes) => {
-      const ownedSkinIds = Array.isArray(ownedRes?.ownedSkinIds)
-        ? ownedRes.ownedSkinIds
-        : Array.isArray(_userDataRef?.owned_skin_ids)
-          ? _userDataRef.owned_skin_ids
-          : [];
-      _ownedSkinIds = new Set(
-        ownedSkinIds.map((skinId) => String(skinId || "").trim()).filter(Boolean),
-      );
-
-      const selectedMap =
-        ownedRes?.selectedSkinIdByCharacter &&
-        typeof ownedRes.selectedSkinIdByCharacter === "object"
-          ? ownedRes.selectedSkinIdByCharacter
-          : _userDataRef?.selected_skin_id_by_char || {};
-      const currentSelectedMap = {
-        ...selectedMap,
-        // A selection POST may finish while this earlier GET is still in
-        // flight. Confirmed local writes must win over that stale response.
-        ..._confirmedSkinSelections,
-      };
-
-      if (_characterDetailsUi) {
-        _characterDetailsUi.selectedSkinByCharacter = {
-          ...currentSelectedMap,
-          // Never replace a skin the user is actively previewing with a late
-          // bootstrap response from before the picker was opened.
-          ..._characterDetailsUi.selectedSkinByCharacter,
-        };
-      }
-      if (_userDataRef) {
-        _userDataRef.selected_skin_id_by_char = {
-          ...(_userDataRef.selected_skin_id_by_char || {}),
-          ...currentSelectedMap,
-        };
-        _userDataRef.owned_skin_ids = Array.from(_ownedSkinIds);
-      }
-    })
-    .finally(() => {
-      _skinBootstrapPromise = null;
-    });
-  return _skinBootstrapPromise;
-}
-
-function getCatalogCharacterSkins(character) {
-  const chars = _skinsCatalog?.characters;
-  if (!chars || typeof chars !== "object") return [];
-  const entry = chars[String(character || "").toLowerCase()] || {};
-  return Array.isArray(entry.skins) ? entry.skins : [];
-}
-
-function normalizeCharacterId(character) {
-  return String(character || "")
-    .trim()
-    .toLowerCase();
-}
-
-function getCharacterSkinList(character) {
-  const characterId = normalizeCharacterId(character);
-  const catalogSkins = getCatalogCharacterSkins(characterId);
-  const characterUnlocked =
-    Number(_userDataRef?.char_levels?.[characterId] ??
-      _userDataRef?.char_levels?.[character] ??
-      0) >= 1;
-  let normalized = catalogSkins
-    .map((skin, index) => {
-      const id =
-        String(skin?.id || skin?.skinId || skin?.key || "").trim() ||
-        (index === 0 ? "default" : `skin-${index + 1}`);
-      const available = skin?.available !== false;
-      // Always allow the base/default skin once the character is unlocked,
-      // even if the skins service hasn't refreshed ownership yet.
-      const owned = (index === 0 && characterUnlocked) || _ownedSkinIds.has(id);
-      if (!owned && !available) return null;
-      return {
-        id,
-        label:
-          String(skin?.label || skin?.name || skin?.title || "").trim() ||
-          (index === 0 ? "Default" : `Skin ${index + 1}`),
-        previewSrc:
-          String(
-            skin?.assetUrl ||
-              skin?.previewSrc ||
-              skin?.bodySrc ||
-              skin?.src ||
-              "",
-        ).trim() || buildCharacterSkinBodyUrl(characterId, id),
-        owned,
-        locked: !owned,
-        rarity: String(skin?.rarity || "common").trim().toLowerCase(),
-      };
-    })
-    .filter(Boolean);
-
-  if (normalized.length === 0) {
-    const stats = getCharacterStats(character) || {};
-    const skins = Array.isArray(stats.skins) ? stats.skins : [];
-    normalized = skins
-      .map((skin, index) => ({
-        id:
-          String(skin?.id || skin?.skinId || skin?.key || "").trim() ||
-          (index === 0 ? "default" : `skin-${index + 1}`),
-        label:
-          String(skin?.label || skin?.name || skin?.title || "").trim() ||
-          (index === 0 ? "Default" : `Skin ${index + 1}`),
-        previewSrc:
-          String(skin?.previewSrc || skin?.bodySrc || skin?.src || "").trim() ||
-          buildCharacterSkinBodyUrl(characterId, ""),
-        owned: true,
-        locked: false,
-        rarity: String(skin?.rarity || "common").trim().toLowerCase(),
-      }))
-      .filter((skin) => skin.id);
-  }
-
-  if (normalized.length === 0) {
-    normalized.push({
-      id: "default",
-      label: "Default",
-      previewSrc: buildCharacterSkinBodyUrl(characterId, ""),
-      owned: true,
-      locked: false,
-      rarity: "common",
-    });
-  }
-
-  return normalized;
-}
-
-function getSelectedSkin(character) {
-  const characterId = normalizeCharacterId(character);
-  const selectedByUserData = String(
-    _userDataRef?.selected_skin_id_by_char?.[characterId] || "",
-  ).trim();
-  const skinId = String(
-    _characterDetailsUi?.selectedSkinByCharacter?.[characterId] ||
-      selectedByUserData,
-  ).trim();
-  const skins = getCharacterSkinList(characterId);
-  return skins.find((skin) => skin.id === skinId) || skins[0];
-}
-
-async function setSelectedSkin(character, skinId, direction = 1) {
-  if (!_characterDetailsUi) return;
-  if (_characterSelectionPromise || blockCharacterChangeWhileReady()) return;
-  const characterId = normalizeCharacterId(character);
-  const skins = getCharacterSkinList(characterId);
-  const nextSkin =
-    skins.find((skin) => skin.id === String(skinId || "")) || skins[0];
-  const previousSkinId = getSelectedSkin(characterId)?.id;
-  if (previousSkinId !== nextSkin.id) playSound("skinSwitch", 0.75);
-  _characterDetailsUi.selectedSkinByCharacter[characterId] = nextSkin.id;
-  // Locked skins remain previewable, but only owned skins are equipped.
-  const saving = nextSkin.locked ? null : selectCharacter(characterId, { closeAfterSelection: false });
-  if (_characterDetailsUi.currentCharacter === characterId) {
-    updateSkinDetails(characterId, direction);
-  }
-  if (saving) {
-    const saved = await saving;
-    if (!saved) _characterDetailsUi.selectedSkinByCharacter[characterId] = previousSkinId;
-    if (_characterDetailsUi.currentCharacter === characterId) updateSkinDetails(characterId, saved ? direction : -direction);
-  }
-}
-
-function cycleSkin(character, direction) {
-  const skins = getCharacterSkinList(character);
-  const index = Math.max(0, skins.findIndex(skin => skin.id === getSelectedSkin(character)?.id));
-  return setSelectedSkin(character, skins[(index + direction + skins.length) % skins.length].id, direction);
-}
-
-function updateSkinDetails(character, direction = 1) {
-  const ui = _characterDetailsUi;
-  if (!ui || ui.currentCharacter !== character) return;
-  const skin = getSelectedSkin(character);
-  const rarity = normalizeRarity(skin.rarity);
-  switchSkinPreview(ui.previewStage, {
-    src: resolveCharacterPreviewAsset(character, skin.id),
-    alt: `${getCharacterDisplayName(character)} ${skin.label}`,
-    direction,
-  });
-  updateCharacterShowcaseSkin(ui.previewStage, character, skin.id);
-  const row = ui.stickyFooter.querySelector('.character-details-inline-skin');
-  for (const element of [row, ui.previewStage]) {
-    for (const value of SUPPORTED_RARITIES) element.classList.toggle(`skin-rarity-${value}`, value === rarity);
-  }
-  row.classList.toggle('is-locked', !!skin.locked);
-  row.querySelector('.character-details-skin-name-text').textContent = skin.label;
-  row.querySelector('.character-details-skin-rarity').textContent = rarity;
-  const name = row.querySelector('strong');
-  let lock = name.querySelector('.character-details-skin-lock');
-  if (skin.locked && !lock) {
-    lock = document.createElement('img');
-    lock.className = 'character-details-skin-lock';
-    lock.src = '/assets/icons/lock.webp';
-    lock.alt = 'Locked';
-    name.prepend(lock);
-  } else if (!skin.locked) lock?.remove();
-  row.querySelectorAll('.character-details-skin-stepper').forEach(button => {
-    button.disabled = getCharacterSkinList(character).length <= 1 || !!_characterSelectionPromise;
-  });
-  const select = ui.stickyFooter.querySelector('.select-button');
-  if (select) {
-    select.disabled = !!skin.locked || !!_characterSelectionPromise;
-    select.textContent = skin.locked ? 'Locked' : 'Select';
-  }
-}
-
-function resolveCharacterPreviewAsset(character, skinId) {
-  const skins = getCharacterSkinList(character);
-  const skin =
-    skins.find((entry) => entry.id === String(skinId || "")) || skins[0];
-  return resolveBodyPortrait(skin?.previewSrc || buildCharacterSkinBodyUrl(character, skin?.id));
-}
+let charactersGridEl = null;
 
 function equippedCharacterPortrait(character, userData) {
   return buildFramedBodyPortrait(character, buildCharacterSkinBodyUrl(
@@ -360,697 +147,9 @@ function sortCharacterCardsInGrid(userData) {
   }
 }
 
-function getCharacterDetailStatBounds() {
-  const characters = getAllCharacters();
-  let maxHealth = 1;
-  let maxDamage = 1;
-  let maxAmmo = 1;
-  let maxReload = 1;
-
-  characters.forEach((character) => {
-    const stats = getCharacterStats(character);
-    if (!stats) return;
-    maxHealth = Math.max(maxHealth, getHealth(character, LEVEL_CAP));
-    maxDamage = Math.max(maxDamage, getDamage(character, LEVEL_CAP));
-    maxAmmo = Math.max(maxAmmo, Number(stats.ammoCapacity || 0));
-    maxReload = Math.max(maxReload, Number(stats.ammoReloadMs || 0));
-  });
-
-  return { maxHealth, maxDamage, maxAmmo, maxReload };
-}
-
-function createStatBar({ label, value, percent, detail, className }) {
-  const section = document.createElement("div");
-  section.className = `character-detail-stat ${className || ""}`.trim();
-  section.innerHTML = `
-    <div class="character-detail-stat-header">
-      <span class="character-detail-stat-label">${escapeHtml(label)}</span>
-      <span class="character-detail-stat-value">${escapeHtml(value)}</span>
-    </div>
-    <div class="character-detail-stat-bar"><span style="width: ${Math.max(0, Math.min(100, percent))}%"></span></div>
-    <div class="character-detail-stat-detail">${escapeHtml(detail)}</div>
-  `;
-  return section;
-}
-
-function getCharacterDetailsTarget(character) {
-  if (!_characterDetailsUi) return null;
-  if (_characterDetailsUi.currentCharacter !== character) return null;
-  return _characterDetailsUi.previewStage || _characterDetailsUi.popup;
-}
-
-function hideCharacterDetails() {
-  if (!_characterDetailsUi) return;
-  disposeSkinCarousel(_characterDetailsUi.previewStage);
-  hideCharacterShowcase();
-  _upgradePreview = null;
-  _pendingUpgradeAnimation = null;
-  _characterDetailsUi.popup.classList.remove("is-upgrade-confirming");
-  if (_characterDetailsUi.currentCharacter) {
-    delete _characterDetailsUi.selectedSkinByCharacter[
-      _characterDetailsUi.currentCharacter
-    ];
-  }
-  _characterDetailsUi.overlay.classList.add("is-hidden");
-  _characterDetailsUi.overlay.setAttribute("aria-hidden", "true");
-  releaseWallet(_characterDetailsUi.wallet);
-  _characterDetailsUi.focus.deactivate();
-  _characterDetailsUi.currentCharacter = null;
-  const render = _deferredSkinRender;
-  _deferredSkinRender = null;
-  render?.();
-}
-
-function ensureCharacterDetailsUi() {
-  if (_characterDetailsUi) return _characterDetailsUi;
-
-  const overlay = document.createElement("div");
-  overlay.className = "character-details-overlay is-hidden";
-  overlay.setAttribute("aria-hidden", "true");
-  const popup = document.createElement("div");
-  popup.className = "character-details-popup";
-  popup.setAttribute("role", "dialog");
-  popup.setAttribute("aria-modal", "true");
-  popup.setAttribute("aria-labelledby", "character-details-title");
-
-  const header = document.createElement("div");
-  header.className = "character-details-header";
-
-  const titleWrap = document.createElement("div");
-  titleWrap.className = "character-details-title-wrap";
-  const title = document.createElement("h3");
-  title.className = "character-details-title";
-  title.id = "character-details-title";
-
-  const subtitle = document.createElement("p");
-  subtitle.className = "character-details-header-description";
-
-  const wallet = document.createElement("div");
-  wallet.className = "character-details-wallet";
-
-  titleWrap.appendChild(title);
-  titleWrap.appendChild(subtitle);
-
-  const closeButton = document.createElement("button");
-  closeButton.className =
-    "close character-details-close bb-close pixel-menu-button";
-  closeButton.type = "button";
-  closeButton.textContent = "×";
-  closeButton.setAttribute("aria-label", "Close character details");
-
-  const content = document.createElement("div");
-  content.className = "character-details-content";
-
-  const preview = document.createElement("div");
-  preview.className = "character-details-preview";
-
-  const info = document.createElement("div");
-  info.className = "character-details-info";
-
-  const stickyFooter = document.createElement("div");
-  stickyFooter.className = "character-details-sticky-footer";
-
-  content.appendChild(preview);
-  content.appendChild(info);
-  header.appendChild(titleWrap);
-  header.appendChild(wallet);
-  header.appendChild(closeButton);
-  popup.appendChild(header);
-  popup.appendChild(content);
-  popup.appendChild(stickyFooter);
-  overlay.appendChild(popup);
-
-  const state = {
-    overlay,
-    popup,
-    header,
-    title,
-    subtitle,
-    wallet,
-    closeButton,
-    content,
-    preview,
-    info,
-    stickyFooter,
-    previewStage: null,
-    selectedSkinByCharacter: {},
-    currentCharacter: null,
-    focus: null,
-  };
-
-  const closeDetails = () => {
-    playSound("cancel", 0.3);
-    hideCharacterDetails();
-  };
-
-  closeButton.addEventListener("click", (e) => {
-    e.stopPropagation();
-    closeDetails();
-  });
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) closeDetails();
-  });
-
-  popup.addEventListener("click", (e) => e.stopPropagation());
-
-  state.focus = createModalFocus(popup, {
-    initialFocus: () => closeButton,
-    onEscape: closeDetails,
-  });
-
-  _characterDetailsUi = state;
-  return state;
-}
-
-function renderCharacterDetails(character) {
-  const ui = ensureCharacterDetailsUi();
-  const stats = getCharacterStats(character);
-  if (!stats) return;
-
-  const cardState = getCharacterCardState(character, _userDataRef);
-  const selectedSkin = getSelectedSkin(character);
-  const upgradeAnimation =
-    _pendingUpgradeAnimation?.character === character
-      ? _pendingUpgradeAnimation
-      : null;
-  const selectedSkinRarity = normalizeRarity(selectedSkin.rarity);
-  const isUpgradePreview =
-    _upgradePreview?.character === character &&
-    _upgradePreview?.level === cardState.level &&
-    !cardState.isMaxed;
-
-  ui.currentCharacter = character;
-  ui.popup.classList.toggle("is-character-locked", cardState.isLocked);
-  ui.selectedSkinByCharacter[character] = selectedSkin.id;
-
-  ui.title.textContent = isUpgradePreview
-    ? `UPGRADE ${getCharacterDisplayName(character).toUpperCase()}`
-    : getCharacterDisplayName(character).toUpperCase();
-  ui.subtitle.textContent = stats.description || "";
-  renderWalletBalances(_userDataRef);
-
-  disposeSkinCarousel(ui.previewStage);
-  ui.preview.innerHTML = "";
-  ui.info.innerHTML = "";
-  ui.stickyFooter.innerHTML = "";
-
-  // Smaller preview frame (game style - no rounded corners)
-  const previewFrame = document.createElement("div");
-  previewFrame.className =
-    `character-details-preview-frame skin-rarity-${selectedSkinRarity} ${cardState.isLocked ? "is-locked" : ""} ${cardState.isMaxed ? "is-maxed" : ""}`.trim();
-  previewFrame.dataset.character = character;
-  for (let corner = 0; corner < 4; corner++) {
-    const tile = buildPortraitChromaTile(BRO_PORTRAIT_PALETTES[character] || BRO_PORTRAIT_PALETTES.ninja, corner);
-    previewFrame.style.setProperty(`--portrait-chroma-${corner}`, `url("data:image/svg+xml,${encodeURIComponent(tile)}")`);
-  }
-
-  const previewGlow = document.createElement("div");
-  previewGlow.className = "character-details-preview-glow";
-
-  const previewImg = document.createElement("img");
-  previewImg.className = "character-details-preview-image";
-  previewImg.src = resolveCharacterPreviewAsset(character, selectedSkin.id);
-  previewImg.alt = `${getCharacterDisplayName(character)} ${selectedSkin.label}`;
-
-  if (!cardState.isLocked && cardState.level > 0 && cardState.level <= LEVEL_CAP) {
-    previewFrame.classList.add("has-character-level");
-    const badge = createLevelBadge(cardState.level, {
-      className: "level-badge--framed character-level character-details-preview-level-badge",
-    });
-    previewFrame.appendChild(badge);
-    if (upgradeAnimation && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      const previousBadge = createLevelBadge(upgradeAnimation.fromLevel, {
-        className: badge.className,
-        ariaHidden: true,
-      });
-      previewFrame.appendChild(previousBadge);
-      const outgoing = previousBadge.animate([
-        { opacity: 1, transform: "translateY(0) scale(1)" },
-        { opacity: 0, transform: "translateY(-12px) scale(0.8)" },
-      ], { duration: 320, easing: "ease-in", fill: "forwards" });
-      outgoing.onfinish = outgoing.oncancel = () => previousBadge.remove();
-      badge.animate([
-        { opacity: 0, transform: "translateY(12px) scale(0.8)" },
-        { opacity: 1, transform: "translateY(0) scale(1.12)", offset: 0.7 },
-        { opacity: 1, transform: "translateY(0) scale(1)" },
-      ], { duration: 580, delay: 180, easing: "ease-out", fill: "backwards" });
-    }
-  }
-
-  previewFrame.appendChild(previewGlow);
-  previewFrame.appendChild(previewImg);
-  if (cardState.isLocked) {
-    const lockOverlay = document.createElement("div");
-    lockOverlay.className = "character-details-lock-overlay";
-    lockOverlay.innerHTML = '<img src="/assets/icons/lock.webp" alt="Locked" />';
-    previewFrame.appendChild(lockOverlay);
-  }
-
-  ui.preview.appendChild(previewFrame);
-  ui.previewStage = previewFrame;
-  mountCharacterShowcase(previewFrame, {
-    character,
-    skinId: selectedSkin.id,
-    level: cardState.currentLevel,
-    name: String(_userDataRef?.name || "You"),
-  });
-
-  if (isUpgradePreview) {
-    previewFrame.dataset.confirming = "true";
-    showCharacterShowcaseBody(previewFrame);
-  }
-
-  // Three main stat boxes: Health (full width top), Attack and Special (side by side)
-  const statsContainer = document.createElement("div");
-  statsContainer.className = "character-details-stats-container";
-
-  ui.popup.classList.toggle("is-upgrade-confirming", isUpgradePreview);
-  const nextLevel = Math.min(cardState.currentLevel + 1, LEVEL_CAP);
-  const nextHealth = getHealth(character, nextLevel);
-  const nextDamage = getDamage(character, nextLevel);
-  const nextSpecial = getSpecialDamage(character, nextLevel);
-  const animatedStart = upgradeAnimation?.from || {};
-
-  const statValueMarkup = (stat, value, nextValue) => {
-    const displayValue = Number(animatedStart[stat] ?? value);
-    const gain = Math.max(0, Number(nextValue) - Number(value));
-    return `<span class="stat-box-value-stack"><span class="stat-box-value" data-stat-value="${stat}" data-stat-target="${escapeHtml(value)}">${displayValue}</span><span class="stat-box-gain"${isUpgradePreview ? "" : ' aria-hidden="true"'}>+${gain}</span></span>`;
-  };
-  const statTrackMarkup = (stat, value, maxValue, nextValue) => {
-    const displayedValue = Number(animatedStart[stat] ?? value);
-    const shownWidth = Math.max(0, Math.min(100, (displayedValue / maxValue) * 100));
-    const targetWidth = Math.max(0, Math.min(100, (value / maxValue) * 100));
-    const nextWidth = Math.max(0, Math.min(100, (nextValue / maxValue) * 100));
-    const previewWidth = Math.max(0, nextWidth - targetWidth);
-    return `<div class="stat-box-track" role="progressbar" aria-label="${stat}" aria-valuemin="0" aria-valuemax="${maxValue}" aria-valuenow="${escapeHtml(value)}"><div class="stat-box-fill" data-stat-fill="${stat}" data-stat-target-width="${targetWidth}" style="width:${shownWidth}%"></div>${isUpgradePreview ? `<div class="stat-box-preview-fill" style="left:${targetWidth}%;width:${previewWidth}%"></div>` : ""}</div>`;
-  };
-
-  // Health box (full width)
-  const healthBox = document.createElement("div");
-  healthBox.className = "character-details-stat-box health-box";
-  const healthMax = Math.max(1, Number(cardState.maxHealth || 1));
-  healthBox.innerHTML = `
-    <div class="stat-box-header">
-      <img class="stat-box-icon" src="/assets/icons/heart.webp" alt="Health" />
-      <span class="stat-box-label">Health</span>
-      ${statValueMarkup("health", cardState.currentHealth, nextHealth)}
-    </div>
-    ${statTrackMarkup("health", cardState.currentHealth, healthMax, nextHealth)}
-  `;
-  statsContainer.appendChild(healthBox);
-
-  // Attack and Special boxes (side by side)
-  const attackSpecialRow = document.createElement("div");
-  attackSpecialRow.className = "character-details-stat-boxes-row";
-
-  // Attack box
-  const attackBox = document.createElement("div");
-  attackBox.className = "character-details-stat-box attack-box";
-  const attackMax = Math.max(1, Number(cardState.maxDamage || 1));
-  attackBox.innerHTML = `
-    <div class="stat-box-header">
-      <img class="stat-box-icon" src="/assets/icons/attack.webp" alt="Attack" />
-      <span class="stat-box-label">Attack</span>
-      ${statValueMarkup("damage", cardState.currentDamage, nextDamage)}
-    </div>
-    ${statTrackMarkup("damage", cardState.currentDamage, attackMax, nextDamage)}
-    <div class="stat-box-content">
-      ${stats.attackDescription ? `<div class="stat-box-desc">${escapeHtml(stats.attackDescription)}</div>` : ""}
-      <div class="stat-box-metrics attack-metrics" aria-label="Attack details">
-        <div class="stat-box-metric reload-metric">
-          <img src="/assets/ui/stat-reload.webp" alt="" aria-hidden="true" />
-          <span class="stat-box-metric-copy">
-            <span class="stat-box-metric-label">Reload</span>
-            <strong>${(Number(stats.ammoReloadMs || 0) / 1000).toFixed(1)}s</strong>
-          </span>
-        </div>
-        <div class="stat-box-metric ammo-metric">
-          <img src="/assets/ui/stat-ammo.webp" alt="" aria-hidden="true" />
-          <span class="stat-box-metric-copy">
-            <span class="stat-box-metric-label">Ammo</span>
-            <strong>${escapeHtml(stats.ammoCapacity || 0)}</strong>
-          </span>
-        </div>
-      </div>
-    </div>
-  `;
-  attackSpecialRow.appendChild(attackBox);
-
-  // Special box
-  const specialBox = document.createElement("div");
-  specialBox.className = "character-details-stat-box special-box";
-  const specialMax = Math.max(1, Number(cardState.maxSpecial || 1));
-  specialBox.innerHTML = `
-    <div class="stat-box-header">
-      <img class="stat-box-icon" src="/assets/icons/special.webp" alt="Special" />
-      <span class="stat-box-label">Special</span>
-      ${statValueMarkup("special", cardState.currentSpecial, nextSpecial)}
-    </div>
-    ${statTrackMarkup("special", cardState.currentSpecial, specialMax, nextSpecial)}
-    <div class="stat-box-content">
-      ${stats.specialDescription ? `<div class="stat-box-desc">${escapeHtml(stats.specialDescription)}</div>` : ""}
-      <div class="stat-box-metrics special-metrics" aria-label="Special charge details">
-        <div class="stat-box-metric hits-metric">
-          <img src="/assets/ui/stat-hits.webp" alt="" aria-hidden="true" />
-          <span class="stat-box-metric-copy">
-            <span class="stat-box-metric-label">Charge</span>
-            <strong>${cardState.currentSuperChargeHits} <small>hits</small></strong>
-          </span>
-        </div>
-      </div>
-    </div>
-  `;
-  attackSpecialRow.appendChild(specialBox);
-
-  statsContainer.appendChild(attackSpecialRow);
-  ui.info.appendChild(statsContainer);
-
-  // Sticky footer: skins and actions in one line
-  const footerLine = document.createElement("div");
-  footerLine.className = "character-details-footer-line";
-
-  const skinRow = document.createElement("div");
-  skinRow.className = `character-details-inline-skin skin-rarity-${selectedSkinRarity}${selectedSkin.locked ? " is-locked" : ""}`;
-
-  const skinLabel = document.createElement("div");
-  skinLabel.className = "character-details-skin-label";
-  skinLabel.innerHTML = `
-    <img class="character-details-hanger-icon" src="/assets/shop/icons/skins-hanger.webp" alt="" aria-hidden="true" />
-    <span>Skin</span>
-  `;
-
-  const skinControls = document.createElement("div");
-  skinControls.className = "character-details-skin-controls";
-
-  const skins = getCharacterSkinList(character);
-  const prevButton = document.createElement("button");
-  prevButton.type = "button";
-  prevButton.className = "character-details-skin-stepper";
-  prevButton.textContent = "";
-  prevButton.setAttribute("aria-label", "Previous skin");
-  prevButton.setAttribute("data-sound", "none");
-  prevButton.disabled = skins.length <= 1 || !!_characterSelectionPromise;
-  prevButton.addEventListener("click", () => {
-    if (skins.length <= 1) return;
-    cycleSkin(character, -1);
-  });
-
-  const skinChip = document.createElement("div");
-  skinChip.className = "character-details-skin-name-box";
-  skinChip.setAttribute("aria-live", "polite");
-  const skinName = document.createElement("strong");
-  if (selectedSkin.locked) {
-    const lockIcon = document.createElement("img");
-    lockIcon.className = "character-details-skin-lock";
-    lockIcon.src = "/assets/icons/lock.webp";
-    lockIcon.alt = "Locked";
-    skinName.appendChild(lockIcon);
-  }
-  const skinNameText = document.createElement("span");
-  skinNameText.className = "character-details-skin-name-text";
-  skinNameText.textContent = selectedSkin.label;
-  skinName.appendChild(skinNameText);
-  const skinRarity = document.createElement("span");
-  skinRarity.className = "character-details-skin-rarity";
-  skinRarity.textContent = selectedSkinRarity;
-  skinChip.appendChild(skinName);
-  skinChip.appendChild(skinRarity);
-
-  const nextButton = document.createElement("button");
-  nextButton.type = "button";
-  nextButton.className = "character-details-skin-stepper";
-  nextButton.textContent = "";
-  nextButton.setAttribute("aria-label", "Next skin");
-  nextButton.setAttribute("data-sound", "none");
-  nextButton.disabled = skins.length <= 1 || !!_characterSelectionPromise;
-  nextButton.addEventListener("click", () => {
-    if (skins.length <= 1) return;
-    cycleSkin(character, 1);
-  });
-
-  skinControls.appendChild(prevButton);
-  skinControls.appendChild(skinChip);
-  skinControls.appendChild(nextButton);
-  skinRow.appendChild(skinLabel);
-  skinRow.appendChild(skinControls);
-
-  const footer = document.createElement("div");
-  footer.className = "character-details-inline-actions";
-
-  if (cardState.isLocked) {
-    const buyButton = document.createElement("button");
-    buyButton.type = "button";
-    buyButton.setAttribute("aria-label", `Unlock ${getCharacterDisplayName(character)} for ${stats.unlockPrice || 0} gems`);
-    buyButton.className =
-      `character-details-action buy-button pixel-menu-button${cardState.canUnlock ? " is-ready" : ""}`;
-    buyButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon" src="/assets/icons/lock.webp" alt="" /><span>Buy</span></span><span class="button-price"><img class="cs-currency" src="/assets/icons/gem.webp" alt="" /><span>${escapeHtml(stats.unlockPrice || 0)}</span></span>`;
-    if (stats.unlockMethod?.type === "trophyRoad") {
-      buyButton.innerHTML = `<span class="character-details-action-label character-details-trophy-label"><img class="character-details-action-icon" src="/assets/icons/lock.webp" alt="" /><span>Trophy Reward</span></span><span class="button-price"><img class="cs-currency" src="/assets/icons/trophy.webp" alt="" /><span>${stats.unlockMethod.min.toLocaleString()}</span></span>`;
-      buyButton.setAttribute("aria-label", `Claim ${getCharacterDisplayName(character)} on Trophy Road at ${stats.unlockMethod.min} trophies`);
-    }
-    buyButton.addEventListener("click", (e) => {
-      e.stopPropagation();
-      playSound("cursor4", 0.2);
-      if (stats.unlockMethod?.type === "trophyRoad") {
-        // Closing through the picker lifecycle clears the party's
-        // "Selecting Character" presence before Trophy Road opens.
-        closeCharacterSelectAfterSelection();
-        document.getElementById("trophy-resource-button")?.click();
-        return;
-      }
-      showConfirmDialog(
-        {
-          type: "unlock",
-          character,
-          level: cardState.level,
-          price: stats.unlockPrice,
-        },
-        () => applyUnlock(character, stats.unlockPrice),
-      );
-    });
-    footer.appendChild(buyButton);
-  } else {
-    if (!cardState.isMaxed) {
-      const upgradeButton = document.createElement("button");
-      upgradeButton.type = "button";
-      upgradeButton.setAttribute("aria-label", `Upgrade ${getCharacterDisplayName(character)} for ${cardState.price} coins`);
-      upgradeButton.className = `character-details-action upgrade-button pixel-menu-button${cardState.canUpgrade ? " is-ready" : ""}`;
-      upgradeButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon upgrade-icon" src="/assets/icons/upgrade.webp" alt="" /><span>Upgrade</span></span><span class="button-price"><img class="cs-currency" src="/assets/icons/coin.webp" alt="" /><span>${escapeHtml(cardState.price)}</span></span>`;
-      if (!cardState.canUpgrade) {
-        upgradeButton.title = "Not enough coins — select to view the balance needed";
-      }
-      upgradeButton.addEventListener("click", (e) => {
-        e.stopPropagation();
-        playSound("cursor4", 0.2);
-        if (!cardState.canUpgrade) {
-          showInsufficientDialog("coins", cardState.price - Number(_userDataRef?.coins || 0));
-          return;
-        }
-        if (!isUpgradePreview) {
-          _upgradePreview = {
-            character,
-            level: cardState.level,
-            minimumButtonWidth: Math.ceil(upgradeButton.getBoundingClientRect().width),
-          };
-          renderCharacterDetails(character);
-          return;
-        }
-        upgradeButton.disabled = true;
-        upgradeButton.textContent = "Upgrading…";
-        applyUpgrade(character, cardState.level);
-      });
-      if (isUpgradePreview) {
-        upgradeButton.classList.add("is-confirming");
-        upgradeButton.style.minWidth = `${_upgradePreview.minimumButtonWidth || 0}px`;
-        upgradeButton.setAttribute("aria-label", `Confirm upgrade ${getCharacterDisplayName(character)} for ${cardState.price} coins`);
-        upgradeButton.innerHTML = `<span class="character-details-action-label">Confirm</span><span class="button-price"><img class="cs-currency" src="/assets/icons/coin.webp" alt="coins"> ${cardState.price}</span>`;
-
-      }
-      footer.appendChild(upgradeButton);
-    } else {
-      const maxedLabel = document.createElement("div");
-      maxedLabel.className = "character-details-maxed-label";
-      maxedLabel.innerHTML =
-        '<img src="/assets/icons/crown.webp" alt="" /> <span>Max Level</span>';
-      footer.appendChild(maxedLabel);
-    }
-
-    const selectButton = document.createElement("button");
-    selectButton.type = "button";
-    selectButton.className =
-      "character-details-action select-button pixel-menu-button";
-    selectButton.textContent = selectedSkin.locked ? "Locked" : "Select";
-    selectButton.disabled = !!selectedSkin.locked || !!_characterSelectionPromise;
-    selectButton.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      if (getSelectedSkin(character)?.locked) return;
-      playSound("cursor4", 0.2);
-      selectButton.disabled = true;
-      selectButton.textContent = "Selecting...";
-      const selected = await selectCharacter(character);
-      if (!selected && _characterDetailsUi?.currentCharacter === character) {
-        renderCharacterDetails(character);
-      }
-    });
-    footer.appendChild(selectButton);
-  }
-
-  footerLine.appendChild(skinRow);
-  footerLine.appendChild(footer);
-  ui.stickyFooter.appendChild(footerLine);
-
-  if (upgradeAnimation) {
-    _pendingUpgradeAnimation = null;
-    animateCharacterDetailStats(upgradeAnimation);
-  }
-}
-
-function animateCharacterDetailStats({ from }) {
-  const ui = _characterDetailsUi;
-  if (!ui?.popup) return;
-  const durationMs = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 900;
-  const values = [...ui.popup.querySelectorAll("[data-stat-value]")];
-  const fills = [...ui.popup.querySelectorAll("[data-stat-fill]")];
-  const boxes = [...ui.popup.querySelectorAll(".character-details-stat-box")];
-
-  boxes.forEach((box) => box.classList.add("is-leveling-up"));
-  requestAnimationFrame(() => {
-    fills.forEach((fill) => {
-      fill.classList.add("is-stat-leveling");
-      fill.style.width = `${fill.dataset.statTargetWidth}%`;
-    });
-  });
-
-  const startedAt = performance.now();
-  const step = (now) => {
-    const progress = Math.min(1, durationMs === 0 ? 1 : (now - startedAt) / durationMs);
-    const eased = 1 - (1 - progress) ** 3;
-    values.forEach((value) => {
-      const start = Number(from?.[value.dataset.statValue] ?? value.textContent);
-      const target = Number(value.dataset.statTarget);
-      value.textContent = String(Math.round(start + (target - start) * eased));
-    });
-    if (progress < 1) {
-      requestAnimationFrame(step);
-      return;
-    }
-    window.setTimeout(() => {
-      boxes.forEach((box) => box.classList.remove("is-leveling-up"));
-      fills.forEach((fill) => fill.classList.remove("is-stat-leveling"));
-    }, 500);
-  };
-  requestAnimationFrame(step);
-}
-
-function playCharacterDetailsSuccessAnimation(type) {
-  if (!_characterDetailsUi || !_characterDetailsUi.currentCharacter) return;
-  const target = getCharacterDetailsTarget(
-    _characterDetailsUi.currentCharacter,
-  );
-  if (!target) return;
-  showCharacterShowcaseBody(target);
-
-  const overlay = document.createElement("div");
-  target.querySelectorAll(".character-details-success").forEach((previous) => previous.remove());
-  overlay.className = `character-details-success is-${type}`;
-  overlay.setAttribute("role", "status");
-  if (type === "unlock") {
-    const ring = document.createElement("div");
-    ring.className = "character-details-success-ring";
-    ring.setAttribute("aria-hidden", "true");
-    overlay.appendChild(ring);
-    for (let index = 0; index < 16; index += 1) {
-      const spark = document.createElement("i");
-      spark.className = "character-details-success-spark";
-      const angle = (index / 16) * Math.PI * 2;
-      const distance = 90 + (index % 3) * 24;
-      spark.style.setProperty("--spark-x", `${Math.cos(angle) * distance}px`);
-      spark.style.setProperty("--spark-y", `${Math.sin(angle) * distance}px`);
-      spark.style.setProperty("--spark-delay", `${index % 4 * 35}ms`);
-      spark.setAttribute("aria-hidden", "true");
-      overlay.appendChild(spark);
-    }
-  }
-  const beams = document.createElement("div");
-  beams.className = `character-details-success-beams ${type === "unlock" ? "gem" : "coin"}`;
-  const label = document.createElement("div");
-  label.className = "character-details-success-label";
-  const headline = document.createElement("strong");
-  headline.textContent = type === "unlock" ? "Unlocked!" : "Level Up";
-  label.appendChild(headline);
-  if (type === "unlock") {
-    const shackles = document.createElement("div");
-    shackles.className = "unlock-shackles";
-    shackles.setAttribute("aria-hidden", "true");
-    for (const corner of ["top-left", "top-right", "bottom-left", "bottom-right"]) {
-      const chain = document.createElement("div");
-      chain.className = `unlock-chain unlock-chain-${corner}`;
-      shackles.appendChild(chain);
-    }
-    const lock = document.createElement("img");
-    lock.className = "unlock-breaking-lock";
-    lock.src = "/assets/icons/lock.webp";
-    lock.alt = "";
-    shackles.appendChild(lock);
-    overlay.appendChild(shackles);
-  }
-  let halo = null;
-  if (type === "upgrade") {
-    target.querySelectorAll(".character-upgrade-halo").forEach((previous) => previous.remove());
-    halo = document.createElement("div");
-    halo.className = "character-upgrade-halo";
-    halo.setAttribute("aria-hidden", "true");
-    target.appendChild(halo);
-  } else {
-    overlay.appendChild(beams);
-  }
-  overlay.appendChild(label);
-  target.appendChild(overlay);
-  playSound("success", 0.6);
-  setTimeout(() => {
-    overlay.classList.add("fade-out");
-    halo?.classList.add("fade-out");
-    setTimeout(() => { overlay.remove(); halo?.remove(); }, 350);
-  }, 1750);
-}
-
-function syncCurrentUserLobbyLevel(character, level) {
-  if (
-    String(_userDataRef?.char_class || "").toLowerCase() !==
-    String(character || "").toLowerCase()
-  ) {
-    return;
-  }
-  const slot =
-    document.querySelector('.character-slot[data-is-current-user="true"]') ||
-    document.getElementById("your-slot-1");
-  if (slot) setSlotLevelBadge(slot, level);
-}
-
-function triggerLobbyCharacterSplash(slot) {
-  if (!slot) return;
-  slot.classList.remove("character-splash");
-  void slot.offsetWidth;
-  slot.classList.add("character-splash");
-  window.setTimeout(() => {
-    slot.classList.remove("character-splash");
-  }, 700);
-}
-
-function getActivePartyIdFromPath() {
-  const pathname = window.location.pathname || "";
-  if (!pathname.includes("/party/")) return null;
-  const last = pathname.split("/").filter(Boolean).pop();
-  if (last && /^\d+$/.test(last)) return Number(last);
-  return last || null;
-}
-
 function isCurrentUserReady() {
-  const selfSlot =
-    document.querySelector('.character-slot[data-is-current-user="true"]') ||
-    document.getElementById("your-slot-1");
-  const status = String(selfSlot?.querySelector(".status")?.textContent || "")
+  const selfSlot = getSelfSlot({ fallback: true });
+  const status = String(slotField(selfSlot, "status")?.textContent || "")
     .trim()
     .toLowerCase();
   return status === "ready";
@@ -1070,20 +169,13 @@ function blockCharacterChangeWhileReady() {
 
 function emitCharacterMenuStatus(open) {
   try {
-    const selfSlot =
-      document.querySelector('.character-slot[data-is-current-user="true"]') ||
-      document.getElementById("your-slot-1");
-    if (selfSlot && !selfSlot.querySelector(":scope > .lobby-selecting-ring")) {
-      const ring = document.createElement("div");
-      ring.className = "lobby-selecting-ring";
-      ring.setAttribute("aria-hidden", "true");
-      selfSlot.appendChild(ring);
-    }
+    const selfSlot = getSelfSlot({ fallback: true });
+    ensureLobbySelectingRing(selfSlot);
     selfSlot?.classList.toggle("is-selecting-character", !!open);
 
-    const partyId = getActivePartyIdFromPath();
+    const partyId = getRoutePartyId();
     if (!partyId) return;
-    socket.emit("char-menu:status", {
+    socket.emit(SOCKET_EVENTS.CHAR_MENU_STATUS, {
       partyId,
       open: !!open,
     });
@@ -1091,27 +183,22 @@ function emitCharacterMenuStatus(open) {
 }
 
 let unsubscribeWallet;
+
 export function initializeCharacterSelect(userData) {
   unsubscribeWallet?.();
   unsubscribeWallet = subscribeWallet((wallet, user) => {
-    if (user !== _userDataRef) return;
+    if (user !== state.userData) return;
     refreshUpgradeButtonAffordability();
-    if (_characterDetailsUi?.currentCharacter) renderCharacterDetails(_characterDetailsUi.currentCharacter);
+    if (state.detailsUi?.currentCharacter) renderCharacterDetails(state.detailsUi.currentCharacter);
   });
-  _userDataRef = userData;
+  if (getUser() !== userData) setUser(userData);
   renderWalletBalances(userData);
-  _skinsCatalog = SKINS_CATALOG;
-  _ownedSkinIds = new Set(
-    (Array.isArray(userData?.owned_skin_ids) ? userData.owned_skin_ids : [])
-      .map((skinId) => String(skinId || "").trim())
-      .filter(Boolean),
-  );
-  _confirmedSkinSelections = Object.create(null);
+  resetSkinOwnership(userData);
   bootstrapSkinState().then(() => {
     try {
       refreshUpgradeButtonAffordability();
-      if (_characterDetailsUi?.currentCharacter) {
-        renderCharacterDetails(_characterDetailsUi.currentCharacter);
+      if (state.detailsUi?.currentCharacter) {
+        renderCharacterDetails(state.detailsUi.currentCharacter);
       }
     } catch (_) {}
   });
@@ -1125,7 +212,7 @@ export function initializeCharacterSelect(userData) {
 
   const charactersGrid = document.createElement("div");
   charactersGrid.className = "characters-grid";
-  _charactersGrid = charactersGrid;
+  charactersGridEl = charactersGrid;
 
   const characters = getSortedCharacters(userData);
   characters.forEach((char) =>
@@ -1158,11 +245,9 @@ export function initializeCharacterSelect(userData) {
     popupShell.hide();
     emitCharacterMenuStatus(false);
   }
-  window.__openCharacterSelect = openCharacterSelect;
-  window.__closeCharacterSelect = closeCharacterSelect;
+  picker = { open: openCharacterSelect, close: closeCharacterSelect };
 }
 
-// Build a single character card
 function createCharacterCard(character, userData) {
   const card = document.createElement("button");
   card.type = "button";
@@ -1170,7 +255,6 @@ function createCharacterCard(character, userData) {
   card.dataset.char = character;
 
   const cardState = getCharacterCardState(character, userData);
-  const stats = cardState.stats || getCharacterStats(character) || {};
 
   card.classList.toggle(
     "selected",
@@ -1264,73 +348,37 @@ function createCharacterCard(character, userData) {
 }
 
 export function openCharacterSelect() {
-  if (window.__openCharacterSelect) return window.__openCharacterSelect();
-  if (blockCharacterChangeWhileReady()) return false;
-  getSharedSelectionPopupShell().show();
-  emitCharacterMenuStatus(true);
-  return true;
-}
-
-function openCharacterDetails(character) {
-  preloadSound("skinSwitch");
-  renderCharacterDetails(character);
-  const ui = ensureCharacterDetailsUi();
-  const wasDetached = !ui.overlay.isConnected;
-  if (!ui.overlay.isConnected) {
-    document.body.appendChild(ui.overlay);
-  }
-  if (wasDetached) void ui.overlay.offsetWidth;
-  ui.overlay.classList.remove("is-hidden");
-  ui.overlay.setAttribute("aria-hidden", "false");
-  mountWallet(ui.wallet);
-  ui.focus.activate();
+  return picker?.open() ?? false;
 }
 
 async function persistActiveCharacterSelection(character, skinId) {
-  const response = await fetch("/skins/select", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      character,
-      skinId,
-      activateCharacter: true,
-    }),
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.success !== true) {
-    throw new Error(
-      String(payload?.error || "Unable to save this character and skin."),
-    );
+  const fallbackMessage = "Unable to save this character and skin.";
+  const payload = await postJson(API_PATHS.SKINS_SELECT, { character, skinId, activateCharacter: true }, { fallbackMessage });
+  if (payload?.success !== true) {
+    throw new Error(payload?.error || fallbackMessage);
   }
   return payload;
 }
 
 function closeCharacterSelectAfterSelection() {
-  if (typeof window.__closeCharacterSelect === "function") {
-    window.__closeCharacterSelect();
-    return;
-  }
-  hideCharacterDetails();
-  getSharedSelectionPopupShell().hide();
-  emitCharacterMenuStatus(false);
+  picker?.close();
 }
 
 async function selectCharacter(character, { closeAfterSelection = true } = {}) {
-  if (_characterSelectionPromise) return false;
+  if (state.selectionPromise) return false;
   if (blockCharacterChangeWhileReady()) return false;
   const charClass = normalizeCharacterId(character);
   const selectedSkin = getSelectedSkin(charClass);
   const selectedSkinId = String(selectedSkin?.id || "").trim();
   if (!charClass || !selectedSkinId || selectedSkin?.locked) return false;
 
-  _characterSelectionPromise = persistActiveCharacterSelection(
+  state.selectionPromise = persistActiveCharacterSelection(
     charClass,
     selectedSkinId,
   );
 
   try {
-    const persisted = await _characterSelectionPromise;
+    const persisted = await state.selectionPromise;
     const selectedSkinAsset = resolveCharacterPreviewAsset(
       charClass,
       selectedSkinId,
@@ -1338,24 +386,17 @@ async function selectCharacter(character, { closeAfterSelection = true } = {}) {
 
     // Update local state only after the server has atomically saved both the
     // active character and its selected skin.
-    if (_userDataRef) {
-      _userDataRef.char_class = charClass;
-      _userDataRef.selected_skin_id_by_char =
-        _userDataRef.selected_skin_id_by_char || {};
-      Object.assign(
-        _userDataRef.selected_skin_id_by_char,
-        persisted?.selectedSkinIdByCharacter || {},
-        { [charClass]: selectedSkinId },
-      );
+    if (state.userData) {
+      updateUser({ char_class: charClass, selected_skin_id_by_char: {
+        ...state.userData.selected_skin_id_by_char, ...persisted?.selectedSkinIdByCharacter, [charClass]: selectedSkinId,
+      } });
     }
-    _confirmedSkinSelections[charClass] = selectedSkinId;
+    state.confirmedSkinSelections[charClass] = selectedSkinId;
     warmBattleSelection();
 
     const updateSelectionView = () => {
     // Update current user's visible slot, if present
-    const yourSlot =
-      document.querySelector('.character-slot[data-is-current-user="true"]') ||
-      document.getElementById("your-slot-1");
+    const yourSlot = getSelfSlot({ fallback: true });
     if (yourSlot) {
       const spriteEl = yourSlot.querySelector(".character-sprite");
       const prevCharacter = String(yourSlot.dataset.character || "").trim();
@@ -1367,9 +408,9 @@ async function selectCharacter(character, { closeAfterSelection = true } = {}) {
       yourSlot.dataset.character = charClass;
       yourSlot.classList.remove("empty");
       const charLevels =
-        typeof _userDataRef?.char_levels === "object" &&
-        _userDataRef?.char_levels
-          ? _userDataRef.char_levels
+        typeof state.userData?.char_levels === "object" &&
+        state.userData?.char_levels
+          ? state.userData.char_levels
           : {};
       setSlotLevelBadge(
         yourSlot,
@@ -1381,24 +422,24 @@ async function selectCharacter(character, { closeAfterSelection = true } = {}) {
     }
 
     // Broadcast the already-persisted selection so party rosters update now.
-    const partyId = getActivePartyIdFromPath();
+    const partyId = getRoutePartyId();
     if (partyId) {
-      socket.emit("char-change", {
+      socket.emit(SOCKET_EVENTS.CHAR_CHANGE, {
         partyId,
         character: charClass,
         selectedSkinId,
       });
     } else {
-      socket.emit("char-change", { character: charClass, selectedSkinId });
+      socket.emit(SOCKET_EVENTS.CHAR_CHANGE, { character: charClass, selectedSkinId });
     }
 
     // Keep chooser card highlight synced immediately after selection.
     refreshUpgradeButtonAffordability();
     };
-    if (!closeAfterSelection && _characterDetailsUi?.currentCharacter) {
-      _deferredSkinRender = updateSelectionView;
+    if (!closeAfterSelection && state.detailsUi?.currentCharacter) {
+      state.deferredSkinRender = updateSelectionView;
     } else {
-      _deferredSkinRender = null;
+      state.deferredSkinRender = null;
       updateSelectionView();
     }
     if (closeAfterSelection) closeCharacterSelectAfterSelection();
@@ -1411,215 +452,19 @@ async function selectCharacter(character, { closeAfterSelection = true } = {}) {
     );
     return false;
   } finally {
-    _characterSelectionPromise = null;
+    state.selectionPromise = null;
   }
 }
 
-function closeConfirmationBackdrop(backdrop) {
-  if (!backdrop || backdrop.dataset.dismissPending === "true") return;
-  backdrop.dataset.dismissPending = "true";
-  if (backdrop.__previewFrame) delete backdrop.__previewFrame.dataset.confirming;
-  backdrop.__removePriorityEscape?.();
-  dismissPopup(backdrop, () => backdrop.remove());
-}
-
-// The topmost confirmation owns keyboard focus above details and selection.
-function installPriorityEscape(backdrop) {
-  const dialog = backdrop.querySelector(".cs-confirm");
-  dialog.setAttribute("role", "dialog");
-  dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-label", dialog.querySelector(".cs-confirm-title").textContent);
-  const focus = createModalFocus(dialog, {
-    onEscape: () => closeConfirmationBackdrop(backdrop),
-  });
-  focus.activate();
-  backdrop.__removePriorityEscape = () => {
-    focus.deactivate();
-    backdrop.__removePriorityEscape = null;
-  };
-}
-
-// Render a small confirmation dialog for upgrades or unlocks
-function showConfirmDialog(opts, onConfirm) {
-  const { type, character, level, price } = opts;
-  const overlay = document.querySelector(".character-select-overlay");
-  if (!overlay) return onConfirm && onConfirm();
-
-  const coins = Number(_userDataRef?.coins ?? 0);
-  const gems = Number(_userDataRef?.gems ?? 0);
-  const isUpgrade = type === "upgrade";
-  const current = isUpgrade ? coins : gems;
-  const remaining = current - Number(price || 0);
-
-  if (remaining < 0) {
-    return showInsufficientDialog(isUpgrade ? "coins" : "gems", -remaining);
-  }
-
-  const backdrop = document.createElement("div");
-  backdrop.className = "cs-confirm-backdrop";
-  const previewFrame = _characterDetailsUi?.previewStage;
-  if (previewFrame) {
-    previewFrame.dataset.confirming = "true";
-    showCharacterShowcaseBody(previewFrame);
-    backdrop.__previewFrame = previewFrame;
-  }
-
-  const dialog = document.createElement("div");
-  dialog.className = `cs-confirm cs-purchase-confirm${isUpgrade ? "" : " cs-unlock-confirm"}`;
-  dialog.setAttribute("role", "dialog");
-  dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-label", isUpgrade ? "Confirm upgrade" : `Unlock ${getCharacterDisplayName(character)}`);
-  // prevent clicks inside dialog from closing parent
-  dialog.addEventListener("click", (e) => e.stopPropagation());
-  const title = document.createElement("div");
-  title.className = "cs-confirm-title";
-  title.textContent = isUpgrade ? "Confirm Upgrade" : "Confirm Unlock";
-
-  const msg = document.createElement("div");
-  msg.className = "cs-confirm-body";
-  // Character hero visual only for unlock (buy)
-  if (!isUpgrade) {
-    const hero = document.createElement("div");
-    hero.className = "cs-hero";
-    const heroBeams = document.createElement("div");
-    heroBeams.className = "cs-hero-beams gem"; // gem theme (bluish)
-    const heroImg = document.createElement("img");
-    heroImg.className = "cs-hero-img";
-    heroImg.src = resolveBodyPortrait(buildCharacterSkinBodyUrl(character, getSelectedSkin(character)?.id));
-    heroImg.alt = character;
-    hero.appendChild(heroBeams);
-    hero.appendChild(heroImg);
-    msg.appendChild(hero);
-    const name = document.createElement("div");
-    name.className = "cs-unlock-name";
-    name.textContent = getCharacterDisplayName(character);
-    msg.appendChild(name);
-  }
-  // Level line focus for upgrades
-  if (isUpgrade) {
-    const levelLine = document.createElement("div");
-    levelLine.className = "cs-level-line";
-    const currImg = createLevelBadge(level, {
-      className: "level-badge--framed character-level cs-level-img",
-    });
-    const arrow = pixelArrow("right", "lg");
-    arrow.classList.add("cs-arrow");
-    const nextWrap = document.createElement("div");
-    nextWrap.className = "cs-next-wrap";
-    const beams = document.createElement("div");
-    beams.className = "cs-beams coin"; // coin theme (golden rays)
-    const nextImg = createLevelBadge(Math.min(level + 1, LEVEL_CAP), {
-      className: "level-badge--framed character-level cs-next-badge",
-    });
-    nextWrap.appendChild(beams);
-    nextWrap.appendChild(nextImg);
-    levelLine.appendChild(currImg);
-    levelLine.appendChild(arrow);
-    levelLine.appendChild(nextWrap);
-    msg.appendChild(levelLine);
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "cs-confirm-actions";
-  const cancelBtn = document.createElement("button");
-  cancelBtn.className = "cs-btn cancel pixel-menu-button";
-  cancelBtn.textContent = "Cancel";
-  const okBtn = document.createElement("button");
-  okBtn.className = "cs-btn confirm pixel-menu-button";
-  okBtn.setAttribute("aria-label", `${isUpgrade ? "Upgrade" : "Unlock"} ${getCharacterDisplayName(character)} for ${price} ${isUpgrade ? "coins" : "gems"}`);
-  okBtn.innerHTML = `${isUpgrade ? "<span>Upgrade</span>" : ""}<img class="cs-currency" src="${
-    isUpgrade ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp"
-  }" alt=""/> <span>${escapeHtml(price)}</span>`;
-
-  cancelBtn.onclick = () => {
-    playSound("cursor4", 0.2);
-    closeConfirmationBackdrop(backdrop);
-  };
-  // Click-out to close confirm
-  backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) {
-      closeConfirmationBackdrop(backdrop);
-    }
-    e.stopPropagation();
-  });
-  okBtn.onclick = () => {
-    closeConfirmationBackdrop(backdrop);
-    playSound("cursor4", 0.2);
-
-    onConfirm && onConfirm();
-  };
-
-  actions.appendChild(cancelBtn);
-  actions.appendChild(okBtn);
-  dialog.appendChild(title);
-  dialog.appendChild(msg);
-  dialog.appendChild(actions);
-  backdrop.appendChild(dialog);
-  // attach to body so overlay click-out doesn't also fire
-  document.body.appendChild(backdrop);
-  installPriorityEscape(backdrop);
-}
-
-// Message dialog with a single Close button. `bodyContent` is appended to the
-// dialog's paragraph.
-function showMessageDialog(titleText, bodyContent) {
-  const backdrop = document.createElement("div");
-  backdrop.className = "cs-confirm-backdrop";
-  const dialog = document.createElement("div");
-  dialog.className = "cs-confirm";
-  dialog.addEventListener("click", (e) => e.stopPropagation());
-  const title = document.createElement("div");
-  title.className = "cs-confirm-title";
-  title.textContent = titleText;
-  const body = document.createElement("div");
-  body.className = "cs-confirm-body";
-  const p = document.createElement("p");
-  p.append(...bodyContent);
-  body.appendChild(p);
-  const actions = document.createElement("div");
-  actions.className = "cs-confirm-actions";
-  const closeBtn = document.createElement("button");
-  closeBtn.className = "cs-btn cancel pixel-menu-button";
-  closeBtn.textContent = "Close";
-  closeBtn.onclick = () => {
-    closeConfirmationBackdrop(backdrop);
-  };
-  actions.appendChild(closeBtn);
-  dialog.appendChild(title);
-  dialog.appendChild(body);
-  dialog.appendChild(actions);
-  backdrop.appendChild(dialog);
-  backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) {
-      closeConfirmationBackdrop(backdrop);
-    }
-    e.stopPropagation();
-  });
-  document.body.appendChild(backdrop);
-  installPriorityEscape(backdrop);
-}
-
-function showInsufficientDialog(currency, missing) {
-  document.dispatchEvent(new CustomEvent("character-currency-shortfall", {
-    detail: { currency, missing },
-  }));
-}
-
-// Generic error dialog for server-side errors
-function showErrorDialog(message, titleText = "Purchase failed") {
-  showMessageDialog(titleText, [message || "Something went wrong. Please try again."]);
-}
-
-// Replace a specific character card with a freshly rendered one.
 function rerenderCharacterCard(character, userData) {
-  const grid = _charactersGrid;
+  const grid = charactersGridEl;
   const oldCard =
     grid &&
     grid.querySelector(`.character-card[data-char="${CSS.escape(character)}"]`);
   if (!oldCard || !grid) return;
   const newCard = createCharacterCard(character, userData);
   grid.replaceChild(newCard, oldCard);
-  if (_characterDetailsUi?.currentCharacter === character) {
+  if (state.detailsUi?.currentCharacter === character) {
     renderCharacterDetails(character);
   }
   sortCharacterCardsInGrid(userData);
@@ -1629,160 +474,55 @@ function rerenderCharacterCard(character, userData) {
   } catch {}
 }
 
-// Upgrade / unlock stubs
-function applyUpgrade(character, currentLevel) {
-  const previousState = getCharacterCardState(character, _userDataRef);
-  fetch("/upgrade", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ character }),
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      if (!data.success) {
-        _upgradePreview = null;
-        if (_characterDetailsUi?.currentCharacter === character) {
-          renderCharacterDetails(character);
-        }
-        showErrorDialog(data.message || "Upgrade failed.");
-        return;
-      }
-
-      try {
-        const upgradedLevel = Number(data.newLevel);
-        if (_userDataRef) {
-          const spent = Number(data.spent || 0);
-          applyWallet(_userDataRef, { coins: data.coins ?? Math.max(0, Number(_userDataRef.coins || 0) - spent) });
-          if (
-            !_userDataRef.char_levels ||
-            typeof _userDataRef.char_levels !== "object"
-          ) {
-            _userDataRef.char_levels = {};
-          }
-          if (!Number.isNaN(upgradedLevel)) {
-            _userDataRef.char_levels[character] = upgradedLevel;
-          }
-        }
-        if (!Number.isNaN(upgradedLevel)) {
-          syncCurrentUserLobbyLevel(character, upgradedLevel);
-        }
-      } catch {}
-
-      _upgradePreview = null;
-      _pendingUpgradeAnimation = {
-        character,
-        fromLevel: previousState.currentLevel,
-        from: {
-          health: previousState.currentHealth,
-          damage: previousState.currentDamage,
-          special: previousState.currentSpecial,
-        },
-      };
-      playSound("upgrade", 0.6);
-      rerenderCharacterCard(character, _userDataRef);
-      refreshUpgradeButtonAffordability();
-      playCharacterDetailsSuccessAnimation("upgrade");
-    })
-    .catch((error) => {
-      _upgradePreview = null;
-      if (_characterDetailsUi?.currentCharacter === character) {
-        renderCharacterDetails(character);
-      }
-      showErrorDialog(error?.message || "Network error.");
-    });
-}
-
-function applyUnlock(character, price) {
-  fetch("/buy", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ character }),
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      if (!data.success) {
-        showErrorDialog(data.message || "Unlock failed.");
-        return;
-      }
-
-      try {
-        if (_userDataRef) {
-          const spent = Number(data.spent || price || 0);
-          const unlockedLevel = Number(data.newLevel || 1);
-          applyWallet(_userDataRef, { gems: data.gems ?? Math.max(0, Number(_userDataRef.gems || 0) - spent) });
-          if (
-            !_userDataRef.char_levels ||
-            typeof _userDataRef.char_levels !== "object"
-          ) {
-            _userDataRef.char_levels = {};
-          }
-          _userDataRef.char_levels[character] = unlockedLevel;
-        }
-      } catch {}
-
-      playSound("unlock", 0.6);
-      rerenderCharacterCard(character, _userDataRef);
-      refreshUpgradeButtonAffordability();
-      playCharacterDetailsSuccessAnimation("unlock");
-    })
-    .catch((error) => {
-      showErrorDialog(error?.message || "Network error.");
-    });
-}
-
-// Re-evaluate visible cards against current coin balance
 function refreshUpgradeButtonAffordability() {
-  const cards = _charactersGrid?.querySelectorAll(".character-card") || [];
+  const user = getUser();
+  const cards = charactersGridEl?.querySelectorAll(".character-card") || [];
   cards.forEach((card) => {
     try {
       const character = card.dataset.char;
       if (!character) return;
-      const state = getCharacterCardState(character, _userDataRef);
+      const cardState = getCharacterCardState(character, user);
       const portrait = card.querySelector(".character-profile-icon");
-      if (portrait) portrait.src = equippedCharacterPortrait(character, _userDataRef);
+      if (portrait) portrait.src = equippedCharacterPortrait(character, user);
       const statusText = card.querySelector(".character-card-status-text");
       if (!statusText) return;
 
       card.classList.toggle(
         "selected",
-        String(_userDataRef?.char_class || "").toLowerCase() ===
+        String(user?.char_class || "").toLowerCase() ===
           String(character).toLowerCase(),
       );
       const selected = card.classList.contains("selected");
       card.setAttribute("aria-pressed", String(selected));
       const selectedBadge = card.querySelector(".character-card-selected-badge");
       if (selectedBadge) selectedBadge.hidden = !selected;
-      card.classList.toggle("locked", state.isLocked);
+      card.classList.toggle("locked", cardState.isLocked);
       const imageWrap = card.querySelector(".character-card-image-wrap");
       const lockOverlay = imageWrap?.querySelector(".character-card-lock-overlay");
-      if (state.isLocked && imageWrap && !lockOverlay) {
+      if (cardState.isLocked && imageWrap && !lockOverlay) {
         const overlay = document.createElement("div");
         overlay.className = "character-card-lock-overlay";
         overlay.innerHTML = '<img src="/assets/icons/lock.webp" alt="Locked" />';
         imageWrap.appendChild(overlay);
-      } else if (!state.isLocked) lockOverlay?.remove();
-      card.classList.toggle("is-maxed", state.isMaxed);
-      card.classList.toggle("is-upgrade-ready", state.canUpgrade);
-      card.classList.toggle("is-unlock-ready", state.canUnlock);
+      } else if (!cardState.isLocked) lockOverlay?.remove();
+      card.classList.toggle("is-maxed", cardState.isMaxed);
+      card.classList.toggle("is-upgrade-ready", cardState.canUpgrade);
+      card.classList.toggle("is-unlock-ready", cardState.canUnlock);
 
-      renderCharacterStatus(statusText, state);
+      renderCharacterStatus(statusText, cardState);
     } catch {}
   });
-  sortCharacterCardsInGrid(_userDataRef);
+  sortCharacterCardsInGrid(user);
 }
 
 export async function refreshCharacterRewards() {
   // The claim response has already updated char_levels. Reflect ownership
   // before the separate skin request completes so newly owned Bros lose their lock.
-  for (const character of Object.keys(_userDataRef?.char_levels || {})) rerenderCharacterCard(character, _userDataRef);
+  for (const character of Object.keys(state.userData?.char_levels || {})) rerenderCharacterCard(character, state.userData);
   refreshUpgradeButtonAffordability();
-  if (_characterDetailsUi?.currentCharacter) renderCharacterDetails(_characterDetailsUi.currentCharacter);
+  if (state.detailsUi?.currentCharacter) renderCharacterDetails(state.detailsUi.currentCharacter);
   await bootstrapSkinState();
-  for (const character of Object.keys(_userDataRef?.char_levels || {})) rerenderCharacterCard(character, _userDataRef);
+  for (const character of Object.keys(state.userData?.char_levels || {})) rerenderCharacterCard(character, state.userData);
   refreshUpgradeButtonAffordability();
-  if (_characterDetailsUi?.currentCharacter) renderCharacterDetails(_characterDetailsUi.currentCharacter);
+  if (state.detailsUi?.currentCharacter) renderCharacterDetails(state.detailsUi.currentCharacter);
 }

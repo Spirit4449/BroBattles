@@ -7,7 +7,7 @@ function setup(inParty = true, options = {}) {
   const f = createLobbyFixture({ url: `https://game.test/${inParty ? 'party/7' : ''}`, ...options,
     globals: { console: { log() {}, warn() {}, error() {} }, ...options.globals } });
   const api = f.load('src/client/lobby/party/party.js');
-  f.window.__BRO_BATTLES_USERDATA__.name = 'Owner';
+  f.session.updateUser({ name: 'Owner' });
   f.document.getElementById('username-text').textContent = 'Owner';
   const roster = (status = 'online') => ({ partyId: 7, ownerName: 'Owner', immediate: true,
     selection: { modeId: 'duels', modeVariantId: 'duels-1v1', mapId: 1 },
@@ -128,4 +128,37 @@ test('hidden Bros follows opponent teams, repeated updates, and disabling the se
   f.api.renderPartyMembers({ ...roster, hideEnemyBros: true, members: roster.members.map(m => ({ ...m, team: m.team === 'team1' ? 'team2' : 'team1' })) });
   assert.equal(f.document.getElementById('your-slot-1').querySelector('.character-sprite').getAttribute('src'), '/assets/ui/hidden-bro.png');
   assert.match(f.document.getElementById('op-slot-1').querySelector('.character-sprite').getAttribute('src'), /ninja/);
+});
+
+test('one invite handler copies the current party URL and preserves badge feedback', async () => {
+  const copied = [];
+  const f = setup(true, { globals: { navigator: { clipboard: {
+    async writeText(url) { copied.push(url); },
+  } } } });
+  const lobby = f.document.getElementById('lobby-area');
+  const badge = f.document.createElement('span');
+  badge.className = 'status invite';
+  badge.textContent = 'Invite';
+  lobby.append(badge);
+  f.api.bindInviteBadgeClicks(lobby);
+  f.api.bindInviteBadgeClicks(lobby);
+  f.event(badge, 'click');
+  await f.settle();
+  assert.deepEqual(copied, ['https://game.test/party/7']);
+  assert.equal(badge.textContent, 'Invite');
+  assert.ok(f.notices.some(([, message]) => message?.includes('invite link copied')));
+
+  badge.dataset.inviteFeedback = 'inline';
+  f.window.location.pathname = '/party/42';
+  f.event(badge, 'click');
+  await f.settle();
+  assert.equal(copied.at(-1), 'https://game.test/party/42');
+  assert.equal(badge.textContent, 'Copied!');
+  await f.advance(1000);
+  assert.equal(badge.textContent, 'Invite');
+
+  f.window.location.pathname = '/';
+  f.event(badge, 'click');
+  await f.settle();
+  assert.equal(copied.length, 2);
 });

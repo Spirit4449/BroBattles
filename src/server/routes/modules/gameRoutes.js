@@ -1,3 +1,4 @@
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
 const { buildGameDataForMatch } = require("../../services/match/gameDataService");
 
 function registerGameRoutes({
@@ -7,8 +8,7 @@ function registerGameRoutes({
   isAdminUser,
   abuseControl,
 }) {
-  app.post("/gamedata", async (req, res) => {
-    console.log("Fetching game data for match:", req.body);
+  app.post(API_PATHS.GAMEDATA, async (req, res) => {
     try {
       const result = await buildGameDataForMatch({
         db,

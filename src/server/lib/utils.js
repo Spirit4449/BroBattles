@@ -1,7 +1,6 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { capacityFromMode, capacityFromSelection } = require("../services/party/partyRules");
 
 function randomString(length, numbersOnly = false) {
   const letters = numbersOnly
@@ -31,8 +30,6 @@ function resolveCookieSecret(rootDir, envSecret) {
 }
 
 module.exports = {
-  capacityFromMode,
-  capacityFromSelection,
   randomString,
   resolveCookieSecret,
 };

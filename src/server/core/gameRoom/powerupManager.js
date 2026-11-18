@@ -1,5 +1,6 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { applyPowerupToPlayer } = require("../../../shared/combat/runtime/effects/powerupApplication");
-const { PICKUP_DELAY_MS } = require("../../../shared/powerups");
+const { PICKUP_DELAY_MS, POWERUP_TYPES } = require("../../../shared/powerups");
 const {
   SD_RISE_SPEED,
   SD_RISE_FAST_PHASE_MS,
@@ -12,13 +13,12 @@ const {
   POWERUP_DESPAWN_MS,
   POWERUP_OMEN_MS,
   POWERUP_SPAWN_Y_LIFT,
-  POWERUP_TYPE_ROTATION,
 } = require("../../../shared/combat/matchConfig.js");
 const { getDuelGeometry } = require("../../../shared/physics/duelGeometry");
 const { resolvePowerupPoints } = require("../../../shared/maps/mapDocument");
 const effectManager = require("../../../shared/combat/runtime/effects/effectManager.js");
-const { powerupGap } = require("./powerupContact");
-const { matchDurationMs } = require("./timerManager");
+const { powerupGap } = require("../../../shared/physics/powerupContact");
+const { poisonYAt } = require("./timerManager");
 const { effectDefs } = require("../../../shared/combat/runtime/effects/effectDefs.js");
 
 // Spawn points come from the map document (`spawns.powerups`, edited in the
@@ -56,7 +56,7 @@ function spawnPointKey(point) {
 
 function activeSpawnPointKeys(room) {
   const active = new Set();
-  for (const powerup of room?._powerups?.values?.() || []) {
+  for (const powerup of room?.powerups?.values?.() || []) {
     if (powerup?._spawnPointKey) {
       active.add(powerup._spawnPointKey);
       continue;
@@ -143,28 +143,12 @@ function pickPowerupType(room, typeList, point = null) {
 
 function spawnPowerup(room) {
   if (room.status !== "active") return;
-  if (room._powerups.size >= (room.geometry?.settings?.maxActive ?? POWERUP_MAX_ACTIVE)) return;
-  const typeList = room.geometry?.settings?.types ||
-    Array.isArray(POWERUP_TYPE_ROTATION) && POWERUP_TYPE_ROTATION.length
-      ? POWERUP_TYPE_ROTATION
-    : [
-        "rage",
-        "health",
-        "shield",
-        "poison",
-        "gravityBoots",
-        "invisibility",
-        "shockwave",
-        "freeze",
-      ];
+  if (room.powerups.size >= (room.geometry?.settings?.maxActive ?? POWERUP_MAX_ACTIVE)) return;
+  const typeList = room.geometry?.settings?.types ?? POWERUP_TYPES;
+  if (!typeList.length) return;
   const point = pickSpawnPoint(room);
-  if (!point) {
-    console.warn(
-      `[GameRoom ${room.matchId}] Skipping powerup spawn: no valid platform spawn points for map ${room.matchData?.map}`,
-    );
-    return;
-  }
-  const type = pickPowerupType(room, point.type ? [point.type] : typeList, point);
+  if (!point) return;
+  const type = pickPowerupType(room, point.type && typeList.includes(point.type) ? [point.type] : typeList, point);
   if (!type) return;
   const now = Date.now();
   const powerup = {
@@ -177,7 +161,7 @@ function spawnPowerup(room) {
     activeAt: now + (room.geometry?.settings?.omenMs ?? POWERUP_OMEN_MS),
     expiresAt: now + (room.geometry?.settings?.omenMs ?? POWERUP_OMEN_MS) + (room.geometry?.settings?.despawnMs ?? POWERUP_DESPAWN_MS),
   };
-  room._powerups.set(powerup.id, powerup);
+  room.powerups.set(powerup.id, powerup);
 }
 
 function computePoisonY(room, sdElapsedMs) {
@@ -191,11 +175,8 @@ function computePoisonY(room, sdElapsedMs) {
 }
 
 function isInSuddenDeathWater(room, playerData, nowTs) {
-  if (!room._suddenDeathActive) return false;
-  const elapsed = nowTs - room._loopStartWallTime;
-  // Same regulation length the timer uses, so heal-blocking matches the poison.
-  const sdElapsed = Math.max(0, elapsed - matchDurationMs(room));
-  const poisonY = computePoisonY(room, sdElapsed);
+  if (!room.suddenDeathActive) return false;
+  const poisonY = poisonYAt(room, nowTs);
   return typeof playerData?.y === "number" && playerData.y >= poisonY;
 }
 
@@ -205,7 +186,7 @@ function tickPowerups(room) {
   const now = Date.now();
 
   if (room._startingPowerupsPending) {
-    if (now - room._loopStartWallTime >= POWERUP_FIRST_SPAWN_DELAY_MS) {
+    if (now - room.loopStartWallTime >= POWERUP_FIRST_SPAWN_DELAY_MS) {
       room._startingPowerupsPending = false;
       room._lastPowerupSpawnAt = now;
       for (let i = 0; i < POWERUP_STARTING_COUNT; i++) spawnPowerup(room);
@@ -215,9 +196,9 @@ function tickPowerups(room) {
     spawnPowerup(room);
   }
 
-  for (const [id, pu] of room._powerups.entries()) {
+  for (const [id, pu] of room.powerups.entries()) {
     if (!pu || now >= (pu.expiresAt || 0)) {
-      room._powerups.delete(id);
+      room.powerups.delete(id);
       continue;
     }
     if (now < Number(pu.activeAt ?? pu.spawnedAt ?? 0) + PICKUP_DELAY_MS) continue;
@@ -226,8 +207,8 @@ function tickPowerups(room) {
       if (powerupGap(p, pu, p, room.geometry?.settings?.pickupRadius ?? POWERUP_PICKUP_RADIUS) > 0) continue;
 
       applyPowerupToPlayer(room, p, pu.type, now);
-      room._powerups.delete(id);
-      room.io.to(`game:${room.matchId}`).emit("powerup:collected", {
+      room.powerups.delete(id);
+      room.broadcast(SOCKET_EVENTS.POWERUP_COLLECTED, {
         id: pu.id,
         type: pu.type,
         username: p.name,

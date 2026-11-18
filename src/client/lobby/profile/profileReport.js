@@ -1,6 +1,8 @@
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
+import { PLAYER_REPORT_MESSAGE_MIN, PLAYER_REPORT_MESSAGE_MAX } from "../../../shared/social/textRules.js";
 import reasons from '../../../shared/social/profileReports.json';
 import { createPixelSelect } from '../../ui/pixelSelect.js';
-import { wireBackdropDismiss } from '../../site/dialogDismiss.mjs';
+import { openModalDialog } from '../../ui/nativeDialog.js';
 import { profileFetchJson } from '../ui';
 import '../../styles/profileReport.css';
 
@@ -44,7 +46,7 @@ function openProfileReport(profile, trigger) {
       <div class="profile-report-field"><span id="profile-report-reason-label">Reason</span><div data-reason></div></div>
       <div class="profile-report-field">
         <label for="profile-report-message">What happened?</label>
-        <textarea id="profile-report-message" name="message" rows="5" minlength="5" maxlength="3500" required placeholder="Tell us why you are reporting this player…"></textarea>
+        <textarea id="profile-report-message" name="message" rows="5" minlength="${PLAYER_REPORT_MESSAGE_MIN}" maxlength="${PLAYER_REPORT_MESSAGE_MAX}" required placeholder="Tell us why you are reporting this player…"></textarea>
       </div>
       <p class="profile-report-error" role="alert" hidden></p>
       <div class="profile-report-actions">
@@ -63,35 +65,14 @@ function openProfileReport(profile, trigger) {
   const reason = createPixelSelect({ options: reasons, value: reasons[0].value, label: 'Report reason', onChange: () => { submissionKey = newKey(); } });
   dialog.querySelector('[data-reason]').append(reason.element);
   form.addEventListener('input', () => { submissionKey = newKey(); });
-  let closed = false;
-  const cleanup = () => {
-    if (closed) return;
-    closed = true;
-    reason.close({ focus: false });
-    window.removeEventListener('keydown', escape, true);
-    dialog.remove();
-    trigger.focus({ preventScroll: true });
-  };
-  const close = () => { dialog.close(); cleanup(); };
-  const escape = event => {
-    if (event.key !== 'Escape' || !dialog.open) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (reason.element.classList.contains('is-open')) reason.close();
-    else close();
-  };
+  const close = () => dialog.close();
   dialog.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', close));
-  dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
-  dialog.addEventListener('close', cleanup, { once: true });
-  dialog.addEventListener('keydown', event => event.stopPropagation());
-  window.addEventListener('keydown', escape, true);
-  wireBackdropDismiss(dialog);
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (saving) return;
     const text = message.value.trim();
-    if (text.length < 5 || text.length > 3500) {
-      error.textContent = 'Please describe what happened in 5–3500 characters.';
+    if (text.length < PLAYER_REPORT_MESSAGE_MIN || text.length > PLAYER_REPORT_MESSAGE_MAX) {
+      error.textContent = `Please describe what happened in ${PLAYER_REPORT_MESSAGE_MIN}–${PLAYER_REPORT_MESSAGE_MAX} characters.`;
       error.hidden = false;
       return;
     }
@@ -102,7 +83,7 @@ function openProfileReport(profile, trigger) {
     error.hidden = true;
     dialog.setAttribute('aria-busy', 'true');
     try {
-      await profileFetchJson('/api/support/reports', {
+      await profileFetchJson(API_PATHS.API_SUPPORT_REPORTS, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetUserId: Number(profile.userId), reason: reason.value, message: text, submissionKey }),
       });
@@ -131,5 +112,16 @@ function openProfileReport(profile, trigger) {
     }
   });
   document.body.append(dialog);
-  dialog.showModal();
+  openModalDialog(dialog, {
+    escape: true,
+    trigger,
+    onEscape() {
+      if (reason.element.classList.contains('is-open')) reason.close();
+      else close();
+    },
+    onClose() {
+      reason.close({ focus: false });
+      dialog.remove();
+    },
+  });
 }

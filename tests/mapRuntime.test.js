@@ -91,7 +91,8 @@ describe("Scenery", () => {
 });
 
 describe("Spawn support and clearance", () => {
-  const { getDuelGeometry, spawnForParticipant, characterBody } = require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
+const { getDuelGeometry, spawnForParticipant } = require('../src/shared/physics/duelGeometry');
   const { resolveLanding } = require('../src/shared/physics/spawnPlacement');
   const frames = require("../src/shared/characters/index.js").characterFrames;
 
@@ -131,7 +132,7 @@ describe("Spawn support and clearance", () => {
     const repo = new MapRepository();
     const floors = new Map();
     for (const id of repo.mapIds()) {
-      const doc = repo.readDocument(id);
+      const doc = repo.get(id).document;
       const walkable = geometryFromMap(doc).colliders.filter(p => !p.motion && p.collision.up !== false);
       const floor = walkable.reduce((a, b) => (b.right - b.left > a.right - a.left ? b : a));
       const key = JSON.stringify(mapArena(doc).camera);

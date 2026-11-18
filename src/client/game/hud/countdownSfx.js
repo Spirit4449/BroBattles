@@ -1,3 +1,5 @@
+import { getNavigation } from "../../lib/globals.cjs";
+import { COUNTDOWN_RISER_MS } from "../../../shared/matchIntroTiming.js";
 // Synthesized layers for the pre-fight countdown: a sub thump under each
 // number, a rising noise sweep into FIGHT, and a boom on FIGHT itself. They
 // sit under the existing beep/start samples on the shared (already unlocked)
@@ -6,7 +8,7 @@ import { getSettings } from "../../site/preferences.js";
 
 function context() {
   try {
-    const ctx = window.__BB_NAVIGATION__?.getAudioContext?.();
+    const ctx = getNavigation()?.getAudioContext?.();
     if (!ctx) return null;
     if (ctx.state === "suspended") ctx.resume?.().catch?.(() => {});
     return ctx;
@@ -62,7 +64,7 @@ export function playCountdownThump(heat = 0) {
 }
 
 /** Filtered noise that sweeps up for `durationMs`, landing on FIGHT. */
-export function playCountdownRiser(durationMs = 3000) {
+export function playCountdownRiser(durationMs = COUNTDOWN_RISER_MS) {
   const ctx = context();
   if (!ctx || volume() <= 0) return;
   try {
