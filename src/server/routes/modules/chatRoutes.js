@@ -1,3 +1,6 @@
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
+const { authedRoute } = require("../http");
+
 function positiveId(value) {
   const id = Number(value);
   return Number.isFinite(id) && id > 0 ? id : null;
@@ -33,21 +36,13 @@ function registerChatRoutes({
 
   // Chat service errors carry their own status code and user-facing message.
   function chatRoute(path, handler) {
-    app.post(path, async (req, res) => {
-      try {
-        const user = await requireCurrentUser(req, res);
-        if (!user) return res.status(401).json({ error: "Not authenticated" });
-        return await handler(req, res, user);
-      } catch (error) {
-        const status = Number(error?.statusCode) || 500;
-        return res
-          .status(status)
-          .json({ error: error?.message || "Internal error" });
-      }
-    });
+    app.post(path, authedRoute(requireCurrentUser, `[chat] ${path}`, handler, {
+      shape: "bare",
+      fallback: "Internal error",
+    }));
   }
 
-  chatRoute("/party-chat/history", async (req, res, user) => {
+  chatRoute(API_PATHS.PARTY_CHAT_HISTORY, async (req, res, user) => {
     const partyId = positiveId(req.body?.partyId);
     if (!partyId) return res.status(400).json({ error: "partyId is required" });
     const result = await chatService.getPartyChatHistory({
@@ -59,7 +54,7 @@ function registerChatRoutes({
     return res.json({ success: true, ...result });
   });
 
-  chatRoute("/party-chat/send", async (req, res, user) => {
+  chatRoute(API_PATHS.PARTY_CHAT_SEND, async (req, res, user) => {
     if (!(await guardChat(res, user, "message", "POST /party-chat/send"))) return undefined;
     const partyId = positiveId(req.body?.partyId);
     if (!partyId) return res.status(400).json({ error: "partyId is required" });
@@ -72,7 +67,7 @@ function registerChatRoutes({
     return res.json({ success: true, message });
   });
 
-  chatRoute("/party-chat/react", async (req, res, user) => {
+  chatRoute(API_PATHS.PARTY_CHAT_REACT, async (req, res, user) => {
     if (!(await guardChat(res, user, "reaction", "POST /party-chat/react"))) return undefined;
     const partyId = positiveId(req.body?.partyId);
     const messageId = positiveId(req.body?.messageId);
@@ -90,7 +85,7 @@ function registerChatRoutes({
     return res.json({ success: true, message });
   });
 
-  chatRoute("/party-chat/read", async (req, res, user) => {
+  chatRoute(API_PATHS.PARTY_CHAT_READ, async (req, res, user) => {
     const partyId = positiveId(req.body?.partyId);
     if (!partyId) return res.status(400).json({ error: "partyId is required" });
     const result = await chatService.markPartyChatRead({

@@ -1,17 +1,22 @@
-import { NETWORK_WIRE_VERSION } from "../../../shared/networkWire";
+import { isLiveRoomStatus } from "../../../shared/net/matchPresentation.js";
+import { remoteActionPresentation } from "../characters/shared/remoteActionPresentation";
+import { createPlayerLookup } from "../players/playerLookup";
+import { returnFromMatch } from "../../navigation/lobbyReturn.js";
+import { createRemotePlayer, placeRemoteAtSpawn, applyRemoteRosterState } from "../players/remotePlayerFactory";
+import { buildJoinPayload } from "./joinPayload";
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import { supportsSuddenDeath } from '../../../shared/modeCapabilities';
-import { COUNTDOWN_MS } from '../../../shared/matchIntroTiming';
-import { getCharacterNetworkVersions, configureCharacterNetworks, resetCharacterNetworks, observeCharacterSnapshot, handleCharacterNetworkPacket } from '../characters/networkRegistry';
+import { COUNTDOWN_MS, START_WATCHDOG_TIMEOUT_MS, START_RECOVERY_GRACE_MS, START_INPUT_GRACE_MS, RESULTS_PRESENTATION_DELAY_MS } from '../../../shared/matchIntroTiming';
+import { configureCharacterNetworks, resetCharacterNetworks, observeCharacterSnapshot, handleCharacterNetworkPacket } from '../characters/networkRegistry';
 // match/matchCoordinator.js
 //
 // Owns all server socket event handlers for a live match session.
 // Use createMatchCoordinator() to get an instance, then call register() once
 // listeners should be active and dispose() to remove them on cleanup.
 //
-// Dependencies are injected via the config object so this module has zero
-// hidden global state and can be tested or instantiated in isolation.
-import { normalizeMapId } from "../maps/manifest";
-import { resolveGameErrorAction } from "./gameErrorActions";
+// The coordinator uses the page-scoped server clock and character network
+// registry. The battle page supplies access to its scene, HUD, and local state.
+import { performGameErrorAction, resolveGameErrorAction } from "./gameErrorActions";
 import { spawnDeathTombstone } from "../scene/deathTombstone";
 import { spawnShockwaveHitSmoke } from "../powerups/shockwaveHit";
 import { applyActionToLocalPlayer, getCharacterSocketEvents, playCharacterSound } from "../characters";
@@ -21,13 +26,13 @@ import { playHitFeedback, hitstopForDelivery } from "../characters/shared/hitFee
 import { presentRemoteAction } from "../characters/shared/animationState.js";
 import {
   configureClientNetTest,
-  noteClientLifecycle,
+  logLifecycle,
   noteClientRemoteAction,
   noteClientSnapshot,
   shouldMuteClientDefaultLogs,
 } from "../../lib/netTestLogger.js";
 import { mergeInitialRosterPlayer } from "./playerRosterMerge.js";
-import { noteDecodedSnapshot } from "./netTrace";
+import { noteDecodedSnapshot, noteRemoteActionOrigin } from "./netTrace";
 import { createSnapshotDecoder } from "../../../shared/snapshotDelta";
 import {
   observeServerClockSnapshot,
@@ -50,6 +55,14 @@ const ROSTER_OWNED_FIELDS = new Set([
  * @property {() => object}        getJoinPayload
  * @property {() => object|null}   getGameScene
  * @property {() => object|null}   getPlayer
+ * @property {(session: {level: number, stats: object}) => void} [setLocalSession]
+ * @property {object} [poisonState]
+ * @property {(name: string) => void} [noteLocalKiller]
+ * @property {object} [playerLookup]
+ * @property {() => boolean} [isPresentationSuppressed]
+ * @property {Function} [getLocalFighterEvents]
+ * @property {Function} [onCharacterNetworksConfigured]
+ * @property {(ammoState: object) => void} [onAuthoritativeAmmo]
  * @property {(untilMs: number) => void} setExternalControlLockUntil
  * // ---- mutable game-phase flags ----
  * @property {() => boolean}       getGameInitialized
@@ -76,6 +89,7 @@ const ROSTER_OWNED_FIELDS = new Set([
  * @property {() => Array}         getLatestDeathDrops
  * @property {(v: Array) => void}  setLatestDeathDrops
  * @property {(v: object) => void} setLatestPlayerEffects
+ * @property {(v: object) => void} [setLatestEffectMovement]
  * @property {() => object}        getLatestPlayerEffects
  * // ---- by-reference mutable collections  ----
  * @property {object} opponentPlayers
@@ -90,7 +104,7 @@ const ROSTER_OWNED_FIELDS = new Set([
  * @property {object}   snapshotBuffer
  * @property {object}   hud
  * @property {Function} positionSpawn
- * @property {Function} OpPlayer
+ * @property {Function} RemotePlayer
  * @property {Function} handleRemoteAttack
  * @property {Function} handleLocalAuthoritativeAttack
  * @property {object}   powerupTickSounds
@@ -118,7 +132,10 @@ export function createMatchCoordinator(config) {
     getUsername,
     getJoinPayload,
     getGameScene,
+    poisonState = {},
+    noteLocalKiller,
     getPlayer,
+    setLocalSession,
     setExternalControlLockUntil,
     getGameInitialized,
     setGameInitialized,
@@ -155,7 +172,7 @@ export function createMatchCoordinator(config) {
     snapshotBuffer,
     hud,
     positionSpawn,
-    OpPlayer,
+    RemotePlayer,
     handleRemoteAttack,
     handleLocalAuthoritativeAttack,
     powerupTickSounds,
@@ -167,12 +184,17 @@ export function createMatchCoordinator(config) {
     onPlayMatchEndSound,
     onShowGameOverScreen,
   } = config;
+  const playerLookup = config.playerLookup || createPlayerLookup({
+    getUsername,
+    getLocalPlayer: getPlayer,
+    getOpponentPlayers: () => opponentPlayers,
+    getTeamPlayers: () => teamPlayers,
+  });
   const presentationSuppressed = () =>
     typeof config.isPresentationSuppressed === "function"
       ? config.isPresentationSuppressed()
       : typeof document !== "undefined" && document.hidden;
   const REMOTE_ATTACK_PRECISION_WINDOW_MS = 320;
-  const START_WATCHDOG_TIMEOUT_MS = 15_000;
 
   // Snapshots arrive as deltas; everything below sees rebuilt full states.
   const snapshotDecoder = createSnapshotDecoder();
@@ -185,62 +207,17 @@ export function createMatchCoordinator(config) {
   let _joinedSocketId = null;
   const lastHealthSoundAt = new Map();
 
-
-
-  function _isBotPlayer(pd) {
-    return pd?.isBot === true;
-  }
-
-
-
-  function _applyAuthoritativeRemotePosition(op, pd) {
-    if (!op?.opponent?.body || pd?.x == null || pd?.y == null) return;
-    const serverX = Number(pd.x);
-    const serverY = Number(pd.y);
-    if (!Number.isFinite(serverX) || !Number.isFinite(serverY)) return;
-
-    op.opponent.body.reset(serverX, serverY);
-  }
-
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
   /**
-   * Applies a server-provided spawn position to a newly created OpPlayer based
-   * on the authoritative spawn index (falling back to roster sort order).
-   */
-  function _positionOpPlayer(op, pd) {
-    const gameData = getGameData();
-    try {
-      op.isBot = _isBotPlayer(pd);
-
-      const idx =
-        typeof serverSpawnIndex[pd.name] === "number"
-          ? serverSpawnIndex[pd.name]
-          : 0;
-      positionSpawn(
-        getGameScene(),
-        op.opponent,
-        gameData.map,
-        pd.team,
-        idx,
-      );
-      // The server position is authoritative, also for a loading ghost
-      // (skipped when the server has none yet).
-      _applyAuthoritativeRemotePosition(op, pd);
-      op.finalizeSpawnPresentation?.();
-      op.updateUIPosition?.();
-    } catch (_) {}
-  }
-
-  /**
-   * Returns the existing OpPlayer wrapper for name, or creates and registers
+   * Returns the existing RemotePlayer wrapper for name, or creates and registers
    * one if it is missing. Used as a lazy-create guard in both snapshot and
    * action handlers. Returns null when the player is the local user or has no
    * known roster entry.
    */
-  function _ensureOpPlayer(name) {
+  function _ensureRemotePlayer(name) {
     const username = getUsername();
     if (name === username) return null;
 
@@ -256,19 +233,14 @@ export function createMatchCoordinator(config) {
     const scene = getGameScene();
     if (!scene) return null;
 
-    const op = new OpPlayer(
-      scene,
-      pd.char_class,
-      pd.selected_skin_id || "",
-      pd.name,
-      isTeammate ? "teammate" : pd.team,
-      null,
-      null,
-      (gameData.players || []).filter((p) => p.team === pd.team).length,
-      normalizeMapId(gameData?.map),
-    );
-    op._spawnVersion = getSpawnVersion();
-    _positionOpPlayer(op, pd);
+    const op = createRemotePlayer(scene, {
+      Player: RemotePlayer, roster: pd, gameData, spawnVersion: getSpawnVersion(),
+      getPlayerEffects: name => getLatestPlayerEffects()?.[name],
+    });
+    placeRemoteAtSpawn(scene, op, pd, {
+      positionSpawn, mapId: gameData.map, spawnIndex: serverSpawnIndex[pd.name],
+    });
+    applyRemoteRosterState(op, pd);
     container[pd.name] = op;
     return op;
   }
@@ -276,18 +248,11 @@ export function createMatchCoordinator(config) {
   function _markJoinStale(reason = "unknown") {
     if (_joinedSocketId == null && !getHasJoined() && !getJoinInFlight())
       return;
-    if (!shouldMuteClientDefaultLogs()) {
-      console.warn("[game] join state reset", {
+    logLifecycle("join-stale", `reason=${reason} joined=${_joinedSocketId || "none"} current=${socket.id || "none"}`, "warn", "[game] join state reset", {
         reason,
         joinedSocketId: _joinedSocketId,
         currentSocketId: socket.id || null,
       });
-    } else {
-      noteClientLifecycle(
-        "join-stale",
-        `reason=${reason} joined=${_joinedSocketId || "none"} current=${socket.id || "none"}`,
-      );
-    }
     _joinedSocketId = null;
     snapshotBuffer.reset();
     snapshotDecoder.reset();
@@ -301,8 +266,7 @@ export function createMatchCoordinator(config) {
 
   /** Re-emit game:join when a socket connection is established or restored. */
   function _tryJoin() {
-    const joinPayload = getJoinPayload();
-    if (joinPayload) { Object.assign(joinPayload, getCharacterNetworkVersions(), { networkWireVersion: NETWORK_WIRE_VERSION }); }
+    const joinPayload = buildJoinPayload(getJoinPayload());
     const currentSocketId = socket.id || null;
     if (
       currentSocketId &&
@@ -320,52 +284,28 @@ export function createMatchCoordinator(config) {
         !currentSocketId ||
         currentSocketId !== _joinedSocketId)
     ) {
-      if (!shouldMuteClientDefaultLogs()) {
-        console.log("[game] connect", {
+      logLifecycle("join-emit", `matchId=${joinPayload?.matchId ?? "?"}`, "log", "[game] connect", {
           ...joinPayload,
           socketId: currentSocketId,
           joinedSocketId: _joinedSocketId,
           gameInitialized: getGameInitialized(),
           hasJoined: getHasJoined(),
         });
-      } else {
-        noteClientLifecycle(
-          "join-emit",
-          `matchId=${joinPayload?.matchId ?? "?"}`,
-        );
-      }
       try {
         setJoinInFlight(true);
-        socket.emit("game:join", joinPayload, (ack) => {
+        socket.emit(SOCKET_EVENTS.GAME_JOIN, joinPayload, (ack) => {
           setJoinInFlight(false);
           if (!ack || ack.ok !== true) {
-            if (!shouldMuteClientDefaultLogs()) {
-              console.warn("[game] join ack failed", ack);
-            } else {
-              noteClientLifecycle(
-                "join-ack-fail",
-                `error=${String(ack?.error || "unknown")}`,
-              );
-            }
+            logLifecycle("join-ack-fail", `error=${String(ack?.error || "unknown")}`, "warn", "[game] join ack failed", ack);
           } else {
-            if (!shouldMuteClientDefaultLogs()) {
-              console.log("[game] join ack ok", ack);
-            } else {
-              noteClientLifecycle(
-                "join-ack-ok",
-                `matchId=${ack?.matchId ?? "?"}`,
-              );
-            }
+            logLifecycle("join-ack-ok", `matchId=${ack?.matchId ?? "?"}`, "log", "[game] join ack ok", ack);
             _joinedSocketId = socket.id || currentSocketId;
             setHasJoined(true);
           }
         });
       } catch (e) {
-        if (!shouldMuteClientDefaultLogs()) {
-          console.warn("[game] join emit error", e);
-        } else {
-          noteClientLifecycle("join-emit-error", String(e?.message || e || ""));
-        }
+        setJoinInFlight(false);
+        logLifecycle("join-emit-error", String(e?.message || e || ""), "warn", "[game] join emit error", e);
       }
     }
   }
@@ -377,18 +317,11 @@ export function createMatchCoordinator(config) {
 
   function _onSocketDisconnect(reason) {
     resetCharacterNetworks();
-    if (!shouldMuteClientDefaultLogs()) {
-      console.warn("[game] socket disconnected", {
+    logLifecycle("disconnect", `reason=${String(reason || "unknown")}`, "warn", "[game] socket disconnected", {
         reason,
         socketId: _joinedSocketId || socket.id || null,
         active: socket.active,
       });
-    } else {
-      noteClientLifecycle(
-        "disconnect",
-        `reason=${String(reason || "unknown")}`,
-      );
-    }
     if (!getGameEnded()) {
       _markJoinStale(`disconnect:${String(reason || "unknown")}`);
     }
@@ -436,7 +369,7 @@ export function createMatchCoordinator(config) {
 
       try {
         setJoinInFlight(true);
-        socket.emit("game:join", joinPayload, (ack) => {
+        socket.emit(SOCKET_EVENTS.GAME_JOIN, joinPayload, (ack) => {
           cleanup(ack || { ok: false, error: "no_ack" });
         });
       } catch (error) {
@@ -449,23 +382,15 @@ export function createMatchCoordinator(config) {
   }
 
   async function _recoverTimedOutStart(joinPayload) {
-    Object.assign(joinPayload, getCharacterNetworkVersions(), { networkWireVersion: NETWORK_WIRE_VERSION });
     if (_startWatchdogRecoveryInFlight) return false;
     _startWatchdogRecoveryInFlight = true;
     try {
-      if (!shouldMuteClientDefaultLogs()) {
-        console.warn("[game] start watchdog expired, attempting recovery", {
+      logLifecycle("watchdog-expired", `matchId=${joinPayload?.matchId ?? "?"}`, "warn", "[game] start watchdog expired, attempting recovery", {
           matchId: joinPayload?.matchId ?? null,
           hasJoined: getHasJoined(),
         });
-      } else {
-        noteClientLifecycle(
-          "watchdog-expired",
-          `matchId=${joinPayload?.matchId ?? "?"}`,
-        );
-      }
 
-      const ack = await _emitJoinAck(joinPayload, 2500);
+      const ack = await _emitJoinAck(joinPayload);
       if (ack?.ok === true) {
         setHasJoined(true);
         _startWatchdogDeadline = Date.now() + START_WATCHDOG_TIMEOUT_MS;
@@ -479,14 +404,7 @@ export function createMatchCoordinator(config) {
         return true;
       }
 
-      if (!shouldMuteClientDefaultLogs()) {
-        console.warn("[game] start watchdog recovery failed", ack);
-      } else {
-        noteClientLifecycle(
-          "watchdog-recovery-fail",
-          `error=${String(ack?.error || "unknown")}`,
-        );
-      }
+      logLifecycle("watchdog-recovery-fail", `error=${String(ack?.error || "unknown")}`, "warn", "[game] start watchdog recovery failed", ack);
       return false;
     } finally {
       _startWatchdogRecoveryInFlight = false;
@@ -497,8 +415,8 @@ export function createMatchCoordinator(config) {
     if (getIsLiveGame() || getGameEnded()) return;
     if (_startWatchdogTimer) return;
 
-    const joinPayload = { ...getJoinPayload(), ...getCharacterNetworkVersions(), networkWireVersion: NETWORK_WIRE_VERSION };
-    const joinMatchId = Number(joinPayload.matchId);
+    const joinPayload = buildJoinPayload(getJoinPayload());
+    const joinMatchId = Number(joinPayload?.matchId);
     if (!Number.isFinite(joinMatchId) || joinMatchId <= 0) return;
 
     _startWatchdogDeadline = Date.now() + START_WATCHDOG_TIMEOUT_MS;
@@ -536,7 +454,7 @@ export function createMatchCoordinator(config) {
             autoCloseMs: 2200,
             confirmOnAutoClose: true,
             onConfirm: () => {
-              window.location.href = "/";
+              _returnToLobby();
             },
           });
         });
@@ -545,15 +463,8 @@ export function createMatchCoordinator(config) {
 
       try {
         if (!getHasJoined() && !getJoinInFlight()) {
-          if (!shouldMuteClientDefaultLogs()) {
-            console.log("[game] watchdog re-emitting join", joinPayload);
-          } else {
-            noteClientLifecycle(
-              "watchdog-join",
-              `matchId=${joinPayload?.matchId ?? "?"}`,
-            );
-          }
-          socket.emit("game:join", joinPayload);
+          logLifecycle("watchdog-join", `matchId=${joinPayload?.matchId ?? "?"}`, "log", "[game] watchdog re-emitting join", joinPayload);
+          socket.emit(SOCKET_EVENTS.GAME_JOIN, joinPayload);
         }
       } catch (_) {}
       // Re-send readiness in case it was lost; only once we really are ready.
@@ -563,6 +474,7 @@ export function createMatchCoordinator(config) {
 
   function _onGameInit(gameState) {
     configureCharacterNetworks(gameState);
+    config.onCharacterNetworksConfigured?.();
     // The room's snapshot rate; older servers omit it (the build default).
     snapshotBuffer.setSnapshotIntervalMs?.(gameState?.snapshotIntervalMs);
     const gameData = getGameData();
@@ -571,19 +483,12 @@ export function createMatchCoordinator(config) {
       username,
       matchId: gameState?.matchId || getJoinPayload()?.matchId || "",
     });
-    if (!shouldMuteClientDefaultLogs()) {
-      console.log("Game initialized:", {
+    logLifecycle("init", `players=${Array.isArray(gameState?.players) ? gameState.players.length : 0} status=${String(gameState?.status || "")}`, "log", "Game initialized:", {
         players: Array.isArray(gameState?.players)
           ? gameState.players.length
           : 0,
         status: gameState?.status,
       });
-    } else {
-      noteClientLifecycle(
-        "init",
-        `players=${Array.isArray(gameState?.players) ? gameState.players.length : 0} status=${String(gameState?.status || "")}`,
-      );
-    }
 
     setGameInitialized(true);
     _joinedSocketId = socket.id || _joinedSocketId;
@@ -595,15 +500,10 @@ export function createMatchCoordinator(config) {
     try {
       const status = String(gameState?.status || "").toLowerCase();
       const active =
-        status === "active" || status === "started" || status === "running";
+        isLiveRoomStatus(status);
       resumeCountdownMs = active ? Math.max(0, Number(gameState?.countdownRemainingMs) || 0) : 0;
       const live = active && resumeCountdownMs <= 0;
       setIsLiveGame(live);
-      if (!shouldMuteClientDefaultLogs()) {
-        console.log(live, "is live");
-      } else {
-        noteClientLifecycle("live-state", `live=${live ? 1 : 0}`);
-      }
       if (live) {
         _clearForceLiveInputTimer();
         _forceLiveClientState();
@@ -659,8 +559,7 @@ export function createMatchCoordinator(config) {
     try {
       const me = (gameState.players || []).find((p) => p.name === username);
       if (me) {
-        window.__MATCH_SESSION__.level = me.level || 1;
-        window.__MATCH_SESSION__.stats = me.stats || {};
+        setLocalSession?.({ level: me.level || 1, stats: me.stats || {} });
         setPendingAuthoritativeLocalState({
           x: me.x,
           y: me.y,
@@ -685,18 +584,14 @@ export function createMatchCoordinator(config) {
   /** Server started the pre-fight countdown: cards, 5..1, FIGHT. */
   function _onGameStart(data) {
     const countdownMs = Math.max(0, Number(data?.countdownMs) || COUNTDOWN_MS);
-    if (!shouldMuteClientDefaultLogs()) {
-      console.log("Game starting:", data);
-    } else {
-      noteClientLifecycle("start", `countdownMs=${countdownMs}`);
-    }
+    logLifecycle("start", `countdownMs=${countdownMs}`, "log", "Game starting:", data);
     _clearForceLiveInputTimer();
     // Keep the watchdog alive through the countdown until we receive
     // actual live evidence (snapshot/timer/world-state). This avoids a
     // permanent client-side stall if `game:start` arrives but the first
     // live packets are missed.
     _startWatchdogDeadline =
-      Date.now() + Math.max(START_WATCHDOG_TIMEOUT_MS, countdownMs + 6000);
+      Date.now() + Math.max(START_WATCHDOG_TIMEOUT_MS, countdownMs + START_RECOVERY_GRACE_MS);
     _startStartWatchdog();
     // Spawns are re-established when the countdown starts; stand everyone on
     // them so the first live packet matches the server.
@@ -704,7 +599,7 @@ export function createMatchCoordinator(config) {
     // Late joiners skip the countdown because the game is already running
     if (!getIsLiveGame()) {
       for (const name of Object.keys(data?.spawns || {})) {
-        const wrapper = opponentPlayers[name] || teamPlayers[name];
+        const wrapper = playerLookup.wrapper(name);
         wrapper?.setPresenceState?.(true, true);
       }
       // A resumed countdown counts down the full scale from where it is.
@@ -716,12 +611,19 @@ export function createMatchCoordinator(config) {
         _forceLiveInputTimer = null;
         _forceLiveClientState();
       },
-      countdownMs + 250,
+      countdownMs + START_INPUT_GRACE_MS,
     );
+  }
+
+  function fighterEvents(payload) {
+    return payload?.username === getUsername()
+      ? config.getLocalFighterEvents?.()
+      : playerLookup.wrapper(payload?.username);
   }
 
   function _onHealthUpdate(payload) {
     if (!payload?.username) return;
+    fighterEvents(payload)?.applyHealthUpdate?.(payload);
     if (typeof payload.health === "number") {
       hud.setTeamHudPlayerHealth?.(
         payload.username,
@@ -744,7 +646,7 @@ export function createMatchCoordinator(config) {
         payload.cause !== "poison"
       ) {
         const wrapper =
-          opponentPlayers[payload.username] || teamPlayers[payload.username];
+          playerLookup.wrapper(payload.username);
         if (wrapper?.opponent) {
           const scene = getGameScene();
           // The attacker already played this at its predicted contact.
@@ -774,13 +676,13 @@ export function createMatchCoordinator(config) {
     if (!payload?.username) return;
     const dyingPlayer = payload.username === getUsername()
       ? getPlayer()
-      : (opponentPlayers[payload.username] || teamPlayers[payload.username])?.opponent;
+      : playerLookup.sprite(payload.username);
     if (!presentationSuppressed()) {
       spawnDeathTombstone(getGameScene(), payload, dyingPlayer);
     }
     hud.setTeamHudPlayerAlive(payload.username, false);
     if (payload.username === getUsername() && !getGameEnded()) {
-      getGameScene()?._noteLocalKiller?.(payload.killedBy);
+      noteLocalKiller?.(payload.killedBy);
       hud.showLocalDeath?.(payload);
     }
     if (Array.isArray(payload.drops) && payload.drops.length) {
@@ -796,7 +698,7 @@ export function createMatchCoordinator(config) {
     }
     if (payload.username === getUsername() || presentationSuppressed()) return;
     const wrapper =
-      opponentPlayers[payload.username] || teamPlayers[payload.username];
+      playerLookup.wrapper(payload.username);
     wrapper?.startDeathPresentation?.({ ...payload, afterSnapshot: lastSnapshotMark });
   }
 
@@ -805,7 +707,7 @@ export function createMatchCoordinator(config) {
     hud.setTeamHudPlayerAlive(payload.username, true);
     if (payload.username === getUsername() || presentationSuppressed()) return;
     const wrapper =
-      opponentPlayers[payload.username] || teamPlayers[payload.username];
+      playerLookup.wrapper(payload.username);
     wrapper?.handleRespawn?.({ ...payload, afterSnapshot: lastSnapshotMark });
   }
 
@@ -843,37 +745,21 @@ export function createMatchCoordinator(config) {
     hud.syncTeamHudFromSnapshot(snapshot.players);
 
     if (ingest.activated) {
-      if (!shouldMuteClientDefaultLogs()) {
-        console.log(
-          "Started receiving server snapshots (tMono/tickId enabled)",
-        );
-      } else {
-        noteClientLifecycle("snapshots-live", "");
-      }
+      logLifecycle("snapshots-live", "", "log", "Started receiving server snapshots (tMono/tickId enabled)");
       _stopStartWatchdog();
       _clearForceLiveInputTimer();
       _forceLiveClientState();
     }
     if (typeof ingest.calibrationLog === "number") {
-      if (!shouldMuteClientDefaultLogs()) {
-        console.log(
-          "Monotonic offset calibrated (ms):",
-          ingest.calibrationLog.toFixed(2),
-        );
-      } else {
-        noteClientLifecycle(
-          "mono-offset",
-          `ms=${ingest.calibrationLog.toFixed(2)}`,
-        );
-      }
+      logLifecycle("mono-offset", `ms=${ingest.calibrationLog.toFixed(2)}`, "log", "Monotonic offset calibrated (ms):", ingest.calibrationLog.toFixed(2));
     }
 
-    // Late-join safety: lazily create OpPlayers for any player in this snapshot
+    // Late-join safety: lazily create RemotePlayers for any player in this snapshot
     try {
       const scene = getGameScene();
       if (scene) {
         for (const name of Object.keys(snapshot.players)) {
-          _ensureOpPlayer(name);
+          _ensureRemotePlayer(name);
         }
       }
     } catch (_) {}
@@ -904,7 +790,7 @@ export function createMatchCoordinator(config) {
       if (handleCharacterNetworkPacket(scene, packet, {
         localPlayer: getPlayer(), localUsername: getUsername(),
         opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers,
-        onAmmo: config.onSparrowAmmo,
+        onAmmo: config.onAuthoritativeAmmo,
       })) return;
       const isSelfPacket = playerName === getUsername();
       if (isSelfPacket && !action?.ownerEcho) return;
@@ -918,11 +804,10 @@ export function createMatchCoordinator(config) {
         const targetSprite =
           targetName === getUsername()
             ? getPlayer()
-            : opponentPlayers[targetName]?.opponent ||
-              teamPlayers[targetName]?.opponent ||
+            : playerLookup.sprite(targetName) ||
               null;
         const soundSource = targetSprite ||
-          (isSelfPacket ? getPlayer() : opponentPlayers[playerName]?.opponent || teamPlayers[playerName]?.opponent);
+          (isSelfPacket ? getPlayer() : playerLookup.sprite(playerName));
         // The attacker's own predicted hit already played its sound.
         const predicted = isSelfPacket && takePredictedHit(targetName, "confirm");
         if (soundSource && !predicted) playCharacterSound(scene, charKey, "hit", {}, soundSource);
@@ -974,81 +859,12 @@ export function createMatchCoordinator(config) {
         return;
       }
 
-      const wrapper = _ensureOpPlayer(playerName);
+      const wrapper = _ensureRemotePlayer(playerName);
       if (!wrapper) return;
 
-      // PHASE 2: Attack visual consistency fix
-      // Always render attack from opponent's CURRENT INTERPOLATED SPRITE POSITION
-      // (not from server-recorded origin). This prevents visual gaps/stuttering.
-      // Server origin is used only for hit validation (separate concern).
-      const act = { ...actionWithPacketMeta };
-
-      if (wrapper.opponent) {
-        const ownerSprite = wrapper.opponent;
-        const actionType = String(act.type || "").toLowerCase();
-        const isProjectileAction =
-          actionType.includes("fireball") ||
-          actionType.includes("shuriken") ||
-          actionType.includes("projectile");
-        const isFireballAction = actionType.includes("fireball");
-
-        // Default visual origin: current interpolated owner position.
-        let visualX = ownerSprite.x;
-        let visualY = ownerSprite.y;
-
-        if (isProjectileAction) {
-          // Projectiles are most sensitive to cross-client origin gaps.
-          // Use a hybrid anchor: mostly visible sprite position, lightly nudged
-          // toward server origin (bounded) to reduce left/right disagreement.
-          const lift =
-            (ownerSprite.displayHeight || ownerSprite.height || 120) * 0.12;
-          visualY = ownerSprite.y - lift;
-          // Fireballs already follow caster during startup; avoid extra origin pull.
-          if (!isFireballAction) {
-            const ox = Number(packet?.origin?.x);
-            const oy = Number(packet?.origin?.y);
-            if (Number.isFinite(ox) && Number.isFinite(oy)) {
-              const dx = ox - visualX;
-              const dy = oy - visualY;
-              const d = Math.hypot(dx, dy);
-              if (d > 0.001) {
-                const pull = Math.min(36, d);
-                visualX += (dx / d) * pull;
-                visualY += (dy / d) * pull;
-              }
-            }
-          }
-        }
-
-        // Use visual anchor for rendering (consistent with interpolation)
-        act.x = visualX;
-        act.y = visualY;
-        if (isProjectileAction || !act.start || typeof act.start !== "object") {
-          act.start = { x: visualX, y: visualY };
-        }
-        if (
-          typeof act.direction !== "number" &&
-          typeof packet.flip === "boolean"
-        ) {
-          act.direction = packet.flip ? -1 : 1;
-        }
-        if (typeof act.direction !== "number") {
-          act.direction = ownerSprite.flipX ? -1 : 1;
-        }
-      }
-
-      // Diagnostic: log if server-provided origin differs significantly from visual
-      if (packet?.origin && wrapper?.opponent) {
-        const originDeltaX = Math.abs(packet.origin.x - wrapper.opponent.x);
-        const originDeltaY = Math.abs(packet.origin.y - wrapper.opponent.y);
-        if (originDeltaX > 60 || originDeltaY > 60) {
-          if (!shouldMuteClientDefaultLogs()) {
-            console.debug(
-              `[Attack Visual Delta] ${playerName}: visual (${wrapper.opponent.x.toFixed(0)},${wrapper.opponent.y.toFixed(0)}) vs origin (${packet.origin.x.toFixed(0)},${packet.origin.y.toFixed(0)}) delta=(${originDeltaX.toFixed(0)},${originDeltaY.toFixed(0)})px`,
-            );
-          }
-        }
-      }
+      // Align remote attack presentation with the displayed attacker.
+      const act = remoteActionPresentation(actionWithPacketMeta, wrapper.opponent);
+      noteRemoteActionOrigin(actionWithPacketMeta, act, wrapper.opponent);
 
       // The handler's animation holds snapshot animation off the sprite.
       const consumed = presentRemoteAction({ scene, wrapper, character: charKey, actionType: act.type },
@@ -1076,32 +892,16 @@ export function createMatchCoordinator(config) {
         }
       }
     } catch (err) {
-      if (!shouldMuteClientDefaultLogs()) {
-        console.warn("Failed to handle remote game:action", err);
-      } else {
-        noteClientLifecycle(
-          "action-rx-error",
-          String(err?.message || err || ""),
-        );
-      }
+      logLifecycle("action-rx-error", String(err?.message || err || ""), "warn", "Failed to handle remote game:action", err);
     }
   }
 
   function _returnToLobby() {
-    const partyId = Number(
-      (getGameData()?.players || []).find((p) => p.name === getUsername())?.party_id,
-    );
-    if (window.__BB_NAVIGATION__?.prepareLobbyReturn) {
-      window.__BB_NAVIGATION__.prepareLobbyReturn(partyId);
-      return;
-    }
-    window.location.replace(
-      Number.isFinite(partyId) && partyId > 0 ? `/party/${partyId}` : "/",
-    );
+    return returnFromMatch({ gameData: getGameData(), username: getUsername() });
   }
 
   function _onGameError(error) {
-    console.error("Game error:", error);
+    logLifecycle("game-error", String(error?.code || error?.message || ""), "error", "Game error:", error);
     _stopStartWatchdog();
     const { action, buttonText } = resolveGameErrorAction(error, {
       editorPlaytest:
@@ -1113,23 +913,14 @@ export function createMatchCoordinator(config) {
       message: String(error?.message || "Something went wrong in this match."),
       buttonText,
       tone: "error",
-      onConfirm: () => {
-        if (action === "reload") window.location.reload();
-        else if (action === "login") window.location.replace("/login");
-        else if (action === "banned") window.location.replace("/banned");
-        else if (action === "lobby") _returnToLobby();
-      },
+      onConfirm: () => performGameErrorAction(action, _returnToLobby),
     });
   }
 
   function _onPlayerDisconnected(data) {
-    if (!shouldMuteClientDefaultLogs()) {
-      console.log("Player disconnected:", data);
-    } else {
-      noteClientLifecycle("player-disconnected", `name=${data?.name ?? "?"}`);
-    }
+    logLifecycle("player-disconnected", `name=${data?.name ?? "?"}`, "log", "Player disconnected:", data);
     if (data?.name) {
-      const wrapper = opponentPlayers[data.name] || teamPlayers[data.name];
+      const wrapper = playerLookup.wrapper(data.name);
       const shouldStayLoaded =
         data.loaded === true || wrapper?.presenceLoaded === true;
       hud.setTeamHudPlayerPresence(data.name, false);
@@ -1140,7 +931,7 @@ export function createMatchCoordinator(config) {
 
   function _onPlayerReconnected(data) {
     if (data?.name) {
-      const wrapper = opponentPlayers[data.name] || teamPlayers[data.name];
+      const wrapper = playerLookup.wrapper(data.name);
       const shouldShowLoaded =
         data.loaded === true || wrapper?.presenceLoaded === true;
       hud.setTeamHudPlayerPresence(data.name, true);
@@ -1154,7 +945,7 @@ export function createMatchCoordinator(config) {
     if (!data?.name) return;
     const rosterEntry = (getGameData()?.players || []).find((p) => p.name === data.name);
     if (rosterEntry) rosterEntry.loaded = true;
-    const wrapper = opponentPlayers[data.name] || teamPlayers[data.name] || _ensureOpPlayer(data.name);
+    const wrapper = playerLookup.wrapper(data.name) || _ensureRemotePlayer(data.name);
     hud.setTeamHudPlayerPresence(data.name, true);
     hud.setTeamHudPlayerLoaded(data.name, true);
     // Stand them on the spawn the server holds for them.
@@ -1188,7 +979,7 @@ export function createMatchCoordinator(config) {
         p.body.enable = false;
       }
     } catch (_) {}
-    setTimeout(() => onShowGameOverScreen(payload), 2000);
+    setTimeout(() => onShowGameOverScreen(payload), RESULTS_PRESENTATION_DELAY_MS);
   }
 
   function _onGameTimer(payload) {
@@ -1200,13 +991,12 @@ export function createMatchCoordinator(config) {
       _forceLiveClientState();
     }
     if (!supportsSuddenDeath(getLatestModeState?.()?.type || getGameData()?.modeId)) return;
-    const scene = getGameScene();
     if (payload.suddenDeath && typeof payload.poisonY === "number") {
-      if (scene) scene._poisonWaterY = payload.poisonY;
+      poisonState.targetY = payload.poisonY;
       onStartSuddenDeathMusic();
-    } else if (scene) {
-      scene._poisonWaterY = null;
-      scene._smoothPoisonY = null;
+    } else {
+      poisonState.targetY = null;
+      poisonState.smoothY = null;
     }
   }
 
@@ -1214,9 +1004,8 @@ export function createMatchCoordinator(config) {
     if (!supportsSuddenDeath(getLatestModeState?.()?.type || getGameData()?.modeId)) return;
     hud.showSuddenDeathBanner();
     onStartSuddenDeathMusic();
-    const scene = getGameScene();
-    if (scene && typeof payload?.poisonY === "number") {
-      scene._poisonWaterY = payload.poisonY;
+    if (typeof payload?.poisonY === "number") {
+      poisonState.targetY = payload.poisonY;
     }
   }
 
@@ -1265,7 +1054,7 @@ export function createMatchCoordinator(config) {
     try {
       const source = payload.username === getUsername()
         ? getPlayer()
-        : opponentPlayers[payload.username]?.opponent || teamPlayers[payload.username]?.opponent;
+        : playerLookup.sprite(payload.username);
       if (!source) return;
       playPlayerSound(scene, source, entry.key, entry.options || {});
       // A power-up heal also sends health-update; play that pair only once.
@@ -1277,7 +1066,7 @@ export function createMatchCoordinator(config) {
     if (!payload?.username || presentationSuppressed()) return;
     const sprite = payload.username === getUsername()
       ? getPlayer()
-      : opponentPlayers[payload.username]?.opponent || teamPlayers[payload.username]?.opponent;
+      : playerLookup.sprite(payload.username);
     spawnShockwaveHitSmoke(getGameScene(), sprite, payload);
   }
 
@@ -1292,11 +1081,7 @@ export function createMatchCoordinator(config) {
     );
   }
 
-  function _findPlayerSprite(name) {
-    if (!name) return null;
-    if (name === getUsername()) return getPlayer();
-    return opponentPlayers[name]?.opponent || teamPlayers[name]?.opponent || null;
-  }
+  const _findPlayerSprite = playerLookup.sprite;
 
   // Character-owned socket events (see CharacterEntityBase.socketEvents).
   const characterSocketHandlers = getCharacterSocketEvents().map(([event, handler]) => [
@@ -1318,34 +1103,42 @@ export function createMatchCoordinator(config) {
     if (typeof ack === "function" && Number(data?.matchId) === Number(matchId)) ack({ matchId: Number(matchId) });
   }
 
+  const listeners = [
+    [SOCKET_EVENTS.GAME_PRESENCE_PROBE, onPresenceProbe],
+    [SOCKET_EVENTS.CONNECT, _tryJoin],
+    [SOCKET_EVENTS.CONNECT, resyncServerClock],
+    [SOCKET_EVENTS.DISCONNECT, _onSocketDisconnect],
+    [SOCKET_EVENTS.GAME_JOINED, _onGameJoined],
+    [SOCKET_EVENTS.GAME_INIT, _onGameInit],
+    [SOCKET_EVENTS.GAME_START, _onGameStart],
+    [SOCKET_EVENTS.HEALTH_UPDATE, _onHealthUpdate],
+    [SOCKET_EVENTS.SUPER_UPDATE, payload => fighterEvents(payload)?.applySuperUpdate?.(payload)],
+    [SOCKET_EVENTS.PLAYER_SPECIAL, payload => fighterEvents(payload)?.presentSpecial?.(payload)],
+    [SOCKET_EVENTS.PLAYER_DEAD, _onPlayerDead],
+    [SOCKET_EVENTS.PLAYER_RESPAWN, _onPlayerRespawn],
+    [SOCKET_EVENTS.GAME_SNAPSHOT, _onGameSnapshot],
+    [SOCKET_EVENTS.GAME_STATE, _onGameState],
+    [SOCKET_EVENTS.GAME_ACTION, _onGameAction],
+    [SOCKET_EVENTS.GAME_ERROR, _onGameError],
+    [SOCKET_EVENTS.PLAYER_DISCONNECTED, _onPlayerDisconnected],
+    [SOCKET_EVENTS.PLAYER_RECONNECTED, _onPlayerReconnected],
+    [SOCKET_EVENTS.PLAYER_LOADED, _onPlayerLoaded],
+    [SOCKET_EVENTS.GAME_OVER, _onGameOver],
+    [SOCKET_EVENTS.GAME_TIMER, _onGameTimer],
+    [SOCKET_EVENTS.GAME_SUDDEN_DEATH_START, _onGameSuddenDeath],
+    [SOCKET_EVENTS.POWERUP_COLLECTED, _onPowerupCollected],
+    [SOCKET_EVENTS.POWERUP_TICK, _onPowerupTick],
+    [SOCKET_EVENTS.SHOCKWAVE_HIT, _onShockwaveHit],
+    ...characterSocketHandlers,
+    [SOCKET_EVENTS.DEATHDROP_COLLECTED, _onDeathDropCollected],
+  ];
+  let registered = false;
+
   function register() {
-    socket.on("game:presence-probe", onPresenceProbe);
-    // Socket.IO v4 emits "connect" for reconnects too ("reconnect" is a Manager event).
-    socket.on("connect", _tryJoin);
-    socket.on("connect", resyncServerClock);
-    socket.on("disconnect", _onSocketDisconnect);
+    if (registered) return;
+    registered = true;
+    for (const [event, handler] of listeners) socket.on(event, handler);
     startServerClockSync(socket);
-    socket.on("game:joined", _onGameJoined);
-    socket.on("game:init", _onGameInit);
-    socket.on("game:start", _onGameStart);
-    socket.on("health-update", _onHealthUpdate);
-    socket.on("player:dead", _onPlayerDead);
-    socket.on("player:respawn", _onPlayerRespawn);
-    socket.on("game:snapshot", _onGameSnapshot);
-    socket.on("game:state", _onGameState);
-    socket.on("game:action", _onGameAction);
-    socket.on("game:error", _onGameError);
-    socket.on("player:disconnected", _onPlayerDisconnected);
-    socket.on("player:reconnected", _onPlayerReconnected);
-    socket.on("player:loaded", _onPlayerLoaded);
-    socket.on("game:over", _onGameOver);
-    socket.on("game:timer", _onGameTimer);
-    socket.on("game:sudden-death:start", _onGameSuddenDeath);
-    socket.on("powerup:collected", _onPowerupCollected);
-    socket.on("powerup:tick", _onPowerupTick);
-    socket.on("shockwave:hit", _onShockwaveHit);
-    for (const [event, handler] of characterSocketHandlers) socket.on(event, handler);
-    socket.on("deathdrop:collected", _onDeathDropCollected);
 
     // If already connected when register() is called, attempt join right away
     if (socket.connected) _tryJoin();
@@ -1356,36 +1149,14 @@ export function createMatchCoordinator(config) {
 
   /** Remove all match socket listeners. Safe to call multiple times. */
   function dispose() {
-    socket.off("game:presence-probe", onPresenceProbe);
+    if (!registered) return;
+    registered = false;
+    for (const [event, handler] of listeners) socket.off(event, handler);
     resetCharacterNetworks();
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
-    socket.off("connect", _tryJoin);
-    socket.off("connect", resyncServerClock);
-    socket.off("disconnect", _onSocketDisconnect);
     stopServerClockSync();
-    socket.off("game:joined", _onGameJoined);
-    socket.off("game:init", _onGameInit);
-    socket.off("game:start", _onGameStart);
-    socket.off("health-update", _onHealthUpdate);
-    socket.off("player:dead", _onPlayerDead);
-    socket.off("player:respawn", _onPlayerRespawn);
-    socket.off("game:snapshot", _onGameSnapshot);
     snapshotDecoder.reset();
-    socket.off("game:state", _onGameState);
-    socket.off("game:action", _onGameAction);
-    socket.off("game:error", _onGameError);
-    socket.off("player:disconnected", _onPlayerDisconnected);
-    socket.off("player:reconnected", _onPlayerReconnected);
-    socket.off("player:loaded", _onPlayerLoaded);
-    socket.off("game:over", _onGameOver);
-    socket.off("game:timer", _onGameTimer);
-    socket.off("game:sudden-death:start", _onGameSuddenDeath);
-    socket.off("powerup:collected", _onPowerupCollected);
-    socket.off("powerup:tick", _onPowerupTick);
-    socket.off("shockwave:hit", _onShockwaveHit);
-    for (const [event, handler] of characterSocketHandlers) socket.off(event, handler);
-    socket.off("deathdrop:collected", _onDeathDropCollected);
   }
 
   return { register, dispose };

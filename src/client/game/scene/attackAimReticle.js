@@ -1,4 +1,5 @@
 import { RENDER_LAYERS } from "./renderLayers";
+import { DEFAULT_CONE_RADIUS, DEFAULT_CONE_SPREAD_DEG } from "../characters/shared/attackAim";
 
 const RETICLE_RENDERERS = new Map();
 
@@ -300,9 +301,9 @@ class SplashAttackReticleRenderer extends BaseAttackReticleRenderer {
     if (!state) return;
     const palette = getPalette(state);
 
-    const radius = Math.max(8, Number(state.coneRadius) || 150);
+    const radius = Math.max(8, Number(state.coneRadius) || DEFAULT_CONE_RADIUS);
     const innerRadius = Math.max(0, Number(state.coneInnerRadius) || 0);
-    const spreadDeg = Math.max(8, Number(state.coneSpreadDeg) || 56);
+    const spreadDeg = Math.max(8, Number(state.coneSpreadDeg) || DEFAULT_CONE_SPREAD_DEG);
     const halfSpread = Phaser.Math.DegToRad(spreadDeg / 2);
     const angle = Number(state.angle) || 0;
     const startAngle = angle - halfSpread;

@@ -1,3 +1,4 @@
+// CommonJS keeps these mechanics directly loadable by the Node test suite.
 // Picks the baked pose for an aimed attack. Characters with directional art
 // (ninja throws, sparrow shots) list poses by elevation: degrees above level,
 // whichever way the attack faces.

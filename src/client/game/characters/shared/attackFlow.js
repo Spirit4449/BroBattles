@@ -1,3 +1,4 @@
+import { getMatchSession } from "../../../lib/globals.cjs";
 import { noteClientActionSent } from "../../../lib/netTestLogger.js";
 
 export function executeDefaultAttack({
@@ -77,7 +78,7 @@ export function resolveSessionDamage(
   fallbackDamage = 200,
 ) {
   const session =
-    (typeof window !== "undefined" && window.__MATCH_SESSION__) || {};
+    getMatchSession() || {};
   const statDamage = session?.stats?.damage;
   if (typeof statDamage === "number" && Number.isFinite(statDamage)) {
     return statDamage;

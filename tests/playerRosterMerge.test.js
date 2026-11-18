@@ -1,19 +1,9 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const vm = require("node:vm");
-const babel = require("@babel/core");
 
-const compiled = babel.transformSync(
-  fs.readFileSync(require.resolve("../src/client/game/match/playerRosterMerge.js"), "utf8"),
-  {
-    babelrc: false,
-    configFile: false,
-    presets: [["@babel/preset-env", { targets: { node: "current" } }]],
-  },
-);
 const api = {};
-vm.runInNewContext(compiled.code, { exports: api });
+loadClientModule(require.resolve("../src/client/game/match/playerRosterMerge.js"), { exports: api });
 
 test("unavailable socket stats do not erase roster stats", () => {
   const rosterPlayer = {

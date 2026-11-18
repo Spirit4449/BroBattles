@@ -72,6 +72,11 @@ test("runtime multipliers round core rewards before adding whole collected drops
   );
 });
 
+test("an explicit zero coin floor is honored when a low multiplier rounds a reward to zero", () => {
+  const result = rewards({}, "team1", "team2", { rewardFloor: 0, rewardMultipliers: { coins: 0.01 } });
+  assert.equal(result.coins, 0);
+});
+
 test("the coin ceiling still applies before collected drops", () => {
   assert.deepEqual(
     rewards({

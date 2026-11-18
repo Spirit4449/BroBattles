@@ -1,3 +1,4 @@
+import { SOCKET_EVENTS } from "../../../../shared/net/socketEvents.js";
 import socket from "../../../lib/socket";
 import { characterStats } from "../../../../shared/characters/characterStats.js";
 import { chooseRemoteAnimationState } from "./animationState";
@@ -20,7 +21,18 @@ import { withShotView } from "./shotPrediction";
  */
 export default class CharacterEntityBase {
   static key = "unknown";
-  static textureKey = "sprite";
+  static get textureKey() {
+    return this.key;
+  }
+
+  static performSpecial() {
+    console.warn(`No special attack defined for ${this.key}`);
+  }
+
+  handlePointerDown(attackContext = null) {
+    const context = attackContext || this.consumeAttackContext();
+    return this.performDefaultAttack(() => this.constructor.basicAttack(this, context));
+  }
 
   static getTextureKey() {
     return this.textureKey || this.key || "sprite";
@@ -99,8 +111,6 @@ export default class CharacterEntityBase {
     return chooseRemoteAnimationState({ ...context, character: this.key });
   }
 
-  static setDebugState() {}
-
   static applyPowerupFx() {
     return { handled: false, rageLike: false };
   }
@@ -143,28 +153,20 @@ export default class CharacterEntityBase {
   }
 
   /**
-   * Create and return the physics sprite for this character.
-   * Called by player.js instead of manually building the sprite.
+   * The local controller supplies the scene and fighter, the fighter's username,
+   * the live opponent lookup, and ammo/HUD callbacks for shot execution.
    */
-  static createSprite(scene, x = -100, y = -100) {
-    return scene.physics.add.sprite(x, y, this.getTextureKey());
-  }
-
   constructor({
     scene,
     player,
     username,
-    gameId,
     opponentPlayersRef,
-    mapObjects,
     ammoHooks,
   }) {
     this.scene = scene;
     this.player = player;
     this.username = username;
-    this.gameId = gameId;
     this.opponentPlayersRef = opponentPlayersRef;
-    this.mapObjects = mapObjects;
     this.ammo = ammoHooks;
     this._pendingAttackContext = null;
   }
@@ -199,7 +201,7 @@ export default class CharacterEntityBase {
   static attackFlow = {};
 
   emitAttackAction(payload) {
-    socket.emit("game:action", withShotView(payload));
+    socket.emit(SOCKET_EVENTS.GAME_ACTION, withShotView(payload));
   }
 
   performDefaultAttack(payloadBuilder, onAfterFire) {
@@ -238,11 +240,5 @@ export default class CharacterEntityBase {
         this.scene.time.delayedCall(noAnimationMs, clear);
       }
     } catch (_) {}
-  }
-
-  attachInput() {
-    // Local attack input is centrally owned by player.js so drag-aim, quick-fire,
-    // and map-editor interactions all flow through one consistent lifecycle.
-    return;
   }
 }

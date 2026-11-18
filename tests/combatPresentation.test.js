@@ -1,14 +1,11 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
 
 describe("Draven confirmed impacts", () => {
   function load(file, deps, globals = {}) {
     const exports = {};
-    const code = babel.transformSync(fs.readFileSync(file,'utf8'), {babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
-    vm.runInNewContext(code,{exports,require:name=>deps[name] || {}, ...globals});
+    loadClientModule(file, {exports,require:name=>deps[name] || {}, ...globals});
     return exports;
   }
   test('remote cast never schedules a phantom explosion; confirmed impact renders once at target',()=>{
@@ -38,8 +35,8 @@ describe("Draven confirmed impacts", () => {
       '../shared/flipLock': { lockPlayerFlip: () => () => {} },
       '../shared/animationState.js': { markOneShotAnimation() {}, playSpriteAnimation() {}, resolveSpriteAnimationKey() {} },
       '../../scene/renderLayers': { RENDER_LAYERS: { PLAYER: 30 } },
-      '../../powerups/shieldBubble': load('src/client/game/powerups/shieldBubble.js', {
-        './pixelShapes': load('src/client/game/powerups/pixelShapes.js', {}),
+      '../../scene/fx/shieldBubble': load('src/client/game/scene/fx/shieldBubble.js', {
+        './pixelShapes': load('src/client/game/scene/fx/pixelShapes.js', {}),
       }),
     }, { Phaser: { BlendModes: { ADD: 1 }, Math: { Between: a => a, FloatBetween: a => a,
       Clamp: (v, min, max) => Math.max(min, Math.min(max, v)), Easing: { Cubic: { Out: v => v } } } } });
@@ -60,7 +57,7 @@ describe("Draven confirmed impacts", () => {
       const player = Object.assign(new EventEmitter(), { active: true, x: 100, y: 200 });
       const scene = { events: new EventEmitter(), time: { now: 0, delayedCall(delay, callback) { timers.push({ delay, callback }); } },
         textures: { exists: () => false }, add: { graphics: shape, circle: shape }, tweens: { add() {} } };
-      api.perform(scene, player, [], [], 'draven', 1, isOwner);
+      api.perform({ scene, player, isOwner });
       const shield = player._dravenInfernoShield;
       assert.ok(shield.active);
       assert.ok(shield.rects.length > 0);
@@ -97,7 +94,7 @@ describe("Draven confirmed impacts", () => {
 
 describe("Ninja collision and playback", () => {
   const { spritePresentation } = require('../src/client/game/characters/shared/spritePresentation');
-  const { characterBody } = require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
 
   test('standard Ninja preserves authoritative standing and ducking collision geometry', () => {
     // The base atlas's cell size, whatever the installed art uses.

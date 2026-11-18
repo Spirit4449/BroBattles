@@ -18,12 +18,45 @@ const titlesCatalog = require('../../src/shared/catalogs/titlesCatalog.json');
 const { validateCatalog } = require('../../src/server/services/shop/shopCatalog');
 const shopCatalog = require('../../src/shared/catalogs/shopCatalog.json');
 
+const trophyCatalog = require('../../src/shared/catalogs/trophySystem.catalog.cjs');
+
+function validateTrophyScoring(catalog) {
+  const errors = [];
+  const ranges = catalog?.modeTrophyRanges;
+  if (!ranges?.default) errors.push('trophies: missing default mode range');
+  for (const [mode, range] of Object.entries(ranges || {})) {
+    if (!Number.isFinite(range?.min) || !Number.isFinite(range?.max) ||
+        range.min < 1 || range.max < range.min) errors.push(`trophies: invalid range for ${mode}`);
+  }
+
+  const fractions = [
+    ['drawRangeScale', catalog?.drawRangeScale, 0, 1],
+    ['lossRangeScale', catalog?.lossRangeScale, 0.1, 1],
+    ['lossPerformanceMitigation', catalog?.lossPerformanceMitigation, 0, 0.9],
+    ...['damage', 'kills', 'hits'].map(stat => [
+      `performanceWeights.${stat}`, catalog?.performanceWeights?.[stat], 0, Infinity,
+    ]),
+  ];
+  for (const [field, value, min, max] of fractions) {
+    if (!Number.isFinite(value) || value < min || value > max) errors.push(`trophies: invalid ${field}`);
+  }
+  return errors;
+}
+
+function validParticle(particle) {
+  const { kind, chance, offset, size, duration } = particle;
+  const range = v => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite) && v[0] > 0 && v[1] >= v[0];
+  return ['plus', 'trail', 'arrow'].includes(kind) && Number.isFinite(chance) && chance >= 0 && chance <= 1 &&
+    Array.isArray(offset) && offset.length === 3 && offset.every(Number.isFinite) && offset[0] >= 0 && offset[1] <= offset[2] &&
+    (range(size) || (kind !== 'arrow' && Number.isFinite(size) && size > 0)) && Number.isFinite(duration) && duration > 0;
+}
+
 function validateContent({ characters = characterDefinitions, powerups = POWERUP_CATALOG,
   cosmetics = [
     ...Object.values(skinsCatalog.characters).flatMap(entry => entry.skins),
     ...cardsCatalog.cards, ...iconsCatalog.icons,
-  ], shop = shopCatalog, botProfiles = BOT_PROFILES } = {}) {
-  const errors = combatCoverageErrors(characters);
+  ], shop = shopCatalog, trophies = trophyCatalog, botProfiles = BOT_PROFILES } = {}) {
+  const errors = [...combatCoverageErrors(characters), ...validateTrophyScoring(trophies)];
   const titleIds = new Set();
   for (const title of titlesCatalog.titles || []) {
     if (!/^[a-z0-9-]+$/.test(title.id) || titleIds.has(title.id)) errors.push(`Invalid or duplicate title ID: ${title.id}`);
@@ -84,6 +117,12 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
   for (const [key, definition] of Object.entries(powerups)) {
     if (!effectDefs[key]) errors.push(`${key}: missing server effect`);
     if (!(definition.durationMs > 0)) errors.push(`${key}: invalid duration`);
+    const visual = definition.visual || {};
+    if (visual.bubbleStrength != null && (!(visual.bubbleStrength > 0 && visual.bubbleStrength <= 1) || !Number.isFinite(visual.bubbleOrder))) errors.push(`${key}: invalid bubble style`);
+    if (visual.tintPulse && (!Array.isArray(visual.tintPulse) || visual.tintPulse.length !== 2 ||
+        !visual.tintPulse.every(color => Number.isInteger(color) && color >= 0 && color <= 0xffffff) || !(visual.tintSpeed > 0))) errors.push(`${key}: invalid tint pulse`);
+    if ((visual.tintPulse || visual.particle) && !Number.isFinite(visual.priority)) errors.push(`${key}: missing visual priority`);
+    if (visual.particle && !validParticle(visual.particle)) errors.push(`${key}: invalid particle style`);
     if ('localMovement' in definition) errors.push(`${key}: separate localMovement tuning is obsolete; use shared modifiers`);
     for (const field of ['touchVolume', 'tickVolume']) {
       if (field in definition && (!Number.isFinite(definition[field]) || definition[field] < 0 || definition[field] > 1)) errors.push(`${key}: invalid ${field}`);
@@ -112,6 +151,10 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
     }
   }
   errors.push(...validateCatalog(shop).map(error => `shop: ${error}`));
+  const registeredMaps = new Set(mapDefaults.map(document => `${document.id}.json`));
+  for (const filename of fs.readdirSync(path.resolve(__dirname, '../../src/shared/maps'))) {
+    if (/^\d+\.json$/.test(filename) && !registeredMaps.has(filename)) errors.push(`Unregistered shipped map: ${filename}`);
+  }
   for (const document of mapDefaults) {
     errors.push(...validateDocument(document).map(error => `map ${document.id}: ${error}`));
   }

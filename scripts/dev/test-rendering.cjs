@@ -1,7 +1,6 @@
-// Requires Playwright and its browser binaries; no game server/database needed.
-// NODE_PATH may point at an existing Playwright installation.
-// CHROME_EXECUTABLE optionally selects an installed Chrome.
-const { chromium, webkit } = require('playwright');
+// Uses installed Google Chrome and Playwright WebKit; no game server/database needed.
+// CHROME_EXECUTABLE can select an installed Chromium/Chrome binary.
+const { chromium, webkit } = require('playwright-core');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
@@ -28,9 +27,12 @@ const server = http.createServer((req, res) => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
-      const browser = await engine.launch({ headless: true,
-        ...(name === 'chromium' && process.env.CHROME_EXECUTABLE ? { executablePath: process.env.CHROME_EXECUTABLE } : {}),
-      });
+      const launchOptions = { headless: true };
+      if (name === 'chromium') {
+        if (process.env.CHROME_EXECUTABLE) launchOptions.executablePath = process.env.CHROME_EXECUTABLE;
+        else launchOptions.channel = 'chrome';
+      }
+      const browser = await engine.launch(launchOptions);
       try {
         for (const renderer of ['webgl', 'canvas', 'fallback']) {
           const page = await browser.newPage();

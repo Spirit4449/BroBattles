@@ -1,7 +1,7 @@
 import streakRewards from '../../shared/winStreakRewards.cjs';
 const { WIN_STREAK_TIERS, winStreakMultipliers } = streakRewards;
 
-export function winStreakBenefitsMarkup(streak) {
+function winStreakBenefitsMarkup(streak) {
   const multipliers = winStreakMultipliers(streak);
   return `<strong>Win streak benefits</strong><ul>${WIN_STREAK_TIERS.map(tier => {
     const unlocked = streak >= tier.streak;

@@ -1,6 +1,10 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import settings from '../../../../../public/assets/ninja/animation-settings.json';
 
 // Logical keys remain compatible with movement and returning-shuriken combat.
+
+const { key: NAME } = characterDefinitions.ninja;
+
 export function animations(scene) {
   const aliases = { attack: 'throw', wall: 'sliding' };
   for (const row of settings.animations) {
@@ -9,7 +13,7 @@ export function animations(scene) {
     const key = 'ninja-' + (aliases[row.key] || row.key.replace(/^attack-/, 'throw-'));
     if (scene.anims.exists(key)) continue;
     scene.anims.create({ key,
-      frames: row.frames.map((frame, index) => ({ key: 'ninja', frame,
+      frames: row.frames.map((frame, index) => ({ key: NAME, frame,
         // Phaser adds this to the base frame interval. Total holds let idle
         // linger naturally while the blink itself stays quick.
         ...(Number.isFinite(row.frameDurationsMs?.[index]) ? {
@@ -22,7 +26,7 @@ export function animations(scene) {
   // Older candidate settings may lack a dedicated special row.
   const attack = settings.animations.find(row => row.key === 'attack');
   if (attack && !scene.anims.exists('ninja-special')) scene.anims.create({
-    key: 'ninja-special', frames: attack.frames.map(frame => ({ key: 'ninja', frame })),
+    key: 'ninja-special', frames: attack.frames.map(frame => ({ key: NAME, frame })),
     frameRate: attack.fps, repeat: 0,
   });
 }

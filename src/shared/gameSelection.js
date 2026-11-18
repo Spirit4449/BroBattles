@@ -1,24 +1,21 @@
+const { DUEL_MODE_ID, normalizeDuelVariant, duelVariantForTeamSize } = require("./maps/duelVariants.js");
 // Mode/variant/map selection rules shared by the lobby client and the server.
 // Each side supplies its own map list: the client registers the catalog it
 // fetched, the server reads the map repository.
-const gameModesCatalog = require("./catalogs/gameModes.catalog.json");
+const gameModesCatalog = require("./catalogs/gameModes.catalog.cjs");
 const { mapsCatalog } = require("./maps");
 
-const MODES = Array.isArray(gameModesCatalog?.modes) ? gameModesCatalog.modes : [];
+const MODES = gameModesCatalog.modes;
 const MODE_BY_ID = new Map(MODES.map((mode) => [String(mode?.id || ""), mode]));
 
-const DEFAULT_MODE_ID = String(gameModesCatalog?.defaultModeId || "duels");
-const DEFAULT_VARIANT_ID = String(
-  gameModesCatalog?.defaultVariantId || "duels-1v1",
-);
-const DEFAULT_MAP_ID = Number(mapsCatalog?.defaultMapId) || 1;
+const DEFAULT_MODE_ID = gameModesCatalog.defaultModeId;
+const DEFAULT_VARIANT_ID = gameModesCatalog.defaultVariantId;
+const DEFAULT_MAP_ID = mapsCatalog.defaultMapId;
 
 // Pre-catalog clients and party rows stored the team size instead of a
 // variant id.
 function legacyModeToVariantId(mode) {
-  const numeric = Number(mode);
-  if (numeric === 2) return "duels-2v2";
-  return DEFAULT_VARIANT_ID;
+  return duelVariantForTeamSize(mode);
 }
 
 function getModeById(modeId) {
@@ -70,8 +67,8 @@ function createSelectionCatalog(getMaps) {
     const { mode, variant } = describeSelection(selection);
     if (!mode) return [];
     const variantId = String(variant?.id || "");
-    return getMaps().filter((map) => mode.id === 'duels'
-      ? map?.modeId === 'duels' || ['duels', 'duels-1v1', 'duels-2v2'].includes(map?.modeVariantId)
+    return getMaps().filter((map) => mode.id === DUEL_MODE_ID
+      ? map?.modeId === DUEL_MODE_ID || normalizeDuelVariant(map?.modeVariantId) === DUEL_MODE_ID
       : variantId ? map?.modeVariantId === variantId : map?.modeId === String(mode.id));
   }
 

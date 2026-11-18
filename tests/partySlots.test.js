@@ -5,7 +5,7 @@ describe("Human seating", () => {
   const { normalizePartySlots, movePartyMember } = require('../src/server/services/party/partySlots');
   const { registerPartyEvents } = require('../src/server/core/socketEvents/partyEvents');
   const { PARTY_STATUS } = require('../src/server/services/party/partyRules');
-  const { setPartyBotSlot, prunePartyBotSlots, clearPartyBotSlots } = require('../src/server/services/party/partyBotSlots');
+  const { setPartyBotSlot, prunePartyBotSlots, clearPartyBotSlots } = require('../src/server/services/party/partyBotSlots').createPartyBotSlots();
   const members = [
     { name: 'Owner', team: 'team1', slot_index: 0 },
     { name: 'Friend', team: 'team2', slot_index: 0 },
@@ -83,7 +83,7 @@ describe("Configured bot seats", () => {
     setPartyBotSlot,
     prunePartyBotSlots,
     clearPartyBotSlots,
-  } = require("../src/server/services/party/partyBotSlots");
+  } = require("../src/server/services/party/partyBotSlots").createPartyBotSlots();
 
   test("party bot slots support shuffle, a fighter, and returning to random", () => {
     clearPartyBotSlots(7001);

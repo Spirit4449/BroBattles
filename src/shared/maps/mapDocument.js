@@ -1,3 +1,4 @@
+const { DUEL_MODE_ID, isDuelFormation } = require("./duelVariants.js");
 // Versioned, data-only map contract. Shared by the editor, Phaser and the server.
 // A map is one layout for a game mode. Duel maps support both formations;
 // their arena profile fixes the world and camera independently of team size.
@@ -10,9 +11,9 @@ const { validateMotion, motionPeakSpeed } = require('./platformMotion');
 const clone = value => JSON.parse(JSON.stringify(value));
 function upgradeDuelMap(document) {
   const copy = clone(document);
-  if (!['duels-1v1', 'duels-2v2'].includes(copy?.modeVariantId)) return copy;
+  if (!isDuelFormation(copy?.modeVariantId)) return copy;
   copy.arenaId = copy.modeVariantId;
-  copy.modeVariantId = 'duels';
+  copy.modeVariantId = DUEL_MODE_ID;
   for (const team of ['team1', 'team2']) {
     const slots = copy.spawns?.players?.[team];
     if (slots?.length === 1) slots.push({ ...clone(slots[0]), dx: (slots[0].dx || 0) + (team === 'team1' ? 80 : -80) });
@@ -104,7 +105,7 @@ function validateMapUnsafe(data) {
   for (const p of data.layout?.platforms || []) if (!data.assets?.[p.textureKey]) fail(`platform.${p.id}.textureKey`, 'asset is not registered');
   if (data.powerups) {
     for (const [key, min, max] of [['spawnIntervalMs',500,3600000],['maxActive',0,100],['despawnMs',500,3600000],['pickupRadius',1,500],['omenMs',0,60000],['spawnLift',0,500]]) num(data.powerups[key], `powerups.${key}`, min, max);
-    if (!Array.isArray(data.powerups.types) || !data.powerups.types.length || data.powerups.types.some(t => !POWERUP_TYPES.includes(t))) fail('powerups.types', 'select known powerup types');
+    if (data.powerups.types !== undefined && (!Array.isArray(data.powerups.types) || data.powerups.types.some(t => !POWERUP_TYPES.includes(t)))) fail('powerups.types', 'select known powerup types');
   }
   if (errors.length) return errors;
   validateScenery(data.scenery, fail, num, id);
@@ -171,4 +172,4 @@ class MapHistory {
   undo() { if (this.index > 0) this.index--; return clone(this.stack[this.index]); }
   redo() { if (this.index < this.stack.length - 1) this.index++; return clone(this.stack[this.index]); }
 }
-module.exports = { upgradeDuelMap, SCHEMA_VERSION, POWERUP_TYPES, clone, mapSummary, geometryFromMap, constrainPoint, resolvePowerupPoints, validateMap, validateDocument, MapHistory };
+module.exports = { upgradeDuelMap, POWERUP_TYPES, clone, mapSummary, geometryFromMap, constrainPoint, resolvePowerupPoints, validateMap, validateDocument, MapHistory };

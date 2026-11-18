@@ -9,6 +9,7 @@ const { DEFAULT_BINDINGS } = require('../../src/client/site/keyBindings.mjs');
 
 function createLocalPlayerFixture() {
   const keys = new Map();
+  const controllerHooks = [];
   let now = 10000;
   class Clock extends Date { static now() { return now; } }
   const Phaser = {
@@ -37,6 +38,7 @@ function createLocalPlayerFixture() {
       setScale(scale) { this.scaleX = this.scaleY = scale; this.displayWidth = this.width * scale; this.displayHeight = this.height * scale; return this; },
       setOrigin(x, y) { this.originX = x; this.originY = y; this.displayOriginX = this.width * x; this.displayOriginY = this.height * y; return this; },
       setVisible(value) { this.visible = value; return this; }, setDepth() { return this; },
+      setAlpha(value) { this.alpha = value; return this; },
       setFlipX(value) { this.flipX = value; return this; }, setPosition(x, y) { this.x = x; this.y = y; return this; },
     });
     value.anims = { isPlaying: true, play(key) { this.currentAnim = { key }; return value; }, stop() {} };
@@ -62,13 +64,13 @@ function createLocalPlayerFixture() {
   Object.assign(f.imports, {
     [modulePath('lib/socket')]: { __esModule: true, default: f.socket },
     [modulePath('site/preferences')]: { getSettings: () => ({ keys: DEFAULT_BINDINGS }), subscribeSettings: () => noop, bindCanvasName: noop },
-    [modulePath('game/characters')]: { createFor: () => null, getTextureKey: () => 'ninja', getCharacterClassByKey: () => null,
+    [modulePath('game/characters')]: { createFor: (_, { ammoHooks }) => { controllerHooks.push(ammoHooks); return null; }, getTextureKey: () => 'ninja', getCharacterClassByKey: () => null,
       resolveAnimKey: (_, character, logical) => `${character}-${logical}`, getStats: () => ({ baseHealth: 8000 }), getEffectsClass: () => null },
-    [modulePath('game/players/localSocketEvents')]: { bindLocalSocketEvents: () => noop },
+    [modulePath('game/players/localSocketEvents')]: { bindLocalSocketEvents: () => ({ dispose: noop }) },
     [modulePath('game/characters/networkRegistry')]: { predictCharacterSpecial: noop },
     [modulePath('game/scene/attackAimReticle')]: { createAttackAimReticleController: () => ({ hide: noop, destroy: noop }) },
     [modulePath('game/scene/mobileControls')]: { createMobileControlsController: () => ({ ensure: noop, update: noop, destroy: noop, isEnabled: () => false }) },
-    [modulePath('game/scene/combatMouse')]: { createCombatMouseController: () => ({ isActive: () => true, shouldShowReticle: () => false, beginInput: () => true, destroy: noop, endDrag: noop }) },
+    [modulePath('game/scene/combatMouse')]: { createCombatMouseController: () => ({ isActive: () => true, shouldShowReticle: () => false, beginInput: () => true, destroy: noop, endDrag: noop, release: noop }) },
     [modulePath('game/players/teamFootRing')]: { attachTeamFootRing: noop },
     [modulePath('game/scene/healthBarRenderer')]: { drawHealthBar: noop, resetHealthBarAnimation: noop },
     [modulePath('game/scene/superBarRenderer')]: { drawSuperChargeBar: noop, resetSuperBarAnimation: noop },
@@ -77,10 +79,10 @@ function createLocalPlayerFixture() {
       updateGroundMotion: () => 0, updateFalling: noop, updateLanding: noop, updateRunDust: noop, updateWallSlide: noop }) },
   });
   const api = f.load('src/client/game/players/localPlayer.js');
-  api.createPlayer(scene, 'Player', 'ninja', null, null, [], [], {});
+  api.createPlayer(scene, { username: 'Player', character: 'ninja', opponentPlayers: {} });
   api.player.setVisible(true);
   api.player.body.reset(400, 300);
-  return { ...f, api, scene, keys, player: api.player,
+  return { ...f, api, scene, keys, controllerHooks, player: api.player,
     press(binding) { const key = keys.get(DEFAULT_BINDINGS[binding]); key.isDown = true; key.isUp = false; key.fresh = true; },
     release(binding) { const key = keys.get(DEFAULT_BINDINGS[binding]); key.isDown = false; key.isUp = true; key.fresh = false; },
     advance(ms) { now += ms; },

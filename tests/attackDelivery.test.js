@@ -52,7 +52,7 @@ describe("Attack contact and launch", () => {
 
       // The transport derives the buffer from the request, bounded by the rewind
       // it measured, which the per-connection allowance still bounds.
-      const room = { _simulationMono: 10000, combatClock: { mono: () => 10000 } };
+      const room = { simulationMono: 10000, combatClock: { mono: () => 10000 } };
       const lowRtt = { samples: [{ at: performance.now(), rtt: 5 }] };
       const forged = stampViewRewind(room, { viewMono: 0, viewDelayMs: 1e9, viewBufferMs: 1e9 }, lowRtt);
       assert.ok(forged.viewBufferMs <= forged.viewRewindMs && forged.viewBufferMs <= MAX_RENDER_DELAY_MS);
@@ -73,7 +73,7 @@ describe("Attack contact and launch", () => {
       const now = 1_000_000;
       const attack = createRuntimeAttack(player, { type, id: type, direction: flip ? -1 : 1 }, now);
       return { player, shapes: elapsedTimes.map((elapsed) => {
-        room._damageHitboxes?.clear();
+        room.damageHitboxes?.clear();
         tickRuntimeAttack(room, attack, now + elapsed);
         return damageHitboxSnapshot(room, now + elapsed)?.[0] || null;
       }) };
@@ -232,4 +232,63 @@ describe("Arrow trajectory", () => {
     assert.ok(second.vy > first.vy);
     assert.ok(Math.hypot(second.vx, second.vy) > Math.hypot(first.vx, first.vy));
   });
+});
+
+test('action normalization keeps supported fields and discards malformed nested geometry', () => {
+  const { sanitizeActionPayload } = require('../src/server/core/gameRoom/actionValidation');
+  assert.equal(sanitizeActionPayload(null), null);
+  assert.equal(sanitizeActionPayload({ type: ' ' }), null);
+  const action = {
+    type: '  ninja-throw  ', id: 7, sequence: '2', direction: -3, flip: false,
+    origin: { x: '5', y: 2, z: 10 }, target: { x: Infinity, y: 2 },
+    projectiles: [null, { angle: '0', speed: 'fast', burn: { durationMs: '80', totalDamage: Infinity } }],
+    mapCollisionRects: [{ left: 1, right: 2, top: 3, bottom: 4 }, { left: 2 }],
+    unrecognized: 'ignored',
+  };
+  assert.deepEqual(sanitizeActionPayload(action), {
+    type: 'ninja-throw', id: '7', sequence: 2, direction: -1, flip: false,
+    origin: { x: 5, y: 2 },
+    projectiles: [{ angle: 0, burn: { durationMs: 80 } }],
+    mapCollisionRects: [{ left: 1, right: 2, top: 3, bottom: 4 }],
+  });
+});
+
+test('attached melee follows the fighter, exposes contact only during its window, and expires', () => {
+  const { buildAttachedRectAttack, tickAttachedRect } = require('../src/shared/combat/runtime/attackRuntimes/melee');
+  const { getResolvedAttackDescriptor } = require('../src/shared/combat/runtime/attackDescriptorResolver');
+  const { damageHitboxSnapshot } = require('../src/shared/combat/runtime/damageHitboxes');
+  const descriptor = getResolvedAttackDescriptor('draven-splash');
+  const fighter = { participantId: 'fighter', name: 'Fighter', isAlive: true, team: 'team1', x: 200, y: 120 };
+  const room = { matchData: { editorDebugHitboxes: true }, players: new Map([[fighter.participantId, fighter]]) };
+  const started = 1000;
+  const attack = buildAttachedRectAttack(fighter, { type: 'draven-splash', id: 'a1' }, descriptor, started);
+  const strike = started + descriptor.runtime.damageStartMs;  const fullyGrown = started + descriptor.runtime.growDurationMs;
+  assert.equal(tickAttachedRect(room, attack, descriptor, strike - 1), false);
+  assert.deepEqual(damageHitboxSnapshot(room, strike - 1), []);
+  tickAttachedRect(room, attack, descriptor, fullyGrown);
+  const [first] = damageHitboxSnapshot(room, fullyGrown);
+  fighter.x += 40;
+  tickAttachedRect(room, attack, descriptor, fullyGrown + 1);
+  const [second] = damageHitboxSnapshot(room, fullyGrown + 1);
+  assert.equal(second.left - first.left, 40);
+  assert.equal(second.right - first.right, 40);
+  assert.equal(tickAttachedRect(room, attack, descriptor, started + descriptor.runtime.activeWindowMs), true);
+});
+
+test('remote releases retain the server muzzle and impacts retain their target position', () => {
+  const { loadClientModule } = require('./helpers/clientModule');
+  const { remoteActionPresentation } = loadClientModule(require.resolve('../src/client/game/characters/shared/remoteActionPresentation.js'));
+  const sprite = { x: 300, y: 420, flipX: true };
+  const muzzle = { x: 481, y: 280 };
+  for (const type of ['ozzy-fireball-release', 'gloop-slimeball-release', 'gloop-hook-release']) {
+    const action = { type, start: muzzle, origin: { x: 390, y: 350 } };
+    const shown = remoteActionPresentation(action, sprite);
+    assert.deepEqual([shown.start.x, shown.start.y, shown.x, shown.y], [481, 280, 481, 280]);
+    assert.equal(shown.direction, -1);
+    assert.equal(action.start, muzzle);
+  }
+  const hit = remoteActionPresentation({ type: 'draven-splash-explode', x: 12, y: 25 }, sprite);
+  assert.deepEqual([hit.x, hit.y], [12, 25]);
+  const cast = remoteActionPresentation({ type: 'draven-splash', x: 12, y: 25 }, sprite);
+  assert.deepEqual([cast.x, cast.y], [sprite.x, sprite.y]);
 });

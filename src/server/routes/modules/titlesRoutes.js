@@ -1,17 +1,17 @@
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
 const { getTitlesCatalog, getTitleById } = require("../../services/cosmetics/titlesCatalog");
 const { getTitleOwnership } = require("../../services/cosmetics/titleOwnership");
-const { authedRoute } = require("../routeHelpers");
+const { authedRoute } = require("../http");
 function registerTitlesRoutes({ app, db, requireCurrentUser }) {
   app.get("/titles/catalog", (_req, res) => res.json({ success: true, catalog: getTitlesCatalog() }));
   app.get("/titles/owned", authedRoute(requireCurrentUser, "[titles] owned", async (_req, res, user) =>
     res.json({ success: true, ...await getTitleOwnership(db, user) })));
-  app.post("/titles/select", authedRoute(requireCurrentUser, "[titles] select", async (req, res, user) => {
+  app.post(API_PATHS.TITLES_SELECT, authedRoute(requireCurrentUser, "[titles] select", async (req, res, user) => {
     const titleId = req.body?.titleId;
     if (titleId !== null && (typeof titleId !== "string" || !getTitleById(titleId))) {
       return res.status(400).json({ success: false, error: "Unknown title" });
     }
     const state = await getTitleOwnership(db, user);
-    if (state.schemaMissing) return res.status(503).json({ success: false, error: "Titles are temporarily unavailable" });
     if (titleId !== null && !state.ownedTitleIds.includes(titleId)) {
       return res.status(403).json({ success: false, error: "You do not own this title" });
     }

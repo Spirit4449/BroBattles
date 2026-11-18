@@ -1,6 +1,6 @@
 const { Worker } = require('node:worker_threads');
 const { createHash } = require('node:crypto');
-const { characterBody } = require('../../../shared/physics/duelGeometry');
+const { characterBody } = require('../../../shared/physics/characterBody');
 const { buildGraph, markGraphStatic } = require('./navigation');
 const { unpackGraph } = require('./navigationPack');
 const { netTrace } = require('../gameRoom/netTraceRecorder');
@@ -171,16 +171,4 @@ function createNavigationService({ limit = 32, workers = 1, log = console.info }
     },
   };
 }
-let liveService;
-function enableAsyncNavigation(options = {}) {
-  liveService ||= createNavigationService(options);
-}
-async function closeAsyncNavigation() {
-  const service = liveService;
-  liveService = null;
-  if (service) await service.close();
-}
-function getNavigationGraph(...args) {
-  return liveService ? liveService.getGraph(...args) : buildGraph(...args);
-}
-module.exports = { createNavigationService, enableAsyncNavigation, closeAsyncNavigation, getNavigationGraph };
+module.exports = { createNavigationService };

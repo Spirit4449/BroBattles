@@ -1,235 +1,631 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { applyTeamVisual } from "../../../../shared/projectilePresentation";
-import { presentSwarmRelease } from './swarmPresentation';
-import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileTexture';
-import { createShurikenEffects } from './effects';
-import { beginThrow, claimThrow, handPoint, presentRelease } from './throwPresentation';
-import { playSpriteAnimation } from '../shared/animationState';
-import { aimAngle, aimFacesLeft, faceAttack } from '../shared/flipLock';
-import { serverClock as matchClock, ensureServerClockEpoch as ensureMatchEpoch } from '../../match/serverClock';
-import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/projectilePresentation';
-import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../../../shared/characters/ninjaProjectile';
-import { advanceGeometry } from '../../../../shared/maps/platformMotion';
-import { clampLead, advanceShownLead } from '../../../../shared/characters/sparrowReplication';
-import { createRuntimeId } from '../shared/runtimeId';
-import { isLocalShooter, isEnemyShooter, predictShotContact, shotBlockersFor, notePredictedHit, enemyShotTraced, traceEnemyShot } from '../shared/shotPrediction';
-import { RENDER_LAYERS } from '../../scene/renderLayers';
-import { playPlayerSound } from '../../audio/playerAudio';
-import { movingColliderMotion, observeSnapshotClock, displayedPlayer, ownerTeamLook, catchUpAmmo, bindSceneUpdates, exposeDiagnostics } from '../shared/projectileReplication';
+import { presentSwarmRelease } from "./swarmPresentation";
+import {
+  ninjaProjectileTexture,
+  animateNinjaProjectile,
+} from "./projectileTexture";
+import { createShurikenEffects } from "./effects";
+import {
+  beginThrow,
+  claimThrow,
+  handPoint,
+  presentRelease,
+} from "./throwPresentation";
+import { playSpriteAnimation } from "../shared/animationState";
+import { aimAngle, aimFacesLeft, faceAttack } from "../shared/flipLock";
+import {
+  serverClock as matchClock,
+  ensureServerClockEpoch as ensureMatchEpoch,
+} from "../../match/serverClock";
+import {
+  remoteLaunchCorrection,
+  reconcileFlight,
+} from "../../../../shared/projectilePresentation";
+import {
+  VERSION,
+  STEP_MS,
+  launch,
+  step,
+  swarmConfig,
+} from "../../../../shared/characters/ninjaProjectile";
+import { advanceGeometry } from "../../../../shared/maps/platformMotion";
+import {
+  clampLead,
+  advanceShownLead,
+} from "../../../../shared/characters/sparrowReplication";
+import { createRuntimeId } from "../shared/runtimeId";
+import {
+  isLocalShooter,
+  isEnemyShooter,
+  predictShotContact,
+  shotBlockersFor,
+  notePredictedHit,
+  enemyShotTraced,
+  traceEnemyShot,
+} from "../shared/shotPrediction";
+import { RENDER_LAYERS } from "../../scene/renderLayers";
+import { playPlayerSound } from "../../audio/playerAudio";
+import {
+  movingColliderMotion,
+  observeSnapshotClock,
+  displayedPlayer,
+  ownerTeamLook,
+  catchUpAmmo,
+  bindSceneUpdates,
+  exposeDiagnostics,
+} from "../shared/projectileReplication";
 // Match and embedded previews own separate flights, clocks and teardown.
+
+const { key: NAME } = characterDefinitions.ninja;
+
 export function createNinjaNetwork(options = {}) {
-const clock = options.clock || matchClock;
-const ensureServerClockEpoch = options.ensureEpoch || ensureMatchEpoch;
-const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
-const diagnostics=[];
-function record(event){diagnostics.push(event);if(diagnostics.length>120)diagnostics.shift();}
-let enabled=false,sceneRef=null,unbindScene=null,ctx={},colliders=[],revision=0;
-// Bootstrap colliders carry their motion; move them to each step's server time,
-// as the server does, so predictions hit moving platforms where they are.
-let platformMotion={movingColliders:[]};
-const stepAt=(p,o,at)=>{advanceGeometry(platformMotion,at);step(p,o,colliders,shotBlockersFor(p.ownerName));};
-const copy=value=>JSON.parse(JSON.stringify(value));
-function ninjaEnabled(){return enabled;}
-function resetNinjaNetwork(){
-  if(sceneRef) delete sceneRef._ninjaCombatEnabled;
-  unbindScene?.();
-  for(const e of active.values()){e.fx?.destroy();e.sprite?.destroy();}
-  for(const e of effects)e.destroy();effects.clear();
-  active.clear();terminals.clear();requests.clear();diagnostics.length=0;
-  enabled=false;sceneRef=null;unbindScene=null;ctx={};revision=0;
-}
-// Remove combat presentation that was on screen when the browser stopped
-// rendering. Keep the network runtime configured so fresh packets can resume
-// normally, but never replay projectiles that crossed the arena while hidden.
-function discardNinjaPresentation(){
-  for(const e of active.values()){e.fx?.destroy();e.sprite?.destroy();}
-  for(const e of effects)e.destroy();
-  effects.clear();active.clear();requests.clear();
-}
-function configureNinjaNetwork(state){
-  resetNinjaNetwork();if(state?.ninjaCombatVersion!==VERSION)return;
-  enabled=true;colliders=state.colliders||[];platformMotion=movingColliderMotion(colliders);ensureServerClockEpoch(state.epoch);clock.observe(state,performance.now());
-  exposeDiagnostics('__BB_NINJA_DIAGNOSTICS__',()=>({
-    epoch:clock.epoch,active:active.size,rttMs:clock.samples.map(p=>p.rtt),events:diagnostics.slice(),
-  }));
-  for(const t of state.terminals||[])terminals.add(t.id);
-  for(const e of state.active||[])accept(e.projectile,state.simMono,e.viewRewindMs);
-}
-function observeNinjaSnapshot(snapshot){if(enabled)observeSnapshotClock(clock,snapshot);}
-const owner=name=>displayedPlayer(ctx,name);
-function accept(projectile,simMono,viewRewindMs){
-  if(terminals.has(projectile.id))return;
-  const prior=active.get(projectile.id);
-  if(prior?.authoritativeAt>=simMono)return;
-  // The server launches an owner's throw about one upstream trip after the
-  // prediction. Keep that lead rather than blending it away, which slowed or
-  // stalled confirmed shuriken mid-flight on the thrower's screen.
-  const lead=prior?.predicted&&!prior.pending?clampLead((simMono-projectile.elapsed)-(prior.at-prior.p.elapsed)):prior?.lead||0;
-  active.set(projectile.id,{...prior,p:copy(projectile),at:simMono,authoritativeAt:simMono,predicted:false,lead,
-    viewRewindMs:viewRewindMs??prior?.viewRewindMs,
-    correctionReported:false,wasPredicted:!!prior?.predicted,
-    correction:prior?.sprite?{replaced:{p:copy(prior.p),at:prior.at,lead:prior.lead||0,correction:prior.correction}}:null});
-}
-// Where a replaced flight would be drawn now. Confirmation measures its error
-// at one instant; measuring from last frame's sprite stalled it for a frame.
-function replacedFlight(r,o,sim,now){
-  const q=r.p,until=sim+r.lead;let at=r.at,count=0;
-  while(at+STEP_MS<=until&&count++<360&&!q.done){stepAt(q,o,at);at+=STEP_MS;}
-  const n=copy(q);if(!n.done)stepAt(n,o,at);
-  const f=Math.max(0,Math.min(1,(until-at)/STEP_MS)),c=r.correction;
-  const blend=c?.x!==undefined?Math.max(0,1-(now-c.at)/(c.duration||60)):0;
-  return {x:q.x+(n.x-q.x)*f+(c?.x||0)*blend,y:q.y+(n.y-q.y)*f+(c?.y||0)*blend};
-}
-// The thrower sees each enemy struck the moment the shuriken crosses it as
-// drawn, once per flight leg like the server. Damage waits for it.
-function predictHits(scene,e,point){
-  const from=e.hitFrom;e.hitFrom=point;
-  if(!from||e.p.phase==='hover'||e.p.phase==='stall'||e.p.elapsed<(e.p.cfg.hitArmMs||0))return;
-  const leg=e.p.phase,struck=(e.struck||=new Map()),skip=(struck.get(leg)||struck.set(leg,new Set()).get(leg));
-  for(let hit;(hit=predictShotContact(from,point,e.p.cfg.collisionRadius,{skip,traceId:e.p.id}));){
-    skip.add(hit.target.name);
-    notePredictedHit({delivery:'released',character:'ninja',target:hit.target});
+  const clock = options.clock || matchClock;
+  const ensureServerClockEpoch = options.ensureEpoch || ensureMatchEpoch;
+  const active = new Map(),
+    terminals = new Set(),
+    requests = new Map(),
+    effects = new Set();
+  const diagnostics = [];
+  function record(event) {
+    diagnostics.push(event);
+    if (diagnostics.length > 120) diagnostics.shift();
   }
-}
-function remove(id){const e=active.get(id);e?.fx?.destroy();e?.sprite?.destroy();active.delete(id);}
-function tombstone(id){terminals.add(id);while(terminals.size>512)terminals.delete(terminals.values().next().value);remove(id);}
-function applyAmmo(action){
-  if(action.revision<=revision)return;revision=action.revision;
-  if(!action.ammoState?.reloadMs)return;
-  const ammo=catchUpAmmo(action.ammoState,Math.max(0,clock.now(performance.now())-action.simMono));
-  ammo.charges=Math.max(0,ammo.charges-[...requests.values()].filter(r=>!r.special&&!r.accepted).length);
-  ctx.onAmmo?.(ammo);
-}
-function predictNinja(scene,player,username,payload,special=false){
-  if(!enabled)return payload;
-  attachNinjaScene(scene,{localPlayer:player,localUsername:username});
-  const id=payload.id||createRuntimeId('ninja');
-  const resolved=aimAngle(special?payload.aim?.angle:payload.angle,player);
-  // The owner turns toward the super on the press, not a round trip later.
-  if(special){const c=swarmConfig();faceAttack(scene,player,aimFacesLeft({angle:resolved},player.flipX),c.count*c.releaseMs+(Number(c.lockPaddingMs)||0));}
-  const now=performance.now();
-  requests.set(id,{at:now,special,accepted:false,username});
-  const count=special?swarmConfig().count:1;
-  for(let i=0;i<count;i++){
-    const p=launch(player,resolved,`${username}:${id}:${i}`,special?i:null);p.ownerName=username;
-    active.set(p.id,{p,at:clock.now(now)+(special?i*swarmConfig().releaseMs:0),due:now+(special?i*swarmConfig().releaseMs:0),predicted:true,pending:true});
-  }
-  return special?{id,aim:{angle:resolved}}:{type:'ninja-shuriken',id,angle:resolved};
-}
-function attachNinjaScene(scene,next={}){
-  ctx={...ctx,...next};if(!enabled||!scene||sceneRef===scene)return;
-  unbindScene?.();
-  sceneRef=scene; scene._ninjaCombatEnabled=true;
-  const update=()=>{
-    const now=performance.now(),sim=clock.now(now);
-    for(const [id,r] of requests)if(now-r.at>2500){requests.delete(id);if(!r.accepted)for(const [key,e]of active)if(key.startsWith(`${r.username}:${id}:`)&&e.predicted)tombstone(key);}
-    for(const [id,e]of active){
-      if(e.due>now)continue;
-      const displayedOwner=owner(e.p.ownerName);
-      // Remote actors are buffered. Homing must use the authoritative target,
-      // not their older on-screen position; owners retain immediate prediction.
-      const o=e.p.ownerName===ctx.localUsername ? displayedOwner||e.p.returnTarget : e.p.returnTarget||displayedOwner;
-      if(e.pending){
-        // Rebuild staggered releases from the current shooter pose, retaining tuning.
-        const i=Number(id.slice(id.lastIndexOf(':')+1));
-        e.p={...launch(o,e.p.angle,id,e.p.special?i:null),ownerName:e.p.ownerName};e.pending=false;
-      }
-      // Enemy throws are drawn ahead so they reach this player on screen when
-      // the server hits them (CombatClock.enemyLeadMs); ramped in, never backwards.
-      const victimLead=!e.predicted&&isEnemyShooter(e.p.ownerName)?advanceShownLead(e.shown||={},clock.enemyLeadMs(e.viewRewindMs),now):0;
-      // Bound catch-up work after stalls; authoritative state is refreshed on return.
-      const until=sim+(e.lead||0)+victimLead;
-      let count=0;while(e.at+STEP_MS<=until&&count++<360&&!e.p.done){stepAt(e.p,o,e.at);e.at+=STEP_MS;}
-      // A basic throw with a directional pose keeps its star in the hand until the
-      // release beat. The flight above runs on regardless; only its drawing waits.
-      // Only a fresh launch starts in the hand; one already well into its flight
-      // (a late packet, a reconnect) is drawn where it is.
-      if(e.thrown===undefined)e.thrown=e.p.special||e.p.elapsed>(e.p.cfg.hitArmMs||60)+STEP_MS?null:claimThrow(displayedOwner);
-      const inHand=!!e.thrown&&now-e.thrown.startedAt<e.thrown.releaseMs;
-      if(!e.sprite&&!inHand){
-        if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,displayedOwner,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
-        const team=ownerTeamLook(ctx,e.p.ownerName,o);
-        e.texture=ninjaProjectileTexture(scene,displayedOwner,team);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && e.texture==="shuriken")e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,team,e.texture.includes("-weapon")?"crown":null);
-        const hand=e.thrown&&displayedOwner?handPoint(displayedOwner,e.thrown.hand):null;
-        e.fx=createShurikenEffects(scene,e.sprite,{x:hand?hand.x:e.p.startX,y:hand?hand.y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:!!hand||e.p.elapsed<180});
-        if(e.p.ownerName!==ctx.localUsername)e.correction=remoteLaunchCorrection(displayedOwner,e.p.returnTarget,e.p.elapsed,now);
-      }
-      const next=copy(e.p);if(!next.done)stepAt(next,o,e.at);
-      const f=Math.max(0,Math.min(1,(until-e.at)/STEP_MS));
-      if(e.correction?.replaced){
-        e.correction=reconcileFlight(replacedFlight(e.correction.replaced,o,sim+victimLead,now),
-          {x:e.p.x+(next.x-e.p.x)*f,y:e.p.y+(next.y-e.p.y)*f},now,
-          Math.hypot(next.x-e.p.x,next.y-e.p.y)*1000/STEP_MS);
-      }
-      if(e.correction&&!e.correctionReported){e.correctionReported=true;record({type:'correction',id,at:now,phase:e.p.phase,predicted:e.wasPredicted,errorPx:Math.hypot(e.correction.x,e.correction.y)});}
-      const blend=e.correction?Math.max(0,1-(now-e.correction.at)/(e.correction.duration||60)):0;
-      const flight={x:e.p.x+(next.x-e.p.x)*f,y:e.p.y+(next.y-e.p.y)*f};
-      if(!e.p.done&&isLocalShooter(e.p.ownerName))predictHits(scene,e,flight);
-      if(!e.sprite){if(e.p.done)tombstone(id);continue;}
-      let x=flight.x+(e.correction?.x||0)*blend;
-      let y=flight.y+(e.correction?.y||0)*blend;
-      // Confirmation can describe a younger outbound projectile than prediction.
-      // Let authority catch up without visually reversing its outbound travel.
-      // Real terrain turns and returns bypass this constraint immediately.
-      if(e.renderPhase==='outward'&&e.p.phase==='outward'&&next.phase==='outward'){
-        const fx=Math.cos(e.p.angle),fy=Math.sin(e.p.angle);
-        const forward=(x-e.sprite.x)*fx+(y-e.sprite.y)*fy;
-        if(forward<0){x-=forward*fx;y-=forward*fy;record({type:'backtrack-prevented',id,at:now,distancePx:-forward});}
-      }
-      if(e.thrown){const leaving=presentRelease(e.thrown,{x,y},displayedOwner,now);x=leaving.x;y=leaving.y;e.sprite.setScale(e.p.cfg.scale*leaving.scale);}
-      e.sprite.setPosition(x,y);e.renderPhase=e.p.phase;
-      animateNinjaProjectile(e.sprite,e.texture,e.p.elapsed,e.p.cfg.rotationSpeed,e.p.direction);
-      e.fx?.update(now,!e.p.done);
-      if(e.p.done){e.sprite.setVisible?.(false);if(until-e.at>2000)tombstone(id);continue;}e.sprite.setVisible?.(true);
-      if(enemyShotTraced()&&!e.predicted&&isEnemyShooter(e.p.ownerName))traceEnemyShot(id,e.p.ownerName,'ninja',x,y,e.p.cfg.collisionRadius,victimLead,e.viewRewindMs,0,e.p.elapsed+Math.max(0,until-e.at));
-      if(now-(e.trailAt||0)>45&&effects.size<180){e.trailAt=now;const trail=scene.add.image(e.sprite.x,e.sprite.y,e.texture,e.sprite.frame?.name);trail.setScale(e.p.cfg.scale*.48);trail.setDepth(RENDER_LAYERS.ATTACKS-1);trail.alpha=.3;effects.add(trail);scene.tweens.add({targets:trail,alpha:0,duration:220,onComplete:()=>{effects.delete(trail);trail.destroy();}});}
-    }
+  let enabled = false,
+    sceneRef = null,
+    unbindScene = null,
+    ctx = {},
+    colliders = [],
+    revision = 0;
+  // Bootstrap colliders carry their motion; move them to each step's server time,
+  // as the server does, so predictions hit moving platforms where they are.
+  let platformMotion = { movingColliders: [] };
+  const stepAt = (p, o, at) => {
+    advanceGeometry(platformMotion, at);
+    step(p, o, colliders, shotBlockersFor(p.ownerName));
   };
-  unbindScene=bindSceneUpdates(scene,update,()=>{if(sceneRef===scene)resetNinjaNetwork();});
-}
-function handleNinjaPacket(scene,packet,next){
-  const a=packet?.action;if(!enabled||a?.ninjaCombatVersion!==VERSION)return false;
-  if(a.epoch!==clock.epoch)return true;
-  attachNinjaScene(scene,next);clock.observe(a,performance.now());
-  if(a.type==='ninja-result'){
-    if(packet.playerName===ctx.localUsername){
-      const r=requests.get(a.requestId);if(r)r.accepted=a.accepted;
-      if(!a.accepted){requests.delete(a.requestId);for(const [id]of active)if(id.startsWith(`${packet.playerName}:${a.requestId}:`))tombstone(id);}
-      applyAmmo(a);
-    }
-  }else if(a.type==='ninja-launch'){
-    if(!a.projectile.special&&packet.playerName!==ctx.localUsername&&!active.has(a.projectile.id)&&!terminals.has(a.projectile.id)){
-      const sprite=owner(packet.playerName);
-      // Each launched projectile is its own throw.
-      playSpriteAnimation({scene,sprite,character:'ninja',logical:'throw',fallback:'idle',id:a.projectile.id,remote:true,variant:beginThrow(sprite,a.projectile.angle,performance.now())});
-      playPlayerSound(scene, sprite, 'shurikenThrow', {volume:1,rate:1.3});
-    }
-    accept(a.projectile,a.simMono,a.viewRewindMs);
+  const copy = (value) => JSON.parse(JSON.stringify(value));
+  function ninjaEnabled() {
+    return enabled;
   }
-  else if(a.type==='ninja-state'){const e=active.get(a.id);if(e)accept({...e.p,...a.state,done:false},a.simMono);}
-  else if(a.type==='ninja-terminal'){tombstone(a.id);if(packet.playerName===ctx.localUsername)applyAmmo(a);}
-  else if(a.type==='ninja-impact'){
-    const key=`hit:${a.id}:${a.phase}:${a.target}`;if(terminals.has(key))return true;
-    terminals.add(key);while(terminals.size>512)terminals.delete(terminals.values().next().value);
-    if(a.appliedDamage>0)playPlayerSound(scene, owner(packet.playerName) || {x:a.x,y:a.y}, 'shurikenHit', {volume:.5});
+  function resetNinjaNetwork() {
+    if (sceneRef) delete sceneRef._ninjaCombatEnabled;
+    unbindScene?.();
+    for (const e of active.values()) {
+      e.fx?.destroy();
+      e.sprite?.destroy();
+    }
+    for (const e of effects) e.destroy();
+    effects.clear();
+    active.clear();
+    terminals.clear();
+    requests.clear();
+    diagnostics.length = 0;
+    enabled = false;
+    sceneRef = null;
+    unbindScene = null;
+    ctx = {};
+    revision = 0;
   }
-  return true;
-}
+  // Remove combat presentation that was on screen when the browser stopped
+  // rendering. Keep the network runtime configured so fresh packets can resume
+  // normally, but never replay projectiles that crossed the arena while hidden.
+  function discardNinjaPresentation() {
+    for (const e of active.values()) {
+      e.fx?.destroy();
+      e.sprite?.destroy();
+    }
+    for (const e of effects) e.destroy();
+    effects.clear();
+    active.clear();
+    requests.clear();
+  }
+  function configureNinjaNetwork(state) {
+    resetNinjaNetwork();
+    if (state?.ninjaCombatVersion !== VERSION) return;
+    enabled = true;
+    colliders = state.colliders || [];
+    platformMotion = movingColliderMotion(colliders);
+    ensureServerClockEpoch(state.epoch);
+    clock.observe(state, performance.now());
+    exposeDiagnostics("__BB_NINJA_DIAGNOSTICS__", () => ({
+      epoch: clock.epoch,
+      active: active.size,
+      rttMs: clock.samples.map((p) => p.rtt),
+      events: diagnostics.slice(),
+    }));
+    for (const t of state.terminals || []) terminals.add(t.id);
+    for (const e of state.active || [])
+      accept(e.projectile, state.simMono, e.viewRewindMs);
+  }
+  function observeNinjaSnapshot(snapshot) {
+    if (enabled) observeSnapshotClock(clock, snapshot);
+  }
+  const owner = (name) => displayedPlayer(ctx, name);
+  function accept(projectile, simMono, viewRewindMs) {
+    if (terminals.has(projectile.id)) return;
+    const prior = active.get(projectile.id);
+    if (prior?.authoritativeAt >= simMono) return;
+    // The server launches an owner's throw about one upstream trip after the
+    // prediction. Keep that lead rather than blending it away, which slowed or
+    // stalled confirmed shuriken mid-flight on the thrower's screen.
+    const lead =
+      prior?.predicted && !prior.pending
+        ? clampLead(simMono - projectile.elapsed - (prior.at - prior.p.elapsed))
+        : prior?.lead || 0;
+    active.set(projectile.id, {
+      ...prior,
+      p: copy(projectile),
+      at: simMono,
+      authoritativeAt: simMono,
+      predicted: false,
+      lead,
+      viewRewindMs: viewRewindMs ?? prior?.viewRewindMs,
+      correctionReported: false,
+      wasPredicted: !!prior?.predicted,
+      correction: prior?.sprite
+        ? {
+            replaced: {
+              p: copy(prior.p),
+              at: prior.at,
+              lead: prior.lead || 0,
+              correction: prior.correction,
+            },
+          }
+        : null,
+    });
+  }
+  // Where a replaced flight would be drawn now. Confirmation measures its error
+  // at one instant; measuring from last frame's sprite stalled it for a frame.
+  function replacedFlight(r, o, sim, now) {
+    const q = r.p,
+      until = sim + r.lead;
+    let at = r.at,
+      count = 0;
+    while (at + STEP_MS <= until && count++ < 360 && !q.done) {
+      stepAt(q, o, at);
+      at += STEP_MS;
+    }
+    const n = copy(q);
+    if (!n.done) stepAt(n, o, at);
+    const f = Math.max(0, Math.min(1, (until - at) / STEP_MS)),
+      c = r.correction;
+    const blend =
+      c?.x !== undefined
+        ? Math.max(0, 1 - (now - c.at) / (c.duration || 60))
+        : 0;
+    return {
+      x: q.x + (n.x - q.x) * f + (c?.x || 0) * blend,
+      y: q.y + (n.y - q.y) * f + (c?.y || 0) * blend,
+    };
+  }
+  // The thrower sees each enemy struck the moment the shuriken crosses it as
+  // drawn, once per flight leg like the server. Damage waits for it.
+  function predictHits(scene, e, point) {
+    const from = e.hitFrom;
+    e.hitFrom = point;
+    if (
+      !from ||
+      e.p.phase === "hover" ||
+      e.p.phase === "stall" ||
+      e.p.elapsed < (e.p.cfg.hitArmMs || 0)
+    )
+      return;
+    const leg = e.p.phase,
+      struck = (e.struck ||= new Map()),
+      skip = struck.get(leg) || struck.set(leg, new Set()).get(leg);
+    for (
+      let hit;
+      (hit = predictShotContact(from, point, e.p.cfg.collisionRadius, {
+        skip,
+        traceId: e.p.id,
+      }));
+    ) {
+      skip.add(hit.target.name);
+      notePredictedHit({
+        delivery: "released",
+        character: NAME,
+        target: hit.target,
+      });
+    }
+  }
+  function remove(id) {
+    const e = active.get(id);
+    e?.fx?.destroy();
+    e?.sprite?.destroy();
+    active.delete(id);
+  }
+  function tombstone(id) {
+    terminals.add(id);
+    while (terminals.size > 512)
+      terminals.delete(terminals.values().next().value);
+    remove(id);
+  }
+  function applyAmmo(action) {
+    if (action.revision <= revision) return;
+    revision = action.revision;
+    if (!action.ammoState?.reloadMs) return;
+    const ammo = catchUpAmmo(
+      action.ammoState,
+      Math.max(0, clock.now(performance.now()) - action.simMono),
+    );
+    ammo.charges = Math.max(
+      0,
+      ammo.charges -
+        [...requests.values()].filter((r) => !r.special && !r.accepted).length,
+    );
+    ctx.onAmmo?.(ammo);
+  }
+  function predictNinja(scene, player, username, payload, special = false) {
+    if (!enabled) return payload;
+    attachNinjaScene(scene, { localPlayer: player, localUsername: username });
+    const id = payload.id || createRuntimeId(NAME);
+    const resolved = aimAngle(
+      special ? payload.aim?.angle : payload.angle,
+      player,
+    );
+    // The owner turns toward the super on the press, not a round trip later.
+    if (special) {
+      const c = swarmConfig();
+      faceAttack(
+        scene,
+        player,
+        aimFacesLeft({ angle: resolved }, player.flipX),
+        c.count * c.releaseMs + (Number(c.lockPaddingMs) || 0),
+      );
+    }
+    const now = performance.now();
+    requests.set(id, { at: now, special, accepted: false, username });
+    const count = special ? swarmConfig().count : 1;
+    for (let i = 0; i < count; i++) {
+      const p = launch(
+        player,
+        resolved,
+        `${username}:${id}:${i}`,
+        special ? i : null,
+      );
+      p.ownerName = username;
+      active.set(p.id, {
+        p,
+        at: clock.now(now) + (special ? i * swarmConfig().releaseMs : 0),
+        due: now + (special ? i * swarmConfig().releaseMs : 0),
+        predicted: true,
+        pending: true,
+      });
+    }
+    return special
+      ? { id, aim: { angle: resolved } }
+      : { type: "ninja-shuriken", id, angle: resolved };
+  }
+  function attachNinjaScene(scene, next = {}) {
+    ctx = { ...ctx, ...next };
+    if (!enabled || !scene || sceneRef === scene) return;
+    unbindScene?.();
+    sceneRef = scene;
+    scene._ninjaCombatEnabled = true;
+    const update = () => {
+      const now = performance.now(),
+        sim = clock.now(now);
+      for (const [id, r] of requests)
+        if (now - r.at > 2500) {
+          requests.delete(id);
+          if (!r.accepted)
+            for (const [key, e] of active)
+              if (key.startsWith(`${r.username}:${id}:`) && e.predicted)
+                tombstone(key);
+        }
+      for (const [id, e] of active) {
+        if (e.due > now) continue;
+        const displayedOwner = owner(e.p.ownerName);
+        // Remote actors are buffered. Homing must use the authoritative target,
+        // not their older on-screen position; owners retain immediate prediction.
+        const o =
+          e.p.ownerName === ctx.localUsername
+            ? displayedOwner || e.p.returnTarget
+            : e.p.returnTarget || displayedOwner;
+        if (e.pending) {
+          // Rebuild staggered releases from the current shooter pose, retaining tuning.
+          const i = Number(id.slice(id.lastIndexOf(":") + 1));
+          e.p = {
+            ...launch(o, e.p.angle, id, e.p.special ? i : null),
+            ownerName: e.p.ownerName,
+          };
+          e.pending = false;
+        }
+        // Enemy throws are drawn ahead so they reach this player on screen when
+        // the server hits them (CombatClock.enemyLeadMs); ramped in, never backwards.
+        const victimLead =
+          !e.predicted && isEnemyShooter(e.p.ownerName)
+            ? advanceShownLead(
+                (e.shown ||= {}),
+                clock.enemyLeadMs(e.viewRewindMs),
+                now,
+              )
+            : 0;
+        // Bound catch-up work after stalls; authoritative state is refreshed on return.
+        const until = sim + (e.lead || 0) + victimLead;
+        let count = 0;
+        while (e.at + STEP_MS <= until && count++ < 360 && !e.p.done) {
+          stepAt(e.p, o, e.at);
+          e.at += STEP_MS;
+        }
+        // A basic throw with a directional pose keeps its star in the hand until the
+        // release beat. The flight above runs on regardless; only its drawing waits.
+        // Only a fresh launch starts in the hand; one already well into its flight
+        // (a late packet, a reconnect) is drawn where it is.
+        if (e.thrown === undefined)
+          e.thrown =
+            e.p.special || e.p.elapsed > (e.p.cfg.hitArmMs || 60) + STEP_MS
+              ? null
+              : claimThrow(displayedOwner);
+        const inHand =
+          !!e.thrown && now - e.thrown.startedAt < e.thrown.releaseMs;
+        if (!e.sprite && !inHand) {
+          if (e.p.special && !e.p.done && !e.releasePresented) {
+            presentSwarmRelease(
+              scene,
+              displayedOwner,
+              swarmConfig().releaseMs,
+              e.p.ownerName !== ctx.localUsername,
+            );
+            e.releasePresented = true;
+          }
+          const team = ownerTeamLook(ctx, e.p.ownerName, o);
+          e.texture = ninjaProjectileTexture(scene, displayedOwner, team);
+          e.sprite = scene.add.image(e.p.x, e.p.y, e.texture);
+          e.sprite.setScale(e.p.cfg.scale);
+          e.sprite.setDepth(RENDER_LAYERS.ATTACKS);
+          if (e.p.special && e.texture === "shuriken")
+            e.sprite.setTint?.(0xc7efff);
+          applyTeamVisual(
+            e.sprite,
+            team,
+            e.texture.includes("-weapon") ? "crown" : null,
+          );
+          const hand =
+            e.thrown && displayedOwner
+              ? handPoint(displayedOwner, e.thrown.hand)
+              : null;
+          e.fx = createShurikenEffects(scene, e.sprite, {
+            x: hand ? hand.x : e.p.startX,
+            y: hand ? hand.y : e.p.startY,
+            angle: e.p.angle,
+            special: e.p.special,
+            launch: !!hand || e.p.elapsed < 180,
+          });
+          if (e.p.ownerName !== ctx.localUsername)
+            e.correction = remoteLaunchCorrection(
+              displayedOwner,
+              e.p.returnTarget,
+              e.p.elapsed,
+              now,
+            );
+        }
+        const next = copy(e.p);
+        if (!next.done) stepAt(next, o, e.at);
+        const f = Math.max(0, Math.min(1, (until - e.at) / STEP_MS));
+        if (e.correction?.replaced) {
+          e.correction = reconcileFlight(
+            replacedFlight(e.correction.replaced, o, sim + victimLead, now),
+            {
+              x: e.p.x + (next.x - e.p.x) * f,
+              y: e.p.y + (next.y - e.p.y) * f,
+            },
+            now,
+            (Math.hypot(next.x - e.p.x, next.y - e.p.y) * 1000) / STEP_MS,
+          );
+        }
+        if (e.correction && !e.correctionReported) {
+          e.correctionReported = true;
+          record({
+            type: "correction",
+            id,
+            at: now,
+            phase: e.p.phase,
+            predicted: e.wasPredicted,
+            errorPx: Math.hypot(e.correction.x, e.correction.y),
+          });
+        }
+        const blend = e.correction
+          ? Math.max(
+              0,
+              1 - (now - e.correction.at) / (e.correction.duration || 60),
+            )
+          : 0;
+        const flight = {
+          x: e.p.x + (next.x - e.p.x) * f,
+          y: e.p.y + (next.y - e.p.y) * f,
+        };
+        if (!e.p.done && isLocalShooter(e.p.ownerName))
+          predictHits(scene, e, flight);
+        if (!e.sprite) {
+          if (e.p.done) tombstone(id);
+          continue;
+        }
+        let x = flight.x + (e.correction?.x || 0) * blend;
+        let y = flight.y + (e.correction?.y || 0) * blend;
+        // Confirmation can describe a younger outbound projectile than prediction.
+        // Let authority catch up without visually reversing its outbound travel.
+        // Real terrain turns and returns bypass this constraint immediately.
+        if (
+          e.renderPhase === "outward" &&
+          e.p.phase === "outward" &&
+          next.phase === "outward"
+        ) {
+          const fx = Math.cos(e.p.angle),
+            fy = Math.sin(e.p.angle);
+          const forward = (x - e.sprite.x) * fx + (y - e.sprite.y) * fy;
+          if (forward < 0) {
+            x -= forward * fx;
+            y -= forward * fy;
+            record({
+              type: "backtrack-prevented",
+              id,
+              at: now,
+              distancePx: -forward,
+            });
+          }
+        }
+        if (e.thrown) {
+          const leaving = presentRelease(
+            e.thrown,
+            { x, y },
+            displayedOwner,
+            now,
+          );
+          x = leaving.x;
+          y = leaving.y;
+          e.sprite.setScale(e.p.cfg.scale * leaving.scale);
+        }
+        e.sprite.setPosition(x, y);
+        e.renderPhase = e.p.phase;
+        animateNinjaProjectile(
+          e.sprite,
+          e.texture,
+          e.p.elapsed,
+          e.p.cfg.rotationSpeed,
+          e.p.direction,
+        );
+        e.fx?.update(now, !e.p.done);
+        if (e.p.done) {
+          e.sprite.setVisible?.(false);
+          if (until - e.at > 2000) tombstone(id);
+          continue;
+        }
+        e.sprite.setVisible?.(true);
+        if (enemyShotTraced() && !e.predicted && isEnemyShooter(e.p.ownerName))
+          traceEnemyShot(
+            id,
+            e.p.ownerName,
+            NAME,
+            x,
+            y,
+            e.p.cfg.collisionRadius,
+            victimLead,
+            e.viewRewindMs,
+            0,
+            e.p.elapsed + Math.max(0, until - e.at),
+          );
+        if (now - (e.trailAt || 0) > 45 && effects.size < 180) {
+          e.trailAt = now;
+          const trail = scene.add.image(
+            e.sprite.x,
+            e.sprite.y,
+            e.texture,
+            e.sprite.frame?.name,
+          );
+          trail.setScale(e.p.cfg.scale * 0.48);
+          trail.setDepth(RENDER_LAYERS.ATTACKS - 1);
+          trail.alpha = 0.3;
+          effects.add(trail);
+          scene.tweens.add({
+            targets: trail,
+            alpha: 0,
+            duration: 220,
+            onComplete: () => {
+              effects.delete(trail);
+              trail.destroy();
+            },
+          });
+        }
+      }
+    };
+    unbindScene = bindSceneUpdates(scene, update, () => {
+      if (sceneRef === scene) resetNinjaNetwork();
+    });
+  }
+  function handleNinjaPacket(scene, packet, next) {
+    const a = packet?.action;
+    if (!enabled || a?.ninjaCombatVersion !== VERSION) return false;
+    if (a.epoch !== clock.epoch) return true;
+    attachNinjaScene(scene, next);
+    clock.observe(a, performance.now());
+    if (a.type === "ninja-result") {
+      if (packet.playerName === ctx.localUsername) {
+        const r = requests.get(a.requestId);
+        if (r) r.accepted = a.accepted;
+        if (!a.accepted) {
+          requests.delete(a.requestId);
+          for (const [id] of active)
+            if (id.startsWith(`${packet.playerName}:${a.requestId}:`))
+              tombstone(id);
+        }
+        applyAmmo(a);
+      }
+    } else if (a.type === "ninja-launch") {
+      if (
+        !a.projectile.special &&
+        packet.playerName !== ctx.localUsername &&
+        !active.has(a.projectile.id) &&
+        !terminals.has(a.projectile.id)
+      ) {
+        const sprite = owner(packet.playerName);
+        // Each launched projectile is its own throw.
+        playSpriteAnimation({
+          scene,
+          sprite,
+          character: NAME,
+          logical: "throw",
+          fallback: "idle",
+          id: a.projectile.id,
+          remote: true,
+          variant: beginThrow(sprite, a.projectile.angle, performance.now()),
+        });
+        playPlayerSound(scene, sprite, "shurikenThrow", {
+          volume: 1,
+          rate: 1.3,
+        });
+      }
+      accept(a.projectile, a.simMono, a.viewRewindMs);
+    } else if (a.type === "ninja-state") {
+      const e = active.get(a.id);
+      if (e) accept({ ...e.p, ...a.state, done: false }, a.simMono);
+    } else if (a.type === "ninja-terminal") {
+      tombstone(a.id);
+      if (packet.playerName === ctx.localUsername) applyAmmo(a);
+    } else if (a.type === "ninja-impact") {
+      const key = `hit:${a.id}:${a.phase}:${a.target}`;
+      if (terminals.has(key)) return true;
+      terminals.add(key);
+      while (terminals.size > 512)
+        terminals.delete(terminals.values().next().value);
+      if (a.appliedDamage > 0)
+        playPlayerSound(
+          scene,
+          owner(packet.playerName) || { x: a.x, y: a.y },
+          "shurikenHit",
+          { volume: 0.5 },
+        );
+    }
+    return true;
+  }
 
-// Lifecycle contract consumed by the generic match and scene controllers.
-const networkAdapter = {
-  key: 'ninja',
-  joinFields: { ninjaCombatVersion: 1 },
-  bootstrapKey: 'ninjaCombat',
-  configure: configureNinjaNetwork,
-  reset: resetNinjaNetwork,
-  discard: discardNinjaPresentation,
-  attach: attachNinjaScene,
-  observe: observeNinjaSnapshot,
-  handlePacket: handleNinjaPacket,
-  predictSpecial: (scene, player, username, request) => predictNinja(scene, player, username, request, true),
-};
+  // Lifecycle contract consumed by the generic match and scene controllers.
+  const networkAdapter = {
+    key: NAME,
+    joinFields: { ninjaCombatVersion: 1 },
+    bootstrapKey: "ninjaCombat",
+    configure: configureNinjaNetwork,
+    reset: resetNinjaNetwork,
+    discard: discardNinjaPresentation,
+    attach: attachNinjaScene,
+    observe: observeNinjaSnapshot,
+    handlePacket: handleNinjaPacket,
+    predictSpecial: (scene, player, username, request) =>
+      predictNinja(scene, player, username, request, true),
+  };
 
-return { ninjaEnabled, resetNinjaNetwork, discardNinjaPresentation, configureNinjaNetwork, observeNinjaSnapshot, predictNinja, attachNinjaScene, handleNinjaPacket, networkAdapter };
+  return {
+    ninjaEnabled,
+    resetNinjaNetwork,
+    discardNinjaPresentation,
+    configureNinjaNetwork,
+    observeNinjaSnapshot,
+    predictNinja,
+    attachNinjaScene,
+    handleNinjaPacket,
+    networkAdapter,
+  };
 }
 const defaultNetwork = createNinjaNetwork();
 export const ninjaEnabled = defaultNetwork.ninjaEnabled;

@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createFakeDb } = require('./helpers/fakeDb');
+const { createFakeIo } = require('./helpers/fakeIo');
 const { createFriendService } = require('../src/server/services/social/friendService.js');
 const { DEFAULT_PRIVACY, normalizePrivacy, privacyFromRow, sanitizePrivacyUpdate } = require('../src/shared/social/privacy.cjs');
 
@@ -37,16 +39,15 @@ function createDb({ privacy = {}, gamesTogether = 0, friends = true, reversePend
     return [];
   };
   const db = {
-    runQuery,
-    withTransaction: (fn) => fn(null, runQuery),
+    ...createFakeDb(runQuery),
     getPartyIdByName: async (name) => (name === 'Me' ? 50 : null),
   };
   return { db, calls };
 }
 
 function createIo() {
-  const events = [];
-  return { events, io: { to: (room) => ({ emit: (event, payload) => events.push({ room, event, payload }) }) } };
+  const io = createFakeIo();
+  return { events: io.emitted, io };
 }
 
 test('privacy values are sanitized and missing rows fall back to defaults', () => {

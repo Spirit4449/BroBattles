@@ -1,4 +1,6 @@
-const catalog = require('../../shared/catalogs/playerCardsCatalog.json');
+const { getNavigation, getPageScope } = require("../lib/globals.cjs");
+const { readJson, writeJson } = require('../lib/safeStorage.js');
+const catalog = require('../../shared/catalogs/playerCardsCatalog.cjs');
 const { assetUrl } = require('../../shared/site/html.cjs');
 
 function resolveCard(card) {
@@ -30,7 +32,7 @@ function animationFormat(url) {
 function readAlphaCache() {
   try {
     const agent = navigator.userAgent;
-    const saved = JSON.parse(window.localStorage.getItem(ALPHA_CACHE_KEY) || 'null');
+    const saved = readJson(() => window.localStorage, ALPHA_CACHE_KEY);
     return saved?.agent === agent ? saved : { agent };
   } catch (_) { return null; }
 }
@@ -39,7 +41,7 @@ function rememberAlpha(format, transparent) {
   const saved = readAlphaCache();
   if (!saved) return;
   saved[format] = transparent;
-  try { window.localStorage.setItem(ALPHA_CACHE_KEY, JSON.stringify(saved)); } catch (_) { /* Storage is optional. */ }
+  writeJson(() => window.localStorage, ALPHA_CACHE_KEY, saved);
 }
 
 // Resolves true/false once a frame decodes, or null when the probe could not
@@ -122,7 +124,7 @@ function selectPlayerCardVideo(card) {
 }
 
 function getCardLoader() {
-  if (window.__BB_NAVIGATION__?.requestCardAnimation) return window.__BB_NAVIGATION__;
+  if (getNavigation()?.requestCardAnimation) return getNavigation();
   if (!standaloneLoader) {
     standaloneLoader = require('../navigation/preload.js').createBattlePreloader();
     const start = () => standaloneLoader.start('cards');
@@ -332,7 +334,7 @@ function createPlayerCardMedia(card, { hover = false, interactive = false, prepa
   media.addEventListener('waiting', resetFrame);
   media.addEventListener('emptied', resetFrame);
   media.addEventListener('error', () => { failed = true; stop(); }, { once: true });
-  unregisterScope = window.__BB_PAGE_SCOPE__?.onDispose(state.dispose);
+  unregisterScope = getPageScope()?.onDispose(state.dispose);
   if (prepare) update();
   else if (!window.IntersectionObserver) window.requestAnimationFrame?.(update);
   return media;

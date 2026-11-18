@@ -1,16 +1,13 @@
-// Discover both script tags and the ordered loadScript calls in game.html.
-// Reading a template must never execute it or initialize the other screen.
-export function getTemplateResources(html) {
-  return [...new Set([...html.matchAll(/["'](\/(?:bundles|styles)\/[^"'\s]+\.(?:js|css)(?:\?[^"'\s]*)?)["']/g)]
-    .map(match => match[1]))].filter(url => !/\/navigation[.]/.test(url));
-}
+import { createPreloadManifest } from './preloadManifest.js';
+import { downloadPreload } from './preloadDownload.js';
+
+export { getTemplateResources } from './preloadManifest.js';
 
 // Only download bytes into the HTTP cache. Discovery and assets share a queue,
 // cancellation controller. The session byte budget limits speculation, not
 // playback the user is currently viewing.
 export function createBattlePreloader() {
   const jobs = new Map();
-  const templates = new Map();
   const completed = new Set();
   // Navigation owns these blobs, so a warmed lobby video survives page disposal.
   // Map order is least recently used first.
@@ -22,8 +19,7 @@ export function createBattlePreloader() {
   let rosterVideos = new Set();
   let activeJob;
   let measuredMbps;
-  let manifest;
-  let modeId;
+  const manifest = createPreloadManifest(add);
   let screen;
   let enabled = false;
   let busy = false;
@@ -106,23 +102,6 @@ export function createBattlePreloader() {
     // New gameplay work preempts an optional card download.
     interruptVideo();
   }
-  function addMode() {
-    for (const url of manifest || []) {
-      if (typeof url === 'string' && url.startsWith('/bundles/mode-' + modeId + '.')) add(url, 'battle', 1);
-      else if (typeof url === 'string' && url.startsWith('/assets/')) add(url, 'battle', 3);
-    }
-  }
-  function seed(target) {
-    if (target === 'cards') return;
-    const template = templates.get(target);
-    if (template) {
-      for (const url of template) add(url, target, 1);
-    } else add(target === 'battle' ? '/game.html' : '/index.html', target, 0, 'template');
-    if (target === 'battle' && modeId) {
-      if (manifest) addMode();
-      else add('/battle-preload.json', target, 1, 'manifest');
-    }
-  }
   function cancelSchedule() {
     clearTimeout(delayTimer);
     if (window.cancelIdleCallback) window.cancelIdleCallback(idleTimer);
@@ -151,35 +130,20 @@ export function createBattlePreloader() {
     const request = new AbortController();
     controller = request;
     const started = Date.now();
-    let transferred = 0;
-    let retryable = true;
+    const transfer = { bytes: 0, retryable: true };
     const timeout = setTimeout(() => request.abort(), job.kind === 'video' ? (job.interactive ? 20000 : retained(job.url) ? 5000 : 2500) : 15000);
     job.attempts++;
     try {
-      const response = await fetch(job.url, { credentials: 'same-origin', priority: 'low', signal: request.signal });
-      if (!response.ok || !response.body) {
-        retryable = response.status >= 500 || response.status === 408 || response.status === 429;
-        await response.body?.cancel();
-        throw new Error('Preload unavailable');
-      }
-      const reader = response.body.getReader();
-      const chunks = [];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (request.signal.aborted) throw new DOMException('Preload stopped', 'AbortError');
-        if (done) break;
-        transferred += value.byteLength;
-        if (!foreground(job)) {
-          budget -= value.byteLength;
-          if (budget < 0) { await reader.cancel(); throw new Error('Preload budget exhausted'); }
-        }
-        if (job.kind === 'video' && (transferred > job.bytes * 1.1 || videoBytes + transferred > videoLimit)) {
-          retryable = false;
-          await reader.cancel();
-          throw new Error('Card animation exceeds declared size');
-        }
-        if (job.kind !== 'asset') chunks.push(value);
-      }
+      const chunks = await downloadPreload(job, {
+        signal: request.signal,
+        transfer,
+        spendBudget(bytes) {
+          if (foreground(job)) return true;
+          budget -= bytes;
+          return budget >= 0;
+        },
+        maxBytes: job.kind === 'video' ? Math.min(job.bytes * 1.1, videoLimit - videoBytes) : Infinity,
+      });
       if (job.kind === 'video') {
         const blob = new Blob(chunks, { type: new URL(job.url).pathname.endsWith('.mov') ? 'video/quicktime' : 'video/webm' });
         const url = URL.createObjectURL(blob);
@@ -191,20 +155,12 @@ export function createBattlePreloader() {
       } else if (job.kind !== 'asset') {
         const body = await new Blob(chunks).text();
         if (request.signal.aborted) throw new DOMException('Preload stopped', 'AbortError');
-        if (job.kind === 'template') {
-          templates.set(job.target, getTemplateResources(body));
-          seed(job.target);
-        } else {
-          const urls = JSON.parse(body);
-          if (!Array.isArray(urls)) throw new Error('Invalid preload manifest');
-          manifest = urls;
-          addMode();
-        }
+        manifest.accept(job, body);
       }
       completed.add(job.url);
       jobs.delete(job.key);
       const elapsed = Date.now() - started;
-      if (transferred >= 65536 && elapsed >= 50) measuredMbps = transferred * 8 / elapsed / 1000;
+      if (transfer.bytes >= 65536 && elapsed >= 50) measuredMbps = transfer.bytes * 8 / elapsed / 1000;
     } catch (_) {
       // Pauses aren't failures. Real failures retry at the back of their
       // priority group, at most three times.
@@ -212,8 +168,8 @@ export function createBattlePreloader() {
       else if (job.kind === 'video') {
         // Visible playback can recover from a transient server/connection
         // failure. Speculation and terminal media failures do not retry.
-        if (!foreground(job) || !retryable) job.attempts = 3;
-        if (request.signal.aborted && !foreground(job)) measuredMbps = Math.max(0.05, transferred * 8 / Math.max(1, Date.now() - started) / 1000);
+        if (!foreground(job) || !transfer.retryable) job.attempts = 3;
+        if (request.signal.aborted && !foreground(job)) measuredMbps = Math.max(0.05, transfer.bytes * 8 / Math.max(1, Date.now() - started) / 1000);
       }
       if (jobs.has(job.key)) {
         jobs.delete(job.key);
@@ -234,7 +190,7 @@ export function createBattlePreloader() {
   function resume() {
     if (!screen || !allowed()) return;
     if (!enabled) { api.start(screen); return; }
-    seed(screen);
+    manifest.seed(screen);
     schedule();
   }
   document.addEventListener('visibilitychange', () => document.hidden ? pause() : resume());
@@ -323,11 +279,11 @@ export function createBattlePreloader() {
       schedule();
     },
     selectMode(value) {
-      modeId = String(value || 'duels');
+      const modeId = manifest.selectMode(value);
       for (const [key, job] of jobs) {
         if (job.url.includes('/bundles/mode-') && !new URL(job.url).pathname.startsWith('/bundles/mode-' + modeId + '.')) jobs.delete(key);
       }
-      if (screen === 'battle') seed('battle');
+      if (screen === 'battle') manifest.seed('battle');
       schedule();
     },
     start(target = 'battle') {
@@ -335,7 +291,7 @@ export function createBattlePreloader() {
       pause();
       screen = target;
       enabled = false;
-      seed(target);
+      manifest.seed(target);
       delayTimer = setTimeout(() => {
         delayTimer = null;
         enabled = true;

@@ -1,8 +1,12 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { THORG_SWEEP } from "../../../../shared/characters/thorgSweep";
 import { attackerPose, pathSweepShapes, pathSweepProgress } from "../../../../shared/combat/attackDelivery";
 import { predictAttachedContacts, notePredictedHit } from "../shared/shotPrediction";
 import { startThorgSweep } from "./weapon";
+
+const { key: NAME } = characterDefinitions.thorg;
+
 export const THORG_FALL_WINDUP_MS = THORG_SWEEP.windupMs;
 export const THORG_FALL_STRIKE_MS = THORG_SWEEP.strikeMs;
 export const THORG_FALL_DURATION_MS = THORG_FALL_WINDUP_MS + THORG_FALL_STRIKE_MS + THORG_SWEEP.recoveryMs;
@@ -19,10 +23,10 @@ function predictSweep(scene, body, direction) {
     if (!body.active) { stop(); return; }
     const progress = pathSweepProgress(performance.now() - startedAt);
     if (progress === null) return;
-    const pose = attackerPose("thorg", body.x, body.y, { flip: direction < 0, scale: body._bbVisualScale || 1 });
+    const pose = attackerPose(NAME, body.x, body.y, { flip: direction < 0, scale: body._bbVisualScale || 1 });
     for (const hit of predictAttachedContacts(pathSweepShapes(pose, direction, previous, progress), { skip: struck })) {
       struck.add(hit.target.name);
-      notePredictedHit({ delivery: "attached", character: "thorg", target: hit.target, attacker: body });
+      notePredictedHit({ delivery: "attached", character: NAME, target: hit.target, attacker: body });
     }
     previous = progress;
     if (progress >= 1) stop();
@@ -40,4 +44,3 @@ export function performThorgFallAttack(instance, attackContext = null) {
     angle: direction < 0 ? Math.PI : 0, range: THORG_FALL_RANGE,
     strikeMs: THORG_FALL_STRIKE_MS, duration: THORG_FALL_DURATION_MS };
 }
-export function changeDebugState() {}

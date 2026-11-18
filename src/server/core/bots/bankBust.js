@@ -1,11 +1,12 @@
+const { botBehaviorFor } = require('./objectives');
 const { basicAim, basicRange, hasClearShot } = require('../../../shared/combat/combat.js');
 const { walkLimits, canStandAt, standOn } = require('./navigation');
-const { movementGeometry } = require('./physics');
+const { movementGeometry } = require('../physics/bodySolver');
 
 const { createRandom } = require('./random');
 const SUPPORT_STYLES = ['farmer', 'crate-hunter', 'hunter', 'defender', 'raider'];
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-const active = (brain) => brain.room.gameMode?.modeId === 'bank-bust';
+const active = (brain) => botBehaviorFor(brain.room) === 'bank-objectives';
 const infiltrator = role => role === 'flanker' || role === 'rusher';
 
 function seedFor(text) {
@@ -14,14 +15,14 @@ function seedFor(text) {
   return hash >>> 0;
 }
 
-function bankRole(brain, now = brain.room._botNow ?? Date.now()) {
+function bankRole(brain, now = brain.room.botNow ?? Date.now()) {
   // Explicit overrides are useful for simulations. Live controllers manage
   // their styles from the same seeded team schedule, independent of think order.
   if (brain.bankRole && !brain.bankStyleManaged) return brain.bankRole;
   if (!brain.bankStyleRoster) {
     brain.bankStyleRoster = [...brain.room.players.values()].filter(p => p.isBot && p.team === brain.player.team)
       .map(p => ({ id: p.participantId, seed: p.seed || 0 })).sort((a, b) => a.id.localeCompare(b.id));
-    brain.bankStyleStart = brain.room.modeState?.startedAt ?? brain.room._loopStartWallTime ?? now;
+    brain.bankStyleStart = brain.room.modeState?.startedAt ?? brain.room.loopStartWallTime ?? now;
     brain.bankStyleManaged = true;
   }
   const roster = brain.bankStyleRoster;
@@ -49,7 +50,7 @@ function wantsBankPurchase(brain, now) {
   if (!brain.bankClaimRandom) brain.bankClaimRandom = createRandom(seedFor(`claim:${brain.player.participantId}:${brain.player.seed}`));
   const random = brain.bankClaimRandom;
   if (!brain.bankClaimPlan) {
-    const start = brain.room.modeState?.startedAt ?? brain.room._loopStartWallTime ?? now;
+    const start = brain.room.modeState?.startedAt ?? brain.room.loopStartWallTime ?? now;
     brain.bankClaimPlan = { willing: random() < 0.12, checkAt: start + 12000 + random() * 16000 };
   }
   const plan = brain.bankClaimPlan;
@@ -144,7 +145,7 @@ function purchaseAllowed(brain, entry) {
   const remaining = own.coins - Math.round(cost);
   const reserve = Math.max(1, (state.purchaseFloorCoins || 0) + cost, own.coins * 0.35);
   // A purchase late in a timed match must not spend away a winning score.
-  const now = brain.room._botNow ?? Date.now();
+  const now = brain.room.botNow ?? Date.now();
   if (state.endsAt > now && state.endsAt - now < 15000 && enemy && own.coins > enemy.coins && remaining <= enemy.coins) return false;
   return remaining >= reserve && brain.room.gameMode.canAffordPurchase(p.team, cost);
 }

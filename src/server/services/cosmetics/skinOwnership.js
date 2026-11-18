@@ -1,3 +1,5 @@
+const { parseJsonOr } = require("../../lib/json");
+const { loadOwnedIds, grantCosmetics } = require("./cosmeticCollections");
 const { isDeepStrictEqual } = require("util");
 const { isAutoUnlocked, unlockedCharacterSet } = require("./cosmeticUnlocks");
 const {
@@ -8,7 +10,6 @@ const {
   normalizeSelectedSkinMap,
   resolveSelectedSkinId,
 } = require("./skinsCatalog");
-
 
 function isSkinAutoUnlockedForUser(skin, userRow, unlockedCharacters = null) {
   return isAutoUnlocked(skin?.unlockMethod, userRow, { fallbackCharacter: skin?.character, unlockedCharacters });
@@ -40,29 +41,11 @@ function getAutoUnlockSkinIds(userRow) {
   return Array.from(out);
 }
 
-function parseStoredSkinMap(raw) {
-  if (raw == null) return null;
-  if (typeof raw === "object") return raw;
-  try {
-    return JSON.parse(String(raw));
-  } catch (_) {
-    return null;
-  }
-}
-
 async function syncSkinOwnershipWithRunner(db, userRow) {
   const userId = Number(userRow?.user_id) || 0;
   const autoUnlockIds = getAutoUnlockSkinIds(userRow);
 
-  const loadOwnedSet = async () => {
-    const ownedRows = await db.runQuery(
-      "SELECT skin_id FROM user_skins WHERE user_id = ?",
-      [userId],
-    );
-    return new Set(
-      ownedRows.map((row) => String(row.skin_id || "")).filter(Boolean),
-    );
-  };
+  const loadOwnedSet = async () => new Set(await loadOwnedIds(db.runQuery, userId, "skin"));
 
   let ownedSet = await loadOwnedSet();
 
@@ -70,12 +53,7 @@ async function syncSkinOwnershipWithRunner(db, userRow) {
   // (and its locks) unless something is actually missing.
   const missingIds = autoUnlockIds.filter((skinId) => !ownedSet.has(skinId));
   if (missingIds.length) {
-    const placeholders = missingIds.map(() => "(?, ?, 'auto')").join(",");
-    const params = missingIds.flatMap((skinId) => [userId, skinId]);
-    await db.runQuery(
-      `INSERT IGNORE INTO user_skins (user_id, skin_id, source) VALUES ${placeholders}`,
-      params,
-    );
+    await grantCosmetics(db.runQuery, userId, "skin", missingIds, "auto");
     ownedSet = await loadOwnedSet();
   }
 
@@ -104,7 +82,7 @@ async function syncSkinOwnershipWithRunner(db, userRow) {
   // malformed entries are still rewritten.
   if (
     !isDeepStrictEqual(
-      parseStoredSkinMap(userRow?.selected_skin_id_by_char),
+      parseJsonOr(userRow?.selected_skin_id_by_char, null),
       nextSelectedMap,
     )
   ) {
@@ -129,39 +107,20 @@ async function syncSkinOwnershipForUser(db, userRow) {
     };
   }
 
-  try {
-    if (typeof db?.withTransaction === "function") {
-      return await db.withTransaction(async (_conn, q) => {
-        // Serialize normalization with skin/character selection writes. Using
-        // the caller's earlier user snapshot here can otherwise undo a newer
-        // selection when two lobby requests overlap.
-        const rows = await q(
-          "SELECT * FROM users WHERE user_id = ? FOR UPDATE",
-          [userId],
-        );
-        const currentUser = rows?.[0] || userRow;
-        return syncSkinOwnershipWithRunner({ runQuery: q }, currentUser);
-      });
-    }
-
-    return await syncSkinOwnershipWithRunner(db, userRow);
-  } catch (error) {
-    if (
-      error?.code === "ER_NO_SUCH_TABLE" ||
-      error?.code === "ER_BAD_FIELD_ERROR"
-    ) {
-      return {
-        ownedSkinIds: getAutoUnlockSkinIds(userRow),
-        selectedSkinIdByCharacter: {},
-        schemaMissing: true,
-      };
-    }
-    throw error;
-  }
+  return await db.withTransaction(async (_conn, q) => {
+    // Serialize normalization with skin/character selection writes. Using
+    // the caller's earlier user snapshot here can otherwise undo a newer
+    // selection when two lobby requests overlap.
+    const rows = await q(
+      "SELECT * FROM users WHERE user_id = ? FOR UPDATE",
+      [userId],
+    );
+    const currentUser = rows?.[0] || userRow;
+    return syncSkinOwnershipWithRunner({ runQuery: q }, currentUser);
+  });
 }
 
 module.exports = {
   getAutoUnlockSkinIds,
-  isSkinAutoUnlockedForUser,
   syncSkinOwnershipForUser,
 };

@@ -1,3 +1,5 @@
+const { getConfig } = require("../../config");
+const { logIgnored } = require("../../lib/logIgnored");
 function createQueueTicketManager({
   db,
   partyStatus,
@@ -9,6 +11,7 @@ function createQueueTicketManager({
   ensureLoop,
   maybeStopLoop,
 }) {
+  const { socketEvents: debugSocketEvents } = getConfig().diagnostics;
   const reservedBotSlots = new Map();
   const ticketKey = (ticket) =>
     ticket?.party_id ? `p:${Number(ticket.party_id)}` : `u:${Number(ticket?.user_id)}`;
@@ -125,7 +128,7 @@ function createQueueTicketManager({
       ]);
     }
 
-    console.log(
+    if (debugSocketEvents) console.log(
       `[queue] join ${partyId ? "p=" + partyId : "u=" + userId} mode=${selection.modeId}:${selection.modeVariantId} map=${selection.mapId} t1=${counts.t1} t2=${counts.t2} mmr=${mmr}`,
     );
 
@@ -150,7 +153,7 @@ function createQueueTicketManager({
         partyId,
       ]);
     }
-    console.log(
+    if (debugSocketEvents) console.log(
       `[queue] leave ${partyId ? "p=" + partyId : "u=" + userId} removed=${r?.affectedRows || 0}`,
     );
     lastProgress.clear();
@@ -169,7 +172,7 @@ function createQueueTicketManager({
         partyId,
       ]);
       reservedBotSlots.delete(`p:${Number(partyId)}`);
-      console.log(`[queue] remove p=${partyId} reason=disconnect name=${name}`);
+      if (debugSocketEvents) console.log(`[queue] remove p=${partyId} reason=disconnect name=${name}`);
       await maybeStopLoop();
     }
 
@@ -185,19 +188,19 @@ function createQueueTicketManager({
           [userId],
         );
         if (r?.affectedRows) {
-          console.log(
+          if (debugSocketEvents) console.log(
             `[queue] remove u=${userId} reason=disconnect name=${name}`,
           );
           await maybeStopLoop();
         }
       }
-    } catch (_) {}
+    } catch (error) { logIgnored("disconnected queue ticket cleanup", error); }
   }
 
   async function invalidatePartyTicket(partyId) {
     await db.runQuery("DELETE FROM match_tickets WHERE party_id=?", [partyId]);
     reservedBotSlots.delete(`p:${Number(partyId)}`);
-    console.log(`[queue] invalidate p=${partyId} reason=team-change`);
+    if (debugSocketEvents) console.log(`[queue] invalidate p=${partyId} reason=team-change`);
     await maybeStopLoop();
   }
 

@@ -1,23 +1,14 @@
+const { imageSize } = require("./imageSize");
+const { resolveAssetFile } = require("./mapAssetFiles");
 const fs = require('node:fs');
 const path = require('node:path');
 const PUBLIC = path.resolve(__dirname,"../../../../public");
-function imageSize(buffer) {
-  if(buffer.toString('ascii',1,4)==='PNG') return {width:buffer.readUInt32BE(16),height:buffer.readUInt32BE(20)};
-  if(buffer.toString('ascii',8,12)==='WEBP'){
-    const kind=buffer.toString('ascii',12,16);
-    if(kind==='VP8X')return {width:1+buffer.readUIntLE(24,3),height:1+buffer.readUIntLE(27,3)};
-    if(kind==='VP8 ')return {width:buffer.readUInt16LE(26)&0x3fff,height:buffer.readUInt16LE(28)&0x3fff};
-    if(kind==='VP8L'){const bits=buffer.readUInt32LE(21);return {width:(bits&0x3fff)+1,height:((bits>>>14)&0x3fff)+1};}
-  }
-  if(buffer[0]===0xff&&buffer[1]===0xd8){let i=2;while(i+9<buffer.length){if(buffer[i]!==0xff)break;const marker=buffer[i+1],length=buffer.readUInt16BE(i+2);if([0xc0,0xc1,0xc2].includes(marker))return {height:buffer.readUInt16BE(i+5),width:buffer.readUInt16BE(i+7)};i+=length+2;}}
-  throw Error('Use PNG, WebP or JPEG images');
-}
-function validateAssets(document, publicRoot=PUBLIC){
+function validateAssets(document, publicRoot=PUBLIC, directory){
   // Cloud art is the game-wide library (clouds.json), checked by validate:content.
   const errors=[];const cache=new Map();
   function read(url){
     if(!url?.startsWith('/assets/')||url.includes('..'))throw Error('Asset URL must be under /assets/');
-    const file=publicRoot===PUBLIC?require('./mapAssetFiles').resolveAssetFile(url):path.resolve(publicRoot,'.'+url);
+    const file=publicRoot===PUBLIC?resolveAssetFile(url, directory):path.resolve(publicRoot,'.'+url);
     if(!url.startsWith('/assets/map-editor-staged/')&&!url.startsWith('/assets/map-revisions/')&&!fs.realpathSync(file).startsWith(fs.realpathSync(path.join(publicRoot,'assets'))+path.sep))throw Error('Asset must stay inside public/assets');
     return fs.readFileSync(file);
   }

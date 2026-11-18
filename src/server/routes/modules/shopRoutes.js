@@ -1,111 +1,71 @@
-function sendShopError(res, error, fallback = "Shop request failed") {
-  const status = Math.max(400, Math.min(599, Number(error?.status) || 500));
-  if (status >= 500) console.error("[shop] request failed", error);
-  return res.status(status).json({
-    success: false,
-    code: error?.code || "shop_error",
-    error: status >= 500 ? fallback : error?.message || fallback,
-    wallet: error?.wallet || undefined,
-  });
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
+const { authedRoute } = require("../http");
+
+function shopErrorFields(error) {
+  return { code: error?.code || "shop_error", wallet: error?.details?.wallet || error?.wallet || undefined };
 }
 
 function registerShopRoutes({ app, requireCurrentUser, shopService, stripeShopService }) {
-  app.get("/api/shop/bootstrap", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) return res.status(401).json({ success: false, error: "Not authenticated" });
-      const paymentConfig = stripeShopService.getConfigurationStatus();
-      return res.json(
-        await shopService.buildBootstrap(user, {
-          paymentsEnabled: paymentConfig.enabled,
-          publishableKey: paymentConfig.publishableKey,
-        }),
-      );
-    } catch (error) {
-      return sendShopError(res, error, "Unable to load the shop.");
-    }
-  });
+  app.get(API_PATHS.API_SHOP_BOOTSTRAP, authedRoute(requireCurrentUser, "[shop] /api/shop/bootstrap", async (req, res, user) => {
+    const paymentConfig = stripeShopService.getConfigurationStatus();
+    return res.json(
+      await shopService.buildBootstrap(user, {
+        paymentsEnabled: paymentConfig.enabled,
+        publishableKey: paymentConfig.publishableKey,
+      }),
+    );
+  }, { fallback: "Unable to load the shop.", extra: shopErrorFields }));
 
-  app.post("/api/shop/viewed", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) return res.status(401).json({ success: false, error: "Not authenticated" });
-      return res.json(await shopService.markViewed({
+  app.post(API_PATHS.API_SHOP_VIEWED, authedRoute(requireCurrentUser, "[shop] /api/shop/viewed", async (req, res, user) => {
+    return res.json(await shopService.markViewed({
+      userId: user.user_id,
+      rotations: req.body?.rotations,
+      offerIds: req.body?.offerIds,
+    }));
+  }, { fallback: "Unable to save viewed shop content.", extra: shopErrorFields }));
+
+  app.post(API_PATHS.API_SHOP_CLAIM_DAILY, authedRoute(requireCurrentUser, "[shop] /api/shop/claim-daily", async (req, res, user) => {
+    return res.json(
+      await shopService.claimDaily({
         userId: user.user_id,
-        rotations: req.body?.rotations,
-        offerIds: req.body?.offerIds,
-      }));
-    } catch (error) {
-      return sendShopError(res, error, "Unable to save viewed shop content.");
-    }
-  });
+        idempotencyKey: req.body?.idempotencyKey,
+      }),
+    );
+  }, { fallback: "Unable to claim the daily reward.", extra: shopErrorFields }));
 
-  app.post("/api/shop/claim-daily", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) return res.status(401).json({ success: false, error: "Not authenticated" });
-      return res.json(
-        await shopService.claimDaily({
-          userId: user.user_id,
-          idempotencyKey: req.body?.idempotencyKey,
-        }),
-      );
-    } catch (error) {
-      return sendShopError(res, error, "Unable to claim the daily reward.");
-    }
-  });
+  app.post(API_PATHS.API_SHOP_PURCHASE, authedRoute(requireCurrentUser, "[shop] /api/shop/purchase", async (req, res, user) => {
+    return res.json(
+      await shopService.purchaseVirtual({
+        userId: user.user_id,
+        offerId: req.body?.offerId,
+        expectedPrice: req.body?.expectedPrice,
+        expectedCurrency: req.body?.expectedCurrency,
+        idempotencyKey: req.body?.idempotencyKey,
+      }),
+    );
+  }, { fallback: "Unable to complete the purchase.", extra: shopErrorFields }));
 
-  app.post("/api/shop/purchase", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) return res.status(401).json({ success: false, error: "Not authenticated" });
-      return res.json(
-        await shopService.purchaseVirtual({
-          userId: user.user_id,
-          offerId: req.body?.offerId,
-          expectedPrice: req.body?.expectedPrice,
-          expectedCurrency: req.body?.expectedCurrency,
-          idempotencyKey: req.body?.idempotencyKey,
-        }),
-      );
-    } catch (error) {
-      return sendShopError(res, error, "Unable to complete the purchase.");
-    }
-  });
+  app.post(API_PATHS.API_SHOP_CHECKOUT_SESSION, authedRoute(requireCurrentUser, "[shop] /api/shop/checkout-session", async (req, res, user) => {
+    return res.json(
+      await stripeShopService.createCheckoutSession({
+        user,
+        offerId: req.body?.offerId,
+        idempotencyKey: req.body?.idempotencyKey,
+        returnPath: req.body?.returnPath,
+      }),
+    );
+  }, { fallback: "Unable to start checkout.", extra: shopErrorFields }));
 
-  app.post("/api/shop/checkout-session", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) return res.status(401).json({ success: false, error: "Not authenticated" });
-      return res.json(
-        await stripeShopService.createCheckoutSession({
-          user,
-          offerId: req.body?.offerId,
-          idempotencyKey: req.body?.idempotencyKey,
-          returnPath: req.body?.returnPath,
-        }),
-      );
-    } catch (error) {
-      return sendShopError(res, error, "Unable to start checkout.");
-    }
-  });
-
-  app.get("/api/shop/checkout-status", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) return res.status(401).json({ success: false, error: "Not authenticated" });
-      const sessionId = String(req.query?.sessionId || "").trim();
-      if (!sessionId) return res.status(400).json({ success: false, error: "sessionId is required" });
-      return res.json(
-        await stripeShopService.getCheckoutStatus({
-          userId: user.user_id,
-          sessionId,
-        }),
-      );
-    } catch (error) {
-      return sendShopError(res, error, "Unable to check the order.");
-    }
-  });
+  app.get(API_PATHS.API_SHOP_CHECKOUT_STATUS, authedRoute(requireCurrentUser, "[shop] /api/shop/checkout-status", async (req, res, user) => {
+    const sessionId = String(req.query?.sessionId || "").trim();
+    if (!sessionId) return res.status(400).json({ success: false, error: "sessionId is required" });
+    return res.json(
+      await stripeShopService.getCheckoutStatus({
+        userId: user.user_id,
+        sessionId,
+      }),
+    );
+  }, { fallback: "Unable to check the order.", extra: shopErrorFields }));
 }
 
 module.exports = { registerShopRoutes };

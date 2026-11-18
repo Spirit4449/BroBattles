@@ -1,3 +1,5 @@
+const { BANK_BUST_VAULT_DEFAULT_RADIUS } = require("../../../bankBustSettings");
+const { SOCKET_EVENTS } = require("../../../net/socketEvents.js");
 const { isPlaced } = require("../../targetable.js");
 const { exposeDamageHitbox } = require('../damageHitboxes.js');
 const { chargeSuperForHit } = require("../superCharge.js");
@@ -89,7 +91,7 @@ function tick(room, caster, now) {
   if (vault && Number(vault.coins) > 0) {
     const vx = Number(vault.x) || 0;
     const vy = Number(vault.y) || 0;
-    const vr = Math.max(30, Number(vault.radius) || 90);
+    const vr = Math.max(30, Number(vault.radius) || BANK_BUST_VAULT_DEFAULT_RADIUS);
     if (
       Math.hypot(vx - infernoCenterX, vy - infernoCenterY) <=
       DRAVEN_INFERNO_RADIUS + vr
@@ -105,9 +107,9 @@ function tick(room, caster, now) {
         previousCoins - (Number(vault.coins) || 0),
       );
       if (appliedVault > 0) {
-        room._recordCombatStat(caster, { damage: appliedVault, hits: 1 });
+        room.recordCombatStat(caster, { damage: appliedVault, hits: 1 });
         room.broadcastSnapshot?.();
-        room._checkVictoryCondition?.();
+        room.checkVictoryCondition?.();
       }
     }
   }
@@ -150,13 +152,13 @@ function tick(room, caster, now) {
 
     target.lastDamagedAt = now;
     target.lastCombatAt = now;
-    room._recordCombatStat(caster, { damage: applied, hits: 1 });
+    room.recordCombatStat(caster, { damage: applied, hits: 1 });
     chargeSuperForHit(room, caster, "special");
 
     // The impact location is authoritative. Every client gets the same
     // explosion at the target that actually took damage instead of inventing
     // a random position around the caster.
-    room.io?.to?.(`game:${room.matchId}`)?.emit?.("game:action", {
+    room.broadcast?.(SOCKET_EVENTS.GAME_ACTION, {
       playerName: caster.name,
       character: caster.char_class,
       action: {
@@ -170,13 +172,13 @@ function tick(room, caster, now) {
     });
 
     if (target.health === 0 && old > 0) {
-      room._recordCombatStat(caster, { kills: 1 });
+      room.recordCombatStat(caster, { kills: 1 });
     }
 
-    room._broadcastHealthUpdate(target, { cause: "combat", duckBlocked });
+    room.broadcastHealthUpdate(target, { cause: "combat", duckBlocked });
 
     if (target.health === 0 && old > 0) {
-      room._handlePlayerDeath(target, {
+      room.handlePlayerDeath(target, {
         cause: "combat",
         killedBy: caster.name,
         at: now,

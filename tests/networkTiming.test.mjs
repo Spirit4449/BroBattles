@@ -1,3 +1,5 @@
+import roomTransport from './helpers/roomTransport.js';
+import { loadClientModule } from "./helpers/clientModule.js";
 import wire from "../src/shared/networkWire.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -14,12 +16,12 @@ const packet = (seq, time, extra = {}) => ({
 
 test("immediate snapshots share simulation time but have distinct emission sequences", () => {
   const sent = [];
-  const room = { matchId: 1, players: new Map(), _tickId: 60, _simulationMono: 1000,
+  const room = { ...roomTransport, matchId: 1, players: new Map(), tickId: 60, simulationMono: 1000,
     io: { to: () => ({ compress() { return this; }, emit(_, p) { sent.push(wire.decodeWire(p)); } }) } };
   roomState.broadcastSnapshot(room, { tMono: 1000 });
   roomState.broadcastSnapshot(room);
-  room._tickId = 62; room._simulationMono += 1000 / 30;
-  roomState.broadcastSnapshot(room, { tMono: room._simulationMono });
+  room.tickId = 62; room.simulationMono += 1000 / 30;
+  roomState.broadcastSnapshot(room, { tMono: room.simulationMono });
   const b = createSnapshotBuffer();
   sent.forEach((p, i) => {
     assert.equal(p.snapshotSeq, i + 1);
@@ -207,27 +209,27 @@ function runLoop(t, coalesce, stall, finishAt = null) {
   const events = [];
   const noop = () => {};
   const room = Object.assign(Object.create(roomModule.GameRoom.prototype), {
-    status: "active", _netTestEnabled: true, _tickId: 0,
+    status: "active", _netTestEnabled: true, tickId: 0,
     FIXED_DT_MS: 1000 / 60, SNAPSHOT_EVERY_TICKS: 2, WORLD_STATE_EVERY_TICKS: 8,
-    COALESCE_SNAPSHOTS: coalesce, _powerups: new Map(), _deathDrops: new Map(), players: new Map(),
+    COALESCE_SNAPSHOTS: coalesce, powerups: new Map(), deathDrops: new Map(), players: new Map(),
     _spawnPowerup: noop, _tickPowerupEffects: noop, processRegen: noop,
     _tickTimerAndSuddenDeath: noop, _tickPowerups: noop, _tickDeathDrops: noop,
     processTick() {
-      events.push({ type: "simulation", tick: this._tickId });
-      if (this._tickId === 4) events.push({ type: "respawn" });
-      if (this._tickId === finishAt) this._loopRunning = false;
+      events.push({ type: "simulation", tick: this.tickId });
+      if (this.tickId === 4) events.push({ type: "respawn" });
+      if (this.tickId === finishAt) this._loopRunning = false;
     },
-    _emitSnapshotWithTiming(time) { events.push({ type: "snapshot", tick: this._tickId, time }); },
+    _emitSnapshotWithTiming(time) { events.push({ type: "snapshot", tick: this.tickId, time }); },
     broadcastWorldState() { events.push({ type: "world" }); },
   });
-  room._sparrow = { active: new Map(), pending: [], requests: new Map(), terminals: [], metrics: [] };
+  room.sparrowCombatState = { active: new Map(), pending: [], requests: new Map(), terminals: [], metrics: [] };
   room.startGameLoop(); clock = stall; callback();
   return { room, events };
 }
 
 test("catch-up retains all steps and discrete events but publishes final state once", (t) => {
   const { room, events } = runLoop(t, true, 1000);
-  assert.equal(room._tickId, 60);
+  assert.equal(room.tickId, 60);
   assert.equal(events.filter(e => e.type === "simulation").length, 60);
   assert.equal(events.filter(e => e.type === "respawn").length, 1);
   const snapshots = events.filter(e => e.type === "snapshot");
@@ -387,14 +389,11 @@ test("snapshots drawn after a death or respawn event cannot undo it", () => {
 test('input wire saves geometry and FX repetition while reliably delivering new effects', async () => {
   const { createRequire } = await import('node:module');
   const require = createRequire(import.meta.url);
-  const fs = require('node:fs'), vm = require('node:vm'), babel = require('@babel/core');
   const filename = require.resolve('../src/client/game/scene/localInputSync.js');
   const realRequire = createRequire(filename);
   const exports = {};
   let now = 10000;
-  vm.runInNewContext(babel.transformSync(fs.readFileSync(filename, 'utf8'), {
-    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-  }).code, { exports, Date: { now: () => now }, require(name) {
+  loadClientModule(filename, { exports, Date: { now: () => now }, require(name) {
     if (name.includes('localMovementCorrector')) return { localMovementCorrector: { getAck: () => 0, recordSent() {} } };
     if (name.includes('netTestLogger')) return { noteClientInputSent() {}, noteClientIntentSent() {} };
     return realRequire(name);
@@ -430,13 +429,10 @@ test('input wire saves geometry and FX repetition while reliably delivering new 
 async function loadLocalInputSync(clock) {
   const { createRequire } = await import('node:module');
   const require = createRequire(import.meta.url);
-  const fs = require('node:fs'), vm = require('node:vm'), babel = require('@babel/core');
   const filename = require.resolve('../src/client/game/scene/localInputSync.js');
   const realRequire = createRequire(filename);
   const exports = {};
-  vm.runInNewContext(babel.transformSync(fs.readFileSync(filename, 'utf8'), {
-    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-  }).code, { exports, Date: { now: () => clock.now }, require(name) {
+  loadClientModule(filename, { exports, Date: { now: () => clock.now }, require(name) {
     if (name.includes('localMovementCorrector')) return { localMovementCorrector: { getAck: () => 0, recordSent() {} } };
     if (name.includes('netTestLogger')) return { noteClientInputSent() {}, noteClientIntentSent() {} };
     return realRequire(name);
@@ -516,16 +512,25 @@ test("the player snapshot rate is a room setting with a keyframe about once a se
   assert.equal(snapshotEveryTicksFor(SERVER_TICK_HZ * 4), 1, "never more than one per tick");
   const keyframesPerSecond = (everyTicks) => {
     const sent = [];
-    const room = { matchId: 1, players: new Map(), _tickId: 0, _simulationMono: 0,
+    const room = { ...roomTransport, matchId: 1, players: new Map(), tickId: 0, simulationMono: 0,
       FIXED_DT_MS, SNAPSHOT_EVERY_TICKS: everyTicks,
       io: { to: () => ({ compress() { return this; }, emit(_, p) { sent.push(wire.decodeWire(p)); } }) } };
     const perSecond = SERVER_TICK_HZ / everyTicks;
     for (let i = 0; i < perSecond * 4; i++) {
-      room._tickId += everyTicks; room._simulationMono += FIXED_DT_MS * everyTicks;
-      roomState.broadcastSnapshot(room, { tMono: room._simulationMono });
+      room.tickId += everyTicks; room.simulationMono += FIXED_DT_MS * everyTicks;
+      roomState.broadcastSnapshot(room, { tMono: room.simulationMono });
     }
     return sent.filter((p) => p.keyframe).length / 4;
   };
   const slow = keyframesPerSecond(2), fast = keyframesPerSecond(1);
   assert.ok(Math.abs(slow - fast) <= 0.25, `keyframes per second ${slow} vs ${fast}`);
+});
+
+test('remote interpolation reaches both endpoints and extrapolates from reported velocity', () => {
+  const source = 'src/client/game/scene/remoteInterpolation.js';
+  const { hermiteAxis, projectAxis } = loadClientModule(source, { require: () => ({}) });
+  assert.equal(hermiteAxis(10, 60, 50, 50, 0, 1000), 10);
+  assert.equal(hermiteAxis(10, 60, 50, 50, 1, 1000), 60);
+  assert.equal(hermiteAxis(10, 60, 50, 50, 0.5, 1000), 35);
+  assert.equal(projectAxis(10, 60, 1000, 50, { extrapolationMs: 200 }), 70);
 });

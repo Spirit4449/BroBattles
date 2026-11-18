@@ -1,7 +1,7 @@
 import { POWERUP_CATALOG } from '../../../shared/powerups';
 // gameScene/preloadGameAssets.js
 import { preloadTerrainAudio } from '../audio/movementAudio';
-import { COIN_FRAME_SIZE } from '../modes/bankBust/coinMotion.mjs';
+import { COIN_FRAME_SIZE } from './coinSprite.mjs';
 
 export function preloadGameAssets({
   scene,

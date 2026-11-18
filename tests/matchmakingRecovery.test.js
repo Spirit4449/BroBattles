@@ -1,3 +1,4 @@
+const { createFakeIo } = require('./helpers/fakeIo');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createQueueTicketManager } = require('../src/server/core/matchmaking/queueTicketManager');
@@ -24,7 +25,7 @@ test('late socket cancellation acknowledges the match without cancelling or chan
   const socket = { data: { user: { name: 'Owner', user_id: 1 } }, on: (key, fn) => { handlers[key] = fn; }, emit: (...args) => events.push(args) };
   registerMatchmakingEvents(socket, {
     db: { getPartyIdByName: async () => 7 },
-    io: { to: () => ({ emit: (...args) => events.push(args) }) },
+    io: createFakeIo({ onEmit: (_room, ...args) => events.push(args) }),
     mm: { queueLeave: async () => ({ cancelled: false, matchId: 77 }) }, PARTY_STATUS,
   });
   let reply;
@@ -63,7 +64,7 @@ test('stale roster and disconnected tickets are removed while a healthy queue st
     throw Error(sql);
   } };
   const sockets = new Map([1, 3].map(id => [`s${id}`, { emit: (event, data) => events.push({ id, event, data }) }]));
-  createMatchmaking({ db, io: { sockets: { sockets } }, runtimeConfig: { get: () => ({ bots: { enabled: false } }) } });
+  createMatchmaking({ db, io: createFakeIo({ sockets }), runtimeConfig: { get: () => ({ bots: { enabled: false } }) } }).start();
   t.mock.timers.tick(1000);
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(tickets.map(row => row.ticket_id), [3]);
@@ -89,7 +90,9 @@ test('a ready check abandoned by restart is cancelled and no longer traps the qu
   t.mock.timers.enable({ apis: ['setInterval'] });
   let active = true;
   const emitted = [], writes = [];
-  const mm = createMatchmaking({ io: { sockets: { sockets: new Map([['s1', { emit: (...args) => emitted.push(args) }]]) } }, db: {
+  const io = createFakeIo();
+  io.addSocket('s1', { onEmit: (...args) => emitted.push(args) });
+  const mm = createMatchmaking({ io, db: {
     async runQuery(sql) {
       if (sql.includes('FROM matches')) return active ? [{ match_id: 77, status: 'queued' }] : [];
       if (sql.startsWith('UPDATE matches')) { active = false; writes.push(sql); return {}; }
@@ -113,9 +116,11 @@ test('ready state survives asynchronous room startup and accepts numeric-string 
   let releaseRoom;
   const room = new Promise(resolve => { releaseRoom = resolve; });
   const events = [];
+  const io = createFakeIo();
+  io.addSocket('s1', { onEmit: (...args) => events.push(args) });
   const ready = createReadyCheckCoordinator({
     db: { runQuery: async sql => sql.startsWith('SELECT user_id') ? [{ user_id: 1, socket_id: 's1' }] : [] },
-    io: { sockets: { sockets: new Map([['s1', { emit: (...args) => events.push(args) }]]) } },
+    io,
     partyStatus: PARTY_STATUS,
     cancelMatch: async () => assert.fail('Ready match should start'),
     getMatchDataForGameRoom: async () => ({}),
@@ -138,12 +143,14 @@ test('queue progress broadcasts skin changes without roster membership changes',
   const events = [];
   let skin = 'ninja-arena-sovereign';
   const emitter = createProgressEmitter({
-    db: { fetchPartyMembersDetailed: async () => [{ name: 'Player', char_class: 'ninja', selected_skin_id_by_char: { ninja: skin } }] },
     io: { to: () => ({ emit: (event, data) => events.push(data) }) },
     lastProgress: new Map(),
   });
   const tickets = [{ ticket_id: 1, party_id: 42, size: 1, mmr: 0, created_at: new Date() }];
-  const emit = () => emitter.emitProgressForBucket('duels', 'duels-1v1', 1, tickets, 1);
+  const { decorateParticipant } = require('../src/server/services/match/matchRosterService');
+  const emit = () => emitter.emitProgressForBucket('duels', 'duels-1v1', 1, tickets, 1, {
+    previews: new Map([[1, [decorateParticipant({ user_id: 1, name: 'Player', char_class: 'ninja', selected_skin_id_by_char: { ninja: skin } })]]]),
+  });
   await emit();
   await emit();
   assert.equal(events.length, 1, 'unchanged skin does not emit duplicate progress');
@@ -152,4 +159,48 @@ test('queue progress broadcasts skin changes without roster membership changes',
   assert.equal(events.length, 2);
   assert.equal(events[0].players[0].selected_skin_id, 'ninja-arena-sovereign');
   assert.equal(events[1].players[0].selected_skin_id, 'ninja-default');
+});
+
+test('reopening matchmaking cancels an in-flight exit and restores inert lobby controls on close', async () => {
+  const { createLobbyFixture } = require('./helpers/lobbyFixture');
+  const f = createLobbyFixture();
+  const overlay = f.load('src/client/lobby/matchmaking/matchmakingOverlay.js').createMatchmakingOverlay();
+  const navbar = f.document.getElementById('navbar');
+  const element = f.document.getElementById('matchmaking-overlay');
+  assert.equal(overlay.isHidden(), true);
+  overlay.show();
+  assert.equal(navbar.inert, true);
+  assert.equal(element.getAttribute('aria-hidden'), 'false');
+  overlay.hide();
+  assert.equal(navbar.inert, false);
+  overlay.show();
+  await f.advance(1000);
+  assert.equal(navbar.inert, true);
+  assert.equal(overlay.isHidden(), false);
+  assert.equal(f.document.body.classList.contains('matchmaking-covered'), true);
+  overlay.hide({ immediate: true });
+  assert.equal(navbar.inert, false);
+  assert.equal(overlay.isHidden(), true);
+  assert.equal(f.document.body.classList.contains('matchmaking-covered'), false);
+});
+
+test('many queued parties and solo owners share three tick reads and retain the latest active match', async () => {
+  const { readQueuedRosters, readActiveTicketMatches } = require('../src/server/core/matchmaking/matchAssemblyManager');
+  const tickets = Array.from({ length: 60 }, (_, i) => ({ ticket_id: i + 1, [i % 2 ? 'party_id' : 'user_id']: i + 10 }));
+  let calls = 0;
+  const db = { async runQuery(sql, ids) {
+    calls++;
+    if (sql.includes('FROM matches')) return [
+      { match_id: 4, party_id: 11, user_id: 23 }, { match_id: 3, party_id: 11, user_id: 23 },
+    ];
+    return ids.map(id => ({ user_id: id, ...(sql.includes('FROM party_members') && { party_id: id }) }));
+  } };
+  const rosters = await readQueuedRosters(db, tickets);
+  const matches = await readActiveTicketMatches(db, tickets);
+  assert.equal(calls, 3);
+  assert.equal(rosters.size, tickets.length);
+  assert.equal(rosters.get(1)[0].user_id, 10);
+  assert.equal(rosters.get(2)[0].party_id, 11);
+  assert.equal(matches.get(2).match_id, 4);
+  assert.equal(matches.get(1), undefined);
 });

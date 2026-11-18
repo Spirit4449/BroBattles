@@ -1,3 +1,4 @@
+const { getConfig } = require("../../config");
 const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const {
   DEFAULT_CHARACTER,
@@ -7,16 +8,11 @@ const { createAuthSessionService } = require("./authSessionService");
 const { randomString } = require("../../lib/utils");
 const { setBanHoldCookies } = require("./banHold");
 
-const ADMIN_TOKENS = (process.env.ADMIN_USERS || "nishay")
-  .split(",")
-  .map((token) => token.trim())
-  .filter(Boolean);
-
-function isAdminUser(user) {
-  if (!user || !ADMIN_TOKENS.length) return false;
+function isAdminUser(user, tokens = getConfig().admin.users) {
+  if (!user || isGuest(user) || !tokens.length) return false;
   const id = String(user.user_id || "");
   const name = String(user.name || "").toLowerCase();
-  return ADMIN_TOKENS.some((token) => {
+  return tokens.some((token) => {
     if (/^[0-9]+$/.test(token)) return token === id;
     return token.toLowerCase() === name;
   });
@@ -24,9 +20,9 @@ function isAdminUser(user) {
 
 // Name-based admin tokens grant access by username, so players must never be
 // able to claim one through signup or a rename.
-function isReservedAdminName(name) {
+function isReservedAdminName(name, tokens = getConfig().admin.users) {
   const lower = String(name || "").trim().toLowerCase();
-  return !!lower && ADMIN_TOKENS.some((token) => !/^[0-9]+$/.test(token) && token.toLowerCase() === lower);
+  return !!lower && tokens.some((token) => !/^[0-9]+$/.test(token) && token.toLowerCase() === lower);
 }
 
 function isGuest(userRow) {
@@ -76,11 +72,12 @@ function makeAuthHelpers(db, cookieOpts) {
     return [await createGuestAndSetCookies(res), "new"];
   }
 
-  // Most callers require gameplay access. Support explicitly accepts a valid
-  // session even when the account is restricted.
+  // Reuse the authenticated lookup made by HTTP abuse checks, including an
+  // anonymous result. Restricted accounts receive the ban-hold cookie here;
+  // support can explicitly accept their otherwise valid session.
   async function requireCurrentUser(req, res, { allowBanned = false } = {}) {
-    const user = Object.prototype.hasOwnProperty.call(req || {}, "abuseResolvedUser")
-      ? req.abuseResolvedUser || null
+    const user = req.authContext
+      ? req.authContext.user
       : await sessions.resolve(req.signedCookies?.user_id);
     if (user && isAccountBanned(user)) {
       req.authBanned = user;

@@ -1,3 +1,4 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { applyTeamVisual } from "../../../../shared/projectilePresentation";
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
@@ -11,6 +12,9 @@ import { isLocalShooter, isEnemyShooter, localBodyContact, victimHoldWindowMs, v
 import { movingColliderMotion, observeSnapshotClock, displayedPlayer, ownerTeamLook, catchUpAmmo, bindSceneUpdates, exposeDiagnostics, setRoomTerrain } from '../shared/projectileReplication';
 
 // Match and embedded previews own separate flights, clocks and teardown.
+
+const { key: NAME } = characterDefinitions.sparrow;
+
 export function createSparrowNetwork(options = {}) {
 const serverClock = options.clock || matchClock;
 const ensureServerClockEpoch = options.ensureEpoch || ensureMatchEpoch;
@@ -201,7 +205,7 @@ function attachSparrowScene(scene, nextContext = {}) {
       entry.revision = state.revision; entry.projectile = p; entry.lead = state.lead;
       const contact = !entry.held && flightContact(entry, p, point, enemy);
       if (contact) entry.held = { ...contact, rotation: Math.atan2(point.vy, point.vx), at: now };
-      if (contact?.target && !contact.victim) notePredictedHit({ delivery: 'released', character: 'sparrow', target: { name: contact.target, sprite: contact.sprite } });
+      if (contact?.target && !contact.victim) notePredictedHit({ delivery: 'released', character: NAME, target: { name: contact.target, sprite: contact.sprite } });
       if (entry.held?.victim && now - entry.held.at > victimHoldWindowMs(entry.held.lead)) {
         // The server did not hit this player with it: withdrawn like an
         // unconfirmed prediction (it rarely is: the contact was tested as the
@@ -213,19 +217,19 @@ function attachSparrowScene(scene, nextContext = {}) {
       if (entry.held) {
         // A predicted body hit the server has not confirmed in time is withdrawn.
         if (entry.held.target && !entry.held.victim && now - entry.held.at > confirmWindowMs()) {
-          if (entry.withdrawnAt == null) noteShotWithdrawn?.('sparrow', id);
+          if (entry.withdrawnAt == null) noteShotWithdrawn?.(NAME, id);
           if (fadeOut(entry, now)) { sprites.delete(id); withdrawn.add(id); }
           continue;
         }
         placeHeld(entry);
-        if (enemy && enemyShotTraced()) traceEnemyShot(id, p.ownerName, 'sparrow', entry.sprite.x, entry.sprite.y, p.radius, point.victimLead, p.viewRewindMs, entry.held.victim ? 1 : 0, point.age);
+        if (enemy && enemyShotTraced()) traceEnemyShot(id, p.ownerName, NAME, entry.sprite.x, entry.sprite.y, p.radius, point.victimLead, p.viewRewindMs, entry.held.victim ? 1 : 0, point.age);
         burningFx(scene, entry, now, true);
         continue;
       }
       const blend = entry.correction ? Math.max(0, 1 - (now - entry.correction.at) / (entry.correction.duration || 80)) : 0;
       entry.sprite.setPosition(point.x + (entry.correction?.x || 0) * blend, point.y + (entry.correction?.y || 0) * blend);
       entry.sprite.setRotation(Math.atan2(point.vy, point.vx));
-      if (enemy && enemyShotTraced()) traceEnemyShot(id, p.ownerName, 'sparrow', entry.sprite.x, entry.sprite.y, p.radius, point.victimLead, p.viewRewindMs, 0, point.age);
+      if (enemy && enemyShotTraced()) traceEnemyShot(id, p.ownerName, NAME, entry.sprite.x, entry.sprite.y, p.radius, point.victimLead, p.viewRewindMs, 0, point.age);
       burningFx(scene, entry, now);
 
     }
@@ -333,7 +337,7 @@ function predictSparrowShot(scene, owner, username, payload, special = false) {
 
 // Lifecycle contract consumed by the generic match and scene controllers.
 const networkAdapter = {
-  key: 'sparrow',
+  key: NAME,
   joinFields: { sparrowCombatVersion: VERSION },
   bootstrapKey: 'sparrowCombat',
   configure: configureSparrowNetwork,

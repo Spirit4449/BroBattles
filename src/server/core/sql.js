@@ -1,3 +1,5 @@
+const { logIgnored } = require("../lib/logIgnored");
+const { getConfig } = require("../config");
 // Database
 const mysql = require("mysql2/promise"); // Just mysql doesn't work
 const {
@@ -5,30 +7,33 @@ const {
   normalizeSelectionFromRow,
   getPlayersPerTeamForSelection,
 } = require("../services/match/gameSelectionCatalog");
-const databaseConfig = {
-  host: process.env.DB_HOST || "localhost",
-  port: Math.max(1, Number(process.env.DB_PORT) || 3306),
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "game",
-};
-const pool = mysql.createPool({
-  ...databaseConfig,
-  waitForConnections: true,
-  connectionLimit: Math.max(1, Number(process.env.DB_CONNECTION_LIMIT) || 10),
-  queueLimit: Math.max(1, Math.min(1000, Number(process.env.DB_QUEUE_LIMIT) || 100)),
-});
+let pool, settings;
+function databaseSettings() {
+  if (!settings) {
+    const { connectionLimit, queueLimit, acquireTimeoutMs, queryTimeoutMs, ...connection } = getConfig().db;
+    settings = { connection, connectionLimit, queueLimit, acquireTimeoutMs, queryTimeoutMs };
+  }
+  return settings;
+}
+function getPool() {
+  const { connection, connectionLimit, queueLimit } = databaseSettings();
+  return pool ||= mysql.createPool({ ...connection, waitForConnections: true, connectionLimit, queueLimit });
+}
+async function closePool() {
+  const current = pool;
+  pool = null;
+  settings = null;
+  await current?.end();
+}
 
-const ACQUIRE_TIMEOUT_MS = Math.max(100, Number(process.env.DB_ACQUIRE_TIMEOUT_MS) || 5000);
-const QUERY_TIMEOUT_MS = Math.max(100, Number(process.env.DB_QUERY_TIMEOUT_MS) || 10000);
 function acquireConnection() {
   return new Promise((resolve, reject) => {
     let done = false;
     const timer = setTimeout(() => {
       done = true;
       reject(Object.assign(new Error("Database busy; retry later"), { code: "DB_BUSY", status: 503 }));
-    }, ACQUIRE_TIMEOUT_MS);
-    pool.getConnection().then(conn => {
+    }, databaseSettings().acquireTimeoutMs);
+    getPool().getConnection().then(conn => {
       clearTimeout(timer);
       if (done) conn.release(); else { done = true; resolve(conn); }
     }, error => {
@@ -48,7 +53,7 @@ async function runQuery(sql, params = []) {
 // Run a query using an existing connection (for transactions)
 async function runQueryConn(conn, sql, params = []) {
   try {
-    const [rows] = await conn.query({ sql, timeout: QUERY_TIMEOUT_MS }, params);
+    const [rows] = await conn.query({ sql, timeout: databaseSettings().queryTimeoutMs }, params);
     return rows;
   } catch (error) {
     if (error.code === "PROTOCOL_SEQUENCE_TIMEOUT") conn.destroy();
@@ -71,7 +76,7 @@ async function withTransaction(fn) {
   } catch (error) {
     try {
       await runQueryConn(conn, "ROLLBACK");
-    } catch (_) {}
+    } catch (error) { logIgnored("DB rollback", error); }
     throw error;
   } finally {
     conn.release();
@@ -157,15 +162,6 @@ async function setPartyStatus(partyId, status) {
   ]);
 }
 
-// Get a user's socket_id by userId
-async function getUserSocketId(userId) {
-  const rows = await runQuery(
-    "SELECT socket_id FROM users WHERE user_id = ? LIMIT 1",
-    [userId],
-  );
-  return rows[0]?.socket_id || null;
-}
-
 // Set the same status for multiple parties at once
 async function setPartiesStatus(partyIds, status) {
   const ids = Array.from(
@@ -180,168 +176,41 @@ async function setPartiesStatus(partyIds, status) {
 }
 
 async function getUserSelectedCardId(userId) {
-  try {
-    const rows = await runQuery(
-      "SELECT selected_card_id FROM users WHERE user_id = ? LIMIT 1",
-      [userId],
-    );
-    return rows[0]?.selected_card_id ?? null;
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") return null;
-    throw error;
-  }
+  const rows = await runQuery(
+    "SELECT selected_card_id FROM users WHERE user_id = ? LIMIT 1",
+    [userId],
+  );
+  return rows[0]?.selected_card_id ?? null;
 }
 
 async function getUserOwnedCardIds(userId) {
-  try {
-    const rows = await runQuery(
-      "SELECT card_id FROM user_cards WHERE user_id = ?",
-      [userId],
-    );
-    return rows.map((r) => String(r.card_id));
-  } catch (error) {
-    if (error?.code === "ER_NO_SUCH_TABLE") return [];
-    throw error;
-  }
+  const rows = await runQuery(
+    "SELECT card_id FROM user_cards WHERE user_id = ?",
+    [userId],
+  );
+  return rows.map((r) => String(r.card_id));
 }
 
 async function userOwnsCard(userId, cardId) {
-  try {
-    const rows = await runQuery(
-      "SELECT 1 AS ok FROM user_cards WHERE user_id = ? AND card_id = ? LIMIT 1",
-      [userId, String(cardId)],
-    );
-    return !!rows[0];
-  } catch (error) {
-    if (error?.code === "ER_NO_SUCH_TABLE") return false;
-    throw error;
-  }
+  const rows = await runQuery(
+    "SELECT 1 AS ok FROM user_cards WHERE user_id = ? AND card_id = ? LIMIT 1",
+    [userId, String(cardId)],
+  );
+  return !!rows[0];
 }
 
 async function setUserSelectedCardId(userId, cardId) {
-  try {
-    return await runQuery(
-      "UPDATE users SET selected_card_id = ? WHERE user_id = ?",
-      [String(cardId), userId],
-    );
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") {
-      throw new Error(
-        "selected_card_id column missing in users table. Apply the player-cards migration.",
-      );
-    }
-    throw error;
-  }
-}
-
-async function getUserSelectedProfileIconId(userId) {
-  try {
-    const rows = await runQuery(
-      "SELECT selected_profile_icon_id FROM users WHERE user_id = ? LIMIT 1",
-      [userId],
-    );
-    return rows[0]?.selected_profile_icon_id ?? null;
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") return null;
-    throw error;
-  }
-}
-
-async function getUserOwnedProfileIconIds(userId) {
-  try {
-    const rows = await runQuery(
-      "SELECT icon_id FROM user_profile_icons WHERE user_id = ?",
-      [userId],
-    );
-    return rows.map((row) => String(row.icon_id));
-  } catch (error) {
-    if (error?.code === "ER_NO_SUCH_TABLE") return [];
-    throw error;
-  }
-}
-
-async function userOwnsProfileIcon(userId, iconId) {
-  try {
-    const rows = await runQuery(
-      "SELECT 1 AS ok FROM user_profile_icons WHERE user_id = ? AND icon_id = ? LIMIT 1",
-      [userId, String(iconId)],
-    );
-    return !!rows[0];
-  } catch (error) {
-    if (error?.code === "ER_NO_SUCH_TABLE") return false;
-    throw error;
-  }
+  return await runQuery(
+    "UPDATE users SET selected_card_id = ? WHERE user_id = ?",
+    [String(cardId), userId],
+  );
 }
 
 async function setUserSelectedProfileIconId(userId, iconId) {
-  try {
-    return await runQuery(
-      "UPDATE users SET selected_profile_icon_id = ? WHERE user_id = ?",
-      [String(iconId), userId],
-    );
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") {
-      throw new Error(
-        "selected_profile_icon_id column missing in users table. Apply the profile-icons migration.",
-      );
-    }
-    throw error;
-  }
-}
-
-async function getUserSelectedSkinMap(userId) {
-  try {
-    const rows = await runQuery(
-      "SELECT selected_skin_id_by_char FROM users WHERE user_id = ? LIMIT 1",
-      [userId],
-    );
-    return rows[0]?.selected_skin_id_by_char ?? null;
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") return null;
-    throw error;
-  }
-}
-
-async function setUserSelectedSkinMap(userId, selectedSkinMap) {
-  try {
-    return await runQuery(
-      "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
-      [JSON.stringify(selectedSkinMap || {}), userId],
-    );
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") {
-      throw new Error(
-        "selected_skin_id_by_char column missing in users table. Apply the skins migration.",
-      );
-    }
-    throw error;
-  }
-}
-
-async function getUserOwnedSkinIds(userId) {
-  try {
-    const rows = await runQuery(
-      "SELECT skin_id FROM user_skins WHERE user_id = ?",
-      [userId],
-    );
-    return rows.map((row) => String(row.skin_id));
-  } catch (error) {
-    if (error?.code === "ER_NO_SUCH_TABLE") return [];
-    throw error;
-  }
-}
-
-async function userOwnsSkin(userId, skinId) {
-  try {
-    const rows = await runQuery(
-      "SELECT 1 AS ok FROM user_skins WHERE user_id = ? AND skin_id = ? LIMIT 1",
-      [userId, String(skinId)],
-    );
-    return !!rows[0];
-  } catch (error) {
-    if (error?.code === "ER_NO_SUCH_TABLE") return false;
-    throw error;
-  }
+  return await runQuery(
+    "UPDATE users SET selected_profile_icon_id = ? WHERE user_id = ?",
+    [String(iconId), userId],
+  );
 }
 
 async function fetchSelectedCardsByNames(names) {
@@ -349,66 +218,43 @@ async function fetchSelectedCardsByNames(names) {
     new Set((Array.isArray(names) ? names : []).map((n) => String(n || ""))),
   ).filter(Boolean);
   if (!unique.length) return {};
-  try {
-    const placeholders = unique.map(() => "?").join(",");
-    const rows = await runQuery(
-      `SELECT name, selected_card_id FROM users WHERE name IN (${placeholders})`,
-      unique,
-    );
-    const out = {};
-    for (const row of rows) {
-      out[row.name] = row.selected_card_id ?? null;
-    }
-    return out;
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") return {};
-    throw error;
+  const placeholders = unique.map(() => "?").join(",");
+  const rows = await runQuery(
+    `SELECT name, selected_card_id FROM users WHERE name IN (${placeholders})`,
+    unique,
+  );
+  const out = {};
+  for (const row of rows) {
+    out[row.name] = row.selected_card_id ?? null;
   }
+  return out;
 }
 
 async function getUserPreferredSelection(userId) {
-  try {
-    const rows = await runQuery(
-      `SELECT preferred_mode_id, preferred_mode_variant_id, preferred_map_id
-         FROM users
-        WHERE user_id = ?
-        LIMIT 1`,
-      [userId],
-    );
-    return normalizeSelection({
-      modeId: rows[0]?.preferred_mode_id || null,
-      modeVariantId: rows[0]?.preferred_mode_variant_id || null,
-      mapId: rows[0]?.preferred_map_id ?? null,
-    });
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") {
-      throw new Error(
-        "preferred selection columns missing in users table. Apply the solo-selection migration.",
-      );
-    }
-    throw error;
-  }
+  const rows = await runQuery(
+    `SELECT preferred_mode_id, preferred_mode_variant_id, preferred_map_id
+       FROM users
+      WHERE user_id = ?
+      LIMIT 1`,
+    [userId],
+  );
+  return normalizeSelection({
+    modeId: rows[0]?.preferred_mode_id || null,
+    modeVariantId: rows[0]?.preferred_mode_variant_id || null,
+    mapId: rows[0]?.preferred_map_id ?? null,
+  });
 }
 
 async function setUserPreferredSelection(userId, selection) {
   const normalized = normalizeSelection(selection);
-  try {
-    return await runQuery(
-      `UPDATE users
-          SET preferred_mode_id = ?,
-              preferred_mode_variant_id = ?,
-              preferred_map_id = ?
-        WHERE user_id = ?`,
-      [normalized.modeId, normalized.modeVariantId, normalized.mapId, userId],
-    );
-  } catch (error) {
-    if (error?.code === "ER_BAD_FIELD_ERROR") {
-      throw new Error(
-        "preferred selection columns missing in users table. Apply the solo-selection migration.",
-      );
-    }
-    throw error;
-  }
+  return await runQuery(
+    `UPDATE users
+        SET preferred_mode_id = ?,
+            preferred_mode_variant_id = ?,
+            preferred_map_id = ?
+      WHERE user_id = ?`,
+    [normalized.modeId, normalized.modeVariantId, normalized.mapId, userId],
+  );
 }
 
 async function updateLastSeen(partyId, username) {
@@ -545,13 +391,13 @@ async function refreshPartyPresence(names) {
 }
 
 module.exports = {
-  openRuntimeConnection: () => mysql.createConnection({ ...databaseConfig, connectTimeout: 5000 }),
-  databaseName: databaseConfig.database,
-  pool,
+  openRuntimeConnection: () => mysql.createConnection({ ...databaseSettings().connection, connectTimeout: 5000 }),
+  get databaseName() { return databaseSettings().connection.database; },
+  closePool,
+  get pool() { return getPool(); },
   refreshPartyPresence,
   refreshUserLastSeen,
   runQuery,
-  runQueryConn,
   withTransaction,
   updateLastSeen,
   deleteEmptyParties,
@@ -566,20 +412,12 @@ module.exports = {
   clearUserSocketIfMatch,
   setPartyStatus,
   setPartiesStatus,
-  getUserSocketId,
   getUserSelectedCardId,
   getUserOwnedCardIds,
   userOwnsCard,
   setUserSelectedCardId,
   fetchSelectedCardsByNames,
-  getUserSelectedProfileIconId,
-  getUserOwnedProfileIconIds,
-  userOwnsProfileIcon,
   setUserSelectedProfileIconId,
-  getUserSelectedSkinMap,
-  setUserSelectedSkinMap,
-  getUserOwnedSkinIds,
-  userOwnsSkin,
   getUserPreferredSelection,
   setUserPreferredSelection,
 };

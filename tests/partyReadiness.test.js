@@ -1,3 +1,4 @@
+const { createFakeIo } = require('./helpers/fakeIo');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -33,7 +34,7 @@ describe("Readiness lifecycle", () => {
         throw new Error(sql);
       },
     };
-    const io = { to: () => ({ emit: (event, data) => events.push({ event, data }) }) };
+    const io = createFakeIo({ onEmit: (_room, event, data) => events.push({ event, data }) });
     const mm = {
       queueJoin: async () => { joins++; await new Promise(resolve => setImmediate(resolve)); if (failJoin) throw new Error('Queue unavailable'); ticket = true; },
       queueLeave: async () => { ticket = false; },
@@ -56,6 +57,13 @@ describe("Readiness lifecycle", () => {
     }
     return { party, members, events, db, io, mm, partyQueueTransition, client, get joins() { return joins; }, fail() { failJoin = true; } };
   }
+
+  test('a malformed acknowledgement cannot interrupt a ready transition', async () => {
+    const f = fixture();
+    await f.client('Owner').handlers['ready:status']({ ready: true, partyId: 7 }, 'invalid');
+    assert.equal(f.joins, 1);
+    assert.equal(f.party.status, 'queued');
+  });
 
   test('a one-person party enters matchmaking on its first ready', async () => {
     const f = fixture();
@@ -366,7 +374,7 @@ describe("Discovery and join visibility", () => {
           throw new Error(`Unexpected query: ${sql}`);
         },
       };
-      const io = { to: (target) => ({ emit: (event, payload) => emissions.push({ target, event, payload }) }) };
+      const io = createFakeIo({ onEmit: (target, event, payload) => emissions.push({ target, event, payload }) });
       return { state: createPartyStateService({ db, io }), emissions };
     }
 
@@ -401,4 +409,58 @@ describe("Discovery and join visibility", () => {
       });
     }
   });
+});
+
+test('only the owner may accept a pending join request, then the requester hears after commit', async t => {
+  const { createPartyJoinRequestService } = require('../src/server/services/party/partyJoinRequestService');
+  const { PARTY_JOIN_REQUEST_TIMEOUT_MS } = require('../src/shared/gameConstants');
+  const { installFakeClock } = require('./helpers/fakeClock');
+  const clock = installFakeClock(t);
+  const operations = [];
+  const io = createFakeIo();
+  const requester = io.addSocket('requester', { onEmit: type => operations.push(type) });
+  const requestedAt = Date.now();
+  const row = {
+    request_id: 4, party_id: 7, requester_user_id: 2, requester_name: 'Visitor',
+    status: 'pending', requested_at: new Date(requestedAt), request_count: 1, char_class: 'ninja',
+  };
+  const db = {
+    pool: { async getConnection() {
+      operations.push('connection');
+      return {
+        async beginTransaction() { operations.push('begin'); },
+        async commit() { operations.push('commit'); },
+        async rollback() { operations.push('rollback'); },
+        release() { operations.push('release'); },
+        async query(sql, params) {
+          if (sql.includes('WHERE r.party_id')) return [[row]];
+          if (sql.startsWith('UPDATE party_join_requests')) {
+            operations.push(params[0] === 'accepted' ? 'accept' : 'expire');
+            return [{ affectedRows: 1 }];
+          }
+          throw Error(`Unexpected join-request SQL: ${sql}`);
+        },
+      };
+    } },
+    async runQuery(sql) {
+      if (sql.startsWith('SELECT socket_id')) return [{ socket_id: requester.id }];
+      throw Error(`Unexpected join-request SQL: ${sql}`);
+    },
+  };
+  const service = createPartyJoinRequestService({ db, io, getPartyOwnerName: async () => 'Owner' });
+  const response = { partyId: 7, requestId: 4, response: 'accept' };
+  assert.equal((await service.respondToJoinRequest({ ...response, actorName: 'Visitor' })).statusCode, 403);
+  assert.deepEqual(operations, []);
+  clock.setTime(requestedAt + PARTY_JOIN_REQUEST_TIMEOUT_MS - 1);
+  const accepted = await service.respondToJoinRequest({ ...response, actorName: 'Owner' });
+  assert.equal(accepted.payload.status, 'accepted');
+  assert.equal(requester.sent[0].payload.requestState.canRequest, true);
+  assert.ok(requester.sent[0].payload.joinAfterMs > 0);
+  assert.deepEqual(operations, ['connection', 'begin', 'accept', 'commit', 'party:join-request:status', 'release']);
+  clock.tick(1);
+  operations.length = 0;
+  const expired = await service.respondToJoinRequest({ ...response, actorName: 'Owner' });
+  assert.equal(expired.statusCode, 409);
+  assert.deepEqual(operations, ['connection', 'begin', 'expire', 'rollback', 'release']);
+  assert.equal(requester.sent.length, 1);
 });

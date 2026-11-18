@@ -1,3 +1,5 @@
+const { fakeRes } = require('./helpers/fakeHttp');
+const { createFakeIo } = require('./helpers/fakeIo');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -52,13 +54,13 @@ describe("Party return route", () => {
         return [{ name: 'Owner' }];
       },
     };
-    const io = { to: room => ({ emit: (event, data) => emissions.push({ room, event, data }) }) };
+    const io = createFakeIo({ onEmit: (room, event, data) => emissions.push({ room, event, data }) });
     const app = { post: (path, handler) => routes.set(path, handler), locals: { socketApi: {
       moveUserSocketToParty: async () => calls.push('move'),
       cancelPartyQueue: async () => calls.push('cancelQueue'),
     } } };
     registerPartyRoutes({ app, io, db, requireCurrentUser: async () => ({ name: 'Player', user_id: 1 }) });
-    const res = { code: 200, status(code) { this.code = code; return this; }, json(payload) { this.payload = payload; } };
+    const res = fakeRes({ statusField: 'code', bodyField: 'payload' });
     return { calls, emissions, db, io, party, res, run: () => routes.get('/partydata')({ body: { partyId: 42 }, app }, res) };
   }
 
@@ -145,7 +147,7 @@ describe("Party return route", () => {
 });
 
 describe("Fresh account status", () => {
-  function fixture({ fail = [], blocked = false, user = { user_id: 1, name: 'Player', char_levels: '{"ninja":2}' } } = {}) {
+  function fixture({ fail = [], blocked = false, user = { user_id: 1, name: 'Player', password: 'hash-for-test', abuse_offense_count: 7, char_levels: '{"ninja":2}' } } = {}) {
     const started = [], releases = [], warnings = [];
     const values = {
       icons: { selectedProfileIconId: 'icon', ownedIconIds: ['icon'] },
@@ -193,6 +195,7 @@ describe("Fresh account status", () => {
     const payload = JSON.parse(JSON.stringify(await pending));
     assert.equal(payload.party_id, 42);
     assert.equal(payload.live_match_id, 91);
+    assert.equal('password' in payload.userData || 'abuse_offense_count' in payload.userData, false);
     assert.equal(payload.userData.selected_card_id, 'card');
     assert.equal(payload.userData.winStreak, 3);
     assert.deepEqual(payload.userData.owned_card_ids, ['card']);

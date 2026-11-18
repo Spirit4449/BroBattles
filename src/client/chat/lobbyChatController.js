@@ -1,9 +1,16 @@
+import { API_PATHS } from "../../shared/net/apiPaths.js";
+import { SOCKET_EVENTS } from "../../shared/net/socketEvents.js";
 import { renderSystemLog } from './systemLog.mjs';
 import { createPartyPresenceTracker, countOnlineMembers } from './partyPresence.mjs';
 import { createViewersPopup } from './viewersPopup.js';
-
-import { makeChatShell, formatSuspensionTime, escapeHtml, buildAvatarUrl, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_CHAT_BUBBLE_MS, messageIdOf, postJson, renderPartyChatMessage, showChatRequestError, buildInlineCooldownMessage, LOBBY_TYPING_STALE_MS } from './presentation';
+import { makeChatShell, escapeHtml, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_IDLE_STOP_MS, messageIdOf, postJson, renderPartyChatMessage } from './presentation';
 import { resolveCharacterKey } from "../../shared/characters/characterStats.js";
+import { nameKey } from "../../shared/social/textRules.js";
+import { createLocalTypingEmitter, TYPING_STALE_MS } from "./typingTracker.js";
+import { findChangedReaction } from "./reactions.js";
+import { renderUnreadBadge } from "./badges.mjs";
+import { createLobbyMessageBubbles } from "../lobby/party/partyChatBubbles.js";
+import { createChatRestrictions } from "./chatRestrictions.js";
 
 export function createLobbyChatController({
   socket,
@@ -30,15 +37,7 @@ export function createLobbyChatController({
     replyTo: null,
     loading: false,
     typingByUser: new Map(),
-    typingStopTimer: null,
-    typingHeartbeatTimer: null,
     typingSweepTimer: null,
-    isLocalTyping: false,
-    bubbleTimers: new Map(),
-    chatSuspendedUntilMs: 0,
-    cooldownTimer: null,
-    localCooldownUntilMs: 0,
-    cooldownDraftValue: "",
   };
 
   const presence = createPartyPresenceTracker(getPartyContext?.());
@@ -49,6 +48,21 @@ export function createLobbyChatController({
     launcherLabel: "Chat",
     launcherClassName: "bb-chat-lobby-launcher",
   });
+  const restrictions = createChatRestrictions(ui, {
+    isSending: () => state.sending,
+    onSuspension: renderMessages,
+  });
+  const { isChatSuspended, syncChatSuspensionUi, cooldown } = restrictions;
+  const bubbles = createLobbyMessageBubbles();
+  const typing = createLocalTypingEmitter({
+    emit: isTyping => {
+      const partyId = currentPartyId();
+      if (partyId) socket?.emit?.(SOCKET_EVENTS.PARTY_CHAT_TYPING, { partyId, isTyping });
+    },
+    idleMs: LOBBY_TYPING_IDLE_STOP_MS,
+    heartbeatMs: LOBBY_TYPING_HEARTBEAT_MS,
+    periodic: true,
+  });
   const socketListeners = [];
   function listen(event, handler) {
     socket?.on?.(event, handler);
@@ -57,96 +71,7 @@ export function createLobbyChatController({
   ui.clearReplyBtn.style.display = "none";
 
   function currentPartyId() {
-    const context =
-      typeof getPartyContext === "function" ? getPartyContext() : null;
-    if (context) return Number(context.partyId) || 0;
-    return Number(state.partyId) || 0;
-  }
-
-  function getGlobalChatSuspensionMs() {
-    return Number(window.__BRO_BATTLES_SUSPENSION__?.chat) || 0;
-  }
-
-  function getActiveChatSuspensionMs() {
-    const now = Date.now();
-    const localMs = Number(state.chatSuspendedUntilMs) || 0;
-    const globalMs = getGlobalChatSuspensionMs();
-    const active = Math.max(localMs, globalMs);
-    return active > now ? active : 0;
-  }
-
-  function isChatSuspended() {
-    return getActiveChatSuspensionMs() > 0;
-  }
-
-  function isLocalCooldownActive() {
-    return Number(state.localCooldownUntilMs) > Date.now();
-  }
-
-  function applyLocalCooldown(message, durationMs = 2000) {
-    const duration = Math.max(250, Number(durationMs) || 2000);
-    const now = Date.now();
-    if (!isLocalCooldownActive()) {
-      state.cooldownDraftValue = String(ui.textarea.value || "");
-    }
-    state.localCooldownUntilMs = now + duration;
-    ui.textarea.value = String(message || "Slow down.");
-    ui.resizeComposer();
-    ui.textarea.placeholder = ui.textarea.value;
-    ui.textarea.disabled = true;
-    ui.sendBtn.disabled = true;
-
-    if (state.cooldownTimer) {
-      window.clearTimeout(state.cooldownTimer);
-      state.cooldownTimer = null;
-    }
-
-    state.cooldownTimer = window.setTimeout(() => {
-      state.cooldownTimer = null;
-      state.localCooldownUntilMs = 0;
-      if (isChatSuspended()) {
-        syncChatSuspensionUi();
-        return;
-      }
-      ui.textarea.disabled = false;
-      ui.sendBtn.disabled = state.sending;
-      ui.textarea.value = String(state.cooldownDraftValue || "");
-      ui.resizeComposer();
-      ui.textarea.placeholder = "Write a message...";
-      ui.textarea.focus();
-      state.cooldownDraftValue = "";
-    }, duration);
-  }
-
-  function syncChatSuspensionUi() {
-    const activeMs = getActiveChatSuspensionMs();
-    if (!activeMs) {
-      if (isLocalCooldownActive()) {
-        return;
-      }
-      ui.textarea.disabled = false;
-      ui.sendBtn.disabled = state.sending;
-      if (ui.textarea.dataset.suspensionText === "1") {
-        ui.textarea.value = "";
-        ui.resizeComposer();
-        ui.textarea.dataset.suspensionText = "0";
-      }
-      ui.textarea.placeholder = "Write a message...";
-      ui.root.classList.remove("bb-chat-is-suspended");
-      return;
-    }
-
-    const timeLeft = formatSuspensionTime(activeMs);
-    const text = timeLeft
-      ? `Chat suspended (${timeLeft} remaining)`
-      : "Chat suspended";
-    ui.textarea.disabled = true;
-    ui.sendBtn.disabled = true;
-    ui.textarea.value = text;
-    ui.resizeComposer();
-    ui.textarea.dataset.suspensionText = "1";
-    ui.textarea.placeholder = text;
-    ui.root.classList.add("bb-chat-is-suspended");
+    return Number(presence.get()?.partyId) || 0;
   }
 
   function getPartyContextSnapshot() {
@@ -206,103 +131,6 @@ export function createLobbyChatController({
     syncHeader();
   }
 
-  function emitTyping(isTyping) {
-    const partyId = currentPartyId();
-    if (!partyId) return;
-    socket?.emit?.("party-chat:typing", {
-      partyId,
-      isTyping: !!isTyping,
-    });
-  }
-
-  function setLocalTyping(isTyping) {
-    const next = !!isTyping;
-    if (!next) {
-      if (state.typingStopTimer) {
-        window.clearTimeout(state.typingStopTimer);
-        state.typingStopTimer = null;
-      }
-      if (state.typingHeartbeatTimer) {
-        window.clearInterval(state.typingHeartbeatTimer);
-        state.typingHeartbeatTimer = null;
-      }
-      if (state.isLocalTyping) {
-        state.isLocalTyping = false;
-        emitTyping(false);
-      }
-      return;
-    }
-
-    if (state.typingStopTimer) {
-      window.clearTimeout(state.typingStopTimer);
-      state.typingStopTimer = null;
-    }
-
-    if (!state.isLocalTyping) {
-      state.isLocalTyping = true;
-      emitTyping(true);
-    }
-    if (!state.typingHeartbeatTimer) {
-      state.typingHeartbeatTimer = window.setInterval(() => {
-        if (!state.isLocalTyping) return;
-        emitTyping(true);
-      }, LOBBY_TYPING_HEARTBEAT_MS);
-    }
-  }
-
-  function scheduleTypingStop() {
-    if (state.typingStopTimer) {
-      window.clearTimeout(state.typingStopTimer);
-    }
-    state.typingStopTimer = window.setTimeout(() => {
-      setLocalTyping(false);
-    }, LOBBY_TYPING_IDLE_STOP_MS);
-  }
-
-  function showLobbyMessageBubble(message) {
-    const bodyText = String(message?.body || "")
-      .replace(/\s+/g, " ")
-      .trim();
-    const senderName = String(message?.sender?.name || "").trim();
-    if (!bodyText || !senderName) return;
-    const slot = Array.from(
-      document.querySelectorAll(".character-slot[data-player-name]"),
-    ).find((candidate) => sameName(candidate?.dataset?.playerName, senderName));
-    if (!slot) return;
-    let bubble = slot.querySelector(".bb-lobby-chat-bubble");
-    if (!bubble) {
-      bubble = document.createElement("div");
-      bubble.className = "bb-lobby-chat-bubble";
-      slot.appendChild(bubble);
-    }
-    let text = bubble.querySelector(".bb-lobby-chat-bubble-text");
-    if (!text) {
-      text = document.createElement("span");
-      text.className = "bb-lobby-chat-bubble-text";
-      bubble.replaceChildren(text);
-    }
-    text.textContent = bodyText;
-    bubble.setAttribute("role", "status");
-    bubble.setAttribute("aria-label", `${senderName}: ${bodyText}`);
-    bubble.classList.remove("is-visible");
-    // Restart the entrance when a player sends another message mid-bubble.
-    void bubble.offsetWidth;
-    bubble.classList.add("is-visible");
-
-    const key = String(slot?.dataset?.playerName || senderName)
-      .trim()
-      .toLowerCase();
-    const existingTimer = state.bubbleTimers.get(key);
-    if (existingTimer) {
-      window.clearTimeout(existingTimer);
-    }
-    const timer = window.setTimeout(() => {
-      bubble.classList.remove("is-visible");
-      state.bubbleTimers.delete(key);
-    }, Math.min(9000, Math.max(LOBBY_CHAT_BUBBLE_MS, bodyText.length * 55)));
-    state.bubbleTimers.set(key, timer);
-  }
-
   function syncLobbyChatVisibility() {
     const visible = currentPartyId() > 0;
     ui.root.style.display = visible ? "block" : "none";
@@ -312,7 +140,7 @@ export function createLobbyChatController({
     setOpen(false);
     setUnreadBadge(0);
     setReactionBadge(false);
-    setLocalTyping(false);
+    typing.stop();
     state.messages = [];
     renderMessages();
     hideTypingIndicator();
@@ -321,13 +149,7 @@ export function createLobbyChatController({
   function setUnreadBadge(count) {
     const next = Math.max(0, Number(count) || 0);
     state.unreadCount = next;
-    if (next > 0) {
-      ui.badge.textContent = next > 99 ? "99+" : String(next);
-      ui.badge.classList.remove("hidden");
-    } else {
-      ui.badge.textContent = "";
-      ui.badge.classList.add("hidden");
-    }
+    renderUnreadBadge(ui.badge, next);
   }
 
   function setReactionBadge(show) {
@@ -339,7 +161,7 @@ export function createLobbyChatController({
     const senderName = String(message?.sender?.name || "");
     const currentName = String(getCurrentUserName?.() || "");
     if (!senderName || !currentName) return !!message?.isMine;
-    return senderName.trim().toLowerCase() === currentName.trim().toLowerCase();
+    return nameKey(senderName) === nameKey(currentName);
   }
 
   function normalizeIncomingMessage(message) {
@@ -348,7 +170,7 @@ export function createLobbyChatController({
       ...message,
       isMine: isMessageMineForCurrentUser(message),
       myReaction: Object.entries(message.reactionUsers || {}).find(([, users]) =>
-        Array.isArray(users) && users.some((user) => sameName(user.name, getCurrentUserName?.())),
+        Array.isArray(users) && users.some((user) => nameKey(user.name) === nameKey(getCurrentUserName?.())),
       )?.[0] || null,
     };
   }
@@ -383,7 +205,7 @@ export function createLobbyChatController({
         void markMessagesRead(latestId);
       }
       ui.messagesEl.querySelector(".bb-chat-divider")?.remove();
-      setLocalTyping(false);
+      typing.stop();
     }
     ui.panel.classList.toggle("is-open", state.isOpen);
     ui.backdrop.classList.toggle("is-visible", state.isOpen);
@@ -448,38 +270,6 @@ export function createLobbyChatController({
     );
   }
 
-  function sameName(a, b) {
-    return (
-      String(a || "")
-        .trim()
-        .toLowerCase() ===
-      String(b || "")
-        .trim()
-        .toLowerCase()
-    );
-  }
-
-  function reactionCountMap(message) {
-    const map = new Map();
-    const reactions = Array.isArray(message?.reactions)
-      ? message.reactions
-      : [];
-    for (const item of reactions) {
-      map.set(String(item?.reaction || ""), Number(item?.count) || 0);
-    }
-    return map;
-  }
-
-  function findChangedReaction(previousMessage, nextMessage) {
-    const prev = reactionCountMap(previousMessage);
-    const next = reactionCountMap(nextMessage);
-    const keys = new Set([...prev.keys(), ...next.keys()]);
-    for (const key of keys) {
-      if ((prev.get(key) || 0) !== (next.get(key) || 0)) return key;
-    }
-    return null;
-  }
-
   async function markMessagesRead(lastMessageId) {
     const partyId = currentPartyId();
     const targetId = Number(lastMessageId) || 0;
@@ -489,7 +279,7 @@ export function createLobbyChatController({
     if (targetId <= state.lastReadSentMessageId) return null;
     state.lastReadSentMessageId = targetId;
     try {
-      const result = await postJson("/party-chat/read", {
+      const result = await postJson(API_PATHS.PARTY_CHAT_READ, {
         partyId,
         lastMessageId: targetId,
       });
@@ -646,7 +436,7 @@ export function createLobbyChatController({
     const beforeRequest = new Map(state.messageMap);
     state.loading = true;
     try {
-      const data = await postJson("/party-chat/history", {
+      const data = await postJson(API_PATHS.PARTY_CHAT_HISTORY, {
         partyId,
         limit: 80,
       });
@@ -689,12 +479,12 @@ export function createLobbyChatController({
       syncChatSuspensionUi();
       return;
     }
-    if (state.sending || isLocalCooldownActive()) return;
+    if (state.sending || cooldown.isActive()) return;
     if (!partyId || !body) return;
     state.sending = true;
     const draft = ui.textarea.value;
     const reply = state.replyTo;
-    setLocalTyping(false);
+    typing.stop();
     const payload = {
       partyId,
       body,
@@ -702,7 +492,7 @@ export function createLobbyChatController({
     };
     ui.sendBtn.disabled = true;
     try {
-      const result = await postJson("/party-chat/send", payload);
+      const result = await postJson(API_PATHS.PARTY_CHAT_SEND, payload);
       if (state.destroyed || partyId !== currentPartyId()) return;
       if (ui.textarea.value === draft) ui.textarea.value = "";
       ui.resizeComposer();
@@ -714,26 +504,10 @@ export function createLobbyChatController({
     } catch (error) {
       if (state.destroyed || partyId !== currentPartyId()) return;
       console.warn("[chat] send failed", error?.message || error);
-      const suspendedUntilMs = Number(error?.payload?.suspendedUntilMs) || 0;
-      if (suspendedUntilMs > Date.now()) {
-        state.chatSuspendedUntilMs = Math.max(
-          state.chatSuspendedUntilMs || 0,
-          suspendedUntilMs,
-        );
-        syncChatSuspensionUi();
-        renderMessages();
-        showChatRequestError(error, "Message not sent");
-        return;
-      }
-      const type = String(error?.payload?.type || "").toLowerCase();
-      if (type === "warn" || type === "chat_limited") {
-        applyLocalCooldown(buildInlineCooldownMessage(error), 2000);
-        return;
-      }
-      showChatRequestError(error, "Message not sent");
+      restrictions.handleError(error, "Message not sent");
     } finally {
       state.sending = false;
-      if (!state.destroyed && !isChatSuspended() && !isLocalCooldownActive()) {
+      if (!state.destroyed && !isChatSuspended() && !cooldown.isActive()) {
         ui.sendBtn.disabled = state.sending;
         ui.textarea.focus();
       }
@@ -746,10 +520,10 @@ export function createLobbyChatController({
       syncChatSuspensionUi();
       return;
     }
-    if (isLocalCooldownActive()) return;
+    if (cooldown.isActive()) return;
     if (!partyId || !messageId) return;
     try {
-      await postJson("/party-chat/react", {
+      await postJson(API_PATHS.PARTY_CHAT_REACT, {
         partyId,
         messageId,
         reaction,
@@ -757,23 +531,7 @@ export function createLobbyChatController({
       // Socket event is the source of truth so all clients animate/resolve consistently.
     } catch (error) {
       console.warn("[chat] reaction failed", error?.message || error);
-      const suspendedUntilMs = Number(error?.payload?.suspendedUntilMs) || 0;
-      if (suspendedUntilMs > Date.now()) {
-        state.chatSuspendedUntilMs = Math.max(
-          state.chatSuspendedUntilMs || 0,
-          suspendedUntilMs,
-        );
-        syncChatSuspensionUi();
-        renderMessages();
-        showChatRequestError(error, "Could not update reaction");
-        return;
-      }
-      const type = String(error?.payload?.type || "").toLowerCase();
-      if (type === "warn" || type === "chat_limited") {
-        applyLocalCooldown(buildInlineCooldownMessage(error), 2000);
-        return;
-      }
-      showChatRequestError(error, "Could not update reaction");
+      restrictions.handleError(error, "Could not update reaction");
     }
   }
 
@@ -798,11 +556,10 @@ export function createLobbyChatController({
   ui.sendBtn.addEventListener("click", () => void sendMessage());
   ui.textarea.addEventListener("input", () => {
     if (!currentPartyId()) return;
-    setLocalTyping(true);
-    scheduleTypingStop();
+    typing.noteInput();
   });
   ui.textarea.addEventListener("blur", () => {
-    setLocalTyping(false);
+    typing.stop();
   });
   ui.textarea.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -811,9 +568,9 @@ export function createLobbyChatController({
     }
   });
 
-  listen("party:joined", ({ partyId }) => {
+  listen(SOCKET_EVENTS.PARTY_JOINED, ({ partyId }) => {
     presence.join(partyId);
-    setLocalTyping(false);
+    typing.stop();
     state.historyRequest++;
     state.messages = [];
     state.messageMap.clear();
@@ -835,7 +592,7 @@ export function createLobbyChatController({
       setOpen(false);
       setUnreadBadge(0);
       setReactionBadge(false);
-      setLocalTyping(false);
+      typing.stop();
       state.messages = [];
       renderMessages();
       hideTypingIndicator();
@@ -849,13 +606,13 @@ export function createLobbyChatController({
     while (state.systemLogs.size > 100) state.systemLogs.delete(state.systemLogs.keys().next().value);
   }
 
-  listen("party-chat:system", (payload = {}) => {
+  listen(SOCKET_EVENTS.PARTY_CHAT_SYSTEM, (payload = {}) => {
     if (Number(payload.partyId) !== currentPartyId()) return;
     rememberSystemLog(payload.event);
     if (state.isOpen) renderMessages();
   });
 
-  listen("party-chat:message", (payload = {}) => {
+  listen(SOCKET_EVENTS.PARTY_CHAT_MESSAGE, (payload = {}) => {
     const partyId = Number(payload?.partyId) || 0;
     if (partyId !== currentPartyId()) return;
     const rawMessage = payload?.message || null;
@@ -873,7 +630,7 @@ export function createLobbyChatController({
     if (!existing && !message?.type) {
       const appendAtBottom = state.isOpen && ui.scroll.atBottom();
       upsertMessage(nextMessage, { forceScroll: appendAtBottom });
-      showLobbyMessageBubble(message);
+      bubbles.show(message);
     } else if (existing) {
       upsertMessage(nextMessage);
     }
@@ -899,7 +656,7 @@ export function createLobbyChatController({
     }
   });
 
-  listen("party-chat:read", (payload = {}) => {
+  listen(SOCKET_EVENTS.PARTY_CHAT_READ, (payload = {}) => {
     const partyId = Number(payload?.partyId) || 0;
     if (partyId !== currentPartyId()) return;
     const viewerName = String(payload?.viewerName || "");
@@ -924,7 +681,7 @@ export function createLobbyChatController({
         const existingId = Number(viewer?.userId) || 0;
         if (existingId > 0 && viewerUserId > 0)
           return existingId === viewerUserId;
-        return sameName(viewer?.name, viewerName);
+        return nameKey(viewer?.name) === nameKey(viewerName);
       });
       if (!viewerExists) {
         viewers.push({
@@ -943,7 +700,7 @@ export function createLobbyChatController({
     }
   });
 
-  listen("party-chat:typing", (payload = {}) => {
+  listen(SOCKET_EVENTS.PARTY_CHAT_TYPING, (payload = {}) => {
     const partyId = Number(payload?.partyId) || 0;
     if (!partyId || partyId !== currentPartyId()) return;
     const now = Date.now();
@@ -953,7 +710,7 @@ export function createLobbyChatController({
     for (const typer of typers) {
       const name = String(typer?.name || "").trim();
       if (!name) continue;
-      if (currentName && sameName(name, currentName)) continue;
+      if (currentName && nameKey(name) === nameKey(currentName)) continue;
       const userId = Number(typer?.userId) || 0;
       const key = userId > 0 ? `u:${userId}` : `n:${name.toLowerCase()}`;
       next.set(key, {
@@ -961,14 +718,14 @@ export function createLobbyChatController({
         name,
         charClass: resolveCharacterKey(typer?.charClass),
         profileIconId: String(typer?.profileIconId || "") || null,
-        expiresAt: now + LOBBY_TYPING_STALE_MS,
+        expiresAt: now + TYPING_STALE_MS,
       });
     }
     state.typingByUser = next;
     renderTypingIndicator();
   });
 
-  listen("party:members", (payload = {}) => {
+  listen(SOCKET_EVENTS.PARTY_MEMBERS, (payload = {}) => {
     if (!presence.roster(payload)) return;
     syncHeader();
     syncLobbyChatVisibility();
@@ -985,7 +742,7 @@ export function createLobbyChatController({
     }
   });
 
-  listen("status:update", (payload = {}) => {
+  listen(SOCKET_EVENTS.STATUS_UPDATE, (payload = {}) => {
     if (presence.status(payload)) syncHeader();
   });
 
@@ -1030,19 +787,13 @@ export function createLobbyChatController({
       state.destroyed = true;
       document.removeEventListener("keydown", escapeHandler);
       for (const [event, handler] of socketListeners) socket?.off?.(event, handler);
-      setLocalTyping(false);
+      typing.stop();
       if (state.typingSweepTimer) {
         window.clearInterval(state.typingSweepTimer);
         state.typingSweepTimer = null;
       }
-      if (state.cooldownTimer) {
-        window.clearTimeout(state.cooldownTimer);
-        state.cooldownTimer = null;
-      }
-      for (const timerId of state.bubbleTimers.values()) {
-        window.clearTimeout(timerId);
-      }
-      state.bubbleTimers.clear();
+      cooldown.destroy();
+      bubbles.destroy();
       ui.root.remove();
       ui.launcher.remove();
       viewersPopup.destroy();

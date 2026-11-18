@@ -222,7 +222,7 @@ test("the match keeps running through a bust, then finishes for the winner", () 
   const room = roomFor();
   room.status = "active";
   const finished = [];
-  room._finishGame = (winner) => finished.push(winner);
+  room.finishGame = (winner) => finished.push(winner);
   room.gameMode.onStart();
 
   room.gameMode.damageVault("team2", SETTINGS.vaultStartingCoins, { sourceTeam: "team1" });
@@ -292,11 +292,11 @@ function fighter(room, name, team, x, y) {
 
 function combatRoom() {
   const room = roomFor();
-  room._recordCombatStat = () => {};
+  room.recordCombatStat = () => {};
   room.broadcastSnapshot = () => {};
-  room._getAttackMaxDist = () => 200;
-  room._getHistoricalPosition = (p) => ({ x: p.x, y: p.y });
-  room._checkVictoryCondition = () => {};
+  room.getAttackMaxDist = () => 200;
+  room.getHistoricalPosition = (p) => ({ x: p.x, y: p.y });
+  room.checkVictoryCondition = () => {};
   return room;
 }
 
@@ -513,7 +513,8 @@ test("built walls block every team's movement but only the other team's shots", 
   const mode = room.gameMode;
   const wall = room.modeState.objects.find((o) => o.type === "wallSlot");
   assert.deepEqual(mode.getMovementBlockers(), [], "an empty slot blocks nothing");
-  wall.state.builtByTeam = "team1";
+  const builder = fighter(room, "builder", "team1", wall.x, wall.y);
+  assert.ok(mode.handlePlayerAction(builder, { type: "mode-interact" }).shouldBroadcastSnapshot);
   assert.deepEqual(mode.getMovementBlockers().map((b) => b.id), [wall.id]);
   assert.deepEqual(mode.getShotBlockers("team1"), [], "the builder's team shoots through");
   assert.deepEqual(mode.getShotBlockers("team2").map((b) => b.id), [wall.id]);
@@ -540,4 +541,142 @@ test('claimed turrets fire at nearby enemies, retain their team and obey the fir
     assert.equal(shots.length, 2);
     assert.ok(shots[1].vx < 0, 'the next shot follows the new target position');
   }
+});
+
+test('loose coins damp on a platform, stop changing at rest, and fall past edges', async () => {
+  const { stepLooseCoin, homingPoint } = await import('../src/client/game/modes/bankBust/coinMotion.mjs');
+  const floor = { floorY: 50, floorLeft: 0, floorRight: 100 };
+  const coin = { ...floor, x: 10, y: 49, vx: 2, vy: 250 };
+  assert.equal(stepLooseCoin(coin, 0.01), true);
+  assert.equal(coin.y, floor.floorY);
+  assert.ok(coin.vy < 0 && Math.abs(coin.vy) < 250);
+  assert.ok(coin.vx > 0 && coin.vx < 2);
+  let bounces = 1;
+  for (let i = 0; i < 240 && !coin.resting; i++) if (stepLooseCoin(coin, 1 / 120)) bounces++;
+  assert.ok(bounces > 1);
+  assert.equal(coin.resting, true);
+  const rest = { ...coin };
+  assert.equal(stepLooseCoin(coin, 1), false);
+  assert.deepEqual(coin, rest);
+  const missed = { ...floor, x: 101, y: 49, vx: 2, vy: 250 };
+  assert.equal(stepLooseCoin(missed, 0.01), false);
+
+  const platforms = [{ left: 0, right: 40, top: 100 }, { left: 0, right: 20, top: 50 }];
+  const falling = { x: 10, y: 45, vx: 0, vy: 800, radius: 2, floors: platforms };
+  assert.equal(stepLooseCoin(falling, 0.08), true);
+  assert.equal(falling.y + falling.radius, platforms[1].top, "catch the highest crossed platform");
+  Object.assign(falling, { y: 65, vy: 800 });
+  assert.equal(stepLooseCoin(falling, 0.08), true);
+  assert.equal(falling.y + falling.radius, platforms[0].top, "a platform above the coin cannot catch it");
+
+  assert.ok(missed.y > floor.floorY);
+  const from = { x: 0, y: 0 }, to = { x: 100, y: 0 }, bow = { x: 0, y: -40 };
+  assert.deepEqual(homingPoint(from, bow, to, -0.5), from);
+  assert.deepEqual(homingPoint(from, bow, to, 1.5), to);
+  assert.ok(homingPoint(from, bow, to, 0.5).y < 0);
+});
+
+test('claimed turrets show the server aim and neutral turrets turn across the shortest angle', async () => {
+  const { stepTurretAim } = await import('../src/client/game/modes/bankBust/turretMotion.mjs');
+  const motion = { angle: Math.PI * 2 - 0.1, facing: 0, phase: 0 };
+  const neutral = stepTurretAim(motion, null, null, 0, 1 / 60);
+  assert.ok(neutral > Math.PI * 2 - 0.1);
+  assert.ok(neutral < Math.PI * 2 + 0.22);
+  const serverAim = -Math.PI / 4;
+  assert.equal(stepTurretAim(motion, serverAim, 'team2', 0, 0), serverAim + Math.PI);
+});
+
+test('client Bank Bust deposits consume replayed snapshots once per team and balance', () => {
+  const { createBrowserFixture } = require('./helpers/browserFixture');
+  const deposits = [], sounds = [], disposed = [];
+  const graphics = () => ({ setDepth() {}, clear() {}, destroy() { disposed.push('graphics'); } });
+  const f = createBrowserFixture('', { imports: {
+    './vaultEffects': { createVaultEffects: () => ({
+      tick() {}, deposit: team => deposits.push(team), destroy: () => disposed.push('vault'),
+    }) },
+    './coinFx': { createCoinFx: () => ({ update() {}, destroy: () => disposed.push('coin') }) },
+    '../../powerups/deathLootEffects': { createDeathLootEffects: () => ({}) },
+    '../../characters/shared/shotPrediction': { setStaticShotTargets() {}, setShotBlockers() {} },
+  } });
+  const { createBankBustRuntime } = f.load('src/client/game/modes/bankBust/runtime.js');
+  const event = { at: 100, team: 'team1', coins: 110, delta: 10, reason: 'pickup' };
+  const state = { type: 'bank-bust', coinEvents: [event, { ...event, coins: 120 }, { ...event, team: 'team2' }] };
+  const scene = { time: { now: 0 }, add: { graphics }, cache: { audio: { exists: () => true } }, sound: { play: key => sounds.push(key) } };
+  const { createPlayerLookup } = f.load('src/client/game/players/playerLookup.js');
+  const runtime = createBankBustRuntime({
+    scene, Phaser: {}, getModeState: () => state, playerLookup: createPlayerLookup({}),
+  });
+  runtime.render();
+  runtime.render();
+  assert.deepEqual(deposits, ['team1', 'team1', 'team2']);
+  assert.deepEqual(sounds, Array(3).fill('sfx-coin-pickup'));
+  runtime.destroy();
+  assert.ok(disposed.includes('vault') && disposed.includes('coin'));
+  assert.equal(f.document.getElementById('bank-bust-prompt-host'), null);
+});
+
+test('partial Bank Bust settings use catalog defaults and preserve a zero purchase floor', () => {
+  const room = roomFor();
+  const Mode = room.gameMode.constructor;
+  room.gameMode = new Mode(room, { settings: {} });
+  assert.deepEqual(room.gameMode.getSettings(), SETTINGS);
+  room.gameMode = new Mode(room, { settings: { purchaseFloorCoins: 0 } });
+  room.modeState = room.gameMode.createRoomState();
+  assert.equal(room.gameMode.buildModeState().purchaseFloorCoins, 0);
+  assert.equal(room.gameMode.canAffordPurchase('team1', room.gameMode.getVaultCoins('team1')), false);
+});
+
+test('turret shots reach enemy fighters through either team’s walls and report lethal damage once', () => {
+  for (const builder of ['team1', 'team2']) {
+    const room = roomFor();
+    const wall = room.modeState.objects.find(object => object.type === 'wallSlot');
+    Object.assign(wall, { x: 50, y: 200 });
+    wall.state.builtByTeam = builder;
+    const enemy = addPlayer(room, 'enemy', 'team2', 100, 200);
+    enemy.health = 10;
+    const ally = addPlayer(room, 'ally', 'team1', 100, 200);
+    ally.health = 10;
+    const updates = [], deaths = [];
+    room.broadcastHealthUpdate = (player, data) => updates.push([player, data.cause]);
+    room.handlePlayerDeath = (player, data) => deaths.push([player, data.killedBy]);
+    room.modeState.turretProjectiles.push({ x: 0, y: 200, vx: 100, vy: 0, damage: 100,
+      spawnedAt: 1000, lastUpdatedAt: 1000, ownerTeam: 'team1' });
+    room.gameMode._tickTurretProjectiles(2000);
+    assert.equal(ally.health, 10);
+    assert.equal(enemy.health, 0);
+    assert.deepEqual(updates, [[enemy, 'turret-projectile']]);
+    assert.deepEqual(deaths, [[enemy, 'team1-turret']]);
+    assert.equal(room.modeState.turretProjectiles.length, 0);
+  }
+});
+
+test("unchanged Bank Bust snapshots reuse their mode section until a purchase, hit, or ledger expiry", t => {
+  const { broadcastWorldState } = require("../src/server/core/gameRoom/roomStateManager");
+  const room = roomFor();
+  let now = 10000;
+  t.mock.method(Date, "now", () => now);
+  const sent = [];
+  Object.assign(room, {
+    powerups: new Map(), _buildPlayerEffectsSnapshot: () => ({}), _buildDeathDropsSnapshot: () => [],
+    broadcast: (_, snapshot) => sent.push(snapshot),
+  });
+  const mode = room.gameMode;
+  const serialize = t.mock.method(mode, "buildModeState");
+  broadcastWorldState(room);
+  now += 100;
+  broadcastWorldState(room);
+  assert.equal(serialize.mock.callCount(), 1);
+  assert.equal(sent.length, 1);
+  const wall = room.modeState.objects.find(object => object.type === "wallSlot");
+  const player = fighter(room, "builder", "team1", wall.x, wall.y);
+  assert.ok(mode.handlePlayerAction(player, { type: "mode-interact" }).shouldBroadcastSnapshot);
+  broadcastWorldState(room);
+  assert.equal(sent.at(-1).modeState.objects.find(object => object.id === wall.id).state.builtByTeam, "team1");
+  mode.damageVault("team2", 100, { sourceTeam: "team1", at: now });
+  broadcastWorldState(room);
+  assert.equal(sent.at(-1).modeState.vaults.team2.coins, mode.getVaultCoins("team2"));
+  now += 60000;
+  mode.tick(now);
+  broadcastWorldState(room);
+  assert.ok(sent.at(-1).modeState.coinEvents.every(event => event.at === now));
 });

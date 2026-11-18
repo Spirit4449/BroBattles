@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../net/socketEvents.js");
 const { combatNow } = require("./clock");
 const { slimeLaunch } = require("../../characters/gloopProjectile");
 const { getResolvedCharacterAttackConfig } = require("../../characters/characterTuning.js");
@@ -20,7 +21,7 @@ function broadcastAction(room, playerData, action, timestamp = combatNow(room)) 
     playerData._visibleAttack = { at: timestamp, startupMs: Number(action.startup) || 0,
       angle: Number.isFinite(action.angle) ? action.angle : (playerData.flip ? Math.PI : 0) };
   }
-  room.io.to(`game:${room.matchId}`).emit("game:action", {
+  room.broadcast(SOCKET_EVENTS.GAME_ACTION, {
     playerId: playerData.user_id,
     playerName: playerData.name,
     origin: { x: playerData.x, y: playerData.y },
@@ -36,7 +37,7 @@ function broadcastAction(room, playerData, action, timestamp = combatNow(room)) 
 // every step s) and the view rewind it is tested with, so every client draws
 // it by server age, and victims lead it (CombatClock.enemyLeadMs).
 function stampRelease(room, playerData, action, launchMono) {
-  const launched = room._activeAttacks?.findLast(attack => attack.instanceId === action.id && attack.attackerParticipantId === participantId(playerData));
+  const launched = room.activeAttacks?.findLast(attack => attack.instanceId === action.id && attack.attackerParticipantId === participantId(playerData));
   if (!launched) return action;
   if (Number.isFinite(launched.x) && Number.isFinite(launched.y)) action.start = { x: launched.x, y: launched.y };
   if (Number.isFinite(launchMono)) action.launchMono = Math.round(launchMono * 10) / 10;
@@ -51,18 +52,18 @@ function getDescriptor(actionType) {
 function claimActionInstance(room, playerData, actionData, now = combatNow(room)) {
   const actionId = String(actionData?.id || "").trim();
   if (!actionId) return true;
-  room._recentCharacterActions = room._recentCharacterActions || new Map();
+  room.recentCharacterActions = room.recentCharacterActions || new Map();
   const key =
     `${String(participantId(playerData) || "")}|` +
     `${String(actionData?.type || "").toLowerCase()}|` +
     actionId;
-  for (const [entryKey, seenAt] of room._recentCharacterActions.entries()) {
+  for (const [entryKey, seenAt] of room.recentCharacterActions.entries()) {
     if (now - seenAt > 8000) {
-      room._recentCharacterActions.delete(entryKey);
+      room.recentCharacterActions.delete(entryKey);
     }
   }
-  if (room._recentCharacterActions.has(key)) return false;
-  room._recentCharacterActions.set(key, now);
+  if (room.recentCharacterActions.has(key)) return false;
+  room.recentCharacterActions.set(key, now);
   return true;
 }
 
@@ -81,8 +82,7 @@ function scheduleWindupRelease(
   if (actionData.type === "gloop-slimeball") {
     const cfg = getResolvedCharacterAttackConfig("gloop", "slimeball");
     const target = actionData.target || { x: playerData.x + (actionData.direction === -1 ? -320 : 320), y: playerData.y + 40 };
-    const fallback = slimeLaunch({ x: playerData.x, y: playerData.y,
-      width: playerData._lastWidth || 80, height: playerData._lastHeight || 100 }, target, cfg);
+    const fallback = slimeLaunch(castOrigin, target, cfg);
     const { start, angle, speed, initialVy } = actionData;
     const valid = start && [start.x, start.y, angle, speed, initialVy].every(Number.isFinite)
       && Math.hypot(start.x - playerData.x, start.y - playerData.y) <= 100

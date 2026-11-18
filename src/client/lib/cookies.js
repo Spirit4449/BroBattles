@@ -3,7 +3,7 @@
 /**
  * Get a cookie value by name. Returns "" if not found (backward compatible).
  */
-export function getCookie(name) {
+function getCookie(name) {
   const needle = `${encodeURIComponent(name)}=`;
   const raw = document.cookie || "";
   if (!raw) return "";

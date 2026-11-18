@@ -1,3 +1,4 @@
+// CommonJS keeps these mechanics directly loadable by the Node test suite.
 const { characterFrames, characterPresentation } = require('../../../../shared/characters');
 const { rigOf } = require('../../../../shared/characters/characterRig');
 const { getCharacterStats } = require('../../../../shared/characters/characterStats');
@@ -68,4 +69,13 @@ function standOnRigFeet(character, texture, presentation) {
   return { ...presentation, originX, flipOriginX,
     body: { ...body, offsetXFromHalf: (body.offsetXFromHalf || 0) + shift, flipOffset: (body.flipOffset || 0) + flipShift - shift } };
 }
-module.exports = { hiResArtFor, spritePresentation };
+// Use the same minimum collision box before spawning local and remote fighters.
+function sizePlayerBody(sprite, frame, { widthShrink, heightShrink }) {
+  sprite.body.setSize(
+    Math.max(4, frame.realWidth - widthShrink),
+    Math.max(4, frame.realHeight - heightShrink),
+  );
+  sprite.body.updateFromGameObject?.();
+}
+
+module.exports = { hiResArtFor, spritePresentation, sizePlayerBody };

@@ -1,3 +1,8 @@
+const { resetPartyAfterQueue } = require('../../services/party/queueLeave');
+const { getConfig } = require("../../config");
+const { hasLegalAcceptance } = require("../../services/auth/legalAcceptance");
+const { defineSocketHandler, checkPenalties } = require("./handler");
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { inPartyOrder } = require("../../services/party/partyOperations");
 const { isAdminUser } = require("../../services/auth/auth");
 const {
@@ -9,14 +14,15 @@ const {
 
 function registerMatchmakingEvents(
   socket,
-  { db, io, mm, PARTY_STATUS, abuseControl },
+  { db, io, mm, abuseControl },
 ) {
-  socket.on("queue:join", async (data) => {
+  const { socketEvents: debugSocketEvents } = getConfig().diagnostics;
+  socket.on(SOCKET_EVENTS.QUEUE_JOIN, async (data) => {
     try {
       const uname = socket.data.user?.name;
       const userId = socket.data.user?.user_id || null;
-      if (!userId || !await require('../../services/auth/legalAcceptance').hasLegalAcceptance(db,userId)) {
-        socket.emit('match:cancelled', { reason:'Please review the Terms before readying up.' });
+      if (!userId || !await hasLegalAcceptance(db, userId)) {
+        socket.emit(SOCKET_EVENTS.MATCH_CANCELLED, { reason:'Please review the Terms before readying up.' });
         return;
       }
       const { mode, modeId, modeVariantId, selection, map, side, partyId } =
@@ -27,34 +33,22 @@ function registerMatchmakingEvents(
       await inPartyOrder(db, pid || `user:${userId}`, async () => {
       if (abuseControl && userId) {
         const evaluateUserPenalty = async (targetUserId) => {
-          const penalties =
-            await abuseControl.getActivePenaltyState(targetUserId);
-          const mmSuspendedUntilMs = Number(penalties?.mmSuspendedUntilMs || 0);
-          if (penalties?.isBanned) {
-            return {
-              blocked: true,
-              payload: {
-                message:
-                  penalties?.banReason || "Your account has been banned.",
-              },
-            };
+          const penalty = await checkPenalties(abuseControl, targetUserId);
+          if (penalty?.type === "banned") {
+            return { blocked: true, payload: { message: penalty.message } };
           }
-          if (mmSuspendedUntilMs && mmSuspendedUntilMs > Date.now()) {
-            return {
-              blocked: true,
-              payload: {
-                message:
-                  "Too many requests. Matchmaking is temporarily suspended.",
-                suspendedUntilMs: mmSuspendedUntilMs,
-              },
-            };
+          if (penalty?.type === "mm_suspended") {
+            return { blocked: true, payload: {
+              message: "Too many requests. Matchmaking is temporarily suspended.",
+              suspendedUntilMs: penalty.suspendedUntilMs,
+            } };
           }
           return { blocked: false };
         };
 
         const selfDecision = await evaluateUserPenalty(userId);
         if (selfDecision.blocked) {
-          socket.emit("queue:error", selfDecision.payload);
+          socket.emit(SOCKET_EVENTS.QUEUE_ERROR, selfDecision.payload);
           return;
         }
 
@@ -65,7 +59,7 @@ function registerMatchmakingEvents(
             if (!memberUserId) continue;
             const memberDecision = await evaluateUserPenalty(memberUserId);
             if (!memberDecision.blocked) continue;
-            socket.emit("queue:error", {
+            socket.emit(SOCKET_EVENTS.QUEUE_ERROR, {
               ...memberDecision.payload,
               message: `${member?.name || "A party member"} is currently suspended from matchmaking.`,
             });
@@ -80,7 +74,7 @@ function registerMatchmakingEvents(
         legacyMode: mode,
         mapId: selection?.mapId ?? map,
       });
-      console.log("[queue] queue:join request", {
+      if (debugSocketEvents) console.log("[queue] queue:join request", {
         socketId: socket.id,
         username: uname || null,
         userId,
@@ -104,7 +98,7 @@ function registerMatchmakingEvents(
         map: normalizedSelection.mapId,
         side,
       });
-      socket.emit("queue:joined", {
+      socket.emit(SOCKET_EVENTS.QUEUE_JOINED, {
         mode: legacyMode,
         modeId: normalizedSelection.modeId,
         modeVariantId: normalizedSelection.modeVariantId,
@@ -112,7 +106,7 @@ function registerMatchmakingEvents(
         map: normalizedSelection.mapId,
         partyId: pid || null,
       });
-      console.log("[queue] queue:join success", {
+      if (debugSocketEvents) console.log("[queue] queue:join success", {
         socketId: socket.id,
         username: uname || null,
         userId,
@@ -122,14 +116,14 @@ function registerMatchmakingEvents(
       });
     } catch (e) {
       console.warn("queue:join error:", e?.message);
-      socket.emit("queue:error", {
+      socket.emit(SOCKET_EVENTS.QUEUE_ERROR, {
         message: e?.message || "queue join failed",
         code: e?.code, maintenanceUntil: e?.maintenanceUntil,
       });
     }
   });
 
-  socket.on("queue:leave", async (ack) => {
+  socket.on(SOCKET_EVENTS.QUEUE_LEAVE, defineSocketHandler(async (ack) => {
     try {
       const uname = socket.data.user?.name;
       const userId = socket.data.user?.user_id || null;
@@ -143,32 +137,14 @@ function registerMatchmakingEvents(
         if (typeof ack === "function") ack({ ok: true, cancelled: false, matchId: result.matchId });
         return;
       }
-      if (pid) {
-        try {
-          await db.setPartyStatus(pid, PARTY_STATUS.IDLE);
-        } catch (_) {}
-        try {
-          const members = await db.fetchPartyMembersDetailed(pid);
-          for (const m of members || []) {
-            if (!m?.name || !m.status || String(m.status).trim().toLowerCase() === "offline") continue;
-            try {
-              await db.setUserStatus(m.name, "online");
-            } catch (_) {}
-            io.to(`party:${pid}`).emit("status:update", {
-              partyId: pid,
-              name: m.name,
-              status: "online",
-            });
-          }
-        } catch (_) {}
-      }
+      if (pid) await resetPartyAfterQueue(db, io, pid);
 
       if (pid) {
-        io.to(`party:${pid}`).emit("match:cancelled", {
+        io.to(`party:${pid}`).emit(SOCKET_EVENTS.MATCH_CANCELLED, {
           reason: `${uname} cancelled matchmaking`,
         });
       } else {
-        socket.emit("match:cancelled", {
+        socket.emit(SOCKET_EVENTS.MATCH_CANCELLED, {
           reason: "You cancelled matchmaking",
         });
       }
@@ -178,9 +154,9 @@ function registerMatchmakingEvents(
       if (typeof ack === 'function') ack({ ok: false });
       console.warn("queue:leave error:", e?.message);
     }
-  });
+  }, { ackIndex: 0 }));
 
-  socket.on("queue:status", async (ack) => {
+  socket.on(SOCKET_EVENTS.QUEUE_STATUS, defineSocketHandler(async (ack) => {
     if (typeof ack !== "function") return;
     try {
       const user = socket.data.user;
@@ -190,9 +166,9 @@ function registerMatchmakingEvents(
     } catch (_) {
       ack({ state: "unavailable" });
     }
-  });
+  }, { ackIndex: 0 }));
 
-  socket.on("ready:ack", async ({ matchId }) => {
+  socket.on(SOCKET_EVENTS.READY_ACK, async ({ matchId }) => {
     try {
       const userId = socket.data.user?.user_id;
       if (!userId || !matchId) return;
@@ -202,7 +178,7 @@ function registerMatchmakingEvents(
     }
   });
 
-  socket.on("queue:fill-bots", async (payload = {}) => {
+  socket.on(SOCKET_EVENTS.QUEUE_FILL_BOTS, async (payload = {}) => {
     try {
       const requester = socket.data.user;
       if (!requester?.name || !requester?.user_id) {
@@ -226,9 +202,9 @@ function registerMatchmakingEvents(
         partyId: partyId || null,
         botHealthOverride,
       });
-      socket.emit("queue:fill-bots:ok", { matchId: result.matchId });
+      socket.emit(SOCKET_EVENTS.QUEUE_FILL_BOTS_OK, { matchId: result.matchId });
     } catch (e) {
-      socket.emit("queue:fill-bots:error", {
+      socket.emit(SOCKET_EVENTS.QUEUE_FILL_BOTS_ERROR, {
         message: e?.message || "Unable to fill with bots.",
       });
     }

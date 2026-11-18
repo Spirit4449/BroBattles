@@ -1,754 +1,297 @@
-import { pixelArrow } from '../ui/pixelArrow.js';
-import { diffUnsaved, discardChanges } from '../editor/unsavedChanges';
-import Phaser from 'phaser/dist/phaser-arcade-physics.min.js';
-import '../editor/mapEditor.css';
-import { openSettings } from '../site/shell.js';
-import skinsCatalog from '../../shared/catalogs/skinsCatalog.json';
-import { createMapModeSelect } from '../editor/mapModeSelect.js';
-import { createCharacterSkinSelect } from '../editor/characterSkinSelect.js';
-import { createPixelSelect } from '../ui/pixelSelect.js';
-import { preloadMapDocument, syncMapDocument } from '../game/maps/documentRuntime';
-import { releaseRendererContext, rendererContextOf } from '../game/scene/releaseRenderer.js';
-import { buildScenery, preloadScenery, sceneryTextureKey } from '../game/maps/sceneryRuntime';
-import { clone, upgradeDuelMap, POWERUP_TYPES, MapHistory, validateDocument, validateMap, geometryFromMap } from '../../shared/maps/mapDocument';
-import { arenaFor, arenaIds, mapArena } from '../../shared/maps/arenas';
-import { ARENA_DEPTH, CLOUD_TYPES, RANDOM_CLOUD, cloudUrl, sceneryUrls } from '../../shared/maps/scenery';
-import { resolveLanding } from '../../shared/physics/spawnPlacement';
-import { MOTION_DEFAULTS, MOTION_EASES, motionOffset } from '../../shared/maps/platformMotion';
-import { allRows, snapMove, resizeRow, resizeCollision, removeRows, exportDocument, replaceAssetReferences, retargetMap } from '../editor/editorModel';
-const $ = id => document.getElementById(id);
-let documentData, revision, savedJSON, history, game, scene, mapList = [], selectedId = null, activeTab = 'selection', preview = false, cameraPreview = false, busy = false;
-// Keep the native fields as the editor's data interface; Settings supplies the UI.
-const toolbarSelects = new Map();
-function syncToolbarSelect(id, { rebuild = false } = {}) {
-  const input = $(id);
-  let control = toolbarSelects.get(id);
-  if (rebuild && control) {
-    control.setDisabled(true);
-    control.element.remove();
-    toolbarSelects.delete(id);
-    control = null;
-  }
-  if (!control && input.options.length) {
-    control = (id === 'map-select' ? createMapModeSelect : id === 'playtest-character' ? createCharacterSkinSelect : createPixelSelect)({
-      skinId: $('playtest-skin').value,
-      options: [...input.options].filter(option => !option.hidden && !option.disabled).map(option => ({ value: option.value, label: option.textContent, modeVariantId: option.dataset.modeVariantId })),
-      value: input.value,
-      label: input.getAttribute('aria-label'),
-      className: `studio-toolbar-select ${id === 'map-select' ? 'studio-map-select' : 'is-compact'}`,
-      onChange(value, skinId) {
-        input.value = value;
-        if (skinId) { $('playtest-skin').value = skinId; $('playtest-skin').dispatchEvent(new Event('change', { bubbles: true })); }
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-      },
-    });
-    input.classList.add('studio-native-select');
-    input.after(control.element);
-    toolbarSelects.set(id, control);
-  }
-  if (control) {
-    control.setValue(input.value);
-    control.setDisabled(input.disabled);
-    control.element.hidden = input.hidden;
-  }
-}
-const friendlyName=value=>String(value).replace(/[-_]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-// Property keys as field labels: offsetX → Offset X.
-const labelFor=key=>{const words=String(key).replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/[-_]/g,' ').toLowerCase();return words.charAt(0).toUpperCase()+words.slice(1).replace(/\b(x|y|ms|px|id|url)\b/g,w=>({ms:'(ms)',px:'(px)'})[w]||w.toUpperCase());};
-let guidelines=[], keyboard=new Set(), drag=null, sceneReady=null, playtestSession=null, playtestFrame=null, selectedIds=new Set(), handleMode='artwork';
-const map = () => documentData;
-const selected = () => allRows(map()).find(r=>r.id===selectedId);
-const status = (text,{error=false}={}) => { const el=$('status');el.textContent=text;el.classList.toggle('is-error',error);el.title=text; };
-const uid = prefix => `${prefix}-${crypto.randomUUID().slice(0,8)}`;
-const dirty = () => documentData && JSON.stringify(documentData)!==savedJSON;
-const setBusy = value => {busy=value;for(const id of ['save','map-select','import','new-map','preview','debug-hitboxes','infinite-supers','add','camera-preview']) $(id).disabled=value;syncToolbarSelect('map-select');};
-async function request(url, options={}) {
-  const response=await fetch(url,{...options,headers:{'Content-Type':'application/json',...options.headers}});
-  let result;try{result=await response.json();}catch{throw Error(`Request failed (${response.status})`);}
-  if(!response.ok)throw Error([result.error,...(result.errors||[]).slice(0,8)].join('\n'));
-  return result;
-}
-function error(e){status(e.message,{error:true});const content=node('div');content.append(node('div',e.message,{class:'errors'}));showDialog('Unable to complete this edit',content,null,'Close');}
-function node(tag,text,attrs={}){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;for(const[k,v]of Object.entries(attrs))el.setAttribute(k,v);return el;}
-function persistDraft(){try{localStorage.setItem(`bb-map-draft-${documentData.id}`,JSON.stringify({revision,document:documentData}));}catch{status('Draft storage is full. Save or export to keep your edits.');}}
-function refreshSave(){ const state=$('save-state');const unsaved=dirty();state.classList.toggle('is-dirty',unsaved);if(unsaved)state.textContent=revision===null?'Not saved yet':'Unsaved changes';else state.replaceChildren(node('img',undefined,{src:'/assets/ui/pixel-check.webp',alt:''}),'Saved');$('undo').disabled=!history || history.index===0;$('redo').disabled=!history || history.index===history.stack.length-1; }
-// Repeated small edits (arrow nudges) fold into one undo step.
-let lastCommit={message:null,at:0};
-function commit(message='Edit applied',{merge=false}={}) {
-  const now=performance.now(),fold=merge&&lastCommit.message===message&&now-lastCommit.at<900&&history.index>0&&history.index===history.stack.length-1;
-  if(fold)history.stack[history.index]=clone(documentData);else history.commit(documentData);
-  lastCommit={message,at:now};persistDraft();refreshSave();renderBrowser();renderInspector();status(message);
-}
-// Loads scenery art an edit introduced (a new layer image or cloud type).
-const sceneryMissing=()=>!!scene&&sceneryUrls(map().scenery).some(url=>!scene.textures.exists(sceneryTextureKey(url)));
-function transaction(fn,message,options){if(busy)return;const before=clone(documentData);try{fn();const errors=validateMap(map());if(errors.length)throw Error(errors.slice(0,6).join('\n'));scene?.rebuild();commit(message,options);if(sceneryMissing())syncHistoryScene().catch(error);}catch(e){documentData=before;scene?.rebuild();renderBrowser();renderInspector();error(e);}}
-function showDialog(title,content,onApply,label='Apply'){
-  const dialog=$('dialog');$('dialog-title').textContent=title;$('dialog-content').replaceChildren(content);$('dialog-apply').textContent=label;$('dialog-cancel').hidden=!onApply;
-  $('dialog-apply').onclick=async ev=>{if(!onApply)return;ev.preventDefault();try{await onApply();dialog.close();}catch(e){let errors=$('dialog-content').querySelector('.errors');if(!errors){errors=node('div','',{class:'errors'});$('dialog-content').prepend(errors);}errors.textContent=e.message;}};
-  if(!dialog.open)dialog.showModal();keyboard.clear();
-}
-function advanced(parent,title='Advanced'){const details=node('details',undefined,{class:'section advanced'});details.append(node('summary',title));parent.append(details);return details;}
-function section(title){const e=node('section',undefined,{class:'section'});e.append(node('div',title,{class:'section-title'}));return e;}
-function field(parent,label,value,onChange,{type,options,min,max,step,full=false,disabled=false}={}){
-  const wrap=node('label',undefined,{class:`field${full?' full':''}`});wrap.append(node('span',label));let input;
-  // A fractional step (parallax, opacity…) keeps decimals; other numbers are whole pixels.
-  const fractional=step!==undefined&&Number(step)<1,round=v=>fractional?Math.round(v*1000)/1000:Math.round(v);
-  if(options){input=node('select');for(const option of options){const [val,title]=Array.isArray(option)?option:[option,option];const el=node('option',String(title),{value:val});input.append(el);}input.value=String(value??'');}
-  else {input=node('input',undefined,{type:type||(typeof value==='number'?'number':'text')});input.value=typeof value==='number'?round(value):value??'';if(input.type==='number')input.step=step||'1';}
-  if(min!==undefined)input.min=min;if(max!==undefined)input.max=max;input.disabled=disabled;
-  input.addEventListener('change',event=>{const v=input.type==='number'?round(Number(input.value)):input.value;if(input.type==='number'&&(!input.value.trim()||!Number.isFinite(v))){input.value=value;return;}onChange(v,event);});
-  wrap.append(input);parent.append(wrap);return input;
-}
-function check(parent,label,value,onChange){const wrap=node('label',undefined,{class:'check'});const input=node('input',undefined,{type:'checkbox'});input.checked=!!value;input.onchange=()=>onChange(input.checked);wrap.append(input,node('span',label));parent.append(wrap);}
-function button(parent,title,callback,cls=''){const b=node('button',title,{type:'button',class:cls});b.onclick=callback;parent.append(b);return b;}
-function editValue(object,key,value){transaction(()=>{object[key]=value;},`${labelFor(key)} updated`);}
-const KIND_LABELS={platform:'Platform',hitbox:'Collision box',spawn:'Player spawn',powerup:'Powerup spawn',cloud:'Cloud',vault:'Vault',respawn:'Respawn point',objective:'Objective',gold:'Gold spawn'};
-const GROUP_LABELS={platform:'Platforms',hitbox:'Collision boxes',spawn:'Player spawns',powerup:'Powerups',cloud:'Clouds',vault:'Vaults',respawn:'Respawn references',objective:'Objectives',gold:'Gold spawns'};
-const spawnName=row=>`${row.team==='team1'?'Blue':'Red'} · Spawn ${row.index+1}`;
-function renderBrowser(){if(!map())return;const list=$('object-list'),scroll=list.scrollTop;list.replaceChildren();let last='';const q=$('search').value.trim().toLowerCase();const rows=allRows(map()).filter(r=>`${r.id} ${r.value.label||''} ${r.value.textureKey||r.kind} ${r.kind==='spawn'?spawnName(r):''} ${KIND_LABELS[r.kind]}`.toLowerCase().includes(q));
-  $('object-count').textContent=q?`${rows.length}/${allRows(map()).length}`:rows.length;
-  if(!rows.length)list.append(node('div',q?`No objects match “${q}”.`:'No objects yet.',{class:'browser-empty'}));
-  for(const r of rows){const group=GROUP_LABELS[r.kind];if(group!==last){list.append(node('div',group,{class:'group-label'}));last=group;}
-    const b=node('button',undefined,{class:`object-row kind-${r.kind}${r.kind==='spawn'?' spawn-'+r.team:''}${selectedIds.has(r.id)?' active':''}`,type:'button',title:`${r.id} · double-click to centre`,'data-id':r.id});b.append(node('span',({platform:'▰',hitbox:'▧',spawn:'⚑',powerup:'✦',cloud:'☁',gold:'●'})[r.kind]||'◆',{class:'object-icon'}),node('span',r.value.label|| (r.kind==='spawn'?spawnName(r):r.id)));b.onclick=event=>{select(r.id,event.shiftKey);scene?.revealRow(r);};b.ondblclick=()=>scene?.focusRow(r);list.append(b);
-  }
-  list.scrollTop=scroll;
-}
-// Keeps the active row visible when the selection changes from the canvas.
-function revealActiveRow(){requestAnimationFrame(()=>$('object-list').querySelector(`.object-row[data-id="${CSS.escape(selectedId||'')}"]`)?.scrollIntoView({block:'nearest'}));}
-function select(id,additive=false){if(!additive)selectedIds.clear();if(id){if(additive&&selectedIds.has(id))selectedIds.delete(id);else selectedIds.add(id);activeTab='selection';}selectedId=selectedIds.has(id)?id:[...selectedIds].at(-1)||null;renderBrowser();renderInspector();revealActiveRow();}
-function recursiveFields(parent,obj,path='',depth=0){
-  if(depth>8)return;
-  for(const [key,value]of Object.entries(obj)){
-    if(value===null||value===undefined)continue;
-    if(obj===documentData.metadata&&['id','label'].includes(key))continue;
-    if(typeof value==='object') {const group=section(labelFor(key));parent.append(group);recursiveFields(group,value,`${path}.${key}`,depth+1);}
-    else if(key==='musicVolume')field(parent,'Music volume (%)',value*100,v=>editValue(obj,key,v/100));
-    else if(typeof value==='boolean')check(parent,labelFor(key),value,v=>editValue(obj,key,v));
-    else if(key==='turnSpeed')field(parent,'Turn speed (%)',value*100,v=>editValue(obj,key,v/100));
-    else field(parent,labelFor(key),value,v=>editValue(obj,key,v),typeof value==='number'&&!Number.isInteger(value)?{step:0.01}:{});
-  }
-}
-// Edits redraw the whole inspector. Keep the reader's place: scroll, which
-// collapsible sections are open and the focused control (after Tab moved it).
-let inspectorFrame=0;
-function renderInspector(){if(!map()||inspectorFrame)return;inspectorFrame=requestAnimationFrame(()=>{inspectorFrame=0;redrawInspector();});}
-function redrawInspector(){
-  const panel=$('inspector-content'),controls=()=>[...panel.querySelectorAll('input,select,textarea,button,summary')];
-  const view=`${activeTab}:${activeTab==='selection'?[...selectedIds].join(','):''}`,same=panel.dataset.view===view;
-  const open=new Set([...panel.querySelectorAll('details[open]>summary')].map(s=>s.textContent+':'+[...panel.querySelectorAll('summary')].filter(x=>x.textContent===s.textContent).indexOf(s)));
-  const focusIndex=panel.contains(document.activeElement)?controls().indexOf(document.activeElement):-1,scroll=panel.scrollTop;
-  drawInspector();panel.dataset.view=view;
-  if(!same){panel.scrollTop=0;return;}
-  const counts={};for(const summary of panel.querySelectorAll('summary')){const key=summary.textContent;counts[key]=(counts[key]??-1)+1;if(open.has(`${key}:${counts[key]}`))summary.parentElement.open=true;}
-  panel.scrollTop=scroll;if(focusIndex>=0)controls()[focusIndex]?.focus({preventScroll:true});
-}
-function drawInspector(){document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===activeTab));const panel=$('inspector-content');panel.replaceChildren();
-  syncAddKinds();
-  if(activeTab==='world'){
-    panel.append(node('h3',documentData.label));field(panel,'Map name',documentData.label,v=>transaction(()=>{documentData.label=v;}));
-    const arena=mapArena(map()),w=arena.world,c=arena.camera;
-    const mode=section('Game mode');panel.append(mode);mode.append(node('p',arena.modeId==='duels'?'Duels · shared by 1v1 and 2v2 · 2 spawn slots per team':`${arena.label} · ${arena.playersPerTeam} players per team`));
-    mode.append(node('div',`World ${w.width} × ${w.height}. The camera shows ${c.width} × ${c.height} of it and zooms ${c.minZoom}–${c.maxZoom}×. This map uses these bounds in every match format.`,{class:'notice'}));
-    const powerups=section('Powerup rules');panel.append(powerups);for(const [k,label] of [['spawnIntervalMs','Spawn interval (ms)'],['maxActive','Maximum active'],['despawnMs','Lifetime (ms)']])field(powerups,label,map().powerups[k],v=>editValue(map().powerups,k,v));const powerupAdvanced=advanced(powerups);for(const [k,label] of [['pickupRadius','Orb pickup radius (px)'],['omenMs','Spawn warning (ms)'],['spawnLift','Legacy anchored spawn lift (px)']])field(powerupAdvanced,label,map().powerups[k],v=>editValue(map().powerups,k,v));
-    for(const type of POWERUP_TYPES)check(powerups,type,map().powerups.types.includes(type),v=>transaction(()=>{map().powerups.types=v?[...map().powerups.types,type]:map().powerups.types.filter(t=>t!==type);}));
-    const meta=advanced(panel,'Map catalog settings');recursiveFields(meta,documentData.metadata);
-    return;
-  }
-  if(activeTab==='scenery'){renderScenery(panel);return;}
-  if(activeTab==='assets'){
-    panel.append(node('h3','Platform artwork'),node('p','Place artwork on the map, or drop an image onto a card to replace every matching platform.'));button(panel,'＋ New platform artwork',()=>assetDialog());
-    for(const[key,asset]of Object.entries(map().assets)){
-      const row=node('div',undefined,{class:'asset-row'});
-      const preview=node('div',undefined,{class:'asset-preview'});preview.append(node('img',undefined,{src:asset.url,alt:friendlyName(key)}));
-      const info=node('div',undefined,{class:'asset-info'});info.append(node('strong',friendlyName(key)),node('small',`${asset.type==='image'?'Still image':'Animated'} · ${map().textureSizes[key]?.width} × ${map().textureSizes[key]?.height} px`));
-      const actions=node('div',undefined,{class:'asset-actions'});
-      button(actions,'Place platform',()=>addObject('platform',key),'asset-place');button(actions,'Edit artwork',()=>assetDialog(key));
-      const upload=node('input',undefined,{type:'file',accept:'image/png,image/webp,image/jpeg',hidden:''});upload.onchange=()=>replaceArtwork(key,upload.files[0]);
-      button(actions,'Replace image…',()=>upload.click());row.append(preview,info,actions,upload);row.ondragover=event=>{event.preventDefault();row.classList.add('drop-target');};row.ondragleave=()=>row.classList.remove('drop-target');row.ondrop=event=>{event.preventDefault();row.classList.remove('drop-target');replaceArtwork(key,event.dataTransfer.files[0]);};panel.append(row);
-    }return;
-  }
-  if(selectedIds.size>1){panel.append(node('h3',`${selectedIds.size} objects selected`),node('p','Drag any of them to move them together. Arrow keys nudge the group. Shift-click toggles an object.'));const actions=node('div',undefined,{class:'stack-actions'});panel.append(actions);button(actions,'Duplicate selection',duplicate);button(actions,'Delete selection',remove,'danger');button(actions,'Clear selection',()=>select(null));return;}
-  const row=selected();if(!row){panel.append(node('h3','Select an object'),node('p','Click a platform or marker on the map, or pick one from the object list, to edit it.'),node('div','Drag a handle to resize; hold Shift to resize freely. Tab switches between artwork and collision handles.',{class:'notice'}),node('div','Spawn markers always attach to a safe platform, even with snapping off. Hold ⌘/Ctrl while dragging to skip snapping.',{class:'notice'}));return;}
-  const p=row.value;panel.append(node('h3',p.label||(row.kind==='spawn'?spawnName(row):friendlyName(row.id))),node('div',`${KIND_LABELS[row.kind]||row.kind} · ${row.id}`,{class:'inspector-subtitle'}));
-  if(!['spawn','vault','respawn'].includes(row.kind))field(panel,'Label',p.label||'',v=>editValue(p,'label',v));
-  if(row.kind==='spawn'){
-    panel.append(node('p','Anchored to a walkable collision surface. Move the platform and this marker follows.'));
-    const geom=geometryFromMap(map());const surfaces=geom.colliders.filter(c=>c.collision.up&&!c.motion);
-    field(panel,'Platform',p.anchorId,v=>transaction(()=>{p.anchorId=v;p.dx=0;delete p.x;delete p.y;}),{options:surfaces.map(c=>[c.id,c.id])});
-    field(panel,'Horizontal offset',p.dx??0,v=>transaction(()=>{p.dx=v;delete p.x;delete p.y;}));
-    button(panel,'Playtest from here',()=>setPreview(true,row));
-  }else if(row.kind==='cloud'){
-    renderCloudInspector(panel,p);
-  }else{
-    const grid=node('div',undefined,{class:'fields'});panel.append(grid);for(const k of ['x','y'])field(grid,k.toUpperCase(),mapPoint(row)[k],v=>transaction(()=>{if(row.kind==='powerup'){Object.assign(p,mapPoint(row));delete p.anchorId;delete p.dx;}p[k]=v;}));
-    if(row.kind==='powerup'){field(panel,'Powerup type',p.type||'',v=>transaction(()=>{if(v)p.type=v;else delete p.type;}),{options:[['','Random available type'],...POWERUP_TYPES]});check(panel,'Enabled',p.enabled!==false,v=>editValue(p,'enabled',v));panel.append(node('p','Place this powerup anywhere in the world.'));}
-    if(row.kind==='platform'){
-      field(panel,'Texture',p.textureKey,v=>transaction(()=>{p.textureKey=v;delete p.frame;}),{options:Object.keys(map().assets)});
-      const transform=section('Visual size');panel.append(transform);const dims=map().textureSizes[p.textureKey];
-      for(const[axis,key]of [['width','scaleX'],['height','scaleY']])field(transform,labelFor(axis),Math.round(dims[axis]*p[key]*100)/100,(v,event)=>transaction(()=>{const ratio=v/(dims[axis]*p[key]);const axes=event.shiftKey?[axis]:['width','height'];for(const dimension of axes){const scale=dimension==='width'?'scaleX':'scaleY';p[scale]=Math.round(dims[dimension]*p[scale]*ratio)/dims[dimension];if(p.body?.[dimension])p.body[dimension]=Math.max(1,Math.round(p.body[dimension]*ratio));}}),{min:1});
-      const more=advanced(transform);
-      if(map().assets[p.textureKey].type!=='image')field(more,'Frame',p.frame??'',v=>transaction(()=>{if(v!=='')p.frame=map().assets[p.textureKey].type==='spritesheet'?Number(v):v;else delete p.frame;}));
-      field(more,'Depth',p.depth??0,v=>editValue(p,'depth',v));field(more,'Opacity (%)',Math.round((p.alpha??1)*100),v=>editValue(p,'alpha',v/100),{min:0,max:100});
-      check(transform,'Flip horizontally',p.flipX,v=>editValue(p,'flipX',v));check(transform,'Flip vertically',p.flipY,v=>editValue(p,'flipY',v));
-      const toggle=button(panel,handleMode==='artwork'?'Artwork handles · Tab for collision':'Collision handles · Tab for artwork',()=>{handleMode=handleMode==='artwork'?'collision':'artwork';renderInspector();});toggle.classList.add('handle-toggle',handleMode==='collision'?'collision-mode':'artwork-mode');
-      const body=advanced(panel,'Collision details');const b=p.body||{};
-      for(const k of ['width','height','offsetX','offsetY'])field(body,labelFor(k),b[k]??(/width|height/.test(k)?dims[k]*p[k==='width'?'scaleX':'scaleY']:0),v=>transaction(()=>{if(!p.body)p.body={};p.body[k]=v;}));
-      body.append(node('div','Width/height are world pixels. Offsets are unscaled texture pixels.',{class:'muted'}));
-      const motion=section('Movement');panel.append(motion);
-      check(motion,'Moving platform',!!p.motion,v=>transaction(()=>{
-        if(!v){delete p.motion;return;}
-        if(allRows(map()).some(r=>['spawn','powerup'].includes(r.kind)&&r.value.anchorId===p.id))throw Error(`${p.id} supports a spawn. Move its spawn markers to another platform before making it move.`);
-        p.motion={...MOTION_DEFAULTS};
-      },v?'Platform now moves':'Platform is now static'));
-      if(p.motion){
-        const m=p.motion;
-        field(motion,'Direction',m.axis,v=>editValue(m,'axis',v),{options:[['y','Up and down'],['x','Left and right']]});
-        field(motion,m.axis==='x'?'Travel (px, negative goes left)':'Travel (px, negative goes up)',m.distance,v=>editValue(m,'distance',v));
-        field(motion,'Speed (px/sec)',m.speed,v=>editValue(m,'speed',v),{min:5,max:2000});
-        field(motion,'Ease',m.ease,v=>editValue(m,'ease',v),{options:MOTION_EASES.map(e=>[e,EASE_LABELS[e]||e])});
-        const timing=advanced(motion,'Timing');
-        field(timing,'Pause at each end (ms)',m.pauseMs??0,v=>editValue(m,'pauseMs',v),{min:0});
-        field(timing,'Start offset (%)',Math.round((m.phase??0)*100),v=>editValue(m,'phase',v/100),{min:0,max:100});
-        const roundTrip=2*(Math.abs(m.distance)/m.speed+(m.pauseMs||0)/1000);
-        motion.append(node('div',`Round trip ${roundTrip.toFixed(1)} s. Drag the round handle on the canvas to set how far it travels. Speed is the average; eases go faster mid-way.`,{class:'muted'}));
-      }
-    }else for(const[key,value]of Object.entries(p))if(row.kind!=='powerup'&&!['x','y','id','type','label','collision','collisionEnabled'].includes(key)&&typeof value!=='object')field(panel,key==='turnSpeed'?'Turn speed (%)':labelFor(key),key==='turnSpeed'?value*100:value,v=>editValue(p,key,key==='turnSpeed'?v/100:v));
-    if(['platform','hitbox'].includes(row.kind)){
-      const collision=advanced(panel,'Collision behavior');check(collision,'Enabled',p.collisionEnabled!==false,v=>editValue(p,'collisionEnabled',v));
-      for(const side of ['up','down','left','right'])check(collision,({up:'Land on top',down:'Block from below',left:'Block left side',right:'Block right side'})[side],p.collision?.[side]!==false,v=>transaction(()=>{if(!p.collision)p.collision={up:true,down:true,left:true,right:true};p.collision[side]=v;}));
-    }
-  }
-  const actions=node('div',undefined,{class:'row-actions'});panel.append(actions);
-  if(!['spawn','vault','respawn'].includes(row.kind)){button(actions,'Duplicate',duplicate);button(actions,'Delete',remove,'danger');}
-}
-// Scenery: art layers back to front, the map's clouds and its atmosphere.
-const FIT_LABELS=[['cover','Fill the screen'],['cover-x','Fill the width'],['none','Natural size']];
-const STACK_LABELS=[['back','Behind platforms'],['arena','Over platforms, under fighters'],['front','Over fighters']];
-function renderScenery(panel){
-  const scenery=map().scenery;
-  panel.append(node('h3','Scenery'),node('p','Layers draw back to front. Press Game camera (C) to see parallax, fog and the zoom range as players will.'));
-  const layers=section('Layers');panel.append(layers);
-  scenery.layers.forEach((layer,i)=>{
-    const card=node('div',undefined,{class:'layer-card'});layers.append(card);
-    const head=node('div',undefined,{class:'layer-head'});head.append(node('strong',`${i+1}. ${friendlyName(layer.id)}`));card.append(head);
-    const move=offset=>transaction(()=>{const list=scenery.layers;const [item]=list.splice(i,1);list.splice(i+offset,0,item);},'Layer moved');
-    const up=button(head,'',()=>move(-1));up.append(pixelArrow('up','sm'));up.setAttribute('aria-label','Draw further back');up.disabled=i===0;up.title='Draw further back';
-    const down=button(head,'',()=>move(1));down.append(pixelArrow('down','sm'));down.setAttribute('aria-label','Draw nearer');down.disabled=i===scenery.layers.length-1;down.title='Draw nearer';
-    const del=button(head,'✕',()=>transaction(()=>{scenery.layers.splice(i,1);},'Layer removed'),'danger');del.title='Remove layer';del.disabled=scenery.layers.length===1;
-    card.append(node('img',undefined,{src:layer.url,alt:'',class:'layer-thumb'}));
-    const grid=node('div',undefined,{class:'fields'});card.append(grid);
-    field(grid,'Parallax',layer.scroll,v=>editValue(layer,'scroll',v),{min:0,max:3,step:0.01});
-    field(grid,'Fog (%)',Math.round((layer.fog??0)*100),v=>transaction(()=>{if(v>0)layer.fog=v/100;else delete layer.fog;}),{min:0,max:100});
-    field(grid,'X offset',layer.x??0,v=>editValue(layer,'x',v));field(grid,'Y offset',layer.y??0,v=>editValue(layer,'y',v));
-    field(grid,'Scale',layer.scale??1,v=>editValue(layer,'scale',v),{min:0.01,step:0.01});field(grid,'Opacity (%)',Math.round((layer.alpha??1)*100),v=>editValue(layer,'alpha',v/100),{min:0,max:100});
-    field(card,'Size',layer.fit||'cover',v=>editValue(layer,'fit',v),{options:FIT_LABELS});
-    field(card,'Draw',layer.stack||(layer.scroll>1?'front':'back'),v=>editValue(layer,'stack',v),{options:STACK_LABELS});
-    const more=advanced(card);field(more,'Image URL',layer.url,v=>transaction(()=>{layer.url=v;},'Layer image changed'),{full:true});
-    field(more,'Baked blur (px)',layer.blur??0,v=>transaction(()=>{if(v>0)layer.blur=v;else delete layer.blur;}),{min:0,max:16,step:0.5});
-    more.append(node('div','Blur is written into the image by the art importer (node scripts/art/import-map-art.cjs). Re-run it after changing blur.',{class:'muted'}));
-  });
-  button(layers,'＋ Add layer',addLayerDialog);
-  const clouds=section('Clouds');panel.append(clouds);
-  check(clouds,'Show clouds',!!scenery.clouds?.enabled,v=>transaction(()=>{scenery.clouds={enabled:v,items:scenery.clouds?.items||[]};},v?'Clouds on':'Clouds off'));
-  clouds.append(node('p',`${scenery.clouds?.items?.length||0} clouds. Add one here or from the object list, then drag it on the map.`,{class:'muted'}));
-  button(clouds,'＋ Add cloud',()=>addObject('cloud'));
-  const atmosphere=section('Atmosphere');panel.append(atmosphere);
-  atmosphere.append(node('p','Fog colour, mist, light rays, glows, dust, platform lighting and vignette. Shown on High and Super High graphics.',{class:'muted'}));
-  if(!scenery.atmosphere){button(atmosphere,'＋ Add atmosphere',()=>transaction(()=>{scenery.atmosphere={fogColor:'#ffffff',vignette:{color:'#000000',alpha:0.2}};},'Atmosphere added'));return;}
-  recursiveFields(atmosphere,scenery.atmosphere);
-  button(atmosphere,'Remove atmosphere',()=>transaction(()=>{delete scenery.atmosphere;},'Atmosphere removed'),'danger');
-}
-function addLayerDialog(){
-  if(busy)return;const values={id:uid('layer'),url:'/assets/',scroll:0.5};const content=node('div');
-  content.append(node('p','A layer is one image of the backdrop. Parallax 0 stays put, 1 moves with the platforms, above 1 is foreground.'));
-  field(content,'Image URL',values.url,v=>values.url=v,{full:true});field(content,'Parallax',values.scroll,v=>values.scroll=v,{min:0,max:3,step:0.01});
-  showDialog('Add scenery layer',content,()=>transaction(()=>{map().scenery.layers.push({id:values.id,url:values.url,scroll:values.scroll});},'Layer added'),'Add layer');
-}
-function renderCloudInspector(panel,cloud){
-  const picker=node('div',undefined,{class:'cloud-picker'});panel.append(node('div','Cloud',{class:'section-title'}),picker);
-  const pick=(type,content)=>{const b=node('button',undefined,{type:'button',class:cloud.type===type?'active':'',title:type===RANDOM_CLOUD?'Random cloud':friendlyName(type)});if(typeof content==='string')b.textContent=content;else b.append(content);b.onclick=()=>transaction(()=>{cloud.type=type;},'Cloud changed');picker.append(b);};
-  pick(RANDOM_CLOUD,'Random');for(const [type,url]of Object.entries(CLOUD_TYPES))pick(type,node('img',undefined,{src:url,alt:''}));
-  const grid=node('div',undefined,{class:'fields'});panel.append(grid);
-  for(const k of ['x','y'])field(grid,k.toUpperCase(),cloud[k],v=>editValue(cloud,k,v));
-  field(grid,'Drift',cloud.direction,v=>editValue(cloud,'direction',v),{options:[['right','Right'],['left','Left']]});
-  field(grid,'Speed (px/sec)',cloud.speed,v=>editValue(cloud,'speed',v),{min:0,max:500});
-  field(grid,'Scale',cloud.scale??1,v=>editValue(cloud,'scale',v),{min:0.01,step:0.05});
-  field(grid,'Opacity (%)',Math.round((cloud.alpha??1)*100),v=>editValue(cloud,'alpha',v/100),{min:0,max:100});
-  const depth=cloud.front?'front':cloud.after||ARENA_DEPTH;
-  field(panel,'Draw',depth,v=>transaction(()=>{delete cloud.front;delete cloud.after;if(v==='front')cloud.front=true;else if(v!==ARENA_DEPTH)cloud.after=v;},'Cloud depth changed'),{options:[[ARENA_DEPTH,'Over platforms, under fighters'],['front','Over fighters'],...map().scenery.layers.map(l=>[l.id,`In front of ${friendlyName(l.id)}`])]});
-  check(panel,'Flip horizontally',!!cloud.flipX,v=>editValue(cloud,'flipX',v));
-  if(!map().scenery.clouds.enabled)panel.append(node('div','Clouds are turned off for this map (Scenery tab).',{class:'notice'}));
-}
-async function uploadArtwork(file,targetUrl){
-  const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(Error('Unable to read image'));reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.readAsDataURL(file);});
-  return request('/api/admin/maps/upload',{method:'POST',body:JSON.stringify({targetUrl,fileName:file.name,base64})});
-}
-async function replaceArtwork(key,file){
-  if(!file||busy)return;
-  const before=clone(documentData);setBusy(true);
-  try{
-    const original=map().assets[key],target=original.sourceUrl||original.replaceTarget||original.url;
-    const upload=await uploadArtwork(file,target);
-    replaceAssetReferences(documentData,original,upload);
-    const errors=validateDocument(documentData);if(errors.length)throw Error(errors.slice(0,5).join('\n'));
-    commit('Artwork replaced in every matching platform. Save writes the image into the game files.');await syncHistoryScene();
-  }catch(e){documentData=before;error(e);}finally{setBusy(false);}
-}
-function assetDialog(key=null){
-  if(busy)return;
-  const current=map().assets[key];
-  const values={key:key||uid('platform'),type:current?.type||'image',url:current?.url||'/assets/maps/platform.png',atlasURL:current?.atlasURL||'',width:map().textureSizes[key]?.width||64,height:map().textureSizes[key]?.height||64,frames:current?.animation?.frames?.join(',')||'',fps:current?.animation?.frameRate||12};
-  const content=node('div');
-  function form(){
-    content.replaceChildren();
-    field(content,'Artwork',values.type==='image'?'image':'animated',v=>{values.type=v==='image'?'image':'spritesheet';form();},{options:[['image','Still image'],['animated','Animated platform']]});
-    field(content,values.type==='image'?'Image URL':'Sprite image URL',values.url,v=>values.url=v);
-    if(values.type!=='image'){
-      const explained=node('p','An animation uses one image containing many frames. If your export includes a JSON file describing those frames, choose “Image + JSON”.');content.append(explained);
-      field(content,'Animation files',values.type,v=>{values.type=v;form();},{options:[['spritesheet','One image, equal-sized frames'],['atlas','Image + JSON frame file']]});
-      if(values.type==='atlas')field(content,'Frame JSON URL',values.atlasURL,v=>values.atlasURL=v);
-      for(const k of ['width','height'])field(content,`Each frame ${k} (px)`,values[k],v=>values[k]=v,{min:1});
-      field(content,values.type==='atlas'?'Frame names (comma separated)':'Frame numbers (comma separated)',values.frames,v=>values.frames=v);
-      field(content,'Animation speed (frames/sec)',values.fps,v=>values.fps=v,{min:1,max:120});
-    }
-    const more=advanced(content,'Advanced');field(more,'Reference key',values.key,v=>values.key=v,{disabled:!!key});
-    content.append(node('p',key?'Changing this artwork updates platforms that use it.':'This registers the artwork and places a platform on your map.'));
-  }
-  form();
-  showDialog(key?'Change platform artwork':'Add platform from artwork',content,async()=>{
-    const before=clone(documentData);const asset={type:values.type,url:values.url};
-    if(values.type==='image'){
-      const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('Unable to load that image URL'));img.src=values.url;});values.width=img.naturalWidth;values.height=img.naturalHeight;
-    }
-    if(values.type==='atlas')asset.atlasURL=values.atlasURL;
-    if(values.type==='spritesheet')asset.frameConfig={frameWidth:values.width,frameHeight:values.height};
-    if(values.type!=='image'){
-      if(!values.frames.trim())throw Error('Enter the animation frames to play.');
-      asset.animation={frames:values.frames.split(',').map(f=>values.type==='spritesheet'?Number(f.trim()):f.trim()),frameRate:values.fps,repeat:-1};
-    }
-    if(!key&&map().assets[values.key])throw Error('That reference key already exists.');
-    const old=map().textureSizes[values.key];
-    if(old)for(const p of map().layout.platforms.filter(p=>p.textureKey===values.key)){p.scaleX*=old.width/values.width;p.scaleY*=old.height/values.height;if(p.body){p.body.offsetX=(p.body.offsetX||0)*values.width/old.width;p.body.offsetY=(p.body.offsetY||0)*values.height/old.height;}}
-    map().assets[values.key]=asset;map().textureSizes[values.key]={width:values.width,height:values.height};
-    const errors=validateMap(map());if(errors.length){documentData=before;throw Error(errors.join('\n'));}
-    commit('Platform artwork updated');await syncHistoryScene();if(!key)addObject('platform',values.key);
-  },key?'Update platforms':'Add platform');
-}
-function addObject(kind=$('add-kind').value,textureKey=null){
-  if(busy)return;
-  textureKey ||= Object.keys(map().assets).sort((a,b)=>{const x=map().textureSizes[a],y=map().textureSizes[b];return y.width/y.height-x.width/x.height;})[0];
-  if(!scene)return;const center=scene.cameras.main.midPoint;let newId;
-  transaction(()=>{
-    const p={id:uid(kind),x:Math.round(center.x/16)*16,y:Math.round(center.y/16)*16};newId=p.id;
-    if(kind==='platform'){const scale=Math.min(1,240/map().textureSizes[textureKey].width);map().layout.platforms.push({...p,textureKey,scaleX:scale,scaleY:scale,flipX:false});}
-    else if(kind==='hitbox')map().layout.hitboxes.push({...p,width:200,height:24,collision:{up:true,down:true,left:true,right:true}});
-    else if(kind==='powerup')map().spawns.powerups.push(snapMove(map(),{kind:'powerup',value:p},p.x,p.y,16).value);
-    else if(kind==='cloud'){map().scenery.clouds||={enabled:true,items:[]};map().scenery.clouds.items.push({...p,type:RANDOM_CLOUD,direction:'right',speed:6,scale:0.8});}
-    else{const b=map().objectiveLayout.bankBust;if(!b)throw Error('Bank Bust objects belong to a Bank Bust map. Select Iron Junction or create a map from it.');
-      if(kind==='gold')b.randomGoldSpawnPoints.push(p);
-      else b.objects.push({...p,type:kind,...({goldMine:{radius:86,collectionRadius:110,yieldAmount:10,yieldIntervalMs:4000,maxStoredGold:60},claimableTurret:{claimRadius:110,claimCost:120,range:520,fireRateMs:900,damage:115,projectileSpeed:520,turnSpeed:0.08},wallSlot:{buildRadius:100,cost:90,width:120,height:46}})[kind]});
-    }
-    if(['platform','hitbox'].includes(kind)){
-      const placed=(kind==='platform'?map().layout.platforms:map().layout.hitboxes).find(r=>r.id===newId);
-      let valid=validateMap(map()).length===0;
-      for(let step=1;!valid&&step<=20;step++)for(const [dx,dy]of [[0,-1],[1,0],[-1,0],[0,1]]){
-        placed.x=p.x+dx*step*48;placed.y=p.y+dy*step*48;
-        if(validateMap(map()).length===0){valid=true;break;}
-      }
-    }
-    selectedId=newId;
-  },'Object added');select(selectedId);
-}
-function duplicate(){
-  const rows=allRows(map()).filter(row=>selectedIds.has(row.id)&&!['spawn','vault','respawn'].includes(row.kind));if(!rows.length)return;
-  transaction(()=>{const ids=[];for(const row of rows){const p=clone(row.value);p.id=uid(row.kind);if(row.kind==='powerup'&&p.anchorId){Object.assign(p,mapPoint(row));delete p.anchorId;delete p.dx;}p.x=Math.round(p.x+32);p.y=Math.round(p.y+32);const target=row.kind==='platform'?map().layout.platforms:row.kind==='hitbox'?map().layout.hitboxes:row.kind==='powerup'?map().spawns.powerups:row.kind==='cloud'?map().scenery.clouds.items:row.kind==='gold'?map().objectiveLayout.bankBust.randomGoldSpawnPoints:map().objectiveLayout.bankBust.objects;target.push(p);ids.push(p.id);}selectedIds=new Set(ids);selectedId=ids.at(-1);},'Selection duplicated');
-}
-function remove(){
-  const ids=allRows(map()).filter(row=>selectedIds.has(row.id)&&!['spawn','vault','respawn'].includes(row.kind)).map(row=>row.id);if(!ids.length)return;
-  transaction(()=>{removeRows(map(),ids);selectedId=null;selectedIds.clear();},'Selection removed');
-}
-function mapPoint(row,data=map()){if(row.kind!=='spawn'&&!(row.kind==='powerup'&&row.value.anchorId))return{x:row.value.x,y:row.value.y};const geometry=geometryFromMap(data);const p=resolveLanding(row.value,geometry.anchors[row.value.anchorId],geometry.colliders,row.kind==='powerup'?{width:32,height:40}:{width:64,height:96});return{x:p.x,y:p.y};}
-function visibleRows(){return allRows(map());}
-// A cloud's on-map size, from its loaded art.
-function cloudSize(cloud){const key=sceneryTextureKey(cloudUrl(cloud));const image=scene?.textures.exists(key)?scene.textures.get(key).getSourceImage():{width:240,height:120};const s=cloud.scale??1;return{width:image.width*s,height:image.height*s};}
-function rowBounds(row,collision=false){if(collision&&row.kind==='platform'){const c=geometryFromMap(map()).anchors[row.id];return{x:c.left,y:c.top,width:c.right-c.left,height:c.bottom-c.top};}const p=row.value;if(row.kind==='cloud'){const c=cloudSize(p);return{x:p.x-c.width/2,y:p.y-c.height/2,...c};}const tex=map().textureSizes[p.textureKey];const width=row.kind==='platform'?tex.width*p.scaleX:row.kind==='hitbox'?p.width:24;const height=row.kind==='platform'?tex.height*p.scaleY:row.kind==='hitbox'?p.height:24;const pt=mapPoint(row);return{x:pt.x-width/2,y:pt.y-height/2,width,height};}
-const EASE_LABELS={linear:'Linear (constant speed)',sine:'Smooth (sine)',quad:'Gentle (quad)',cubic:'Strong (cubic)',quart:'Sharp (quart)',expo:'Snappy (expo)'};
-// A moving platform's far end: its rest bounds shifted by the travel distance.
-function travelEnd(row){const b=rowBounds(row),m=row.value.motion;const dx=m.axis==='x'?m.distance:0,dy=m.axis==='y'?m.distance:0;return{...b,x:b.x+dx,y:b.y+dy,cx:b.x+dx+b.width/2,cy:b.y+dy+b.height/2};}
-const RESIZE_CURSORS={nw:'nwse-resize',se:'nwse-resize',ne:'nesw-resize',sw:'nesw-resize',n:'ns-resize',s:'ns-resize',e:'ew-resize',w:'ew-resize'};
-const handlesFor=b=>({nw:[b.x,b.y],n:[b.x+b.width/2,b.y],ne:[b.x+b.width,b.y],e:[b.x+b.width,b.y+b.height/2],se:[b.x+b.width,b.y+b.height],s:[b.x+b.width/2,b.y+b.height],sw:[b.x,b.y+b.height],w:[b.x,b.y+b.height/2]});
-class StudioScene extends Phaser.Scene {
-  constructor(){super('studio');this.markerElements=new Map();this.visuals=[];this.objectiveVisuals=[];this.mapObjects=[];this.pickups=new Map();this.accumulator=0;}
-  preload(){
-    preloadMapDocument(this,map());preloadScenery(this,map());
-    const bankAssets={vault:'bank-bust/vault-intact.webp',goldMine:'bank-bust/mine.webp',claimableTurret:'bank-bust/mount.webp',wallSlot:'bank-bust/not-built.webp',gold:'icons/coin.webp'};
-    for(const [key,file]of Object.entries(bankAssets))this.load.image(`editor-object-${key}`,`/assets/${file}`);
-    this.assetErrors=[];this.load.on('loaderror',file=>this.assetErrors.push(`Unable to load ${file.url}`));
-  }
-  create(){scene=this;this._loadedAssets=clone(map().assets);this.sceneryKey=null;
-    this.overlay=this.add.graphics().setDepth(10000);
-    this.rebuild();this.fit();
-    this.input.mouse.disableContextMenu();this.input.on('pointerdown',p=>this.pointerDown(p));this.input.on('pointermove',p=>this.pointerMove(p));this.input.on('pointerup',()=>this.pointerUp());this.input.on('gameout',()=>{this.hoverId=null;});
-    // Wheel zooms toward the cursor. Trackpads send many small deltas (pinch arrives with ctrlKey).
-    this.input.on('wheel',(pointer,_objects,_dx,dy)=>{if(preview||!dy)return;const event=pointer.event,pixels=event?.deltaMode===1?dy*16:dy;this.zoomBy(Phaser.Math.Clamp(Math.exp(-pixels*(event?.ctrlKey?0.01:0.0016)),0.7,1.4),pointer.x,pointer.y);});
-    // A fitted view refits; otherwise keep the same world point centred.
-    this.scale.on('resize',(size,_base,_display,previousWidth,previousHeight)=>{if(preview)return;if(this.fitted||cameraPreview)return this.fit();const cam=this.cameras.main;cam.scrollX+=(previousWidth-size.width)/2;cam.scrollY+=(previousHeight-size.height)/2;});
-    if(this.assetErrors.length)status(this.assetErrors.join(' · '));else status('Ready · Drag objects to edit. Esc enters playtest.');
-    sceneReady?.();sceneReady=null;
-  }
-  rebuild(){
-    const cam=this.cameras.main, savedCamera={zoom:cam.zoom,scrollX:cam.scrollX,scrollY:cam.scrollY};
-    for(const object of [...this.visuals,...this.objectiveVisuals])object.destroy();this.visuals=[];this.objectiveVisuals=[];
-    const runtime=syncMapDocument(this,documentData.id,map());this.mapObjects=runtime.objects;
-    this.geometry=geometryFromMap(map(),documentData.id);
-    // The edit view composes the scenery still, as the match camera frames it at
-    // rest; the game camera view runs it live. Platform lighting follows layout.
-    const sceneryKey=JSON.stringify([map().modeVariantId,map().scenery,cameraPreview&&map().layout]);
-    if(sceneryKey!==this.sceneryKey){this.sceneryKey=sceneryKey;buildScenery(this,map(),{still:!cameraPreview});}
-    // Edit camera can pan beyond world bounds; the game camera keeps the match bounds.
-    if(!preview&&!cameraPreview){cam.removeBounds();cam.setZoom(savedCamera.zoom);cam.scrollX=savedCamera.scrollX;cam.scrollY=savedCamera.scrollY;}
-    const markers=visibleRows().filter(r=>!['platform','hitbox','cloud'].includes(r.kind));
-    const ids=new Set(markers.map(row=>row.id));
-    for(const [id,entry] of this.markerElements)if(!ids.has(id)){entry.el.remove();this.markerElements.delete(id);}
-    for(const row of markers){
-      const p=mapPoint(row);
-      if(['vault','objective','gold'].includes(row.kind)){
-        const type=row.kind==='objective'?row.value.type:row.kind;
-        const art=this.add.image(p.x,p.y,`editor-object-${type}`).setDepth(3000);
-        const width=row.value.width|| (type==='gold'?24:type==='goldMine'?80:90);
-        art.setDisplaySize(width,row.value.height||width);this.objectiveVisuals.push(art);
-      }
-      let entry=this.markerElements.get(row.id);
-      if(!entry){
-        const el=node('div',undefined,{class:'map-marker'}),dot=node('span',undefined,{class:'marker-dot'}),label=node('span',undefined,{class:'marker-label'});
-        el.append(dot,label);$('marker-layer').append(el);entry={el,label};this.markerElements.set(row.id,entry);
-      }
-      entry.point=p;entry.row=row;
-      entry.el.className=`map-marker ${row.kind}${row.kind==='spawn'?' '+row.team:''}`;
-      entry.label.textContent=row.kind==='spawn'?`${row.team==='team1'?'Blue':'Red'} ${row.index+1}`:row.value.label||friendlyName(row.id);
-    }
-  }
-  positionMarkers(){
-    const cam=this.cameras.main;
-    for(const [id,entry]of this.markerElements){
-      const x=(entry.point.x-cam.scrollX-cam.width/2)*cam.zoom+cam.width/2;
-      const y=(entry.point.y-cam.scrollY-cam.height/2)*cam.zoom+cam.height/2;
-      entry.el.style.transform=`translate3d(${x}px,${y}px,0)`;
-      entry.el.hidden=preview||x<-100||y<-60||x>cam.width+100||y>cam.height+60;
-      entry.el.classList.toggle('selected',selectedIds.has(id));
-      entry.label.hidden=entry.row.kind!=='spawn'&&!selectedIds.has(id)&&cam.zoom<=.8;
-    }
-  }
+import "../styles/ui-system.css";
+import "../styles/toolShell.css";
+import { isSiteDialogOpen } from "../site/dialog";
+import { readJson, writeJson } from "../lib/safeStorage.js";
+import { initSiteShell, openSettings } from "../site/shell.js";
+import skinsCatalog from "../../shared/catalogs/skinsCatalog.cjs";
+import { clone } from "../../shared/maps/mapDocument";
+import { allRows, snapMove } from "../editor/editorModel";
+import { hideHint, $, editor, map, selected, status, dirty } from "../editor/studioState";
+import { syncToolbarSelect } from "../editor/toolbarSelects";
+import { error } from "../editor/studioControls";
+import {
+  persistDraft,
+  transaction,
+  setPreview,
+  loadMap,
+  save,
+  showUnsavedChanges,
+  download,
+  importDialog,
+  refreshMaps,
+  newMapDialog,
+  undo,
+} from "../editor/mapSession";
+import { renderBrowser, renderInspector } from "../editor/inspector";
+import { addObject, duplicate, remove } from "../editor/objectEdits";
+import { mapPoint } from "../editor/canvasInteraction";
+import { shortcutsDialog } from "../editor/shortcutDialog";
+import { PLAYTEST_KEY, playtestInputs, syncPlaytestSummary } from "../editor/playtestControls";
 
-  // Game camera: the match camera's bounds and zoom range, with live scenery.
-  setCameraPreview(on){
-    cameraPreview=on;document.body.classList.toggle('camera-preview',on);$('camera-preview').setAttribute('aria-pressed',String(on));
-    this.sceneryKey=null;this.rebuild();
-    if(!on){this.fit();status('Editing · Drag objects to edit. C shows the game camera.');return;}
-    const c=mapArena(map()).camera,cam=this.cameras.main;
-    cam.setBounds(c.x,c.y,c.width,c.height);cam.setZoom(c.zoom);cam.centerOn(c.x+c.width/2,c.y+c.height/2);$('zoom-label').textContent=Math.round(cam.zoom*100)+'%';
-    status(`Game camera · ${mapArena(map()).label} zooms ${c.minZoom}–${c.maxZoom}×. Pan with Space + drag. C returns to editing.`);
-  }
-  fit(){if(cameraPreview)return this.setCameraPreview(true);const w=mapArena(map()).world;const cam=this.cameras.main;cam.removeBounds();cam.setZoom(Math.min(this.scale.width/(w.width+160),this.scale.height/(w.height+200)));cam.centerOn(w.x+w.width/2,w.y+w.height/2);this.fitted=true;$('zoom-label').textContent=Math.round(cam.zoom*100)+'%';}
-  // Zooms about a screen point (the view centre by default), keeping the world point under it fixed.
-  zoomBy(factor,screenX,screenY){const cam=this.cameras.main,c=mapArena(map()).camera;screenX??=cam.width/2;screenY??=cam.height/2;
-    const world=this.screenToWorld(screenX,screenY),zoom=cameraPreview?Phaser.Math.Clamp(cam.zoom*factor,c.minZoom,c.maxZoom):Phaser.Math.Clamp(cam.zoom*factor,.08,4);
-    cam.setZoom(zoom);cam.scrollX=world.x-cam.width/2-(screenX-cam.width/2)/zoom;cam.scrollY=world.y-cam.height/2-(screenY-cam.height/2)/zoom;this.fitted=false;$('zoom-label').textContent=Math.round(zoom*100)+'%';}
-  // The camera's own matrix only refreshes on render; this stays exact between frames.
-  screenToWorld(x,y){const cam=this.cameras.main;return{x:(x-cam.width/2)/cam.zoom+cam.scrollX+cam.width/2,y:(y-cam.height/2)/cam.zoom+cam.scrollY+cam.height/2};}
-  focusRow(row){const p=mapPoint(row);this.cameras.main.centerOn(p.x,p.y);this.fitted=false;}
-  // Pans to a row picked from the list only when it is off screen.
-  revealRow(row){const b=rowBounds(row),view=this.cameras.main.worldView;if(b.x+b.width<view.x||b.x>view.right||b.y+b.height<view.y||b.y>view.bottom)this.focusRow(row);}
-  handleAt(pt){
-    const current=selected(),cam=this.cameras.main;
-    if(selectedIds.size!==1||!current)return null;
-    if(current.kind==='platform'&&current.value.motion){const end=travelEnd(current);if(Math.hypot(pt.x-end.cx,pt.y-end.cy)<9/cam.zoom)return{kind:'travel',row:current};}
-    if(['platform','hitbox'].includes(current.kind))for(const[handle,[x,y]]of Object.entries(handlesFor(rowBounds(current,handleMode==='collision'))))if(Math.hypot(pt.x-x,pt.y-y)<8/cam.zoom)return{kind:'resize',handle,row:current};
-    return null;
-  }
-  rowAt(pt){
-    const rows=visibleRows(),cam=this.cameras.main;
-    // Markers first, then platforms; clouds (large, see-through art) last.
-    const ordered=[...rows.filter(r=>!['platform','hitbox','cloud'].includes(r.kind)).reverse(),...rows.filter(r=>['platform','hitbox'].includes(r.kind)).reverse(),...rows.filter(r=>r.kind==='cloud').reverse()];
-    return ordered.find(r=>{const b=rowBounds(r);const pad=['platform','hitbox'].includes(r.kind)?0:8/cam.zoom;return pt.x>=b.x-pad&&pt.x<=b.x+b.width+pad&&pt.y>=b.y-pad&&pt.y<=b.y+b.height+pad;});
-  }
-  setCursor(cursor){if(this.game.canvas.style.cursor!==cursor)this.game.canvas.style.cursor=cursor;}
-  updateHover(pointer){
-    if(preview||cameraPreview||$('dialog').open){this.hoverId=null;return;}
-    if(keyboard.has(' ')){this.hoverId=null;return this.setCursor('grab');}
-    const pt=this.screenToWorld(pointer.x,pointer.y),handle=this.handleAt(pt);
-    if(handle){this.hoverId=null;return this.setCursor(handle.kind==='travel'?'grab':RESIZE_CURSORS[handle.handle]);}
-    const hit=this.rowAt(pt);this.hoverId=hit?.id||null;this.setCursor(hit?'move':'default');
-  }
-  pointerDown(pointer){
-    if(preview||busy||$('dialog').open)return;
-    const cam=this.cameras.main,pt=this.screenToWorld(pointer.x,pointer.y);
-    hideHint();if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();
-    if(keyboard.has(' ')||pointer.middleButtonDown()||pointer.rightButtonDown()){
-      drag={kind:'pan',x:pointer.x,y:pointer.y,scrollX:cam.scrollX,scrollY:cam.scrollY};this.setCursor('grabbing');return;
-    }
-    const handle=this.handleAt(pt);
-    if(handle?.kind==='travel'){drag={kind:'travel',rowId:handle.row.id,before:clone(documentData),screenX:pointer.x,screenY:pointer.y,moved:false};return;}
-    if(handle){drag={kind:'resize',handle:handle.handle,rowId:handle.row.id,start:clone(handle.row.value),before:clone(documentData),screenX:pointer.x,screenY:pointer.y,moved:false};return;}
-    const hit=this.rowAt(pt);
-    if(!hit){
-      drag={kind:'marquee',start:pt,end:pt,screenX:pointer.x,screenY:pointer.y,additive:!!pointer.event?.shiftKey,ids:new Set(selectedIds),moved:false};
-      if(!drag.additive)select(null);return;
-    }
-    if(pointer.event?.shiftKey)select(hit.id,true);
-    else if(!selectedIds.has(hit.id))select(hit.id);
-    else {selectedId=hit.id;activeTab='selection';renderBrowser();renderInspector();}
-    if(!selectedIds.has(hit.id))return;
-    const position=mapPoint(hit);
-    drag={kind:'move',rowId:hit.id,dx:position.x-pt.x,dy:position.y-pt.y,start:position,ids:[...selectedIds],before:clone(documentData),screenX:pointer.x,screenY:pointer.y,moved:false};
-  }
-  pointerMove(pointer){
-    if(preview)return;
-    if(!drag)return this.updateHover(pointer);
-    const cam=this.cameras.main;
-    if(drag.kind==='pan'){cam.scrollX=drag.scrollX-(pointer.x-drag.x)/cam.zoom;cam.scrollY=drag.scrollY-(pointer.y-drag.y)/cam.zoom;this.fitted=false;return;}
-    if(!drag.moved&&Math.hypot(pointer.x-drag.screenX,pointer.y-drag.screenY)<4)return;
-    drag.moved=true;
-    const pt=this.screenToWorld(pointer.x,pointer.y);
-    if(drag.kind==='marquee'){
-      drag.end=pt;const left=Math.min(pt.x,drag.start.x),right=Math.max(pt.x,drag.start.x),top=Math.min(pt.y,drag.start.y),bottom=Math.max(pt.y,drag.start.y);
-      selectedIds=new Set(drag.additive?drag.ids:[]);
-      for(const row of visibleRows()){const b=rowBounds(row);if(b.x+b.width>=left&&b.x<=right&&b.y+b.height>=top&&b.y<=bottom)selectedIds.add(row.id);}
-      selectedId=[...selectedIds].at(-1)||null;renderBrowser();renderInspector();return;
-    }
-    documentData=clone(drag.before);
-    const base=drag.before,row=allRows(map()).find(r=>r.id===drag.rowId);
-    if(!row)return;
-    try{
-      const bypass=pointer.event?.metaKey||pointer.event?.ctrlKey,grid=Number($('grid').value);
-      if(drag.kind==='travel'){
-        const m=row.value.motion,start=m.axis==='x'?row.value.x:row.value.y;let travel=(m.axis==='x'?pt.x:pt.y)-start;
-        if(!bypass&&grid)travel=Math.round(travel/grid)*grid;
-        m.distance=Math.round(Math.abs(travel)<8?(travel<0?-8:8):travel);
-      }else if(drag.kind==='resize'){
-        const x=Math.round(!bypass&&grid?Math.round(pt.x/grid)*grid:pt.x),y=Math.round(!bypass&&grid?Math.round(pt.y/grid)*grid:pt.y);
-        const value=handleMode==='collision'&&row.kind==='platform'?resizeCollision(base,row,drag.handle,x,y,!pointer.event?.shiftKey):resizeRow(drag.start,drag.handle,x,y,row.kind==='platform'?map().textureSizes[row.value.textureKey]:null,!pointer.event?.shiftKey);
-        Object.assign(row.value,value);
-      }else{
-        const snap=snapMove(map(),row,pt.x+drag.dx,pt.y+drag.dy,grid,bypass,8/cam.zoom);
-        const destination=mapPoint({...row,value:snap.value}),dx=destination.x-drag.start.x,dy=destination.y-drag.start.y;guidelines=snap.guides;
-        for(const target of allRows(map()).filter(r=>drag.ids.includes(r.id))){
-          if(target.kind==='spawn'&&drag.ids.includes(target.value.anchorId))continue;
-          const original=allRows(base).find(r=>r.id===target.id),point=mapPoint(original,base);
-          Object.assign(target.value,snapMove(map(),target,point.x+dx,point.y+dy,0,true).value);
-        }
-      }
-      this.rebuild();
-    }catch(e){documentData=clone(drag.before);this.rebuild();status(e.message);}
-  }
-  pointerUp(){
-    if(!drag)return;
-    const current=drag;drag=null;guidelines=[];if(current.kind==='pan')this.setCursor(keyboard.has(' ')?'grab':'default');
-    if(current.kind==='pan'||current.kind==='marquee'||!current.moved)return;
-    const errors=validateMap(map());
-    if(errors.length){documentData=current.before;this.rebuild();renderInspector();status(`Edit reverted: ${errors[0]}`);return;}
-    commit(({resize:'Object resized',travel:'Travel distance updated'})[current.kind]||'Selection moved');
-  }
-  drawOverlay(){this.overlay.clear();if(preview)return;this.positionMarkers();if(cameraPreview)return;const g=this.overlay,cam=this.cameras.main,arena=mapArena(map()),w=arena.world,c=arena.camera,grid=Number($('grid').value);
-    if(grid&&grid*cam.zoom>=7){g.lineStyle(1/cam.zoom,0x7594a7,.12);const view=cam.worldView;const left=Math.max(w.x,Math.floor(view.x/grid)*grid),top=Math.max(w.y,Math.floor(view.y/grid)*grid),right=Math.min(w.x+w.width,view.right),bottom=Math.min(w.y+w.height,view.bottom);
-      for(let x=left;x<=right;x+=grid)g.lineBetween(x,top,x,bottom);for(let y=top;y<=bottom;y+=grid)g.lineBetween(left,y,right,y);}
-    g.lineStyle(2/cam.zoom,0x91adc0,.65).strokeRect(w.x,w.y,w.width,w.height);g.lineStyle(1/cam.zoom,0xbaf36b,.25).lineBetween(w.x+w.width/2,w.y,w.x+w.width/2,w.y+w.height);
-    // What the match camera can show (the mode's camera bounds).
-    g.lineStyle(2/cam.zoom,0xffd166,.45).strokeRect(c.x,c.y,c.width,c.height);
-    for(const c of this.geometry.colliders){g.lineStyle(1/cam.zoom,c.id===selectedId?0xbaf36b:0x66bbff,(c.id===selectedId||$('debug-hitboxes').checked) ? .9 : .3).strokeRect(c.left,c.top,c.right-c.left,c.bottom-c.top);}
-    // Moving platforms: travel path, far-end ghost and a live preview of the motion.
-    const now=performance.now();
-    for(const row of visibleRows().filter(r=>r.kind==='platform'&&r.value.motion)){
-      const rest=rowBounds(row),end=travelEnd(row),offset=motionOffset(row.value.motion,now),active=selectedIds.has(row.id);
-      g.lineStyle(2/cam.zoom,0xffd166,active?.9:.45).lineBetween(rest.x+rest.width/2,rest.y+rest.height/2,end.cx,end.cy);
-      g.lineStyle(1/cam.zoom,0xffd166,active?.7:.3).strokeRect(end.x,end.y,end.width,end.height);
-      g.fillStyle(0xffd166,active?.18:.08).fillRect(rest.x+offset.x,rest.y+offset.y,rest.width,rest.height);
-      if(active&&selectedIds.size===1){g.fillStyle(0x17212c).fillCircle(end.cx,end.cy,6/cam.zoom);g.lineStyle(2/cam.zoom,0xffd166).strokeCircle(end.cx,end.cy,6/cam.zoom);}
-    }
-    const hover=this.hoverId&&!selectedIds.has(this.hoverId)&&!drag&&visibleRows().find(r=>r.id===this.hoverId);
-    if(hover){const b=rowBounds(hover);g.lineStyle(1.5/cam.zoom,0xffffff,.7).strokeRect(b.x,b.y,b.width,b.height);}
-    for(const guide of guidelines){g.lineStyle(1/cam.zoom,0xff87c8,.9);if(guide.axis==='x')g.lineBetween(guide.value,w.y,guide.value,w.y+w.height);else g.lineBetween(w.x,guide.value,w.x+w.width,guide.value);}
-    const color=handleMode==='collision'?0xffb866:0xbaf36b;
-    for(const row of visibleRows().filter(row=>selectedIds.has(row.id))){
-      const b=rowBounds(row,handleMode==='collision');
-      g.lineStyle(2/cam.zoom,color,1).strokeRect(b.x,b.y,b.width,b.height);
-      if(selectedIds.size===1&&['platform','hitbox'].includes(row.kind))for(const[x,y]of Object.values(handlesFor(b))){
-        g.fillStyle(0x17212c).fillRect(x-4/cam.zoom,y-4/cam.zoom,8/cam.zoom,8/cam.zoom);
-        g.lineStyle(1/cam.zoom,color).strokeRect(x-4/cam.zoom,y-4/cam.zoom,8/cam.zoom,8/cam.zoom);
-      }
-    }
-    if(drag?.kind==='marquee'&&drag.moved){const x=Math.min(drag.start.x,drag.end.x),y=Math.min(drag.start.y,drag.end.y),width=Math.abs(drag.end.x-drag.start.x),height=Math.abs(drag.end.y-drag.start.y);g.fillStyle(0x66bbff,.12).fillRect(x,y,width,height);g.lineStyle(1/cam.zoom,0x66bbff,1).strokeRect(x,y,width,height);}
+import "../editor/mapEditor.css";
+import "../styles/ui-components.css";
 
-  }
-  update(){if(documentData)this.drawOverlay();}
+initSiteShell();
+
+const HINT_KEY = "bb-map-studio-hint-dismissed";
+
+try {
+  $("canvas-hint").hidden = localStorage.getItem(HINT_KEY) === "1";
+} catch {
+  $("canvas-hint").hidden = false;
 }
 
-async function startScene(){setBusy(true);$('marker-layer').replaceChildren();cameraPreview=false;document.body.classList.remove('camera-preview');$('camera-preview').setAttribute('aria-pressed','false');if(game){const retiringContext=rendererContextOf(game);const retired=new Promise(r=>game.events.once(Phaser.Core.Events.DESTROY,r));game.destroy(true);game=null;scene=null;await Promise.race([retired,new Promise(r=>setTimeout(r,30))]);releaseRendererContext(retiringContext);}
-  return new Promise(resolve=>{sceneReady=()=>{setBusy(false);resolve();};const host=$('canvas');game=new Phaser.Game({type:Phaser.AUTO,parent:host,width:host.clientWidth,height:host.clientHeight,backgroundColor:'#111d29',transparent:false,pixelArt:true,physics:{default:'arcade',arcade:{gravity:{y:0}}},scale:{mode:Phaser.Scale.NONE},scene:StudioScene});});
-}
-async function setPreview(value,row=null){
-  if(!scene||busy)return;
-  if(!value){
-    const token=playtestSession;playtestSession=null;playtestFrame?.remove();playtestFrame=null;
-    preview=false;document.body.classList.remove('preview');keyboard.clear();game.scene.resume('studio');game.scale.resize($('viewport').clientWidth,$('viewport').clientHeight);
-    if(token)request(`/api/admin/map-playtests/${token}`,{method:'DELETE'}).catch(e=>status(e.message));
-    return;
-  }
-  scene.pointerUp();setBusy(true);
-  try{
-    const result=await request('/api/admin/map-playtests',{method:'POST',body:JSON.stringify({document:documentData,modeVariantId:mapArena(map()).modeId==='duels'?$('playtest-formation').value:null,bots:$('playtest-kind').value==='bots',infiniteSupers:$('infinite-supers').checked,debugHitboxes:$('debug-hitboxes').checked,character:$('playtest-character').value,skinId:$('playtest-skin').value,spawn:row?.kind==='spawn'?{point:row.value}:null})});
-    playtestSession=result.session;
-    preview=true;keyboard.clear();game.scene.pause('studio');document.body.classList.add('preview');
-    playtestFrame=node('iframe',undefined,{id:'playtest-frame',title:'Live game playtest',src:`/map-editor/playtest?session=${result.session}&match=${result.matchId}`,allow:'autoplay; fullscreen'});
-    document.body.append(playtestFrame);playtestFrame.onload=()=>playtestFrame?.contentWindow?.focus();
-  }catch(e){error(e);}finally{setBusy(false);}
-}
-window.addEventListener('message',event=>{if(event.origin===location.origin&&event.source===playtestFrame?.contentWindow&&event.data?.type==='bb-map-playtest-exit')setPreview(false);});
-async function syncHistoryScene(){
-  const wanted=map().assets,previous=scene._loadedAssets||{};
-  const changed=Object.keys(wanted).filter(key=>!scene.textures.exists(key)||JSON.stringify(wanted[key])!==JSON.stringify(previous[key]));
-  if(changed.length||sceneryMissing()){
-    setBusy(true);
-    for(const key of changed){
-      for(const object of scene.mapObjects.filter(o=>o.texture?.key===key)){object.setTexture('__DEFAULT');object._mapRowJSON=null;}
-      if(scene.textures.exists(key))scene.textures.remove(key);
-      if(scene.anims.exists(`map-animation-${key}`))scene.anims.remove(`map-animation-${key}`);
-    }
-    preloadMapDocument(scene,map());preloadScenery(scene,map());
-    await new Promise(resolve=>{scene.load.once('complete',resolve);scene.load.start();});setBusy(false);
-  }
-  scene._loadedAssets=clone(wanted);scene.sceneryKey=null;scene.rebuild();
-}
-async function loadMap(id){setBusy(true);try{const response=await request(`/api/admin/maps/${id}`);documentData=response.document;revision=response.revision;savedJSON=JSON.stringify(documentData);
-    try{const draft=JSON.parse(localStorage.getItem(`bb-map-draft-${id}`)||'null');if(draft?.document&&validateDocument(draft.document).length===0&&JSON.stringify(draft.document)!==savedJSON){documentData=upgradeDuelMap(draft.document);revision=draft.revision;status('Recovered local draft.');}}catch{}
-    history=new MapHistory(documentData);selectedId=null;selectedIds.clear();$('map-select').value=id;syncToolbarSelect('map-select');renderBrowser();renderInspector();refreshSave();await startScene();
-  }catch(e){error(e);}finally{setBusy(false);}}
-async function save(){if(busy||!documentData)return;scene?.pointerUp();const errors=validateDocument(documentData);if(errors.length){error(Error(errors.join('\n')));return;}setBusy(true);
-  try{const result=await request(`/api/admin/maps/${documentData.id}`,{method:'PUT',body:JSON.stringify({document:documentData,revision})});revision=result.revision;documentData=result.document;history.stack[history.index]=clone(documentData);savedJSON=JSON.stringify(documentData);await syncHistoryScene();renderInspector();persistDraft();refreshSave();status('Saved. New matches will use this revision; existing matches keep their current map.');await refreshMaps();}
-  catch(e){error(e);}finally{setBusy(false);}}
-async function showUnsavedChanges(){
-  if(busy||!documentData)return;
-  scene?.pointerUp();
-  const content=node('div',undefined,{class:'pending-changes'});
-  showDialog('Unsaved changes',content,null,'Close');
-  content.append(node('p','Comparing with the live map…'));
-  let live;
-  setBusy(true);
+$("hint-close").onclick = () => {
+  hideHint();
   try {
-    if(revision===null){
-      content.replaceChildren(node('p','This new map has not been saved yet. Discarding it removes the local draft.'));
-      const discard=node('button','Discard new map',{type:'button',class:'danger'});
-      discard.onclick=async()=>{localStorage.removeItem(`bb-map-draft-${documentData.id}`);$('dialog').close();await refreshMaps();await loadMap(mapList[0].id);};content.append(discard);return;
-    }
-    live=await request(`/api/admin/maps/${documentData.id}`);
-  }catch(e){content.replaceChildren(node('p',e.message,{class:'errors'}));return;}finally{setBusy(false);}
-  const render=()=>{
-    const changes=diffUnsaved(live.document,documentData),chosen=new Set();
-    content.replaceChildren(node('p',changes.length?`${changes.length} pending changes compared with the live map. Only current differences are shown.`:'Your draft matches the live map.'));
-    if(!changes.length)return;
-    const actions=node('div',undefined,{class:'pending-actions'}),list=node('ol',undefined,{class:'pending-list'}),message=node('p','',{class:'errors',role:'status'});
-    const discardSelected=node('button','Discard selected',{type:'button'}),discardAll=node('button','Discard all',{type:'button',class:'danger'});
-    discardSelected.disabled=true;
-    const apply=async all=>{
-      if(busy)return;
-      const candidate=all?clone(live.document):discardChanges(documentData,changes.filter((_,i)=>chosen.has(i)));
-      const errors=validateDocument(candidate);
-      if(errors.length){message.textContent='These changes depend on other edits. Select the related changes too, or discard all. '+errors.slice(0,3).join(' ');return;}
-      setBusy(true);discardSelected.disabled=true;discardAll.disabled=true;
-      try{
-        documentData=candidate;
-        if(all||diffUnsaved(live.document,candidate).length===0){revision=live.revision;savedJSON=JSON.stringify(live.document);}
-        selectedId=null;selectedIds.clear();
-        commit(all?'All unsaved changes discarded.':'Selected changes discarded.');
-        await syncHistoryScene();render();
-      }catch(e){message.textContent=e.message;}finally{setBusy(false);}
-    };
-    discardSelected.onclick=()=>apply(false);discardAll.onclick=()=>apply(true);
-    actions.append(discardSelected,discardAll);content.append(actions,message,list);
-    const format=value=>value===undefined?'Not present':typeof value==='object'?JSON.stringify(value,null,2):String(value);
-    changes.forEach((change,i)=>{
-      const item=node('li',undefined,{class:'pending-change'}),label=node('label'),check=node('input',undefined,{type:'checkbox'});
-      const kind=change.before===undefined?'Added':change.after===undefined?'Removed':'Changed';
-      const title=change.path.map(part=>typeof part==='object'?part.id:friendlyName(part)).join(' › ');
-      check.onchange=()=>{if(check.checked)chosen.add(i);else chosen.delete(i);discardSelected.disabled=!chosen.size;discardSelected.textContent=chosen.size?`Discard selected (${chosen.size})`:'Discard selected';};
-      label.append(check,node('strong',title),node('span',kind,{class:'change-kind'}));item.append(label);
-      const details=node('details');details.append(node('summary','Live → draft'));
-      const values=node('div',undefined,{class:'change-values'});
-      for(const [name,value] of [['Live',change.before],['Draft',change.after]]){const col=node('div');col.append(node('b',name),node('pre',format(value)));values.append(col);}
-      details.append(values);item.append(details);list.append(item);
-    });
-  };
-  render();
-}
-function download(){const {document:exported,files:pending}=exportDocument(documentData);const blob=new Blob([JSON.stringify(exported,null,2)+'\n'],{type:'application/json'});const url=URL.createObjectURL(blob);const link=node('a',undefined,{href:url,download:`map-${documentData.id}.json`});link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);status('Exported the full map document.');if(pending.size){const info=node('div');info.append(node('p','JSON does not include uploaded image files. Manually replace these game files when using this export:'));for(const file of pending)info.append(node('p','public'+file));showDialog('Images needed for this export',info,null,'Got it');}}
-function importDialog(){if(busy)return;const content=node('div');content.append(node('p','Paste a complete versioned map document, or select an exported JSON file. Import replaces the whole map and can be undone.'));const input=node('input',undefined,{type:'file',accept:'.json,application/json'});const text=node('textarea',undefined,{'aria-label':'Map document JSON',spellcheck:'false'});input.onchange=async()=>{if(input.files[0])text.value=await input.files[0].text();};content.append(input,text);
-  showDialog('Import map document',content,async()=>{let doc;try{doc=upgradeDuelMap(JSON.parse(text.value));}catch{throw Error('Invalid JSON.');}const errors=validateDocument(doc);if(errors.length)throw Error(errors.slice(0,12).join('\n'));if(doc.id!==documentData.id)throw Error('The imported map ID must match the open map. Use New map to create a separate map.');documentData=doc;selectedId=null;selectedIds.clear();commit('Document imported');await syncHistoryScene();});}
-async function refreshMaps(){const result=await request('/api/admin/maps');mapList=result.maps;$('map-select').replaceChildren(...mapList.map(m=>node('option',m.label,{value:m.id,'data-mode-variant-id':m.modeVariantId})));if(documentData)$('map-select').value=documentData.id;syncToolbarSelect('map-select',{rebuild:true});}
-function newMapDialog(){if(busy)return;const content=node('div');const values={id:Math.max(...mapList.map(m=>m.id))+1,label:'New map',modeVariantId:map().modeVariantId};
-  content.append(node('p','Create a separate map, starting as a copy of this one: platforms, art and scenery. Duel maps support both 1v1 and 2v2 and keep this map’s arena profile.'));
-  field(content,'Map ID',values.id,v=>values.id=v,{min:1});field(content,'Map name',values.label,v=>values.label=v);
-  field(content,'Game mode',values.modeVariantId,v=>values.modeVariantId=v,{options:arenaIds().map(id=>[id,arenaFor(id).label])});
-  showDialog('Create map',content,async()=>{if(mapList.some(m=>m.id===values.id))throw Error('Map ID already exists.');const doc=retargetMap(documentData,values.modeVariantId);doc.id=values.id;doc.label=values.label;doc.metadata.key=`map-${doc.id}`;const errors=validateDocument(doc);if(errors.length)throw Error(errors.join('\n'));persistDraft();documentData=doc;revision=null;savedJSON='';history=new MapHistory(doc);selectedId=null;selectedIds.clear();commit('New map created locally. Move its platforms and spawns to suit the mode, then save to add it to the map catalog.');$('map-select').append(node('option',doc.label,{value:doc.id,'data-mode-variant-id':doc.modeVariantId}));$('map-select').value=doc.id;syncToolbarSelect('map-select',{rebuild:true});await startScene();},'Create');}
-async function undo(redo=false){if(!history||busy)return;documentData=redo?history.redo():history.undo();selectedIds=new Set([...selectedIds].filter(id=>allRows(map()).some(r=>r.id===id)));selectedId=[...selectedIds].at(-1)||null;persistDraft();refreshSave();renderBrowser();renderInspector();await syncHistoryScene();status(redo?'Edit restored':'Edit undone');}
-const SHORTCUTS=[['Undo',['⌘/Ctrl','Z']],['Redo',['⌘/Ctrl','Shift','Z']],['Save',['⌘/Ctrl','S']],['Playtest / return',['Esc']],['Duplicate',['D']],['Delete',['Del']],['Select all',['⌘/Ctrl','A']],['Nudge 1 px / 16 px',['Arrows','Shift']],['Multi-select',['Shift','Click']],['Box-select',['Drag empty space']],['Pan',['Space','Drag']],['Pan (mouse)',['Right-drag']],['Zoom at cursor',['Scroll']],['Zoom in / out',['+','−']],['Fit world',['F']],['Game camera',['C']],['Artwork / collision handles',['Tab']],['Skip snapping',['⌘/Ctrl','Drag']],['Resize freely',['Shift','Drag handle']],['Centre on object',['Double-click row']]];
-function shortcutsDialog(){const list=node('dl',undefined,{class:'shortcut-list'});for(const[label,keys]of SHORTCUTS){const row=node('div'),keysEl=node('dd');for(const k of keys)keysEl.append(node('kbd',k));row.append(node('dt',label),keysEl);list.append(row);}showDialog('Keyboard shortcuts',list,null,'Got it');}
-const HINT_KEY='bb-map-studio-hint-dismissed';
-function hideHint(){$('canvas-hint').hidden=true;}
-try{$('canvas-hint').hidden=localStorage.getItem(HINT_KEY)==='1';}catch{$('canvas-hint').hidden=false;}
-$('hint-close').onclick=()=>{hideHint();try{localStorage.setItem(HINT_KEY,'1');}catch{}};
-$('shortcuts').onclick=shortcutsDialog;
+    localStorage.setItem(HINT_KEY, "1");
+  } catch {}
+};
+
+$("shortcuts").onclick = shortcutsDialog;
+
 // Toolbar menus close on an outside click or after an action inside them.
-const menus=[...document.querySelectorAll('details.menu')];
-const closeMenus=except=>{for(const menu of menus)if(menu!==except)menu.open=false;};
-document.addEventListener('pointerdown',event=>closeMenus(menus.find(menu=>menu.contains(event.target))));
-for(const action of document.querySelectorAll('.menu-actions button'))action.addEventListener('click',()=>closeMenus());
-$('studio-settings').onclick = openSettings;
-for (const entry of Object.values(skinsCatalog.characters)) for (const skin of entry.skins) {
-  $('playtest-skin').add(new Option(skin.name, skin.id));
+const menus = [...document.querySelectorAll("details.menu")];
+
+const closeMenus = (except) => {
+  for (const menu of menus) if (menu !== except) menu.open = false;
+};
+
+document.addEventListener("pointerdown", (event) =>
+  closeMenus(menus.find((menu) => menu.contains(event.target))),
+);
+
+for (const action of document.querySelectorAll(".menu-actions button"))
+  action.addEventListener("click", () => closeMenus());
+
+$("studio-settings").onclick = openSettings;
+
+for (const entry of Object.values(skinsCatalog.characters))
+  for (const skin of entry.skins) {
+    $("playtest-skin").add(new Option(skin.name, skin.id));
+  }
+
+$("playtest-skin").value = skinsCatalog.characters[$("playtest-character").value].defaultSkinId;
+
+const savedPlaytestOptions = readJson(() => localStorage, PLAYTEST_KEY);
+
+if (savedPlaytestOptions && typeof savedPlaytestOptions === "object") {
+  for (const [key, input] of Object.entries(playtestInputs)) {
+    if (!(key in savedPlaytestOptions)) continue;
+    if (input.type === "checkbox") input.checked = !!savedPlaytestOptions[key];
+    else if ([...input.options].some((option) => option.value === savedPlaytestOptions[key]))
+      input.value = savedPlaytestOptions[key];
+  }
 }
-$('playtest-skin').value = skinsCatalog.characters[$('playtest-character').value].defaultSkinId;
-// Playtest settings are a per-browser preference.
-const PLAYTEST_KEY='bb-map-studio-playtest',playtestInputs={formation:$('playtest-formation'),kind:$('playtest-kind'),character:$('playtest-character'),skin:$('playtest-skin'),debugHitboxes:$('debug-hitboxes'),infiniteSupers:$('infinite-supers')};
-function syncPlaytestSummary(){$('playtest-summary').textContent=[mapArena(map())?.modeId==='duels'&&playtestInputs.formation.selectedOptions[0]?.text,playtestInputs.kind.selectedOptions[0]?.text,playtestInputs.character.selectedOptions[0]?.text,playtestInputs.debugHitboxes.checked&&'hitboxes',playtestInputs.infiniteSupers.checked&&'infinite supers'].filter(Boolean).join(' · ');$('preview').title=`Playtest this draft (Esc) · ${$('playtest-summary').textContent}`;}
-try{const saved=JSON.parse(localStorage.getItem(PLAYTEST_KEY)||'{}');for(const[key,input]of Object.entries(playtestInputs))if(key in saved){if(input.type==='checkbox')input.checked=!!saved[key];else if([...input.options].some(o=>o.value===saved[key]))input.value=saved[key];}}catch{}
-for(const input of Object.values(playtestInputs))input.addEventListener('change',()=>{syncPlaytestSummary();try{localStorage.setItem(PLAYTEST_KEY,JSON.stringify(Object.fromEntries(Object.entries(playtestInputs).map(([k,i])=>[k,i.type==='checkbox'?i.checked:i.value]))));}catch{}});
-if (!skinsCatalog.characters[playtestInputs.character.value].skins.some(s => s.id === playtestInputs.skin.value)) playtestInputs.skin.value = skinsCatalog.characters[playtestInputs.character.value].defaultSkinId;
+
+for (const input of Object.values(playtestInputs)) {
+  input.addEventListener("change", () => {
+    syncPlaytestSummary();
+    const options = Object.fromEntries(
+      Object.entries(playtestInputs).map(([key, field]) => [
+        key,
+        field.type === "checkbox" ? field.checked : field.value,
+      ]),
+    );
+    writeJson(() => localStorage, PLAYTEST_KEY, options);
+  });
+}
+
+if (
+  !skinsCatalog.characters[playtestInputs.character.value].skins.some(
+    (s) => s.id === playtestInputs.skin.value,
+  )
+)
+  playtestInputs.skin.value = skinsCatalog.characters[playtestInputs.character.value].defaultSkinId;
+
 syncPlaytestSummary();
-for (const id of ['playtest-formation', 'playtest-kind', 'playtest-character', 'grid']) syncToolbarSelect(id);
-// Bank Bust objects only exist on Bank Bust maps.
-function syncAddKinds(){const bank=!!map()?.objectiveLayout?.bankBust,select=$('add-kind');$('playtest-formation').hidden=mapArena(map())?.modeId!=='duels';syncToolbarSelect('playtest-formation');syncPlaytestSummary();for(const option of select.querySelectorAll('[data-bank-bust]'))option.hidden=option.disabled=!bank;if(select.selectedOptions[0]?.disabled)select.value='platform';syncToolbarSelect('add-kind',{rebuild:true});}
-$('map-select').onchange=()=>{const leaving=dirty()?documentData.label:null;loadMap(Number($('map-select').value)).then(()=>{if(leaving)status(`Your unsaved edits to ${leaving} are kept as a draft. Open it again to continue.`);});};$('search').oninput=renderBrowser;$('camera-preview').onclick=()=>scene?.setCameraPreview(!cameraPreview);
-$('save-state').onclick=showUnsavedChanges;
-$('add').onclick=()=>addObject();$('save').onclick=save;$('export').onclick=download;$('import').onclick=importDialog;$('new-map').onclick=newMapDialog;
-$('undo').onclick=()=>undo();$('redo').onclick=()=>undo(true);$('preview').onclick=()=>setPreview(!preview);$('fit').onclick=()=>scene?.fit();$('zoom-in').onclick=()=>scene?.zoomBy(1.2);$('zoom-out').onclick=()=>scene?.zoomBy(1/1.2);
-document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{activeTab=b.dataset.tab;renderInspector();});
-const ARROWS={arrowleft:[-1,0],arrowright:[1,0],arrowup:[0,-1],arrowdown:[0,1]};
-function nudge(dx,dy){
-  const rows=allRows(map()).filter(r=>selectedIds.has(r.id));if(!rows.length)return;
+
+for (const id of ["playtest-formation", "playtest-kind", "playtest-character", "grid"])
+  syncToolbarSelect(id);
+
+$("map-select").onchange = () => {
+  const leaving = dirty() ? editor.documentData.label : null;
+  loadMap(Number($("map-select").value)).then(() => {
+    if (leaving)
+      status(`Your unsaved edits to ${leaving} are kept as a draft. Open it again to continue.`);
+  });
+};
+
+$("search").oninput = renderBrowser;
+
+$("camera-preview").onclick = () => editor.scene?.setCameraPreview(!editor.cameraPreview);
+
+$("save-state").onclick = showUnsavedChanges;
+
+$("add").onclick = () => addObject();
+
+$("save").onclick = save;
+
+$("export").onclick = download;
+
+$("import").onclick = importDialog;
+
+$("new-map").onclick = newMapDialog;
+
+$("undo").onclick = () => undo();
+
+$("redo").onclick = () => undo(true);
+
+$("preview").onclick = () => setPreview(!editor.preview);
+
+$("fit").onclick = () => editor.scene?.fit();
+
+$("zoom-in").onclick = () => editor.scene?.zoomBy(1.2);
+
+$("zoom-out").onclick = () => editor.scene?.zoomBy(1 / 1.2);
+
+document.querySelectorAll("[data-tab]").forEach(
+  (b) =>
+    (b.onclick = () => {
+      editor.activeTab = b.dataset.tab;
+      renderInspector();
+    }),
+);
+
+const ARROWS = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, -1], arrowdown: [0, 1] };
+
+function nudge(dx, dy) {
+  const rows = allRows(map()).filter((r) => editor.selectedIds.has(r.id));
+  if (!rows.length) return;
   // A spawn riding on a selected platform already moves with it.
-  transaction(()=>{const base=clone(map());for(const row of rows){if(row.kind==='spawn'&&selectedIds.has(row.value.anchorId))continue;const original=allRows(base).find(r=>r.id===row.id),pt=mapPoint(original,base);Object.assign(row.value,snapMove(map(),row,pt.x+dx,pt.y+dy,0,true).value);}},'Selection nudged',{merge:true});
+  transaction(
+    () => {
+      const base = clone(map());
+      for (const row of rows) {
+        if (row.kind === "spawn" && editor.selectedIds.has(row.value.anchorId)) continue;
+        const original = allRows(base).find((r) => r.id === row.id),
+          pt = mapPoint(original, base);
+        Object.assign(row.value, snapMove(map(), row, pt.x + dx, pt.y + dy, 0, true).value);
+      }
+    },
+    "Selection nudged",
+    { merge: true },
+  );
 }
-window.addEventListener('keydown',ev=>{if(window.__BB_SITE_DIALOG_OPEN||$('dialog').open||ev.target.closest?.('.bb-pixel-select'))return;const typing=/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName);const key=ev.key.toLowerCase(),ctrl=ev.metaKey||ev.ctrlKey;
-  if(key==='escape'){ev.preventDefault();if(typing){ev.target.blur();return;}if(menus.some(m=>m.open)){closeMenus();return;}setPreview(!preview);return;}
-  if(ctrl&&key==='s'){ev.preventDefault();if(!preview){ev.target.blur?.();save();}return;}
-  if(typing)return;
-  if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(key))ev.preventDefault();
-  if(key===' '&&!keyboard.has(' ')){keyboard.add(' ');scene?.setCursor('grab');return;}
-  keyboard.add(key);
-  if(preview)return;
-  if(key==='tab'&&selected()?.kind==='platform'){ev.preventDefault();handleMode=handleMode==='artwork'?'collision':'artwork';renderInspector();status(handleMode==='artwork'?'Artwork handles':'Collision handles');return;}
-  if(ctrl&&key==='z'){ev.preventDefault();undo(ev.shiftKey);}else if(ctrl&&key==='y'){ev.preventDefault();undo(true);}
-  else if(ctrl&&key==='a'){ev.preventDefault();selectedIds=new Set(allRows(map()).map(r=>r.id));selectedId=[...selectedIds].at(-1)||null;activeTab='selection';renderBrowser();renderInspector();}
-  else if(ctrl&&key==='d'){ev.preventDefault();duplicate();}
-  else if(ctrl||ev.altKey)return;
-  else if(key==='d'){ev.preventDefault();duplicate();}else if(key==='delete'||key==='backspace'){ev.preventDefault();remove();}
-  else if(key==='f'){scene?.fit();}else if(key==='c'){scene?.setCameraPreview(!cameraPreview);}
-  else if(key==='='||key==='+'){scene?.zoomBy(1.2);}else if(key==='-'||key==='_'){scene?.zoomBy(1/1.2);}
-  else if(key==='?'){shortcutsDialog();}
-  else if(ARROWS[key]){const step=ev.shiftKey?16:1;nudge(ARROWS[key][0]*step,ARROWS[key][1]*step);}
+
+window.addEventListener("keydown", (ev) => {
+  if (isSiteDialogOpen() || $("dialog").open || ev.target.closest?.(".bb-pixel-select")) return;
+  const typing = /INPUT|SELECT|TEXTAREA/.test(ev.target.tagName);
+  const key = ev.key.toLowerCase(),
+    ctrl = ev.metaKey || ev.ctrlKey;
+  if (key === "escape") {
+    ev.preventDefault();
+    if (typing) {
+      ev.target.blur();
+      return;
+    }
+    if (menus.some((m) => m.open)) {
+      closeMenus();
+      return;
+    }
+    setPreview(!editor.preview);
+    return;
+  }
+  if (ctrl && key === "s") {
+    ev.preventDefault();
+    if (!editor.preview) {
+      ev.target.blur?.();
+      save();
+    }
+    return;
+  }
+  if (typing) return;
+  if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) ev.preventDefault();
+  if (key === " " && !editor.keyboard.has(" ")) {
+    editor.keyboard.add(" ");
+    editor.scene?.setCursor("grab");
+    return;
+  }
+  editor.keyboard.add(key);
+  if (editor.preview) return;
+  if (key === "tab" && selected()?.kind === "platform") {
+    ev.preventDefault();
+    editor.handleMode = editor.handleMode === "artwork" ? "collision" : "artwork";
+    renderInspector();
+    status(editor.handleMode === "artwork" ? "Artwork handles" : "Collision handles");
+    return;
+  }
+  if (ctrl && key === "z") {
+    ev.preventDefault();
+    undo(ev.shiftKey);
+  } else if (ctrl && key === "y") {
+    ev.preventDefault();
+    undo(true);
+  } else if (ctrl && key === "a") {
+    ev.preventDefault();
+    editor.selectedIds = new Set(allRows(map()).map((r) => r.id));
+    editor.selectedId = [...editor.selectedIds].at(-1) || null;
+    editor.activeTab = "selection";
+    renderBrowser();
+    renderInspector();
+  } else if (ctrl && key === "d") {
+    ev.preventDefault();
+    duplicate();
+  } else if (ctrl || ev.altKey) return;
+  else if (key === "d") {
+    ev.preventDefault();
+    duplicate();
+  } else if (key === "delete" || key === "backspace") {
+    ev.preventDefault();
+    remove();
+  } else if (key === "f") {
+    editor.scene?.fit();
+  } else if (key === "c") {
+    editor.scene?.setCameraPreview(!editor.cameraPreview);
+  } else if (key === "=" || key === "+") {
+    editor.scene?.zoomBy(1.2);
+  } else if (key === "-" || key === "_") {
+    editor.scene?.zoomBy(1 / 1.2);
+  } else if (key === "?") {
+    shortcutsDialog();
+  } else if (ARROWS[key]) {
+    const step = ev.shiftKey ? 16 : 1;
+    nudge(ARROWS[key][0] * step, ARROWS[key][1] * step);
+  }
 });
 
-const viewportObserver=new ResizeObserver(()=>{if(game&&scene&&!preview)game.scale.resize($('viewport').clientWidth,$('viewport').clientHeight);});viewportObserver.observe($('viewport'));
-window.addEventListener('keyup',ev=>{const key=ev.key.toLowerCase();keyboard.delete(key);if(key===' '&&!drag)scene?.setCursor('default');});window.addEventListener('blur',()=>{keyboard.clear();scene?.pointerUp();});window.addEventListener('pointerup',()=>scene?.pointerUp());
-window.addEventListener('beforeunload',ev=>{if(dirty()){persistDraft();ev.preventDefault();ev.returnValue='';}});
-(async()=>{try{await refreshMaps();const query=new URLSearchParams(location.search);await loadMap(Number(query.get('map'))||mapList[0].id);if(['1v1','2v2'].includes(query.get('variant')))playtestInputs.formation.value=`duels-${query.get('variant')}`;syncPlaytestSummary();}catch(e){error(e);}})();
+const viewportObserver = new ResizeObserver(() => {
+  if (editor.game && editor.scene && !editor.preview)
+    editor.game.scale.resize($("viewport").clientWidth, $("viewport").clientHeight);
+});
+
+viewportObserver.observe($("viewport"));
+
+window.addEventListener("keyup", (ev) => {
+  const key = ev.key.toLowerCase();
+  editor.keyboard.delete(key);
+  if (key === " " && !editor.drag) editor.scene?.setCursor("default");
+});
+
+window.addEventListener("blur", () => {
+  editor.keyboard.clear();
+  editor.scene?.pointerUp();
+});
+
+window.addEventListener("pointerup", () => editor.scene?.pointerUp());
+
+window.addEventListener("beforeunload", (ev) => {
+  if (dirty()) {
+    persistDraft();
+    ev.preventDefault();
+    ev.returnValue = "";
+  }
+});
+
+(async () => {
+  try {
+    await refreshMaps();
+    const query = new URLSearchParams(location.search);
+    await loadMap(Number(query.get("map")) || editor.mapList[0].id);
+    if (["1v1", "2v2"].includes(query.get("variant")))
+      playtestInputs.formation.value = `duels-${query.get("variant")}`;
+    syncPlaytestSummary();
+  } catch (e) {
+    error(e);
+  }
+})();

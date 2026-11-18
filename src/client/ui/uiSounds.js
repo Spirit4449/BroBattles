@@ -1,3 +1,4 @@
+import { getPageScope } from "../lib/globals.cjs";
 import { getSettings, subscribeSettings } from "../site/preferences.js";
 import { shouldMuteClientDefaultLogs } from "../lib/netTestLogger.js";
 
@@ -5,7 +6,8 @@ import { shouldMuteClientDefaultLogs } from "../lib/netTestLogger.js";
  * Simple UI sound system
  * Usage:
  * 1. Auto: Buttons and links get a default cue; data-sound overrides it.
- * 2. Manual: import { playSound } from './lib/uiSounds.js'; playSound('click');
+ * 2. Manual: import playSound from the UI sounds module by its named export
+ *    and call playSound("click").
  */
 
 const sounds = {};
@@ -15,9 +17,20 @@ let uiSoundsInitialized = false;
 const clickContexts = [];
 let automaticClickCue = false;
 const clickCues = new Set(["click", "cursor2", "cursor3", "cursor4", "cursor5", "cancel", "cancel2"]);
-subscribeSettings(settings => {
-  for (const [sound, base] of activeSounds) sound.volume = base * settings.sfx;
-});
+let settingsSubscribed = false;
+
+function trackSoundSettings() {
+  if (settingsSubscribed) return;
+  settingsSubscribed = true;
+  const unsubscribe = subscribeSettings(settings => {
+    for (const [sound, base] of activeSounds) sound.volume = base * settings.sfx;
+  });
+  getPageScope()?.onDispose(() => {
+    unsubscribe();
+    settingsSubscribed = false;
+    activeSounds.clear();
+  });
+}
 const soundPath = "/assets/ui-sound/";
 
 // Default sound mappings (filename without extension)
@@ -113,6 +126,7 @@ export function preloadSound(soundName) { getOrLoadSound(soundName); }
 export function playSound(soundName, volume = 0.5, options = {}) {
   const source = getOrLoadSound(soundName);
   if (!source) return;
+  trackSoundSettings();
   const clickContext = automaticClickCue ? null : [...clickContexts].reverse().find(context => context.event.eventPhase !== 0);
   if (clickContext) {
     // Profile/slot handlers can call the same cue twice as a click bubbles.
@@ -128,7 +142,7 @@ export function playSound(soundName, volume = 0.5, options = {}) {
     if (!sound && pool.length < limit) {
       sound = source.cloneNode(true);
       const voice = sound;
-      window.__BB_PAGE_SCOPE__?.onDispose(() => { voice.pause(); voice.removeAttribute('src'); voice.load(); });
+      getPageScope()?.onDispose(() => { voice.pause(); voice.removeAttribute('src'); voice.load(); });
       pool.push(sound);
     }
     if (!sound) {
@@ -203,7 +217,7 @@ export function initUISounds() {
   };
   document.addEventListener("click", onClick, true);
   document.addEventListener("pointerover", onHover, true);
-  window.__BB_PAGE_SCOPE__?.onDispose(() => {
+  getPageScope()?.onDispose(() => {
     disposed = true;
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("pointerover", onHover, true);

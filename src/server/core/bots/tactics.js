@@ -1,12 +1,12 @@
 const { bankDecisionSteps } = require('./bankBust');
 const { basicAim, basicRange, hasClearShot, pressureAim } = require('../../../shared/combat/combat.js');
 const { nearestSurface, walkLimits, canStandAt, canWalkBetween, standOn, previewManeuver, routePoisonDamage } = require('./navigation');
-const { bounds, movementGeometry } = require('./physics');
+const { bounds, movementGeometry } = require('../physics/bodySolver');
 const { teamPosition } = require('./teamwork');
 const effects = require('../../../shared/combat/runtime/effects/effectManager.js');
 const { botProfile } = require('../../../shared/combat/characterProfiles.js');
 const { POWERUP_SHOCKWAVE_RADIUS, DEATH_DROP_PICKUP_RADIUS } = require('../../../shared/combat/matchConfig.js');
-const { powerupGap, powerupReachX } = require('../gameRoom/powerupContact');
+const { powerupGap, powerupReachX } = require('../../../shared/physics/powerupContact');
 
 const style = (player) => botProfile(player.char_class).spacing;
 const healthFraction = (p) => Math.max(0, Math.min(1, p.health / Math.max(1, p.maxHealth)));
@@ -201,7 +201,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
   if (!suddenDeath) {
     // A shockwave detonates immediately. If an opponent has clearly won the race,
     // concede it and leave the blast radius instead of feeding the pickup.
-    for (const pickup of brain.room._powerups?.values?.() || []) {
+    for (const pickup of brain.room.powerups?.values?.() || []) {
         yield;
       if (pickup.type !== 'shockwave' || Number(pickup.expiresAt || Infinity) <= now || pickup.y >= poisonY - 40) continue;
       const surface = nearestSurface(graph, pickup), route = yield* routeSteps(surface?.id);
@@ -217,7 +217,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
     }
 
     let bestPickup = null, value = -Infinity;
-    for (const pickup of brain.room._powerups?.values?.() || []) {
+    for (const pickup of brain.room.powerups?.values?.() || []) {
         yield;
       if (Number(pickup.activeAt || 0) > now || Number(pickup.expiresAt || Infinity) <= now || pickup.y >= poisonY - 40) continue;
       const destination = collectionDestination(brain, context, pickup, now);
@@ -255,7 +255,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
 
     // Loose rewards are a small, human-looking opportunity: nearby gems matter
     // more than coins, but danger and an active fight quickly outweigh either.
-    for (const drop of brain.room._deathDrops?.values?.() || []) {
+    for (const drop of brain.room.deathDrops?.values?.() || []) {
         yield;
       if (brain.retreating && enemies.some((enemy) => distance(p, enemy) < 650)) continue;
       if (!drop || drop.claimedBy || Number(drop.expiresAt || 0) <= now || drop.y >= poisonY - 40) continue;

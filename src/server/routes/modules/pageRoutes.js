@@ -1,3 +1,4 @@
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
 const path = require("path");
 const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const { getBanHoldFromRequest, setBanHoldCookies } = require("../../services/auth/banHold");
@@ -69,11 +70,11 @@ function registerPageRoutes({
   app.get("/signed-out", (req, res) => {
     res.sendFile(path.join(pageRoot, "Errors", "signed-out.html"));
   });
-  app.get("/signup", async (req, res) => {
+  app.get(API_PATHS.SIGNUP, async (req, res) => {
     if (await redirectIfBanHold(req, res)) return;
     res.sendFile(path.join(pageRoot, "signup.html"));
   });
-  app.get("/login", async (req, res) => {
+  app.get(API_PATHS.LOGIN, async (req, res) => {
     res.sendFile(path.join(pageRoot, "login.html"));
   });
   app.get("/profile", (_req, res) => {

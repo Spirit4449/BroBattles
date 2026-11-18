@@ -1,3 +1,4 @@
+const { resolveOwnedSelection, loadOwnedIds, grantCosmetic } = require("./cosmeticCollections");
 const { getPlayerCardsCatalog } = require("./playerCardsCatalog");
 
 async function syncPlayerCardOwnershipForUser(db, userRow) {
@@ -8,61 +9,35 @@ async function syncPlayerCardOwnershipForUser(db, userRow) {
     return { ownedCardIds: [], selectedCardId: defaultCardId };
   }
 
-  try {
-    return await db.withTransaction(async (_conn, q) => {
-      const userRows = await q(
-        "SELECT selected_card_id FROM users WHERE user_id = ? FOR UPDATE",
-        [userId],
-      );
-      if (!userRows[0]) {
-        return { ownedCardIds: [], selectedCardId: null };
-      }
-      if (defaultCardId) {
+  return await db.withTransaction(async (_conn, q) => {
+    const userRows = await q(
+      "SELECT selected_card_id FROM users WHERE user_id = ? FOR UPDATE",
+      [userId],
+    );
+    if (!userRows[0]) {
+      return { ownedCardIds: [], selectedCardId: null };
+    }
+    if (defaultCardId) {
+      await grantCosmetic(q, userId, "card", defaultCardId, "default");
+    }
+    const ownedIds = await loadOwnedIds(q, userId, "card");
+    const validIds = new Set(
+      (catalog?.cards || []).map((card) => String(card?.id || "")),
+    );
+    const ownedCardIds = ownedIds.filter(id => validIds.has(id));
+    const owned = new Set(ownedCardIds);
+    const selected = String(userRows[0].selected_card_id || "").trim();
+    const selectedCardId = resolveOwnedSelection(selected, owned, defaultCardId);
+    if (selected !== selectedCardId) {
+      if (selectedCardId) {
         await q(
-          "INSERT IGNORE INTO user_cards (user_id, card_id, source) VALUES (?, ?, 'default')",
-          [userId, defaultCardId],
+          "UPDATE users SET selected_card_id = ? WHERE user_id = ?",
+          [selectedCardId, userId],
         );
       }
-      const ownedRows = await q(
-        "SELECT card_id FROM user_cards WHERE user_id = ?",
-        [userId],
-      );
-      const validIds = new Set(
-        (catalog?.cards || []).map((card) => String(card?.id || "")),
-      );
-      const ownedCardIds = ownedRows
-        .map((row) => String(row.card_id || ""))
-        .filter((id) => id && validIds.has(id));
-      const owned = new Set(ownedCardIds);
-      let selectedCardId =
-        String(userRows[0].selected_card_id || "").trim() || null;
-      if (!selectedCardId || !owned.has(selectedCardId)) {
-        selectedCardId =
-          (defaultCardId && owned.has(defaultCardId) && defaultCardId) ||
-          ownedCardIds[0] ||
-          null;
-        if (selectedCardId) {
-          await q(
-            "UPDATE users SET selected_card_id = ? WHERE user_id = ?",
-            [selectedCardId, userId],
-          );
-        }
-      }
-      return { ownedCardIds, selectedCardId };
-    });
-  } catch (error) {
-    if (
-      error?.code === "ER_NO_SUCH_TABLE" ||
-      error?.code === "ER_BAD_FIELD_ERROR"
-    ) {
-      return {
-        ownedCardIds: defaultCardId ? [defaultCardId] : [],
-        selectedCardId: defaultCardId,
-        schemaMissing: true,
-      };
     }
-    throw error;
-  }
+    return { ownedCardIds, selectedCardId };
+  });
 }
 
 module.exports = { syncPlayerCardOwnershipForUser };

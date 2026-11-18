@@ -1,3 +1,4 @@
+const { clamp } = require("../../../shared/math.js");
 function mean(values) {
   if (!Array.isArray(values) || values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -24,9 +25,6 @@ function percentile(values, pct) {
   return sorted[low] * (1 - weight) + sorted[high] * weight;
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
 
 function format(value, digits = 1) {
   const num = Number(value);

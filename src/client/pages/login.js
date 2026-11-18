@@ -1,7 +1,14 @@
-import "../site/shell.js";
+import "../styles/ui-system.css";
+import { safeReturnPath } from "../account/emailVerificationUI.js";
+import { API_PATHS } from "../../shared/net/apiPaths.js";
+import { initSiteShell } from "../site/shell.js";
 // login.js
 import "../styles/accounts.css";
 import { wireFullscreenToggles } from "../ui/fullscreen.js";
+import { HttpError, postJson } from "../lib/http.js";
+import "../styles/ui-components.css";
+
+initSiteShell();
 
 wireFullscreenToggles();
 
@@ -17,15 +24,7 @@ const successMessage = document.getElementById("successMessage");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
 const requestedNext = new URLSearchParams(window.location.search).get("next");
-let safeNext = "/";
-if (requestedNext?.startsWith("/") && !requestedNext.includes("\\")) {
-  try {
-    const target = new URL(requestedNext, window.location.origin);
-    if (target.origin === window.location.origin) {
-      safeNext = `${target.pathname}${target.search}${target.hash}`;
-    }
-  } catch (_) {}
-}
+const safeNext = safeReturnPath(requestedNext, window.location.origin);
 
 // Accessibility for live messages
 errorMessage.setAttribute("role", "alert");
@@ -80,21 +79,13 @@ form.addEventListener("submit", async (e) => {
   setLoading(true);
 
   try {
-    const resp = await fetch("/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin", // include cookies
-      body: JSON.stringify({ username, password }),
+    const data = await postJson(API_PATHS.LOGIN, { username, password }, {
+      fallbackMessage: status => status === 401
+        ? "Invalid username or password."
+        : "Login failed. Please try again.",
     });
 
-    let data = null;
-    try {
-      data = await resp.json();
-    } catch {
-      // non-JSON or empty; let fallbacks below handle it
-    }
-
-    if (resp.ok && data?.success) {
+    if (data?.success) {
       showSuccess("Logged in! Redirecting…");
       // quick pause so cookies settle and users see feedback
       setTimeout(() => {
@@ -103,21 +94,14 @@ form.addEventListener("submit", async (e) => {
       return;
     }
 
-    if (resp.status === 403 && (data?.banned || data?.redirect === "/banned")) {
+    showError(data?.error || "Login failed. Please try again.");
+  } catch (error) {
+    if (error.status === 403 && (error.payload?.banned || error.payload?.redirect === "/banned")) {
       window.location.href = "/banned";
       return;
     }
 
-    // Map server errors → friendly message
-    let msg =
-      data?.error ||
-      (resp.status === 401
-        ? "Invalid username or password."
-        : "Login failed. Please try again.");
-
-    showError(msg);
-  } catch {
-    showError("Network error. Please check your connection and try again.");
+    showError(error instanceof HttpError ? error.message : "Network error. Please check your connection and try again.");
   } finally {
     setLoading(false);
   }

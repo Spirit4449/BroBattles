@@ -1,9 +1,9 @@
+import { clamp } from "../../../../shared/math.js";
 import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
 import { sweep } from "../../../../shared/characters/gloopProjectile";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
-import { fillPixelBlob, fillPixelEllipse, PIXEL_FX_SIZE, rasterizePixelBlob } from "../../powerups/pixelShapes.js";
+import { fillPixelBlob, fillPixelEllipse, PIXEL_FX_SIZE, rasterizePixelBlob } from "../../scene/fx/pixelShapes.js";
 
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const random = (a, b) => a + Math.random() * (b - a);
 const COLORS = [0x45d4cc, 0x2ca7b2, 0x0a50d0, 0xb5f3dc];
 // The ink line around Gloop's body sprite; the ball and bud carry it too.

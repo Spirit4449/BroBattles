@@ -1,7 +1,12 @@
+// CommonJS keeps these mechanics directly loadable by the Node test suite.
 // Directional throw poses and the hand-to-flight handoff of the basic shuriken.
 // Presentation only: the flight itself (when it fires, its aim, path, hits and
 // damage) is untouched. `throw` in animation-settings.json describes the baked
 // poses; sheets without it keep the single forward throw and show the star at once.
+
+const { characterDefinitions } = require("../../../../shared/characters/index.js");
+const { key: NAME } = characterDefinitions.ninja;
+
 const settings = require('../../../../../public/assets/ninja/animation-settings.json');
 const { aimElevation, nearestAimPose } = require('../shared/aimPose');
 
@@ -20,7 +25,7 @@ function beginThrow(sprite, angle, now = performance.now(), config = settings.th
   // Every player carries its texture key, the default skin's being 'ninja'
   // itself; only other skins keep their own single throw.
   const texture = sprite._bbSkinTextureKey || sprite.texture?.key;
-  if (!pose || (texture && texture !== 'ninja')) return null;
+  if (!pose || (texture && texture !== NAME)) return null;
   sprite._ninjaThrow = { startedAt: now, releaseMs: config.releaseMs, blendMs: config.blendMs,
     startScale: config.startScale, hand: pose.hand };
   return pose.key;

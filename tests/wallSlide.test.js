@@ -6,7 +6,7 @@ const {
   applyWallSlide,
   resolveWallSlideFlipX,
 } = require('../src/client/game/players/wallMovement');
-const { stepBody } = require('../src/server/core/bots/physics');
+const { stepBody } = require('../src/server/core/physics/bodySolver');
 
 function localSlide(overrides = {}) {
   const player = {

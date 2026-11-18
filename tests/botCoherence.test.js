@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
 const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
 const { buildGraph, findRoute, standOn, safeWalkDirection, walkLimits, canStandAt } = require('../src/server/core/bots/navigation');
-const { stepBody } = require('../src/server/core/bots/physics');
+const { stepBody } = require('../src/server/core/physics/bodySolver');
 const { difficultyForTrophies } = require('../src/server/core/bots/config');
 const { createBotParticipants, BOT_NAMES } = require('../src/server/core/bots/identity');
 const { chooseDecision, preferredRange } = require('../src/server/core/bots/tactics');
@@ -109,7 +109,7 @@ test('allied bots yield an ordinary pickup to the teammate already collecting it
   const [p, enemy, ally] = h.players, brain = h.room.botControllers.get(p.participantId);
   h.place(p, 1050); h.place(ally, 1080); h.place(enemy, 1450);
   const pickup = { id: 42, type: 'shield', x: 1200, y: p.y, activeAt: time.now(), expiresAt: time.now() + 10000 };
-  h.room._powerups.set(pickup.id, pickup);
+  h.room.powerups.set(pickup.id, pickup);
   const other = h.room.botControllers.get(ally.participantId);
   other.decision = { mode: 'pickup', pickupId: 42, goal: pickup };
   const context = brain.context({}, time.now());
@@ -148,9 +148,9 @@ for (const character of ['thorg', 'ozzy']) test(`${character} actually collects 
   p.health = p.maxHealth * 0.2;
   brain.openingUntil = 0;
   h.room._lastPowerupSpawnAt = time.now();
-  h.room._powerups.set(50, { id: 50, type: 'health', x: 1150, y: 125.15, activeAt: time.now(), expiresAt: time.now() + 15000 });
-  for (let i = 0; i < 300 && h.room._powerups.has(50); i++) { time.step(h); h.room._tickPowerups(); }
-  assert.equal(h.room._powerups.has(50), false);
+  h.room.powerups.set(50, { id: 50, type: 'health', x: 1150, y: 125.15, activeAt: time.now(), expiresAt: time.now() + 15000 });
+  for (let i = 0; i < 300 && h.room.powerups.has(50); i++) { time.step(h); h.room._tickPowerups(); }
+  assert.equal(h.room.powerups.has(50), false);
   assert.equal(p.health, p.maxHealth);
   assert.equal(brain.metrics.unforcedFalls, 0);
 });
@@ -187,7 +187,7 @@ test('unreachable loot and an obstructed last-seen point cannot replace a valid 
   const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
   h.place(p, 980);
   brain.lastSeen = { ...h.players[1], x: 1150, y: p.y, platformId: 'p0', grounded: true, at: time.now() };
-  h.room._deathDrops.set(90, { id: 90, type: 'coin', x: 1150, y: p.y, claimedBy: null, expiresAt: time.now() + 15000 });
+  h.room.deathDrops.set(90, { id: 90, type: 'coin', x: 1150, y: p.y, claimedBy: null, expiresAt: time.now() + 15000 });
   const context = brain.context({}, time.now());
   const decision = chooseDecision(brain, context, null, [], time.now());
   assert.notEqual(decision.mode, 'loot');
@@ -209,7 +209,7 @@ test('a dying bot avoids crossing its pursuer even when the far side offers more
   brain.decision = chooseDecision(brain, context, enemy, [enemy], time.now());
   assert.equal(brain.decision.mode, 'retreat');
   assert.ok(brain.decision.goal.x < p.x, 'escapes on its current side of the pursuer');
-  h.room._powerups.set(99, { id: 99, type: 'health', x: 1000, y: p.y, activeAt: time.now(), expiresAt: time.now() + 10000 });
+  h.room.powerups.set(99, { id: 99, type: 'health', x: 1000, y: p.y, activeAt: time.now(), expiresAt: time.now() + 10000 });
   for (const x of [780, 740, 700]) {
     enemy.x = x;
     brain.decision = chooseDecision(brain, context, enemy, [enemy], time.now());
@@ -291,6 +291,20 @@ test('sudden-death tactics trade a hazardous retreat against a charging opponent
   assert.equal(safe.goal.surfaceId, shelf.id, 'keeps dry ground when the opponent is not pressuring it');
 });
 
+test('Duels bot gas forecasts use the room regulation clock and authoritative rising level', t => {
+  const { matchDurationMs } = require('../src/server/core/gameRoom/timerManager');
+  const time = clock(t);
+  const { room, players } = makeRoom();
+  t.after(() => room.cleanup());
+  const brain = room.botControllers.get(players[0].participantId);
+  const elapsed = 3000;
+  room.suddenDeathActive = true;
+  room.loopStartWallTime = time.now() - matchDurationMs(room) - elapsed;
+  const context = brain.context({}, time.now());
+  assert.equal(context.poisonY, room.computePoisonY(elapsed));
+  assert.equal(context.poisonAt(5000), room.computePoisonY(elapsed + 5000));
+});
+
 for (const character of characters) {
   test(`${character} keeps pursuing distant opponents when sudden death begins`, (t) => {
     const time = clock(t), h = makeRoom({ characters: [character, 'ninja'], trophies: 2000 });
@@ -301,8 +315,8 @@ for (const character of characters) {
     h.room.geometry = { ...h.room.geometry, colliders: [floor] };
     h.place(p, 700, floor); h.place(enemy, 1900, floor);
     h.room.botControllers.delete(enemy.participantId);
-    h.room._suddenDeathActive = true;
-    h.room._loopStartWallTime = time.now() - h.room.gameMode.getMatchDurationMs();
+    h.room.suddenDeathActive = true;
+    h.room.loopStartWallTime = time.now() - require("../src/server/core/gameRoom/timerManager").matchDurationMs(h.room);
     brain.random = () => 0.5;
     const context = brain.context({}, time.now());
     const normal = chooseDecision(brain, { ...context, poisonY: Infinity, poisonAt: () => Infinity }, enemy, [enemy], time.now());
@@ -321,9 +335,9 @@ for (const map of [1, 2, 3]) {
     const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
     h.place(p, map === 2 ? 980 : 1150);
     const normal = brain.context({}, time.now());
-    h.room._suddenDeathActive = true;
+    h.room.suddenDeathActive = true;
     let level = 101;
-    h.room._computePoisonY = () => level;
+    h.room.computePoisonY = () => level;
     assert.equal(brain.context({}, time.now()).gasSaturated, false);
     for (level of [100, 99, 0]) {
       const saturated = brain.context({}, time.now());

@@ -387,9 +387,13 @@ window.htmlSmoke = {
       info.click();
       const offerPreview = document.querySelector('dialog.player-card-preview');
       check(offerPreview?.open, 'info button did not open card preview');
+      const closed = new Promise(resolve => offerPreview.addEventListener('close', resolve, { once: true }));
       offerPreview.querySelector('button').click();
-      await tick(50);
-    } finally { shop.close(); window.fetch = originalFetch; }
+      await closed;
+      check(!offerPreview.isConnected, 'shop preview did not clean up');
+    } finally {
+      try { await shop.close(); } finally { window.fetch = originalFetch; }
+    }
     const rewardHost = document.createElement('div'); document.body.append(rewardHost);
     const rewardState = { overlay: rewardHost };
     const rewards = createRewardPresentation({ state: rewardState, updateWallet() {} });
@@ -511,7 +515,7 @@ window.htmlSmoke = {
     check(gloopCard && !gloopCard.classList.contains('locked'), 'claimed Gloop remained locked');
     check(!gloopCard.querySelector('.character-card-lock-overlay'), 'claimed Gloop retained chains');
     check(gloopCard.querySelector('.character-card-level'), 'claimed Gloop did not show his level');
-    window.__closeCharacterSelect();
+    getSharedSelectionPopupShell().closeButton.click();
     await skinRefresh;
     results.push('Trophy Road Gloop unlock refreshes the closed character chooser');
     check(!window.injected, "HTML injection executed");

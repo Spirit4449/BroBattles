@@ -1,10 +1,12 @@
-import './shell';
+import '../styles/ui-system.css';
+import { initSiteShell } from "./shell.js";
 import '../styles/chat.css';
 import '../styles/friends.css';
 import '../styles/titles.css';
 import '../styles/characterSelect.css';
 import '../styles/levelBadge.css';
 import './pages.css';
+import '../styles/ui-components.css';
 import { initializeAboutReel } from './aboutReel.mjs';
 import { initializeAboutBros } from './aboutBros.mjs';
 import { initializeSiteMotion } from './siteMotion.mjs';
@@ -13,6 +15,8 @@ import { initializeAboutCosmetics } from './aboutCosmetics.mjs';
 import { initializeAboutFriends } from './aboutFriends.mjs';
 import { initializeSupportPage } from './supportUI';
 import { initializeHelpSearch } from './helpSearch';
+
+initSiteShell();
 initializeSupportPage();
 initializeHelpSearch();
 initializeAboutReel();

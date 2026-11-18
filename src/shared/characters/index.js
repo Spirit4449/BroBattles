@@ -1,13 +1,14 @@
+const { deepFreeze } = require('../deepFreeze');
 // Pure content registry: safe to import from the browser, server, and tools.
-const definitions = [
+const definitions = deepFreeze([
   require('./ninja.json'),
   require('./thorg.json'),
   require('./draven.json'),
   require('./ozzy.json'),
   require('./sparrow.json'),
   require('./gloop.json'),
-];
-const characterDefinitions = Object.fromEntries(definitions.map(definition => [definition.key, definition]));
+]);
+const characterDefinitions = Object.freeze(Object.fromEntries(definitions.map(definition => [definition.key, definition])));
 const characterStats = Object.fromEntries(definitions.map(definition => [definition.key, definition.stats]));
 const characterFrames = Object.fromEntries(definitions.map(definition => [definition.key, definition.frame]));
 const duckFrameCells = Object.fromEntries(definitions.map(definition => [definition.key, definition.duckFrame]));

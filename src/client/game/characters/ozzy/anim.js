@@ -1,6 +1,9 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { createAnimationBuilder } from '../shared/animationBuilder';
+
+const { key: NAME } = characterDefinitions.ozzy;
+
 export function animations(scene) {
-  const NAME = "ozzy";
   if (!scene?.textures?.exists(NAME)) return;
   const { make: ensureAnim, findFrames } = createAnimationBuilder(scene, NAME);
 

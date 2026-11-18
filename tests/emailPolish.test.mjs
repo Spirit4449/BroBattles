@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCooldown,safeReturnPath,wireCodeInputs} from '../src/client/account/emailVerificationUI.js';
+import {parseHTML} from 'linkedom';
+import verificationPolicy from '../src/shared/social/verificationCode.js';
+import {codeInputMarkup,createCooldown,safeReturnPath,wireCodeInputs} from '../src/client/account/emailVerificationUI.js';
 import cooldownModule from '../src/server/services/email/emailCooldown.js';
 const {emailCooldown}=cooldownModule;
 
@@ -32,4 +34,13 @@ test('OTP supports full paste from any cell, navigation, and submit',()=>{
   inputs[2].handlers.keydown({key:'ArrowLeft',preventDefault(){}});assert.equal(focused,1);
   inputs[5].handlers.keydown({key:'Enter',preventDefault(){}});assert.equal(submitted,1);
   code.clear();assert.equal(code.value(),'');
+});
+
+test('verification markup renders the policy number of cells with one-time-code autofill', () => {
+  const { document } = parseHTML(`<div id="code-inputs">${codeInputMarkup()}</div>`);
+  const inputs = [...document.querySelectorAll('input')];
+  assert.equal(inputs.length, verificationPolicy.VERIFICATION_CODE_LENGTH);
+  assert.equal(inputs[0].getAttribute('autocomplete'), 'one-time-code');
+  assert.equal(Number(inputs[0].getAttribute('maxlength')), inputs.length);
+  assert.ok(inputs.slice(1).every(input => input.getAttribute('maxlength') === '1'));
 });

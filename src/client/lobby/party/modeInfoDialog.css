@@ -96,11 +96,11 @@
   align-self: start;
   aspect-ratio: 4 / 3;
   overflow: hidden;
-  background: var(--bb-surface-1, #0b1629);
+  background: var(--bb-surface-1, var(--bb-surface-1));
   box-shadow:
-    0 0 0 3px var(--bb-ink, #03060b),
-    0 0 0 5px var(--bb-border, #385478),
-    0 6px 0 5px var(--bb-ink, #03060b);
+    0 0 0 3px var(--bb-ink, var(--bb-ink)),
+    0 0 0 5px var(--bb-border, var(--bb-border)),
+    0 6px 0 5px var(--bb-ink, var(--bb-ink));
 }
 
 .mode-info-art img {
@@ -137,8 +137,8 @@
   font-family: var(--bb-font-display, "Press Start 2P", monospace);
   font-size: 9px;
   text-transform: uppercase;
-  background: var(--bb-gold, #efc86e);
-  box-shadow: 0 0 0 2px var(--bb-ink, #03060b), 0 3px 0 2px var(--bb-ink, #03060b);
+  background: var(--bb-gold, var(--bb-gold));
+  box-shadow: 0 0 0 2px var(--bb-ink, var(--bb-ink)), 0 3px 0 2px var(--bb-ink, var(--bb-ink));
 }
 
 .mode-info-copy {
@@ -159,7 +159,7 @@
 
 .mode-info-copy p {
   margin: 0 0 14px;
-  color: var(--bb-text-soft, #c9d6e8);
+  color: var(--bb-text-soft, var(--bb-text-soft));
   font-size: 15px;
   font-weight: 600;
   line-height: 1.6;

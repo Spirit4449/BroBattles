@@ -5,18 +5,45 @@ const babel = require('@babel/core');
 
 const compiled = new Map();
 
-// Compile each real browser module once per worker, but give every fixture a
-// fresh VM and explicit imports/globals so state cannot leak between tests.
-function loadClientModule(file, globals = {}) {
-  const filename = path.resolve(file);
+function compile(filename) {
   if (!compiled.has(filename)) {
     compiled.set(filename, babel.transformSync(fs.readFileSync(filename, 'utf8'), {
       babelrc: false, configFile: false,
       presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
     }).code);
   }
+  return compiled.get(filename);
+}
+
+// Compile each real browser module once per worker, but give every fixture a
+// fresh VM and explicit imports/globals so state cannot leak between tests.
+function loadClientModule(file, globals = {}, { require: localRequire = globals.require } = {}) {
+  const filename = path.resolve(file);
   const exports = globals.exports || {};
-  vm.runInNewContext(compiled.get(filename), { ...globals, exports });
+  const context = { ...globals, exports };
+  context.require = specifier => {
+    if (/\/shared\/(?:net\/(?:apiPaths|socketEvents)|social\/textRules|combat\/(?:ammoClock|attackDelivery|matchConfig)|characters\/(?:index|characterStats)|math|format|bankBustSettings|matchIntroTiming|maps\/duelVariants)\.js$/.test(specifier)) {
+      return require(path.resolve(path.dirname(filename), specifier));
+    }
+    if (/\/shared\/catalogs\/[\w.]+\.cjs$/.test(specifier)) {
+      return require(path.resolve(path.dirname(filename), specifier));
+    }
+    if (/\/(?:playerLookup|domMotion|attackDebugDraw|remoteActionPresentation|playerBodyGeometry)$/.test(specifier)) {
+      return loadClientModule(path.resolve(path.dirname(filename), specifier + '.js'), { ...globals, exports: {} });
+    }
+    if (/^(?:\.\.\/)+lib\/http\.js$/.test(specifier)) {
+      return loadClientModule(path.resolve(__dirname, '../../src/client/lib/http.js'), { ...globals, exports: {} });
+    }
+    if (specifier.endsWith('globals.cjs')) {
+      const module = { exports: {} };
+      vm.runInNewContext(compile(path.resolve(path.dirname(filename), specifier)), { ...globals, module, exports: module.exports });
+      return module.exports;
+    }
+    if (localRequire) return localRequire(specifier);
+    throw new Error(`Unexpected import in ${file}: ${specifier}`);
+  };
+  if (localRequire?.context) context.require.context = localRequire.context;
+  vm.runInNewContext(compile(filename), context);
   return exports;
 }
 
@@ -33,12 +60,6 @@ function createClientModuleGraph({ globals = {}, imports = {} } = {}) {
     if (filename.endsWith('.json')) return require(filename);
     const module = { exports: {} };
     cache.set(filename, module);
-    if (!compiled.has(filename)) {
-      compiled.set(filename, babel.transformSync(fs.readFileSync(filename, 'utf8'), {
-        babelrc: false, configFile: false,
-        presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-      }).code);
-    }
     const localRequire = specifier => {
       if (Object.hasOwn(imports, specifier)) return imports[specifier];
       const target = specifier.startsWith('.') ? path.resolve(path.dirname(filename), specifier) : specifier;
@@ -50,7 +71,7 @@ function createClientModuleGraph({ globals = {}, imports = {} } = {}) {
       if (!specifier.startsWith('.')) return require(specifier);
       return load(target);
     };
-    const execute = vm.runInContext(`(function(exports, require, module, __filename, __dirname) {\n${compiled.get(filename)}\n})`, context, { filename });
+    const execute = vm.runInContext(`(function(exports, require, module, __filename, __dirname) {\n${compile(filename)}\n})`, context, { filename });
     execute(module.exports, localRequire, module, filename, path.dirname(filename));
     return module.exports;
   }

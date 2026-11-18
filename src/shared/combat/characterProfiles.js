@@ -141,6 +141,5 @@ module.exports = {
   DEFAULT_SPECIAL_LOCK_MS,
   botProfile,
   DEFAULT_SPECIAL_RANGE,
-  hasBotProfile,
   healthFraction,
 };

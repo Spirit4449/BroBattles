@@ -1,3 +1,4 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { actionElapsedMs, playSpriteAnimation } from "../shared/animationState.js";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { playOzzySuperCast } from "./superCast";
@@ -6,20 +7,15 @@ import { playOzzySuperCast } from "./superCast";
 // the teammate beams arrive separately with `ozzy:arcane-surge`. The owner's
 // pose already started on the key press, so this continues it rather than
 // restarting it, and the cast effect joins at the pose's current frame.
-export function perform(
-  scene,
-  player,
-  playersInTeam,
-  opponentPlayers,
-  username,
-  gameId,
-  isOwner = false,
-) {
+
+const { key: NAME } = characterDefinitions.ozzy;
+
+export function perform({ scene, player, isOwner = false }) {
   if (!scene || !player) return;
   playSpriteAnimation({
     scene,
     sprite: player,
-    character: "ozzy",
+    character: NAME,
     logical: "special",
     fallback: "throw",
     remote: !isOwner,

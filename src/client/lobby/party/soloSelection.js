@@ -1,11 +1,11 @@
+import { getUser, updateUser } from "../session.mjs";
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
+import { SOLO_MAP_STORAGE_KEY, SOLO_MODE_ID_STORAGE_KEY, SOLO_MODE_STORAGE_KEY, SOLO_MODE_VARIANT_STORAGE_KEY } from "../../../shared/storageKeys.js";
+export { SOLO_MAP_STORAGE_KEY, SOLO_MODE_ID_STORAGE_KEY, SOLO_MODE_STORAGE_KEY, SOLO_MODE_VARIANT_STORAGE_KEY };
 // Solo (no party) lobby selection, remembered in localStorage for guests and
 // saved to the account for signed-in players.
 import { normalizeGameSelection, selectionToLegacyMode } from "../../lib/gameSelectionCatalog.js";
-
-export const SOLO_MODE_STORAGE_KEY = "bb_solo_mode";
-export const SOLO_MODE_ID_STORAGE_KEY = "bb_solo_mode_id";
-export const SOLO_MODE_VARIANT_STORAGE_KEY = "bb_solo_mode_variant_id";
-export const SOLO_MAP_STORAGE_KEY = "bb_solo_map";
+import { postJson } from "../../lib/http.js";
 
 function canPersistSoloSelections() {
   try {
@@ -18,7 +18,7 @@ function canPersistSoloSelections() {
   }
 }
 
-export function setSoloSelection(key, value) {
+function setSoloSelection(key, value) {
   if (!canPersistSoloSelections()) return;
   try {
     localStorage.setItem(key, String(value));
@@ -35,40 +35,31 @@ export function getSoloSelection(key) {
 }
 
 export function getSavedSelectionFromUserData() {
-  const selection = window.__BRO_BATTLES_USERDATA__?.preferred_selection;
+  const selection = getUser()?.preferred_selection;
   if (!selection || typeof selection !== "object") return null;
   return normalizeGameSelection(selection);
 }
 
-export async function persistSoloSelection(selection) {
-  const normalized = normalizeGameSelection(selection);
-  setSoloSelection(SOLO_MODE_ID_STORAGE_KEY, normalized.modeId);
+export function rememberSoloSelection(selection, legacyMode = selectionToLegacyMode(selection)) {
+  setSoloSelection(SOLO_MODE_ID_STORAGE_KEY, selection.modeId);
   setSoloSelection(
     SOLO_MODE_VARIANT_STORAGE_KEY,
-    normalized.modeVariantId || "",
+    selection.modeVariantId || "",
   );
-  setSoloSelection(SOLO_MODE_STORAGE_KEY, selectionToLegacyMode(normalized));
-  if (normalized.mapId != null) {
-    setSoloSelection(SOLO_MAP_STORAGE_KEY, normalized.mapId);
+  setSoloSelection(SOLO_MODE_STORAGE_KEY, legacyMode);
+  if (selection.mapId != null) {
+    setSoloSelection(SOLO_MAP_STORAGE_KEY, selection.mapId);
   }
+}
 
+export async function persistSoloSelection(selection) {
+  const normalized = normalizeGameSelection(selection);
+  rememberSoloSelection(normalized);
   try {
-    const response = await fetch("/selection-preferences", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-      body: JSON.stringify({ selection: normalized }),
+    const data = await postJson(API_PATHS.SELECTION_PREFERENCES, { selection: normalized }, {
+      fallbackMessage: "Failed to save selection",
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data?.error || "Failed to save selection");
-    }
-    if (window.__BRO_BATTLES_USERDATA__) {
-      window.__BRO_BATTLES_USERDATA__.preferred_selection =
-        normalizeGameSelection(data?.selection || normalized);
-    }
+    updateUser({ preferred_selection: normalizeGameSelection(data?.selection || normalized) });
   } catch (error) {
     console.warn("[party] failed to persist solo selection", {
       selection: normalized,

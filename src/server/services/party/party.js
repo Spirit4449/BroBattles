@@ -1,5 +1,6 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { recordPartyRoster } = require("./partyChatLog");
-const { capacityFromSelection } = require("../../lib/utils");
+const { capacityFromSelection } = require("./partyRules");
 const { normalizeSelectionFromRow } = require("../match/gameSelectionCatalog");
 const {
   normalizeSelectedSkinMap,
@@ -8,7 +9,7 @@ const {
 } = require("../cosmetics/skinsCatalog");
 const { getPlayersPerTeamForSelection } = require("../match/gameSelectionCatalog");
 const { resolveCharacterKey } = require("../../../shared/characters/characterStats.js");
-const { prunePartyBotSlots, clearPartyBotSlots } = require("./partyBotSlots");
+const { partyBotSlotsFor } = require("./partyBotSlots");
 
 async function selectPartyById(db, partyId) {
   const rows = await db.runQuery(
@@ -60,7 +61,7 @@ async function emitRoster(io, partyId, party, members, db = null, snapshot = {})
     };
   });
   const selection = normalizeSelectionFromRow(party || {});
-  const botSlots = prunePartyBotSlots(partyId, {
+  const botSlots = partyBotSlotsFor(io || db).prunePartyBotSlots(partyId, {
     teamSize: getPlayersPerTeamForSelection(selection),
     members: roster,
   });
@@ -69,7 +70,7 @@ async function emitRoster(io, partyId, party, members, db = null, snapshot = {})
     ? snapshot.ownerName
     : db ? await getPartyOwnerName(db, partyId) : null;
   recordPartyRoster(io, partyId, roster);
-  io.to(`party:${partyId}`).emit("party:members", {
+  io.to(`party:${partyId}`).emit(SOCKET_EVENTS.PARTY_MEMBERS, {
     partyId,
     ownerName,
     allowMemberSelection: Number(party?.allow_member_selection ?? 1) === 1,
@@ -90,7 +91,7 @@ async function emitRoster(io, partyId, party, members, db = null, snapshot = {})
 
 async function emitPartyNotice(io, partyId, notice) {
   if (!partyId) return;
-  io.to(`party:${partyId}`).emit("party:notice", {
+  io.to(`party:${partyId}`).emit(SOCKET_EVENTS.PARTY_NOTICE, {
     partyId,
     type: String(notice?.type || "update"),
     actorName: String(notice?.actorName || "").trim(),
@@ -105,7 +106,7 @@ async function updateOrDeleteParty(io, db, partyId) {
   const party = await selectPartyById(db, partyId);
   if (!party) return true; // already gone
   if (!members || members.length === 0) {
-    clearPartyBotSlots(partyId);
+    partyBotSlotsFor(io || db).clearPartyBotSlots(partyId);
     await db.runQuery("DELETE FROM parties WHERE party_id = ?", [partyId]);
     return true;
   }

@@ -1,3 +1,5 @@
+const { logIgnored } = require("../../lib/logIgnored");
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 function createReadyCheckCoordinator({
   db,
   io,
@@ -7,6 +9,7 @@ function createReadyCheckCoordinator({
   gameHub,
 }) {
   const readyStates = new Map();
+  const pendingChecks = new Set();
 
   function startReadyCheck(matchId, userIds) {
     const deadline = Date.now() + 10_000;
@@ -51,7 +54,7 @@ function createReadyCheckCoordinator({
         );
         const ids = rows.map((r) => r.party_id);
         if (ids.length) await db.setPartiesStatus(ids, partyStatus.LIVE);
-      } catch (_) {}
+      } catch (error) { logIgnored("match live party state", error); }
 
       console.log(`[match:live] #${matchId}`);
 
@@ -66,7 +69,7 @@ function createReadyCheckCoordinator({
             console.log(`[match:live] cleaned stray tickets=${r.affectedRows}`);
           }
         }
-      } catch (_) {}
+      } catch (error) { logIgnored("match live ticket cleanup", error); }
 
       if (!gameHub) return;
 
@@ -85,7 +88,7 @@ function createReadyCheckCoordinator({
           if (!row.socket_id) continue;
           const socket = io.sockets.sockets.get(row.socket_id);
           if (socket) {
-            socket.emit("match:gameReady", { matchId });
+            socket.emit(SOCKET_EVENTS.MATCH_GAME_READY, { matchId });
           }
         }
       } catch (error) {
@@ -104,7 +107,12 @@ function createReadyCheckCoordinator({
       }
     };
 
-    state.timer = setInterval(() => { void check().catch((error) => console.warn("[ready] cancellation failed:", error.message)); }, 250);
+    state.timer = setInterval(() => {
+      if (state.checking) return;
+      const pending = check().catch(error => console.warn("[ready] cancellation failed:", error.message))
+        .finally(() => pendingChecks.delete(pending));
+      pendingChecks.add(pending);
+    }, 250);
     state.timer.unref?.();
     readyStates.set(matchId, state);
   }
@@ -116,6 +124,11 @@ function createReadyCheckCoordinator({
   }
 
   return {
+    async stop() {
+      for (const state of readyStates.values()) clearInterval(state.timer);
+      readyStates.clear();
+      await Promise.all(pendingChecks);
+    },
     isActive: (matchId) => readyStates.has(Number(matchId)),
     startReadyCheck,
     handleReadyAck,

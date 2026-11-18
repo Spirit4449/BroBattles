@@ -15,6 +15,11 @@ This guide covers the current single-process server, persistent state, recovery,
    `SECURE_COOKIES=true` for HTTPS. `.env.example` uses HTTP development settings;
    override them in production. Configure `TRUST_PROXY` with the actual proxy
    addresses/CIDRs only. With it unset, forwarded IP headers are ignored.
+   Set `ADMIN_USERS` to a comma-separated list of permanent account IDs
+   (preferred) or usernames. A blank list grants no administrative access.
+   Configuration is read at startup. Set `PORT` to an integer from 1 to 65535
+   and `BCRYPT_ROUNDS` to an integer from 4 to 31. Blank values use 3002 and
+   12 respectively. Restart the process after changing these settings.
 4. Keep `MATCH_RESULT_DIR` on persistent storage writable only by the game
    process. Its default is `data/match-results`. Preserve that directory across
    releases and when moving the server to another host.
@@ -68,10 +73,11 @@ must be retained for duplicate protection. Use sandbox events when verifying thi
 Production shares a 4-core Raspberry Pi with other services. `scripts/ops/pi-cpu-reserve.sh` keeps one core for the game: it confines every other pm2 app (with its child processes, at niceness 10), Docker containers, MariaDB, the desktop session and the Pi's other system services to cores 0–2 with a lower CPU weight, and leaves the game, nginx and tailscaled on every core. MariaDB keeps normal priority because the game queries it. It is idempotent and runs as root every minute from `/etc/cron.d/pi-cpu-reserve`, which catches pm2 apps restarted since the last run:
 
 ```
-* * * * * root nice -n 19 taskset -c 0-2 /home/nisch/Desktop/Game/scripts/ops/pi-cpu-reserve.sh >/dev/null 2>&1
+BRO_BATTLES_DIR=/path/to/BroBattles
+* * * * * root nice -n 19 taskset -c 0-2 "$BRO_BATTLES_DIR/scripts/ops/pi-cpu-reserve.sh" >/dev/null 2>&1
 ```
 
-The game inherits pm2's systemd unit, so restart pm2 with `sudo systemctl restart pm2-nisch` rather than from a login shell (which would put it in the confined user session); the script logs a warning to the journal if that happens. `pm2-logrotate` caps pm2 logs at 20 MB with five compressed copies.
+The script defaults to the owner of the deployed script, that user’s `.pm2` directory and the `pm2-<user>.service` unit. Set `BB_PM2_USER`, `PM2_HOME` or `BB_PM2_UNIT` in cron when the deployment uses different values. Restart PM2 through its systemd unit so the game inherits the reserved CPU set. Starting PM2 from a login shell places the game in the confined user session and triggers a journal warning. `pm2-logrotate` caps pm2 logs at 20 MB with five compressed copies.
 
 ## Limits and validation
 
@@ -119,7 +125,9 @@ of the configured schema and binds a temporary local port; build assets first.
 
 ## Persistent files and deployment payload
 
-Deploy `src/`, `content/`, generated `dist/`, package metadata and installed production dependencies. Keep `.env` and the cookie secret private. Map editing also needs writable `public/assets/` and its production copy; preserve uploaded revisions, `data/maps/` (or `BB_MAP_DIR`) and production map snapshots. Preserve `runtime-overrides.json` if you use admin configuration. Do not replace these runtime stores with an empty release directory.
+Deploy `src/`, `content/`, `public/assets/`, generated `dist/`, package metadata and installed production dependencies. The game serves the built client from `dist/`. The map repository also reads original art from `public/assets/` when validating a save or pinning a shipped map for its first match. Include `scripts/maps/`, `scripts/db/` and `migrations/` when performing the upgrades on the target host.
+
+Keep `.env` and the cookie secret private. Map editing needs a writable, persistent `data/maps/` (or `BB_MAP_DIR`) for publications, uploaded art, revision history and production match snapshots. Before upgrading an environment with legacy overrides, back up the map store with `public/assets/` and run `node scripts/maps/import-publications.cjs` while the old files are still present. Preserve `runtime-overrides.json` if you use admin configuration. Do not replace these runtime stores with an empty release directory.
 
 ## Security regression workflow
 

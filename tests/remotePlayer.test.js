@@ -5,6 +5,8 @@ const fs = require('node:fs');
 
 
 
+const { createRemoteMovementFx } = loadClientModule(require.resolve('../src/client/game/players/remoteMovementFx.js'), { require: () => ({}) });
+
 describe("Respawn synchronization", () => {
   function loadOpPlayer(onRespawn = () => {}) {
     const exports = {};
@@ -39,7 +41,7 @@ describe("Respawn synchronization", () => {
   test('a pending corpse-removal callback cannot hide a respawned opponent', () => {
     let respawnEffects = 0;
     const OpPlayer = loadOpPlayer(() => { respawnEffects++; });
-    const wrapper = Object.create(OpPlayer.prototype);
+    const wrapper = Object.assign(Object.create(OpPlayer.prototype), { movementFx: createRemoteMovementFx() });
     let corpseCallback;
     let timerRemoved = false;
     wrapper.scene = {
@@ -82,7 +84,7 @@ describe("Respawn synchronization", () => {
 
   test('a respawn leaves physics no stale previous body position to apply', () => {
     const OpPlayer = loadOpPlayer();
-    const wrapper = Object.create(OpPlayer.prototype);
+    const wrapper = Object.assign(Object.create(OpPlayer.prototype), { movementFx: createRemoteMovementFx() });
     wrapper.scene = { time: { delayedCall: () => ({ remove() {} }) }, sound: { play() {} } };
     wrapper.character = 'draven';
     wrapper.skinId = '';
@@ -134,7 +136,8 @@ describe("Loading presence", () => {
   }
 
   function remoteFighter() {
-    const wrapper = Object.create(loadOpPlayer().prototype);
+    const RemotePlayer = loadOpPlayer();
+    const wrapper = Object.assign(Object.create(RemotePlayer.prototype), { movementFx: createRemoteMovementFx() });
     Object.assign(wrapper, {
       opponent: displayObject(),
       opPlayerName: displayObject(),
@@ -171,7 +174,7 @@ describe("Loading presence", () => {
 describe("Remote duck geometry", () => {
   const Frame = require('phaser/src/textures/Frame');
   const Body = require('phaser/src/physics/arcade/Body');
-  const { characterBody } = require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
   const { spritePresentation } = require('../src/client/game/characters/shared/spritePresentation');
   const { DUCK_HEIGHT_RATIO } = require('../src/shared/physics/ducking');
   const { characterDefinitions } = require('../src/shared/characters');
@@ -250,4 +253,27 @@ describe("Remote duck geometry", () => {
     sprite._bbHudTopOffset = -35;
     assert.equal(remote.hudTopY(), 265);
   });
+});
+
+test('a remote starts with roster maximum health or level-scaled character health', () => {
+  const characterStats = require('../src/shared/characters/characterStats');
+  const { createRemotePlayer } = loadClientModule(
+    require.resolve('../src/client/game/players/remotePlayerFactory'),
+    { require: () => characterStats },
+  );
+  class RecordingPlayer {
+    constructor(options) {
+      this.maxHealthAtConstruction = options.maxHealth;
+    }
+  }
+  const roster = { char_class: 'thorg', level: 4, isBot: true };
+  const options = { Player: RecordingPlayer, roster, gameData: {}, spawnVersion: 2 };
+  const fallback = createRemotePlayer({}, options);
+  assert.equal(fallback.maxHealthAtConstruction, characterStats.getHealth('thorg', roster.level));
+  assert.equal(fallback.isBot, true);
+  assert.equal(fallback._spawnVersion, options.spawnVersion);
+
+  const matchHealth = fallback.maxHealthAtConstruction * 2;
+  const boosted = createRemotePlayer({}, { ...options, roster: { ...roster, stats: { health: matchHealth } } });
+  assert.equal(boosted.maxHealthAtConstruction, matchHealth);
 });

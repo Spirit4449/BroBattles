@@ -1,3 +1,5 @@
+const roomTransport = require('./helpers/roomTransport.js');
+const { createFakeIo } = require('./helpers/fakeIo');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { advanceSlimeball, sweep } = require('../src/shared/characters/gloopProjectile');
@@ -148,14 +150,14 @@ test('authoritative release publishes the same launch used for damage, its serve
   const owner = { participantId:'gloop-release',name:'Gloop',char_class:'gloop',isAlive:true,loaded:true,
     x:100,y:200,_lastWidth:150,_lastHeight:150 };
   const emitted=[];let release;
-  const room={status:'active',matchId:1,geometry:{colliders:[{left:600,right:610,top:100,bottom:500}], world: WORLD },
-    _simulationMono:5000,_tickId:10,FIXED_DT_MS:1000/60,
-    io:{to:()=>({emit:(_event,data)=>emitted.push(data)})},scheduleAction:fn=>{release=fn;}};
+  const room={ ...roomTransport,status:'active',matchId:1,geometry:{colliders:[{left:600,right:610,top:100,bottom:500}], world: WORLD },
+    simulationMono:5000,tickId:10,FIXED_DT_MS:1000/60,
+    io:createFakeIo({ onEmit: (_room, _event, data) => emitted.push(data) }),scheduleAction:fn=>{release=fn;}};
   const target={x:450,y:300};
   handleCharacterAction(room,owner,{type:'gloop-slimeball',id:'release-test',target},0);
   owner.x=125; // Movement during windup must not re-solve the committed trajectory.
   release();
-  const packet=emitted.at(-1).action, runtime=room._activeAttacks[0];
+  const packet=emitted.at(-1).action, runtime=room.activeAttacks[0];
   const expected=slimeLaunch({x:100,y:200,width:150,height:150},target,cfg);
   expected.start.x += 25;
   assert.ok(Math.abs(packet.start.x-expected.start.x)<1e-9&&Math.abs(packet.start.y-expected.start.y)<1e-9,JSON.stringify(packet.start));
@@ -210,14 +212,14 @@ test('release translates the preview with windup movement without changing its i
     const owner = { ...player, participantId:'gloop',name:'Gloop',char_class:'gloop',isAlive:true,loaded:true,
       _lastWidth:80,_lastHeight:100 };
     let release;
-    const room = {status:'active',matchId:1,geometry:{colliders:rects, world: WORLD },players:new Map([['gloop',owner]]),
-      FIXED_DT_MS:1000/120,io:{to:()=>({emit:()=>{}})},scheduleAction:fn=>{release=fn;}};
+    const room = { ...roomTransport,status:'active',matchId:1,geometry:{colliders:rects, world: WORLD },players:new Map([['gloop',owner]]),
+      FIXED_DT_MS:1000/120,io:createFakeIo(),scheduleAction:fn=>{release=fn;}};
     handleCharacterAction(room,owner,{type:'gloop-slimeball',id:'cast',start:aim.start,
       angle:aim.angle,speed:aim.speed,initialVy:aim.initialVy,target:aim.target,
       floorY:1000,worldMinX:-500,worldMaxX:1000},0);
     owner.x += 40;
     release();
-    const attack=room._activeAttacks[0];
+    const attack=room.activeAttacks[0];
     const showsBounce = aim.throwPreview.impacts.length > 1;
     for (let i = 0; i < 720 && !attack.done && (showsBounce || !attack.bounceCount); i++)
       tickRuntimeAttack(room, attack, i * room.FIXED_DT_MS);
@@ -231,7 +233,7 @@ test('slime hits only one overlapping enemy and broadcasts the terminal splat', 
   const owner={participantId:'owner',name:'Gloop',char_class:'gloop',team:'a',isAlive:true,loaded:true,x:0,y:100};
   const enemies=['one','two'].map(name=>({participantId:name,name,char_class:'gloop',team:'b',isAlive:true,loaded:true,x:80,y:100,_lastWidth:150,_lastHeight:150}));
   const hits=[],events=[];
-  const room={players:new Map([owner,...enemies].map(p=>[p.participantId,p])),FIXED_DT_MS:1000/120,
+  const room={ ...roomTransport,players:new Map([owner,...enemies].map(p=>[p.participantId,p])),FIXED_DT_MS:1000/120,
     geometry:{colliders:[], world: WORLD },handleHit:(_,hit)=>hits.push(hit),io:{to:()=>({emit:(event,data)=>events.push(data)})}};
   const attack=createRuntimeAttack(owner,{type:'gloop-slimeball-release',id:'single',start:{x:20,y:100},angle:0,speed:250,initialVy:0,floorY:1000},0);
   for(let i=0;i<120&&!attack.done;i++) tickRuntimeAttack(room,attack,i*room.FIXED_DT_MS);

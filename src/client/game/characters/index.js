@@ -1,7 +1,8 @@
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
 // src/client/game/characters/index.js
 import CHARACTER_MANIFEST from "./manifest";
-import { characterStats } from "../../../shared/characters/characterStats.js";
+import { setAttackDebugDraw } from "./shared/attackDebugDraw";
+import { characterStats, resolveCharacterKey } from "../../../shared/characters/characterStats.js";
 import {
   normalizeSkinId,
   buildCharacterSkinTextureKey,
@@ -270,13 +271,7 @@ export function getTextureKey(character, skinId = "") {
     return buildCharacterSkinTextureKey(character, normalizedSkinId);
   }
   const Cls = getCharacterClass(character);
-  // Prefer an explicit textureKey static, fallback to common "sprite"
-  return (
-    (Cls &&
-      (Cls.textureKey ||
-        (typeof Cls.getTextureKey === "function" && Cls.getTextureKey()))) ||
-    "sprite"
-  );
+  return Cls?.getTextureKey() || resolveCharacterKey(character);
 }
 
 // Delegate handling of a remotely received attack to the character module
@@ -320,11 +315,7 @@ export function chooseRemoteAnimation(character, context = {}) {
 }
 
 export function setAttackDebugState(enabled) {
-  for (const Cls of Object.values(registry)) {
-    if (Cls && typeof Cls.setDebugState === "function") {
-      Cls.setDebugState(enabled);
-    }
-  }
+  setAttackDebugDraw(enabled);
 }
 
 // Resolve a generic animation key (e.g., 'idle') to a character-specific
@@ -383,19 +374,12 @@ export function resolveAnimKey(
 
 // Get merged stats for a character from centralized stats
 export function getStats(character) {
-  const key = normalizeCharacterKey(character);
-  return (key && characterStats[key]) || characterStats.ninja;
+  return characterStats[resolveCharacterKey(character)];
 }
 
 // Optional: returns the Effects class for a character, or null if none
 export function getEffectsClass(character) {
-  const Cls = getCharacterClass(character);
-  return (
-    (Cls &&
-      (Cls.Effects ||
-        (typeof Cls.getEffects === "function" && Cls.getEffects()))) ||
-    null
-  );
+  return getCharacterClass(character)?.Effects || null;
 }
 
 export function applyCharacterPowerupFx(character, context = {}) {

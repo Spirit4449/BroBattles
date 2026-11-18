@@ -1,8 +1,22 @@
-ALTER TABLE users
-  ADD COLUMN stripe_customer_id VARCHAR(191) NULL;
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'stripe_customer_id'),
+  'SELECT 1',
+  'ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(191) NULL'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
 
-CREATE UNIQUE INDEX idx_users_stripe_customer_id
-  ON users (stripe_customer_id);
+SET @ddl = IF(
+  EXISTS(SELECT 1 FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_stripe_customer_id'),
+  'SELECT 1',
+  'CREATE UNIQUE INDEX idx_users_stripe_customer_id ON users (stripe_customer_id)'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
 
 CREATE TABLE IF NOT EXISTS shop_rotation_state (
   section VARCHAR(32) NOT NULL,

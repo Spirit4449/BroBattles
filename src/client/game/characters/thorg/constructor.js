@@ -1,22 +1,24 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { perform as performSpecial } from "./special";
 import { setThorgRageVisual } from "./rageVisual";
-import { drawPixelRing } from "../../powerups/pixelShapes";
-// src/client/game/characters/thorg/thorg.js
+import { drawPixelRing } from "../../scene/fx/pixelShapes";
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
 import { animations } from "./anim";
-import { performThorgFallAttack, THORG_FALL_DURATION_MS, changeDebugState } from "./attack";
+import { performThorgFallAttack, THORG_FALL_DURATION_MS } from "./attack";
 import { startThorgSweep } from "./weapon";
 import CharacterEntityBase from "../shared/characterEntityBase";
-import { chooseRemoteAnimationState } from "../shared/animationState";
 
 // Single source of truth for this character's name/key
-const NAME = "thorg";
+
+const { key: NAME } = characterDefinitions.thorg;
+
 const SWEEP = getResolvedCharacterAttackConfig(NAME, "sweep");
 
 class Thorg extends CharacterEntityBase {
   static key = NAME;
   static WEAPON_FORWARD_OFFSET = SWEEP.spriteForwardOffset;
   // Main texture key used for this character's sprite
-  static textureKey = NAME;
+  static performSpecial = performSpecial;
 
   static sounds = {
     attack: { key: "thorg-throw", volume: 0.6 },
@@ -33,7 +35,7 @@ class Thorg extends CharacterEntityBase {
       this.characterAssetPath(staticPath, "swoosh.mp3"),
     );
     scene.load.audio("thorg-sweep", this.characterAssetPath(staticPath, "sweep.mp3"));
-    if (!scene.sound.get("thorg-hit")) {
+    if (!scene.cache?.audio?.exists("thorg-hit")) {
       scene.load.audio(
         "thorg-hit",
         this.characterAssetPath(staticPath, "hit.mp3"),
@@ -45,30 +47,11 @@ class Thorg extends CharacterEntityBase {
     animations(scene, textureKey);
   }
 
-  static setDebugState(enabled) {
-    changeDebugState(enabled);
-  }
-
   static handleRemoteAttack(scene, data, ownerWrapper) {
     if (data.type !== `${NAME}-fall`) return false;
     const sprite = ownerWrapper?.opponent;
     if (sprite) startThorgSweep(scene, sprite, { direction: data.direction });
     return true;
-  }
-
-  static chooseRemoteAnimation({
-    animation = "idle",
-    previousPosition,
-    currentPosition,
-    sprite,
-  } = {}) {
-    return chooseRemoteAnimationState({
-      animation,
-      previousPosition,
-      currentPosition,
-      sprite,
-      character: NAME,
-    });
   }
 
   static applyPowerupFx({
@@ -143,13 +126,7 @@ class Thorg extends CharacterEntityBase {
     };
   }
 
-  handlePointerDown(attackContext = null) {
-    const context = attackContext || this.consumeAttackContext();
-    // Use the shared Thorg fall attack implementation (owner-side hits + payload)
-    return this.performDefaultAttack(() =>
-      performThorgFallAttack(this, context),
-    );
-  }
+  static basicAttack = performThorgFallAttack;
 
 }
 

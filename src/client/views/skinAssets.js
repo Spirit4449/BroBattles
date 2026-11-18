@@ -1,4 +1,4 @@
-import SKINS_CATALOG from "../../shared/catalogs/skinsCatalog.json";
+import SKINS_CATALOG from "../../shared/catalogs/skinsCatalog.cjs";
 import PORTRAIT_SOURCES from "./portraitSources.json";
 import { DEFAULT_CHARACTER, canonicalCharacterKey } from "../../shared/characters/characterStats.js";
 

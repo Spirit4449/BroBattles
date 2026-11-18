@@ -26,68 +26,9 @@
       #lobby-loading { display: none; }
     </style>
     <link rel="stylesheet" href="/bundles/index.css" />
-    <link rel="stylesheet" href="/styles/ui-system.css" />
-    <link rel="stylesheet" href="/styles/lobby-frames.css?v=3" />
-    <link rel="stylesheet" href="/styles/lobby-responsive.css" />
-    <link rel="stylesheet" href="/styles/loading.css" />
   </head>
   <body data-bb-screen="lobby">
-    <script>
-      window.__BB_NAVIGATION__.runInline(function(window, document, location, setTimeout, clearTimeout, setInterval, clearInterval) {
-
-      // Restore the most recently confirmed map before the first paint. Party
-      // state replaces this once its authoritative selection arrives.
-      (function () {
-        try {
-          var backgrounds = {
-            1: "/assets/lushy/lobbyBg.webp",
-            2: "/assets/mangrove/lobbyBg.webp",
-            3: "/assets/serenity/lobbyBg.webp",
-            4: "/assets/bank-bust/lobbyBg.webp",
-          };
-          var partyMatch = window.location.pathname.match(
-            /^\/party\/([^/?#]+)/,
-          );
-          var backgroundScope = partyMatch
-            ? "party:" + partyMatch[1]
-            : "solo";
-          var cachedUrl = localStorage.getItem(
-            "bb_lobby_background_url:" + backgroundScope,
-          );
-          if (
-            cachedUrl &&
-            !/^\/assets\/[a-z0-9/_-]+\.(webp|png|jpe?g)$/i.test(cachedUrl)
-          ) {
-            cachedUrl = null;
-          }
-          var cachedMap = partyMatch
-            ? null
-            : localStorage.getItem("bb_solo_map");
-          // Discard website art cached by the former lobby background override.
-          // Map metadata and first paint now use the original lobby backgrounds.
-          var websiteBackgrounds = {
-            "/assets/site/lushy-home.webp": backgrounds[1],
-            "/assets/site/lushy-home-v2.webp": backgrounds[1],
-            "/assets/site/mangrove-home.webp": backgrounds[2],
-            "/assets/site/serenity-home.webp": backgrounds[3],
-            "/assets/site/bank-home.webp": backgrounds[4],
-          };
-          if (websiteBackgrounds[cachedUrl]) {
-            cachedUrl = websiteBackgrounds[cachedUrl];
-            localStorage.setItem("bb_lobby_background_url:" + backgroundScope, cachedUrl);
-          }
-          var initialUrl = cachedUrl || backgrounds[cachedMap];
-
-          if (!initialUrl && !partyMatch) initialUrl = backgrounds[1];
-          if (!initialUrl) return;
-
-          document.body.style.backgroundImage = 'url("' + initialUrl + '")';
-          document.body.dataset.lobbyBackgroundUrl = initialUrl;
-        } catch (_) {}
-      })();
-
-      });
-    </script>
+    <script src="/bundles/lobbyPaint.bundle.js"></script>
     <div id="navbar">
       <div class="flex">
         <span class="site-menu-placeholder" aria-hidden="true"></span>
@@ -869,7 +810,7 @@
             <input id="party-public-toggle" type="checkbox" aria-controls="party-public-name-group" />
             <small id="party-public-hint">Let other players find your party in discovery.</small>
             <div id="party-public-name-group" class="hidden">
-              <input id="party-public-name" class="party-public-name-input" type="text" aria-label="Public party name" maxlength="32" placeholder="Give your public party a name" disabled />
+              <input id="party-public-name" class="party-public-name-input" type="text" aria-label="Public party name" placeholder="Give your public party a name" disabled />
             </div>
           </div>
           <label class="site-setting" for="party-member-selection-toggle">
@@ -1000,46 +941,6 @@
       <div id="bb-mobile-jump-label" class="bb-mobile-jump-label">JUMP</div>
     </div>
 
-    <script>
-      window.__BB_NAVIGATION__.runInline(function(window, document, location, setTimeout, clearTimeout, setInterval, clearInterval) {
-
-      (function () {
-        var tips = [
-          "Stay still to regenerate health. Pick your moment wisely.",
-          "Watch the yellow bar. When it's full, your special attack is ready.",
-          "Earn more gems by racking up kills and dealing big damage.",
-          "Jump toward a wall and press jump again to wall jump your way up.",
-          "Falling off the map is an instant KO. Stay on solid ground.",
-          "Spend your coins in the shop to upgrade your character's stats.",
-          "Use gems to unlock new characters with unique fighting styles.",
-          "Every attack has a cooldown. Wait for it before swinging again.",
-          "Ammo is limited! Aim carefully and don't waste your shots.",
-          "Low on health? Back off and regenerate before re-engaging.",
-          "Team up with your partner to focus one enemy at a time.",
-          "Wall jumping can save your life after being knocked off the edge.",
-          "Your special attack deals massive damage. Save it for the right moment.",
-          "Keep moving. A stationary target is an easy target.",
-          "Different characters have different ranges. Know your spacing.",
-          "Left-click to attack. No need to reach for J.",
-          "Right-click to unleash your special when the yellow bar is full.",
-        ];
-        var idx = Math.floor(Math.random() * tips.length);
-        var el = document.getElementById("tips-text");
-        function showTip() {
-          if (!el) return;
-          el.style.opacity = "0";
-          setTimeout(function () {
-            el.textContent = tips[idx];
-            el.style.opacity = "1";
-            idx = (idx + 1) % tips.length;
-          }, 350);
-        }
-        showTip();
-        setInterval(showTip, 4000);
-      })();
-
-      });
-    </script>
     <script src="/bundles/index.bundle.js"></script>
   </body>
 </html>

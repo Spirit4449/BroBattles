@@ -94,5 +94,4 @@ function staticGeometry(geometry) {
   return result;
 }
 
-module.exports = { MOTION_EASES, MOTION_AXES, MOTION_LIMITS, MOTION_DEFAULTS, PLATFORM_STEP_UP_PX, validateMotion, motionProgress,
-  motionOffset, motionPeakSpeed, advanceGeometry, staticGeometry };
+module.exports = { MOTION_EASES, MOTION_DEFAULTS, PLATFORM_STEP_UP_PX, validateMotion, motionOffset, motionPeakSpeed, advanceGeometry, staticGeometry };

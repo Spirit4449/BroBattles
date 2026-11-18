@@ -1,3 +1,5 @@
+// CommonJS keeps these mechanics directly loadable by the Node test suite.
+const { lerp: interpolate } = require("../../../../shared/math.js");
 const { slimeLaunch, sampleSlimePath } = require("../../../../shared/characters/gloopProjectile");
 const { aimAtTarget } = require("../../../../shared/characters/sparrowProjectile");
 const { resolveGloopHookSocket } = require("../../../../shared/characters/gloopHookGeometry");
@@ -11,6 +13,9 @@ const { mergeObjects } = require("../../../../shared/deepMerge.js");
 
 const ATTACK_AIM_HOLD_ACTIVATE_MS = 140;
 const ATTACK_AIM_DRAG_ACTIVATE_PX = 16;
+
+const DEFAULT_CONE_RADIUS = 150;
+const DEFAULT_CONE_SPREAD_DEG = 56;
 
 const DEFAULT_AIM_CONFIG = Object.freeze({
   family: "basic",
@@ -49,8 +54,8 @@ const DEFAULT_AIM_CONFIG = Object.freeze({
   throwMaxOffsetY: null,
   quickTargetOffsetX: null,
   quickTargetOffsetY: null,
-  coneRadius: 150,
-  coneSpreadDeg: 56,
+  coneRadius: DEFAULT_CONE_RADIUS,
+  coneSpreadDeg: DEFAULT_CONE_SPREAD_DEG,
   coneInnerRadius: 30,
 });
 
@@ -65,7 +70,7 @@ function clamp(value, min, max) {
 function lerp(a, b, t) {
   const start = Number.isFinite(Number(a)) ? Number(a) : 0;
   const end = Number.isFinite(Number(b)) ? Number(b) : start;
-  return start + (end - start) * clamp(t, 0, 1);
+  return interpolate(start, end, clamp(t, 0, 1));
 }
 
 function normalizeAngle(angle, fallback = 0) {
@@ -626,7 +631,7 @@ function resolveAttackAimContext({
     endX: throwPreview ? throwPreview.endX : resolvedTargetX,
     endY: throwPreview ? throwPreview.endY : resolvedTargetY,
     coneRadius,
-    coneSpreadDeg: Math.max(1, Number(config.coneSpreadDeg) || 56),
+    coneSpreadDeg: Math.max(1, Number(config.coneSpreadDeg) || DEFAULT_CONE_SPREAD_DEG),
     coneInnerRadius: Math.max(0, Number(config.coneInnerRadius) || 0),
     roundRadius,
     visualScale: config.scalesWithSprite ? (Number(player?._bbVisualScale) || 1) : 1,
@@ -635,6 +640,8 @@ function resolveAttackAimContext({
 }
 
 module.exports = {
+  DEFAULT_CONE_RADIUS,
+  DEFAULT_CONE_SPREAD_DEG,
   ATTACK_AIM_HOLD_ACTIVATE_MS,
   ATTACK_AIM_DRAG_ACTIVATE_PX,
   getAimConfig,

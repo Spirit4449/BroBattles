@@ -1,3 +1,6 @@
+const { BANK_BUST_VAULT_DEFAULT_WIDTH, BANK_BUST_VAULT_DEFAULT_HEIGHT } = require("../../bankBustSettings");
+const { consumeAmmoCharge } = require("../ammoClock");
+const { SOCKET_EVENTS } = require("../../net/socketEvents.js");
 // Server side of the predicted-shot protocols (ninja, sparrow): the client
 // fires at once and sends a request id; the server accepts or rejects it once,
 // echoes the same result to retries, and resolves flights against targets
@@ -45,10 +48,9 @@ function isCharged(p, special) {
 function spendShot(room, p, special, now) {
   if (special) {
     p.superCharge = 0;
-    room.io.to(`game:${room.matchId}`).emit('super-update', { username: p.name, charge: 0, maxCharge: p.maxSuperCharge });
+    room.broadcast(SOCKET_EVENTS.SUPER_UPDATE, { username: p.name, charge: 0, maxCharge: p.maxSuperCharge });
   } else {
-    p.ammoState.charges--;
-    p.ammoState.nextFireInMs = p.ammoState.cooldownMs;
+    consumeAmmoCharge(p.ammoState);
   }
   p.lastCombatAt = now;
 }
@@ -63,7 +65,8 @@ function rememberRequest(requests, key, value) {
 function vaultWithCoins(room, team) {
   const vault = room.gameMode?.getVaultState?.(team);
   if (!vault || !(vault.coins > 0)) return null;
-  const w = (vault.width || 150) / 2, h = (vault.height || 180) / 2;
+  const w = (vault.width || BANK_BUST_VAULT_DEFAULT_WIDTH) / 2;
+  const h = (vault.height || BANK_BUST_VAULT_DEFAULT_HEIGHT) / 2;
   return { name: `vault:${team}`, bounds: { left: vault.x - w, right: vault.x + w, top: vault.y - h, bottom: vault.y + h } };
 }
 

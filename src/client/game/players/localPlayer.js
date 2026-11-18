@@ -1,10 +1,17 @@
+import { getMatchSession } from "../../lib/globals.cjs";
+import { isSiteDialogOpen } from "../../site/dialog";
+import { createLocalPointerAttack, serializeAimContext } from "./localPointerAttack";
+import { createLocalHud } from "./localHud";
+import { standingBodyHeight, applyBodyFlipOffset, hudTopY } from "./playerBodyGeometry";
+import { createLocalAmmo } from "./localAmmo";
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import { updateDash, endDash, drawDashCooldown, protectDashMotion, applyDashCoast } from '../scene/dash';
 import { integrateLikeReferenceStep } from '../scene/displayRatePhysics';
-import { spritePresentation } from '../characters/shared/spritePresentation';
-import { bindPlayerOrigin, playerAnchor } from '../characters/shared/rig';
+import { spritePresentation, sizePlayerBody } from '../characters/shared/spritePresentation';
+import { bindPlayerOrigin } from "../characters/shared/rig";
 import { attachTeamFootRing } from './teamFootRing';
 import { applyTeamVisual } from "../../../shared/projectilePresentation";
-import { getSettings, bindCanvasName, subscribeSettings } from "../../site/preferences";
+import { getSettings, subscribeSettings } from "../../site/preferences";
 import {
   resolveWallContact,
   applyWallSlide,
@@ -12,21 +19,7 @@ import {
 } from './wallMovement';
 import { predictCharacterSpecial } from '../characters/networkRegistry';
 import { withShotView } from '../characters/shared/shotPrediction';
-// player.js
-// NOTE: Refactored to remove circular dependency on game.js.
-// socket now comes from standalone socket.js and opponentPlayers are passed into createPlayer.
 import socket from "../../lib/socket";
-import { drawSuperChargeBar, resetSuperBarAnimation } from "../scene/superBarRenderer";
-import { drawHealthBar, resetHealthBarAnimation } from "../scene/healthBarRenderer";
-import { drawAmmoChargeBar } from "../scene/ammoBarRenderer";
-import {
-  setStatusIconStackAlpha,
-  setStatusIconStackVisible,
-  syncStatusIconStack,
-} from "../scene/statusIconStack";
-function pdbg() {
-  /* logging disabled */
-}
 import {
   createFor as createCharacterFor,
   getTextureKey,
@@ -40,7 +33,7 @@ import {
   spawnHealthMarker,
   spawnJumpTakeoff,
   spawnSpawnBurst,
-  spawnWallKickCloud,
+  spawnWallKickCloud, wallContactPoint, MOVEMENT_VFX_CONFIG,
 } from "../scene/effects";
 import { bindLocalSocketEvents } from "./localSocketEvents";
 import { INVISIBLE_ALPHA, invisibleAttackAlpha } from "../powerups/invisibilityReveal.js";
@@ -65,8 +58,6 @@ import {
   markWallJumpAnimation,
   holdWallSlidePose,
 } from "../characters/shared/animationState.js";
-import { createAttackAimReticleController } from "../scene/attackAimReticle";
-import { createCombatMouseController } from "../scene/combatMouse";
 import { createMobileControlsController } from "../scene/mobileControls";
 import { releaseMovementForFocus } from "./focusMomentum.mjs";
 import { RENDER_LAYERS } from "../scene/renderLayers";
@@ -96,7 +87,6 @@ let keySpace; // Spacebar for dash
 let keyJ; // J for basic attack
 let canWallJump = true;
 let isMoving = false;
-let isJumping = false;
 let isAttacking = false;
 let canAttack = true;
 // SFX state
@@ -112,34 +102,27 @@ let latestMovementFxEvent = {
 
 let frame;
 
-let maxHealth = 1000;
-let currentHealth = 1000; // Client-side copy (display only)
-let dead = false;
+let dead = false; // Live export also consumed by the Phaser scene.
+const localStats = {
+  currentHealth: 1000, maxHealth: 1000, superCharge: 0, maxSuperCharge: 100,
+  get dead() { return dead; },
+  set dead(value) {
+    if (dead !== value) {
+      endDash(player, false);
+      if (player) { player._dashReadyAt = 0; player._dashHud?.hide(); }
+    }
+    dead = value;
+    mobileControlsController?.setHidden?.(!!value);
+  },
+};
 
-let healthBarWidth = 52;
-let healthBar;
-let healthText;
-let duckShieldIcon;
-let duckShieldGlow;
-let powerupStatusIcons = [];
 // Ammo/Cooldown bar (client-side only)
-let ammoBar; // graphics
-let ammoBarBack; // background graphics
-let ammoBarWidth = 52;
-let ammoCooldownMs = 1200; // time between shots
-let ammoReloadMs = 1200; // time to reload one charge
-let ammoCapacity = 1; // number of segments
-let ammoCharges = 1; // current charges available
-let nextFireTime = 0; // timestamp (ms) when we can fire again
-let reloadTimerMs = 0; // accumulates while reloading toward ammoReloadMs
+let localHud = null;
+const ammo = createLocalAmmo();
 let ammoBarShakeUntil = 0;
 let lastNoAmmoSfxAt = 0;
 let lastNoSuperSfxAt = 0;
 
-let superBar;
-let superBarBack;
-let superCharge = 0;
-let maxSuperCharge = 100;
 let keyI;
 let keyE;
 let _specialNotReadyFlash = 0; // timestamp until "not ready" red flash expires
@@ -147,20 +130,13 @@ let movementSpeedMult = 1;
 let movementJumpMult = 1;
 let powerupInvisible = false;
 
-let playerName;
-
-let indicatorTriangle;
-
 let username;
-let gameId = window.location.pathname.split("/").filter(Boolean).pop();
 
 let scene;
 // Persist the selected character so movement helpers can resolve anim keys
 let currentCharacter;
 let currentSkinId = "";
 
-let playersInTeam;
-let mapObjects;
 let opponentPlayersRef; // injected from game.js to avoid circular import
 
 // Body config and flip-offset applier hoisted for use across functions
@@ -169,13 +145,11 @@ let applyFlipOffsetLocal = null;
 let resizeForDuckLocal = null;
 let charEffects = null; // per-character, per-player effects handler (e.g., Draven fire)
 let charCtrl = null; // active character controller instance
-let disposeLocalSocketEvents = null;
+let localSocketEvents = null;
+let disposePlayerLifetime = null;
+export function getLocalFighterEvents() { return localSocketEvents; }
 let flushLocalNetState = null;
-let attackAimReticleController = null;
-let pointerAttackHandlers = null;
-let pointerAttackScene = null;
-let pointerContextMenuCanvas = null;
-let pointerContextMenuHandler = null;
+let pointerAttack = null;
 let mobileControlsController = null;
 
 function noteMovementFxEvent(type, details = {}) {
@@ -256,7 +230,7 @@ function resetMovementInputState({ preserveVelocity = false } = {}) {
     }
   }
 
-  networkInputState = {
+  networkInputState = buildNetworkInputState({
     ...networkInputState,
     left: false,
     right: false,
@@ -268,20 +242,10 @@ function resetMovementInputState({ preserveVelocity = false } = {}) {
     wallSliding: false,
     wallSide: null,
     movementLocked: preserveVelocity,
-  };
+  }, { derive: false });
 }
 
-let combatMouseController = null;
-
-const attackAimState = {
-  active: false,
-  pointerId: null,
-  family: "basic",
-  button: 0,
-  currentContext: null,
-};
-
-let networkInputState = {
+const idleNetworkInputState = {
   left: false,
   right: false,
   direction: 0,
@@ -295,60 +259,13 @@ let networkInputState = {
   movementLocked: false,
   loaded: false,
 };
+let networkInputState = { ...idleNetworkInputState };
 let chatInputActive = false;
 
 const localStateSync = createLocalStateSync({
-  Phaser,
   getPlayer: () => player,
-  getDead: () => dead,
-  setDead: (value) => {
-    if (dead !== value) {
-      endDash(player, false);
-      if (player) { player._dashReadyAt = 0; player._dashHud?.hide(); }
-    }
-    dead = value;
-    mobileControlsController?.setHidden?.(!!value);
-  },
-  getMaxHealth: () => maxHealth,
-  setMaxHealth: (value) => {
-    maxHealth = value;
-  },
-  getCurrentHealth: () => currentHealth,
-  setCurrentHealth: (value) => {
-    currentHealth = value;
-  },
-  getSuperCharge: () => superCharge,
-  setSuperCharge: (value) => {
-    superCharge = value;
-  },
-  getMaxSuperCharge: () => maxSuperCharge,
-  setMaxSuperCharge: (value) => {
-    maxSuperCharge = value;
-  },
-  getAmmoCapacity: () => ammoCapacity,
-  setAmmoCapacity: (value) => {
-    ammoCapacity = value;
-  },
-  getAmmoCharges: () => ammoCharges,
-  setAmmoCharges: (value) => {
-    ammoCharges = value;
-  },
-  getAmmoCooldownMs: () => ammoCooldownMs,
-  setAmmoCooldownMs: (value) => {
-    ammoCooldownMs = value;
-  },
-  getAmmoReloadMs: () => ammoReloadMs,
-  setAmmoReloadMs: (value) => {
-    ammoReloadMs = value;
-  },
-  getReloadTimerMs: () => reloadTimerMs,
-  setReloadTimerMs: (value) => {
-    reloadTimerMs = value;
-  },
-  getNextFireTime: () => nextFireTime,
-  setNextFireTime: (value) => {
-    nextFireTime = value;
-  },
+  stats: localStats,
+  ammo,
   setMovementSpeedMult: (value) => {
     movementSpeedMult = value;
   },
@@ -358,211 +275,34 @@ const localStateSync = createLocalStateSync({
   updateHealthBar: () => updateHealthBar(),
 });
 
-function clearAttackAimReticle() {
-  try {
-    attackAimReticleController?.hide?.();
-  } catch (_) {}
-}
-
-function resetPointerAttackAim() {
-  combatMouseController?.endDrag();
-  attackAimState.active = false;
-  attackAimState.pointerId = null;
-  attackAimState.family = "basic";
-  attackAimState.button = 0;
-  attackAimState.currentContext = null;
-  clearAttackAimReticle();
-}
-
-function clearGameCursor(targetScene = pointerAttackScene || scene) {
-  try {
-    const canvas = targetScene?.game?.canvas;
-    if (canvas?.style) {
-      canvas.style.cursor = "";
-    }
-  } catch (_) {}
-}
-
-function detachPointerAttackBindings(
-  targetScene = pointerAttackScene || scene,
-) {
-  const sceneToDetach = targetScene || pointerAttackScene || scene;
-  if (!sceneToDetach) return;
-  const isTrackedScene =
-    !pointerAttackScene || pointerAttackScene === sceneToDetach;
-  clearGameCursor(sceneToDetach);
-  if (!isTrackedScene) return;
-  combatMouseController?.destroy();
-  combatMouseController = null;
-  try {
-    if (pointerAttackHandlers?.down) {
-      sceneToDetach?.input?.off?.("pointerdown", pointerAttackHandlers.down);
-    }
-    if (pointerAttackHandlers?.move) {
-      sceneToDetach?.input?.off?.("pointermove", pointerAttackHandlers.move);
-    }
-    if (pointerAttackHandlers?.up) {
-      sceneToDetach?.input?.off?.("pointerup", pointerAttackHandlers.up);
-      sceneToDetach?.input?.off?.("pointerupoutside", pointerAttackHandlers.up);
-    }
-    if (pointerAttackHandlers?.gameout) {
-      sceneToDetach?.input?.off?.("gameout", pointerAttackHandlers.gameout);
-    }
-  } catch (_) {}
-  try {
-    pointerContextMenuCanvas?.removeEventListener?.(
-      "contextmenu",
-      pointerContextMenuHandler,
-    );
-  } catch (_) {}
-  pointerAttackHandlers = null;
-  pointerAttackScene = null;
-  pointerContextMenuCanvas = null;
-  pointerContextMenuHandler = null;
-}
-
-function resolveQuickAttackContext(family = "basic") {
-  if (combatMouseController?.shouldShowReticle()) return resolveDirectionalAttackContext(family);
-  return resolveAttackAimContext({
-    character: currentCharacter,
-    player,
-    family,
-    quick: true,
-    quickFacingDirection: getNearestOpponentDirection(player, opponentPlayersRef),
-  });
-}
-
-function getAimBasePoint(family = attackAimState.family || "basic") {
-  return (
-    getPlayerAimBasePoint({
-      character: currentCharacter,
-      player,
-      family,
-    }) || { baseX: Number(player?.x) || 0, baseY: Number(player?.y) || 0 }
-  );
-}
-
-function resolveDirectionalAttackContext(family = "basic") {
-  if (!player || !combatMouseController) return null;
-  if (combatMouseController.isDefaultAim()) {
-    return resolveAttackAimContext({ character: currentCharacter, player, family, quick: true,
-      quickFacingDirection: getNearestOpponentDirection(player, opponentPlayersRef) });
-  }
-  const base = getAimBasePoint(family);
-  const direction = combatMouseController.getDirection();
-  const defaultRange = Number(base.config?.defaultRange) || 120;
-  const minRange = Number(base.config?.minRange) || defaultRange;
-  const maxRange = Number(base.config?.maxRange) || defaultRange;
-  const range = base.config?.kind === "throw"
-    ? minRange + (maxRange - minRange) * combatMouseController.getDistanceRatio()
-    : defaultRange;
-  return resolveAttackAimContext({
-    character: currentCharacter, player, family, quick: false,
-    pointerWorldX: base.baseX + direction.x * range,
-    pointerWorldY: base.baseY + direction.y * range,
-  });
-}
-
-function serializeAimContext(context) {
-  if (!context || typeof context !== "object") return null;
-  const out = {
-    family: String(context.family || "basic").toLowerCase(),
-    kind: String(context.kind || "line").toLowerCase(),
-    direction: Number(context.direction) === -1 ? -1 : 1,
-  };
-  if (Number.isFinite(Number(context.angle))) out.angle = Number(context.angle);
-  if (Number.isFinite(Number(context.range))) out.range = Number(context.range);
-  if (Number.isFinite(Number(context.speedScale))) {
-    out.speedScale = Number(context.speedScale);
-  }
-  if (
-    Number.isFinite(Number(context.targetX)) &&
-    Number.isFinite(Number(context.targetY))
-  ) {
-    out.target = {
-      x: Number(context.targetX),
-      y: Number(context.targetY),
-    };
-  }
-  if (Number.isFinite(Number(context.coneRadius))) {
-    out.coneRadius = Number(context.coneRadius);
-  }
-  if (Number.isFinite(Number(context.coneSpreadDeg))) {
-    out.coneSpreadDeg = Number(context.coneSpreadDeg);
-  }
-  if (Number.isFinite(Number(context.coneInnerRadius))) {
-    out.coneInnerRadius = Number(context.coneInnerRadius);
-  }
-  if (Number.isFinite(Number(context.roundRadius))) {
-    out.roundRadius = Number(context.roundRadius);
-  }
-  return out;
-}
-
-function startPointerAttackAim(pointer, family = "basic", button = 0) {
-  if (!pointer || dead) return;
-  resetPointerAttackAim();
-  combatMouseController?.beginDrag(player?.flipX ? -1 : 1, getAimBasePoint(family).config?.kind === "throw");
-  attackAimState.active = true;
-  attackAimState.family = family;
-  attackAimState.button = button;
-  attackAimState.pointerId = pointer.id;
-  updatePointerAttackAimState();
-}
-
-function updatePointerAttackAimState() {
-  if (mobileControlsController?.isEnabled?.()) return;
-  if (!player || dead || !combatMouseController?.shouldShowReticle()) {
-    clearAttackAimReticle();
-    return;
-  }
-  const family = attackAimState.active ? attackAimState.family : "basic";
-  attackAimState.currentContext = resolveDirectionalAttackContext(family);
-  attackAimReticleController?.update({ ...attackAimState.currentContext,
-    previewStrength: combatMouseController.getStrength(),
-    centerCue: combatMouseController.getCenterCue() });
-}
-
-function finishPointerAttackAim(pointer) {
-  if (!attackAimState.active ||
-      (pointer && pointer.id !== attackAimState.pointerId)) return null;
-  // Resolve from the current player position with the same direction as the preview.
-  const context = combatMouseController?.isAiming()
-    ? resolveDirectionalAttackContext(attackAimState.family)
-    : resolveQuickAttackContext(attackAimState.family);
-  resetPointerAttackAim();
-  return context;
-}
-
-// Create player function
-export function createPlayer(
-  sceneParam,
-  name,
+export function createPlayer(sceneParam, {
+  username: name,
+  getPlayerEffects,
   character,
-  spawnPlatformParam,
-  spawnParam,
-  playersInTeamParam,
-  mapParam,
-  opponentPlayersParam,
-  selectedSkinIdParam = "",
-) {
+  opponentPlayers,
+  isSystemNoticeOpen,
+  skinId = "",
+}) {
+  disposePlayerLifetime?.();
+  canWallJump = true;
+  canAttack = true;
+  isMoving = false;
+  isAttacking = false;
+  chatInputActive = false;
+  powerupInvisible = false;
+  setPowerupMobility();
+  networkInputState = { ...idleNetworkInputState };
+  latestMovementFxEvent = { seq: movementFxSequence, type: null, direction: 0, wallSide: null, fallDistance: 0, impactVelocity: 0 };
   resetMovementVfxTracking();
-  resetPointerAttackAim();
-  detachPointerAttackBindings();
-  mobileControlsController?.destroy?.();
-  if (attackAimReticleController) {
-    try {
-      attackAimReticleController.destroy();
-    } catch (_) {}
-    attackAimReticleController = null;
-  }
-  attackAimReticleController = createAttackAimReticleController(sceneParam, {
-    getAmmoCharges: () => ammoCharges,
+  pointerAttack = createLocalPointerAttack(sceneParam, character, opponentPlayers, localStats, {
+    getAmmoCharges: () => ammo.state.charges, getMobileControls: () => mobileControlsController,
+    isUiCapturingInput, isSystemNoticeOpen, isControlLocked, triggerSpecialNotReadyFeedback,
+    fireBasicAttack, fireSpecialAttack, resetMovementInputState,
   });
   if (!mobileControlsController) {
     mobileControlsController = createMobileControlsController({
       getPlayer: () => player,
-      getPointerAimActive: () => !!attackAimState.active,
+      getPointerAimActive: () => !!pointerAttack?.active,
       getAimBasePoint: (family = "basic") =>
         getPlayerAimBasePoint({
           character: currentCharacter,
@@ -579,31 +319,22 @@ export function createPlayer(
           quick,
           quickFacingDirection: quick ? getNearestOpponentDirection(player, opponentPlayersRef) : null,
         }),
-      resolveQuickContext: (family) => resolveQuickAttackContext(family),
-      getSuperChargeRatio: () => (maxSuperCharge > 0 ? superCharge / maxSuperCharge : 0),
+      resolveQuickContext: (family) => pointerAttack?.quick(family),
+      getSuperChargeRatio: () => (localStats.maxSuperCharge > 0 ? localStats.superCharge / localStats.maxSuperCharge : 0),
       onBasicFire: (context) => fireBasicAttack(context?.direction, context),
       onSpecialFire: (context) => fireSpecialAttack(context),
       onSpecialNotReady: () => triggerSpecialNotReadyFeedback(),
-      onClearReticle: () => clearAttackAimReticle(),
+      onClearReticle: () => pointerAttack?.clearReticle(),
     });
   }
   mobileControlsController.ensure(sceneParam);
 
-  if (disposeLocalSocketEvents) {
-    try {
-      disposeLocalSocketEvents();
-    } catch (_) {}
-    disposeLocalSocketEvents = null;
-  }
-
   username = name;
   scene = sceneParam;
-  playersInTeam = playersInTeamParam;
-  opponentPlayersRef = opponentPlayersParam;
+  opponentPlayersRef = opponentPlayers;
   // Remember the chosen character for animation resolution in update loop
   currentCharacter = character;
-  currentSkinId = String(selectedSkinIdParam || "").trim();
-  pdbg();
+  currentSkinId = String(skinId || "").trim();
   let bindingSignature='';
   const bindKeys = settings => {
     const signature=JSON.stringify(settings.keys);if(signature===bindingSignature)return;
@@ -617,26 +348,12 @@ export function createPlayer(
   };
   bindKeys(getSettings());
   const stopKeyUpdates=subscribeSettings(bindKeys);
-  scene.events.once('shutdown',stopKeyUpdates);
 
   movementAudio.attach(scene);
 
   // Animations are registered globally in game.js via setupAll(scene)
 
-  // Create player sprite using the character class factory so each class
-  // owns its own texture key without duplicating it here.
-  const CharCls = getCharacterClassByKey(character);
-  player = CharCls
-    ? scene.physics.add.sprite(
-        -100,
-        -100,
-        getTextureKey(character, currentSkinId),
-      )
-    : scene.physics.add.sprite(
-        -100,
-        -100,
-        getTextureKey(character, currentSkinId),
-      );
+  player = scene.physics.add.sprite(-100, -100, getTextureKey(character, currentSkinId));
   scene._localPlayerAudioSprite = player;
   player._bbCharacter = String(currentCharacter || "").toLowerCase();
   player._bbSkinId = currentSkinId;
@@ -652,28 +369,22 @@ export function createPlayer(
   noteAnimationPlayed(player, "idle");
   // Hide until we've configured frame/body and spawn to avoid a mid-air first render
   player.setVisible(false);
-  pdbg();
 
   // Apply character stats (health, ammo, sprite/body sizing)
   const stats = getStats(character);
   // Prefer server-provided per-match stats when available
-  const sessionStats =
-    (typeof window !== "undefined" &&
-      window.__MATCH_SESSION__ &&
-      window.__MATCH_SESSION__.stats) ||
-    null;
+  const sessionStats = getMatchSession()?.stats || null;
   if (sessionStats && typeof sessionStats.health === "number") {
-    maxHealth = sessionStats.health;
+    localStats.maxHealth = sessionStats.health;
   } else if (typeof stats.baseHealth === "number") {
-    maxHealth = stats.baseHealth;
+    localStats.maxHealth = stats.baseHealth;
   }
-  currentHealth = maxHealth;
-  ammoCooldownMs = stats.ammoCooldownMs ?? ammoCooldownMs;
-  ammoReloadMs = stats.ammoReloadMs ?? ammoReloadMs;
-  ammoCapacity = Math.max(1, stats.ammoCapacity ?? ammoCapacity);
-  ammoCharges = ammoCapacity;
-  nextFireTime = 0;
-  reloadTimerMs = 0;
+  localStats.currentHealth = localStats.maxHealth;
+  localStats.dead = false;
+  localStats.superCharge = 0;
+  localStats.maxSuperCharge = 100;
+  ammoBarShakeUntil = lastNoAmmoSfxAt = lastNoSuperSfxAt = _specialNotReadyFlash = 0;
+  ammo.reset(stats);
   const presentation = spritePresentation(character, player.texture);
   player.setScale(presentation.scale);
   attachTeamFootRing(scene, player, { isAlly: true, isSelf: true, hidden: () => dead });
@@ -683,39 +394,21 @@ export function createPlayer(
 
   // Establish frame/body sizing BEFORE computing spawn so height math is correct
   frame = player.frame;
-  const bs = presentation.body;
-  bodyConfig = bs; // persist for use in movement function
-  const widthShrink = bs.widthShrink;
-  const heightShrink = bs.heightShrink;
-  const bw = Math.max(4, frame.realWidth - widthShrink);
-  const bh = Math.max(4, frame.realHeight - heightShrink);
-  player.body.setSize(bw, bh);
-  player.body.updateFromGameObject?.();
+  bodyConfig = presentation.body;
+  sizePlayerBody(player, frame, bodyConfig);
   player._ducking = false;
   player._duckRequested = false;
   player._duckAvailableAt = 0;
   player._duckHoldUntil = 0;
   player._duckGroundSpan = null;
   // Helper to adjust body offset when flipping
-  applyFlipOffsetLocal = () => {
-    if (!player || !player.body) return;
-    const cfg = bodyConfig || {};
-    const flipOffset = cfg.flipOffset || 0; // falsy -> 0
-    const extra = player.flipX ? flipOffset : 0;
-    const frameW = frame ? frame.realWidth : player.width;
-    const bodyW = cfg.sourceUnits ? player.body.sourceWidth : player.body.width;
-    const ox = frameW / 2 - bodyW / 2 + (cfg.offsetXFromHalf ?? 0) + extra;
-    const standingHeight = Math.max(4, frame.realHeight - cfg.heightShrink);
-    const currentSourceHeight = player.body.sourceHeight || standingHeight;
-    const oy = cfg.offsetY + standingHeight - currentSourceHeight;
-    player.body.setOffset(ox, oy);
-  };
+  applyFlipOffsetLocal = () => applyBodyFlipOffset(player, frame, bodyConfig);
   applyFlipOffsetLocal();
 
   resizeForDuckLocal = (ducking) => {
     if (!player?.body || player._ducking === !!ducking) return;
     const body = player.body;
-    const standingHeight = Math.max(4, frame.realHeight - bodyConfig.heightShrink);
+    const standingHeight = standingBodyHeight(player, frame, bodyConfig);
     const nextHeight = ducking
       ? Math.max(4, standingHeight * DUCK_HEIGHT_RATIO)
       : standingHeight;
@@ -757,12 +450,6 @@ export function createPlayer(
   // the sprite drawn this frame instead of one frame behind it.
   const syncUiAfterPhysics = () => { if (!dead && player?.visible) syncLocalUiPosition(); };
   scene.events.on("postupdate", syncUiAfterPhysics);
-  scene.events.once("shutdown", () => {
-    scene.physics.world.off("worldstep", protectDuckEdge);
-    scene.physics.world.off("worldstep", protectDash);
-    scene.events.off("postupdate", syncUiAfterPhysics);
-    restoreIntegration();
-  });
 
   // Falling out of the world is detected by the server from position packets.
 
@@ -773,89 +460,27 @@ export function createPlayer(
   // Set depth so player renders above all map objects (bank bust graphics are at depths 7-24)
   player.setDepth(RENDER_LAYERS.PLAYER);
 
-  // Player name text anchored to physics body top (not frame height)
-  const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
-  playerName = scene.add.text(player.x, bodyTop - 40, username);
-  bindCanvasName(playerName, username);
-  playerName.setStyle({
-    fontFamily: "'Press Start 2P', monospace",
-    fontSize: "7px",
-    fill: "#ffffff",
-    stroke: "#000000",
-    strokeThickness: 3,
+  localHud?.destroy();
+  localHud = createLocalHud(scene, player, {
+    username, getPlayerEffects, stats: localStats, ammo, getStableLocalUiTop,
+    isInvisible: () => powerupInvisible, clearAttackAimReticle: () => pointerAttack?.clearReticle(),
+    superFlashActive: () => Date.now() < _specialNotReadyFlash,
+    ammoShakeActive: () => Date.now() < ammoBarShakeUntil,
   });
-  playerName.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 0, true, true);
-  playerName.setOrigin(0.5, 0);
-  playerName.setDepth(42);
-
-  // Health text
-  healthText = scene.add.text(0, 0, "", {
-    fontFamily: "'Press Start 2P', monospace",
-    fontSize: "8px",
-    color: "#FFFFFF", // White
-    stroke: "#000000", // Black
-    strokeThickness: 4,
-  });
-
-  // Health bar
-  healthBar = scene.add.graphics();
-  healthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-  duckShieldGlow = scene.add.image(0, 0, "pu-icon-shield-webp");
-  duckShieldGlow
-    .setDisplaySize(20, 23)
-    .setTint(0xff8d32)
-    .setAlpha(0.4)
-    .setBlendMode(Phaser.BlendModes.ADD)
-    .setDepth(RENDER_LAYERS.PLAYER_HUD + 1.5)
-    .setVisible(false);
-  duckShieldIcon = scene.add.image(0, 0, "pu-icon-shield-webp");
-  duckShieldIcon
-    .setDisplaySize(13, 15)
-    .setDepth(RENDER_LAYERS.PLAYER_HUD + 3)
-    .setVisible(false);
-  scene.tweens.add({
-    targets: duckShieldGlow,
-    displayWidth: { from: 18, to: 22 },
-    displayHeight: { from: 21, to: 26 },
-    duration: 520,
-    ease: "Sine.InOut",
-    yoyo: true,
-    repeat: -1,
-  });
-  // Ammo bar background & fill (render order: background, fill)
-  ammoBarBack = scene.add.graphics();
-  ammoBar = scene.add.graphics();
-  superBarBack = scene.add.graphics();
-  superBar = scene.add.graphics();
-
-  // Triangle to show which one is the user. Dissapears when the player moves
-  indicatorTriangle = scene.add.graphics();
-  setLocalUiVisible(false);
-
-  // Arrow above the body top so it's consistent across different frame paddings
-  const triangle = new Phaser.Geom.Triangle(
-    player.x,
-    bodyTop - 10, // Top point
-    player.x - 13,
-    bodyTop - 20, // Left point
-    player.x + 13,
-    bodyTop - 20, // Right point
-  );
-  indicatorTriangle.fillStyle(0x99ab2c); // Green color
-  indicatorTriangle.fillTriangleShape(triangle);
-  indicatorTriangle.setVisible(false);
 
   // Character controller wiring (centralized per character)
+  const fighter = player;
   const ammoHooks = {
     // stats
-    getAmmoCapacity: () => ammoCapacity,
-    getAmmoCooldownMs: () => ammoCooldownMs,
-    getAmmoReloadMs: () => ammoReloadMs,
+    getAmmoCapacity: () => ammo.state.capacity,
+    getAmmoCooldownMs: () => ammo.state.cooldownMs,
+    getAmmoReloadMs: () => ammo.state.reloadMs,
     // state
-    getCharges: () => ammoCharges,
-    getNextFireTime: () => nextFireTime,
+    getCharges: () => ammo.state.charges,
+    getNextFireTime: () => ammo.nextFireAt,
     // actions
     triggerNoAmmoFeedback: (playSound = true) => {
+      if (player !== fighter) return;
       const now = Date.now();
       ammoBarShakeUntil = now + 180;
       if (!playSound) return;
@@ -866,34 +491,33 @@ export function createPlayer(
       } catch (_) {}
     },
     tryConsume: () => {
-      if (player?._dash) return false;
+      if (player !== fighter || fighter._dash) return false;
       const now = Date.now();
       if (!canAttack) {
-        if (ammoCharges <= 0) ammoHooks.triggerNoAmmoFeedback(true);
-        else if (now < nextFireTime) ammoHooks.triggerNoAmmoFeedback(false);
+        if (ammo.state.charges <= 0) ammoHooks.triggerNoAmmoFeedback(true);
+        else if (now < ammo.nextFireAt) ammoHooks.triggerNoAmmoFeedback(false);
         return false;
       }
-      if (now < nextFireTime) {
+      if (now < ammo.nextFireAt) {
         ammoHooks.triggerNoAmmoFeedback(false);
         return false;
       }
-      if (ammoCharges <= 0) {
+      if (ammo.state.charges <= 0) {
         ammoHooks.triggerNoAmmoFeedback(true);
         return false;
       }
-      ammoCharges -= 1;
-      nextFireTime = now + ammoCooldownMs;
-      // start/restart reloading if not full
-      if (ammoCharges < ammoCapacity && reloadTimerMs <= 0) reloadTimerMs = 0;
-      return true;
+      return ammo.consume(now);
     },
     grantCharge: (n = 1) => {
-      ammoCharges = Math.min(ammoCapacity, ammoCharges + n);
-      if (ammoCharges >= ammoCapacity) reloadTimerMs = 0;
-      drawAmmoBar();
+      if (player !== fighter) return;
+      ammo.grant(n);
+      localHud?.drawAmmoBar();
     },
-    setCanAttack: (v) => (canAttack = v),
+    setCanAttack: (v) => {
+      if (player === fighter) canAttack = v;
+    },
     setIsAttacking: (v) => {
+      if (player !== fighter) return;
       isAttacking = v;
       if (v && player) {
         const throwKey = resolveAnimKey(
@@ -911,6 +535,7 @@ export function createPlayer(
       }
     },
     flushNetState: () => {
+      if (player !== fighter) return;
       try {
         flushLocalNetState?.({
           dead,
@@ -920,170 +545,42 @@ export function createPlayer(
       } catch (_) {}
     },
     // view
-    drawAmmoBar: () => drawAmmoBar(),
+    drawAmmoBar: () => { if (player === fighter) localHud?.drawAmmoBar(); },
   };
 
   const ctrl = createCharacterFor(character, {
     scene,
     player,
     username,
-    gameId,
     opponentPlayersRef,
-    mapObjects,
     ammoHooks,
   });
   charCtrl = ctrl;
-  if (ctrl && ctrl.attachInput) ctrl.attachInput();
 
-  // Mouse movement selects direction; left-click releases the basic attack.
-  // Right-click mirrors that for supers using the special reticle theme.
-  const pointerDownHandler = (pointer) => {
-    if (dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
-    if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
-    if (
-      Math.max(
-        Number(player?._movementLockedUntil || 0),
-        Number(player?._externalControlLockUntil || 0),
-      ) > Date.now()
-    ) {
-      return;
-    }
-    // Touches belong to the mobile controls overlay.
-    if (mobileControlsController?.isEnabled?.() && pointer?.wasTouch) return;
-    if (!combatMouseController?.beginInput()) return;
-    if (pointer.button === 0) {
-      startPointerAttackAim(pointer, "basic", 0);
-      return;
-    }
-    if (pointer.button === 2) {
-      if (superCharge >= maxSuperCharge) {
-        startPointerAttackAim(pointer, "special", 2);
-      } else {
-        triggerSpecialNotReadyFeedback();
-      }
-    }
-  };
-
-  const pointerMoveHandler = (pointer) => {
-    if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
-    // Touches belong to the mobile controls overlay.
-    if (mobileControlsController?.isEnabled?.() && pointer?.wasTouch) return;
-    if (!attackAimState.active) return;
-    if (
-      attackAimState.pointerId !== null &&
-      pointer &&
-      pointer.id !== attackAimState.pointerId
-    ) {
-      return;
-    }
-    updatePointerAttackAimState();
-  };
-
-  const pointerUpHandler = (pointer) => {
-    if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
-    // Touches belong to the mobile controls overlay.
-    if (mobileControlsController?.isEnabled?.() && pointer?.wasTouch) return;
-    const movementLockedNow =
-      Math.max(
-        Number(player?._movementLockedUntil || 0),
-        Number(player?._externalControlLockUntil || 0),
-      ) > Date.now();
-    const context = finishPointerAttackAim(pointer);
-    if (!context || dead || movementLockedNow || Date.now() < (player?._attackInterruptedUntil || 0)) return;
-    if (String(context.family || "basic").toLowerCase() === "special") {
-      fireSpecialAttack(context);
-      return;
-    }
-    fireBasicAttack(context.direction, context);
-  };
-
-  const pointerGameOutHandler = () => {
-    resetPointerAttackAim();
-  };
-
-  pointerAttackHandlers = {
-    down: pointerDownHandler,
-    move: pointerMoveHandler,
-    up: pointerUpHandler,
-    gameout: pointerGameOutHandler,
-  };
-  pointerAttackScene = sceneParam;
-  scene.input.on("pointerdown", pointerDownHandler);
-  scene.input.on("pointermove", pointerMoveHandler);
-  scene.input.on("pointerup", pointerUpHandler);
-  scene.input.on("pointerupoutside", pointerUpHandler);
-  scene.input.on("gameout", pointerGameOutHandler);
-  combatMouseController = createCombatMouseController({
-    getPreferences: getSettings,
-    scene: sceneParam,
-    canPrepare: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN && !window.__BB_GAME_NOTICE_OPEN &&
-      !mobileControlsController?.isEnabled?.() && sceneParam.sys.isActive(),
-    canCapture: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN && !window.__BB_GAME_NOTICE_OPEN &&
-      !mobileControlsController?.isEnabled?.() &&
-      sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
-    canPlay: () => !!player && !dead && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN && !window.__BB_GAME_NOTICE_OPEN &&
-      !mobileControlsController?.isEnabled?.() &&
-      sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
-    onRelease: () => {
-      resetPointerAttackAim();
-      resetMovementInputState({ preserveVelocity: true });
-    },
-  });
-
-  pointerContextMenuCanvas = scene.game?.canvas || null;
-  pointerContextMenuHandler = (e) => e.preventDefault();
-  pointerContextMenuCanvas?.addEventListener?.(
-    "contextmenu",
-    pointerContextMenuHandler,
-  );
+  pointerAttack.bind(player);
 
   // Per-character effects: instantiate if the character provides an Effects class
   const EffectsCls = getEffectsClass(currentCharacter);
   charEffects = EffectsCls ? new EffectsCls(scene, player) : null;
 
-  disposeLocalSocketEvents = bindLocalSocketEvents({
+  localSocketEvents = bindLocalSocketEvents({
     socket,
     getUsername: () => username,
     getScene: () => scene,
     getPlayer: () => player,
     getCurrentCharacter: () => currentCharacter,
-    getGameId: () => gameId,
-    getPlayersInTeam: () => playersInTeam,
     getOpponentPlayersRef: () => opponentPlayersRef,
     spawnHealthMarker,
     updateHealthBar,
-    getCurrentHealth: () => currentHealth,
-    setCurrentHealthValue: (value) => {
-      currentHealth = value;
-    },
-    getMaxHealth: () => maxHealth,
-    setMaxHealth: (value) => {
-      maxHealth = value;
-    },
-    getDead: () => dead,
-    setDead: (value) => {
-      if (dead !== value) {
-        endDash(player, false);
-        if (player) { player._dashReadyAt = 0; player._dashHud?.hide(); }
-      }
-      dead = value;
-      mobileControlsController?.setHidden?.(!!value);
-    },
-    getSuperCharge: () => superCharge,
-    setSuperCharge: (value) => {
-      superCharge = value;
-    },
-    setMaxSuperCharge: (value) => {
-      maxSuperCharge = value;
-    },
+    stats: localStats,
     stopWallSlideAudio: () => movementAudio.stopWallSlide(),
     onLocalDeath: () => {
-      combatMouseController?.endDrag();
+      pointerAttack?.mouse?.endDrag();
       resetMovementInputState();
       resetMovementVfxTracking();
-      resetPointerAttackAim();
+      pointerAttack?.reset();
       updateHealthBar();
-      setLocalUiVisible(false);
+      localHud?.setLocalUiVisible(false);
     },
     onLocalRespawn: () => {
       resetMovementInputState();
@@ -1091,11 +588,10 @@ export function createPlayer(
       resizeForDuckLocal?.(false);
       applyFlipOffsetLocal?.();
       player.body?.updateFromGameObject?.();
-      setLocalUiVisible(true);
+      localHud?.setLocalUiVisible(true);
       syncLocalUiPosition();
       try {
-        indicatorTriangle?.setVisible(true);
-        drawIndicatorTriangle();
+        localHud?.showIndicator();
       } catch (_) {}
     },
     removeLocalCorpse: () => {
@@ -1103,157 +599,47 @@ export function createPlayer(
         player?.setVisible(false);
       } catch (_) {}
     },
-    onDebug: pdbg,
     onDuckBlocked: () => playDuckBlockSound(scene),
     onAttackInterrupted: () => {
       isAttacking = false;
-      combatMouseController?.endDrag();
-      resetPointerAttackAim();
+      pointerAttack?.mouse?.endDrag();
+      pointerAttack?.reset();
     },
   });
 
-  if (!scene._localSocketEventsCleanupBound) {
-    scene._localSocketEventsCleanupBound = true;
-    const disposeLocalPlayerBindings = () => {
-      scene.events.off("shutdown", disposeLocalPlayerBindings);
-      scene.events.off("destroy", disposeLocalPlayerBindings);
-      if (disposeLocalSocketEvents) {
-        try {
-          disposeLocalSocketEvents();
-        } catch (_) {}
-        disposeLocalSocketEvents = null;
-      }
-      resetPointerAttackAim();
-      movementAudio.dispose();
-      mobileControlsController?.destroy?.();
-      detachPointerAttackBindings(sceneParam);
-      clearGameCursor(sceneParam);
-      try {
-        attackAimReticleController?.destroy?.();
-      } catch (_) {}
-      attackAimReticleController = null;
-      charEffects?.destroy?.();
-      charEffects = null;
-      scene._localSocketEventsCleanupBound = false;
-    };
-    scene.events.once("shutdown", disposeLocalPlayerBindings);
-    scene.events.once("destroy", disposeLocalPlayerBindings);
-  }
+  const dispose = () => {
+    sceneParam.events.off("shutdown", dispose);
+    sceneParam.events.off("destroy", dispose);
+    if (disposePlayerLifetime !== dispose) return;
+    disposePlayerLifetime = null;
+    stopKeyUpdates();
+    sceneParam.physics.world.off("worldstep", protectDuckEdge);
+    sceneParam.physics.world.off("worldstep", protectDash);
+    sceneParam.events.off("postupdate", syncUiAfterPhysics);
+    restoreIntegration();
+    localHud?.destroy();
+    localHud = null;
+    localSocketEvents?.dispose();
+    localSocketEvents = null;
+    destroyMobileControls();
+    movementAudio.dispose();
+    charEffects?.destroy?.();
+    charEffects = null;
+    charCtrl = null;
+    sceneParam._localPlayerAudioSprite = null;
+    player = null;
+    scene = null;
+  };
+  disposePlayerLifetime = dispose;
+  sceneParam.events.once("shutdown", dispose);
+  sceneParam.events.once("destroy", dispose);
 }
 
-// Function to set health of player from another file
-function setCurrentHealth(damage) {
-  // Deprecated: server authoritative. Kept for compatibility (no-op display update only)
-  currentHealth -= damage;
-  if (currentHealth < 0) currentHealth = 0;
-  updateHealthBar();
-}
-
-function setLocalUiVisible(visible) {
-  const shouldShow = visible !== false;
-  if (!shouldShow) {
-    resetHealthBarAnimation(healthBar);
-    resetSuperBarAnimation(superBar, player);
-  }
-  try {
-    playerName?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
-    healthText?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
-    healthBar?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
-    const showDuckShield = shouldShow && !dead && !!player?._ducking;
-    duckShieldIcon?.setVisible(showDuckShield);
-    duckShieldGlow?.setVisible(showDuckShield);
-    if (!shouldShow) setStatusIconStackVisible(powerupStatusIcons, false);
-  } catch (_) {}
-  try {
-    ammoBar?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
-    ammoBarBack?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
-    superBar?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
-    superBarBack?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
-    indicatorTriangle?.setVisible(shouldShow);
-    if (!shouldShow) indicatorTriangle?.clear?.();
-  } catch (_) {}
-  if (!shouldShow) {
-    clearAttackAimReticle();
-  }
-}
-
-function setLocalUiAlpha(alpha = 1) {
-  const safeAlpha = Math.max(0, Math.min(1, Number(alpha) || 0));
-  for (const item of [
-    playerName,
-    healthText,
-    healthBar,
-    duckShieldIcon,
-    duckShieldGlow,
-    ammoBar,
-    ammoBarBack,
-    superBar,
-    superBarBack,
-    indicatorTriangle,
-  ]) {
-    try {
-      item?.setAlpha?.(safeAlpha);
-    } catch (_) {}
-  }
-  setStatusIconStackAlpha(powerupStatusIcons, safeAlpha);
-  try {
-    const hudRoot = document.getElementById("hud");
-    if (hudRoot) {
-      hudRoot.style.transition = "opacity 180ms ease";
-      hudRoot.style.opacity = powerupInvisible ? "0.48" : "";
-    }
-  } catch (_) {}
-}
-
-function drawIndicatorTriangle() {
-  if (!indicatorTriangle || !player) return;
-  indicatorTriangle.clear();
-  const bodyTop = getStableLocalUiTop();
-  const hudX = playerAnchor(player, "top").x;
-  const triangle = new Phaser.Geom.Triangle(
-    hudX,
-    bodyTop - 10,
-    hudX - 13,
-    bodyTop - 20,
-    hudX + 13,
-    bodyTop - 20,
-  );
-  indicatorTriangle.fillStyle(0x99ab2c);
-  indicatorTriangle.fillTriangleShape(triangle);
-}
-
-export function syncLocalUiPosition() {
-  if (!player) return;
-  const uiTop = getStableLocalUiTop();
-  try {
-    playerName?.setPosition(playerAnchor(player, "top").x, uiTop - 42);
-  } catch (_) {}
-  try {
-    if (indicatorTriangle?.visible) drawIndicatorTriangle();
-  } catch (_) {}
-  updateHealthBar();
-}
+function updateHealthBar() { localHud?.updateHealthBar(); }
+export function syncLocalUiPosition() { localHud?.syncLocalUiPosition(); }
 
 function getStableLocalUiTop() {
-  if (Number.isFinite(player?._bbHudTopOffset)) return player.y + player._bbHudTopOffset;
-  if (!player?.body) return player.y - player.height / 2;
-  if (!player._ducking || !bodyConfig || !frame) return player.body.y;
-  const standingHeight = Math.max(4, frame.realHeight - bodyConfig.heightShrink);
-  return player.body.bottom - standingHeight * Math.abs(player.scaleY || 1) + 8;
+  return hudTopY(player, frame, bodyConfig);
 }
 
 export function finalizeLocalSpawnPresentation() {
@@ -1271,63 +657,13 @@ export function finalizeLocalSpawnPresentation() {
       player._spawnIntroPresented = true;
     } catch (_) {}
   }
-  setLocalUiVisible(!dead);
+  localHud?.setLocalUiVisible(!dead);
   if (!dead) {
     try {
-      indicatorTriangle?.setVisible(true);
-      drawIndicatorTriangle();
+      localHud?.showIndicator();
     } catch (_) {}
   }
   syncLocalUiPosition();
-}
-
-function updateHealthBar() {
-  if (currentHealth <= 0) currentHealth = 0;
-  pdbg();
-
-  const healthBarX = playerAnchor(player, "top").x - healthBarWidth / 2;
-  const bodyTop = getStableLocalUiTop();
-  // Always anchor to bodyTop so it doesn't jump when dead
-  const y = bodyTop - 20; // just above body
-
-  if (!dead) {
-    healthText.setText(`${currentHealth}`);
-  } else {
-    // Show 0 instead of blank when dead
-    healthText.setText(`0`);
-  }
-
-  drawHealthBar(healthBar, {
-    x: healthBarX, y, width: healthBarWidth,
-    health: currentHealth, maxHealth, color: 0xaebb50, teamGlowColor: 0x83dca6, isLocal: true,
-  });
-  healthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-
-  const showDuckShield = !dead && !!player._ducking && healthBar.visible !== false;
-  const shieldX = healthBarX + healthBarWidth + 1;
-  const powerupX = healthBarX - 1;
-  const shieldY = y + 4.5;
-  duckShieldGlow?.setPosition(shieldX, shieldY).setVisible(showDuckShield);
-  duckShieldIcon?.setPosition(shieldX, shieldY).setVisible(showDuckShield);
-  syncStatusIconStack({
-    scene,
-    icons: powerupStatusIcons,
-    effects: player?._powerupEffects,
-    recentEffects: player?._recentPowerupEffects,
-    x: powerupX,
-    y: shieldY,
-    visible: !dead && healthBar.visible !== false,
-    startIndex: 0,
-  });
-
-  healthText.setPosition(player.x - healthText.width / 2, y - 8);
-  healthText.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
-
-  // Draw ammo bar underneath health (only for local player & when alive)
-  // Each bar's 2px pixel frame overlaps the one above, so the stack reads as
-  // one panel with ink dividers.
-  drawAmmoBar(healthBarX, y + 11);
-  drawSuperBar(healthBarX, y + 19);
 }
 
 function fireBasicAttack(direction, context = null) {
@@ -1348,7 +684,7 @@ function fireBasicAttack(direction, context = null) {
 
 function fireSpecialAttack(context = null) {
   if (dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
-  if (superCharge < maxSuperCharge) {
+  if (localStats.superCharge < localStats.maxSuperCharge) {
     triggerSpecialNotReadyFeedback();
     return;
   }
@@ -1377,7 +713,7 @@ function fireSpecialAttack(context = null) {
   } catch (_) {}
   noteClientActionSent("special", { type: "special" });
   const specialRequest = { aim: serializeAimContext(context) };
-  socket.emit("game:special", withShotView(predictCharacterSpecial(
+  socket.emit(SOCKET_EVENTS.GAME_SPECIAL, withShotView(predictCharacterSpecial(
     currentCharacter, player?.scene, player, username, specialRequest,
   )));
 }
@@ -1392,27 +728,6 @@ function triggerSpecialNotReadyFeedback() {
   } catch (_) {}
 }
 
-function drawSuperBar(x, y) {
-  if (!superBar || !superBarBack) return;
-  drawSuperChargeBar(superBar, superBarBack, {
-    x, y, charge: superCharge, maxCharge: maxSuperCharge, player,
-    notReady: Date.now() < _specialNotReadyFlash,
-  });
-}
-
-function drawAmmoBar(forcedX, forcedY) {
-  if (!ammoBar || !ammoBarBack) return;
-  const shakeX =
-    Date.now() < ammoBarShakeUntil ? Phaser.Math.Between(-3, 3) : 0;
-  const x =
-    (forcedX !== undefined ? forcedX : player.x - ammoBarWidth / 2) + shakeX;
-  const bodyTop = getStableLocalUiTop();
-  const y = forcedY !== undefined ? forcedY : bodyTop - 9; // just under health bar
-  drawAmmoChargeBar(ammoBar, ammoBarBack, { x, y, width: ammoBarWidth,
-    ammo: { capacity: ammoCapacity, charges: ammoCharges, reloadTimerMs, reloadMs: ammoReloadMs },
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Per-frame local movement
 // ---------------------------------------------------------------------------
@@ -1422,7 +737,8 @@ function drawAmmoBar(forcedX, forcedY) {
 // -> ducking -> horizontal motion -> jumps -> wall slide -> airborne state ->
 // presentation (effects, animation) -> replicated input state.
 
-export function handlePlayerMovement(scene) {
+export function handlePlayerMovement(activeScene) {
+  if (activeScene !== scene || !player) return;
   mobileControlsController?.update?.(scene);
   updateInvisibleAttackAlpha();
   // Touch players read the cooldown from the dash button instead.
@@ -1474,7 +790,7 @@ export function handlePlayerMovement(scene) {
   movementFx.updateFalling(scene, player, { dead, sliding: isWallSliding, hidden: powerupInvisible });
   updateAirborneState(isWallSliding);
 
-  updatePointerAttackAimState();
+  pointerAttack?.update();
   movementFx.updateLanding(scene, player, { dead, hidden: powerupInvisible });
   if (player.body.touching.down) player._lastGroundTime = Date.now();
   // Per-character effects update (e.g., Draven fire trail)
@@ -1506,16 +822,19 @@ export function handlePlayerMovement(scene) {
   });
 }
 
+function isUiCapturingInput() {
+  return chatInputActive || isSiteDialogOpen();
+}
+
 function isLocalInputInactive(scene) {
   const desktopInputInactive =
-    !!combatMouseController &&
+    !!pointerAttack?.mouse &&
     !mobileControlsController?.isEnabled?.() &&
-    !combatMouseController.isActive();
+    !pointerAttack.mouse.isActive();
   return (
     scene?.input?.keyboard?.enabled === false ||
     desktopInputInactive ||
-    chatInputActive ||
-    !!window.__BB_SITE_DIALOG_OPEN
+    isUiCapturingInput()
   );
 }
 
@@ -1526,22 +845,22 @@ function isControlLocked(now = Date.now()) {
   ) > now;
 }
 
-
 function isLoadedForNetwork() {
   return !dead && Number.isFinite(player?.x) && Number.isFinite(player?.y) && player?.visible !== false;
 }
 
 // Replicated input snapshot; physics/facing fields always come from the body.
-function buildNetworkInputState(fields) {
+function buildNetworkInputState(fields, { derive = true, includeDucking = true } = {}) {
+  if (!derive) return fields;
   return {
     grounded: !!player?.body?.touching?.down,
-    ducking: !!player?._ducking,
+    ...(includeDucking ? { ducking: !!player?._ducking } : {}),
     vx: Number(player?.body?.velocity?.x) || 0,
     vy: Number(player?.body?.velocity?.y) || 0,
     facing: player?.flipX ? -1 : 1,
-    ...fields,
     ...getMovementFxNetworkState(),
     loaded: isLoadedForNetwork(),
+    ...fields,
   };
 }
 
@@ -1557,7 +876,6 @@ function applyInactiveInputFrame(scene) {
   });
   isMoving = false;
   const grounded = !!(player?.body?.touching?.down || player?.body?.blocked?.down);
-  if (grounded) isJumping = false;
   const now = Date.now();
   const desiredMovementAnimation = deriveMovementAnimation({
     grounded,
@@ -1571,36 +889,30 @@ function applyInactiveInputFrame(scene) {
     fallback: getPresentedAnimation(player, "idle"),
   });
   // While a throw or special is showing, the controller keeps it.
-  const passiveAnimation = desiredMovementAnimation;
   playCharacterAnimation({
     scene,
     sprite: player,
     character: currentCharacter,
     skinId: currentSkinId,
     resolveAnimKey,
-    logical: passiveAnimation,
+    logical: desiredMovementAnimation,
     fallback: "idle",
     force: true,
   });
   // Input can be inactive while Arcade Physics still advances the body; the
   // postupdate sync keeps world-space HUD elements attached meanwhile.
-  networkInputState = {
+  networkInputState = buildNetworkInputState({
     left: false,
     right: false,
     direction: 0,
     jumpHeld: false,
     jumpPressed: false,
     grounded,
-    vx: Number(player?.body?.velocity?.x) || 0,
-    vy: Number(player?.body?.velocity?.y) || 0,
-    facing: player?.flipX ? -1 : 1,
-    animation: getPresentedAnimation(player, passiveAnimation),
+    animation: getPresentedAnimation(player, desiredMovementAnimation),
     wallSliding: false,
     wallSide: null,
-    ...getMovementFxNetworkState(),
     movementLocked: true,
-    loaded: isLoadedForNetwork(),
-  };
+  }, { includeDucking: false });
 }
 
 // Advances the dash and ammo reload. Returns true while a dash owns movement.
@@ -1620,16 +932,8 @@ function updateDashAndAmmo(scene) {
     now,
     showEffect: !powerupInvisible,
   });
-  if (ammoCharges < ammoCapacity) {
-    reloadTimerMs += scene.game.loop.delta;
-    if (reloadTimerMs >= ammoReloadMs) {
-      reloadTimerMs = 0;
-      ammoCharges = Math.min(ammoCapacity, ammoCharges + 1);
-    }
-  } else {
-    reloadTimerMs = 0; // full, no reload progress
-  }
-  if (!dead) drawAmmoBar();
+  ammo.tick(scene.game.loop.delta);
+  if (!dead) localHud?.drawAmmoBar();
   return dashing;
 }
 
@@ -1642,14 +946,19 @@ function applyDashFrame(scene) {
   applyFlipOffsetLocal?.();
   playCharacterAnimation({ scene, sprite: player, character: currentCharacter,
     skinId: currentSkinId, resolveAnimKey, logical: "dashing", fallback: "falling", force: true });
-  networkInputState = {
-    direction: player._dash.inputX || 0, jumpHeld: false, jumpPressed: false,
-    grounded: !!player.body.touching.down, ducking: !!player._ducking,
-    vx: player.body.velocity.x, vy: player.body.velocity.y,
-    facing: player.flipX ? -1 : 1, animation: "dashing",
-    wallSliding: false, wallSide: null, ...getMovementFxNetworkState(),
-    movementLocked: false, loaded: !dead && player.visible !== false,
-  };
+  networkInputState = buildNetworkInputState({
+    direction: player._dash.inputX || 0,
+    jumpHeld: false,
+    jumpPressed: false,
+    grounded: !!player.body.touching.down,
+    vx: player.body.velocity.x,
+    vy: player.body.velocity.y,
+    animation: "dashing",
+    wallSliding: false,
+    wallSide: null,
+    movementLocked: false,
+    loaded: !dead && player.visible !== false,
+  });
 }
 
 // Attacks such as Draven's splash lock facing; enforce it before movement
@@ -1774,24 +1083,24 @@ function handleActionKeys() {
   try {
     const pressed = (key) => key && Phaser.Input.Keyboard.JustDown(key) && !dead;
     if (pressed(keyJ) && !isControlLocked()) {
-      const context = resolveQuickAttackContext("basic");
+      const context = pointerAttack?.quick("basic");
       fireBasicAttack(context.direction, context);
     }
     if (pressed(keyI) && !isControlLocked()) {
-      fireSpecialAttack(resolveQuickAttackContext("special"));
+      fireSpecialAttack(pointerAttack?.quick("special"));
     }
     if (pressed(keyE) && !isControlLocked()) {
       noteClientActionSent("mode-interact", { type: "mode-interact" });
-      socket.emit("game:action", { type: "mode-interact" });
+      socket.emit(SOCKET_EVENTS.GAME_ACTION, { type: "mode-interact" });
     }
   } catch (_) {}
 }
 
 function updateAimReticleVisibility() {
   if (mobileControlsController?.isEnabled?.()) {
-    mobileControlsController.updateReticle(attackAimReticleController);
-  } else if (!attackAimState.active) {
-    clearAttackAimReticle();
+    mobileControlsController.updateReticle(pointerAttack?.reticle);
+  } else if (!pointerAttack?.active) {
+    pointerAttack?.clearReticle();
   }
 }
 
@@ -1815,7 +1124,7 @@ function updateDucking(scene, input, movementLocked) {
     ducking = false;
   }
   if (player._ducking && !ducking && grounded && !dead) {
-    const standingHeight = Math.max(4, frame.realHeight - bodyConfig.heightShrink);
+    const standingHeight = standingBodyHeight(player, frame, bodyConfig);
     const extraHeight = standingHeight * Math.abs(player.scaleY || 1) - player.body.height;
     if (!hasStandingClearance(player.body, scene._mapObjects || [], extraHeight)) {
       ducking = true;
@@ -1833,12 +1142,6 @@ function updateDucking(scene, input, movementLocked) {
     player._duckGroundSpan = null;
   }
   return ducking;
-}
-
-function hideSpawnIndicator() {
-  if (!indicatorTriangle) return;
-  indicatorTriangle.clear();
-  indicatorTriangle.setVisible(false);
 }
 
 function applyHorizontalMovement(input, tuning, { ducking, shockwaveActive }) {
@@ -1861,12 +1164,12 @@ function applyHorizontalMovement(input, tuning, { ducking, shockwaveActive }) {
     player.setDragX(onGround ? tuning.dragGround : tuning.dragAir);
   };
   if (input.left) {
-    hideSpawnIndicator();
+    localHud?.hideSpawnIndicator();
     accelerate(-1);
     setFacingLeft(true);
     isMoving = true;
   } else if (input.right) {
-    hideSpawnIndicator();
+    localHud?.hideSpawnIndicator();
     setFacingLeft(false);
     accelerate(1);
     isMoving = true;
@@ -1925,7 +1228,7 @@ function updateJumping(scene, wall, tuning, { movementLocked, shockwaveActive, g
     (body.touching.down || now - (player._lastGroundTime || 0) <= tuning.coyoteTimeMs) &&
     !dead
   ) {
-    hideSpawnIndicator();
+    localHud?.hideSpawnIndicator();
     // Slight jump boost when moving fast to feel snappier transitions.
     const boost = Phaser.Math.Clamp(
       (Math.abs(body.velocity.x || 0) / tuning.maxSpeed) * tuning.jumpBoost, 0, tuning.jumpBoost);
@@ -1965,12 +1268,10 @@ function performJump(scene, jumpSpeed) {
     noteMovementFxEvent("jump", { direction: Math.sign(Number(body.velocity?.x) || 0) });
   }
   playJumpAnimation(scene);
-  pdbg();
   player._jumpConsumed = true;
   player._jumpLaunch = { startedAt: Date.now(), vy: -jumpSpeed * MOVEMENT_PHYSICS.jumpLaunchSpeedMult };
   player.setVelocityY(player._jumpLaunch.vy * MOVEMENT_PHYSICS.jumpStartSpeedRatio);
   isMoving = true;
-  isJumping = true;
 }
 
 // Physics-impulse wall jump away from `wallSide`, with a short re-jump
@@ -1989,15 +1290,12 @@ function performWallJump(scene, wallSide, tuning) {
   if (!player._lockFlip) setFacingLeft(!fromLeft);
   else enforceLockedFacing();
   playJumpAnimation(scene, true);
-  pdbg();
 
   // Visual-only kickback cloud at the wall contact point.
   try {
     const body = player.body;
-    const contactX = body
-      ? body.x + (fromLeft ? 0 : body.width)
-      : player.x + (fromLeft ? -player.width * 0.5 : player.width * 0.5);
-    const contactY = body ? body.y + body.height * 0.62 : player.y + player.height * 0.18;
+    const { x: contactX, y: contactY } = wallContactPoint(body, wallSide, MOVEMENT_VFX_CONFIG.wallKickHeightFraction,
+      player.x, player.y + player.height * 0.18, player.width * 0.5);
     if (!powerupInvisible) spawnWallKickCloud(scene, contactX, contactY, fromLeft ? 1 : -1, { follow: player });
   } catch (_) {}
   noteMovementFxEvent("wall-jump", { direction: fromLeft ? 1 : -1, wallSide: fromLeft ? "left" : "right" });
@@ -2008,8 +1306,9 @@ function performWallJump(scene, wallSide, tuning) {
   player.setVelocityX(fromLeft ? tuning.wallKickFull : -tuning.wallKickFull);
   player.setVelocityY(-vertKick);
   player.setDragX(tuning.dragAir);
+  const jumpingPlayer = player;
   scene.time.delayedCall(tuning.wallJumpCooldownMs, () => {
-    canWallJump = true;
+    if (player === jumpingPlayer) canWallJump = true;
   });
   player._wallKickLockUntil = Date.now() + tuning.wallKickLockMs;
 }
@@ -2033,17 +1332,10 @@ function updateWallSlide(scene, wall, tuning, movementLocked) {
   return sliding;
 }
 
-// Clears the jump state once the jump animation ends in the air, and stops
-// the slide scrape when idle on the ground.
+// Clear the jump state once its animation ends in the air.
 function updateAirborneState(isWallSliding) {
   if (!player.anims.isPlaying && !player.body.touching.down && !isWallSliding && !isAttacking) {
     movementAudio.updateWallSlide(false);
-    pdbg();
-    isJumping = false;
-  }
-  if (!isMoving && player.body.touching.down && !isJumping && !isAttacking && !dead) {
-    movementAudio.updateWallSlide(false);
-    pdbg();
   }
 }
 
@@ -2098,17 +1390,17 @@ export function getNetworkInputState() {
 
 export function getPlayerTutorialState() {
   return {
-    health: Number(currentHealth) || 0,
-    maxHealth: Math.max(1, Number(maxHealth) || 1),
+    health: Number(localStats.currentHealth) || 0,
+    maxHealth: Math.max(1, Number(localStats.maxHealth) || 1),
     healthRatio: Math.max(
       0,
-      Math.min(1, (Number(currentHealth) || 0) / Math.max(1, Number(maxHealth) || 1)),
+      Math.min(1, (Number(localStats.currentHealth) || 0) / Math.max(1, Number(localStats.maxHealth) || 1)),
     ),
-    superCharge: Number(superCharge) || 0,
-    maxSuperCharge: Math.max(1, Number(maxSuperCharge) || 1),
+    superCharge: Number(localStats.superCharge) || 0,
+    maxSuperCharge: Math.max(1, Number(localStats.maxSuperCharge) || 1),
     superRatio: Math.max(
       0,
-      Math.min(1, (Number(superCharge) || 0) / Math.max(1, Number(maxSuperCharge) || 1)),
+      Math.min(1, (Number(localStats.superCharge) || 0) / Math.max(1, Number(localStats.maxSuperCharge) || 1)),
     ),
   };
 }
@@ -2119,19 +1411,10 @@ export function setLocalNetStateFlusher(fn) {
 
 export function setChatInputActive(active) {
   chatInputActive = !!active;
-  if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) {
-    combatMouseController?.release();
-    resetPointerAttackAim();
+  if (isUiCapturingInput()) {
+    pointerAttack?.mouse?.release();
+    pointerAttack?.reset();
     resetMovementInputState({ preserveVelocity: true });
-    networkInputState = {
-      ...networkInputState,
-      left: false,
-      right: false,
-      direction: 0,
-      jumpHeld: false,
-      jumpPressed: false,
-      movementLocked: true,
-    };
   }
 }
 
@@ -2142,7 +1425,7 @@ export function isChatInputActive() {
 // Keep browser focus on the arena during the pre-fight countdown without
 // enabling movement before the HUD declares the fight live.
 export function focusBattleInput() {
-  return combatMouseController?.prepareForBattle?.() || false;
+  return pointerAttack?.mouse?.prepareForBattle?.() || false;
 }
 
 export function setPowerupMobility(speedMult = 1, jumpMult = 1) {
@@ -2176,8 +1459,8 @@ export function setPowerupInvisible(active = false) {
     }
   }
   if (changed) {
-    setLocalUiVisible(!dead);
-    setLocalUiAlpha(powerupInvisible ? 0.42 : 1);
+    localHud?.setLocalUiVisible(!dead);
+    localHud?.setLocalUiAlpha(powerupInvisible ? 0.42 : 1);
   }
 }
 
@@ -2190,12 +1473,12 @@ export function setExternalControlLockUntil(untilMs = 0) {
 }
 
 export function destroyMobileControls() {
-  combatMouseController?.destroy();
-  combatMouseController = null;
+  pointerAttack?.destroy();
+  pointerAttack = null;
   try {
     mobileControlsController?.destroy?.();
   } catch (_) {}
   mobileControlsController = null;
 }
 
-export { player, frame, currentHealth, setCurrentHealth, dead };
+export { player, dead };

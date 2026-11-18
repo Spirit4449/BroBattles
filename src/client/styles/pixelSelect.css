@@ -14,13 +14,13 @@
   min-width: 132px;
   max-width: 100%;
   padding: 8px 10px;
-  border: 3px solid #03060b;
+  border: 3px solid var(--bb-ink);
   border-radius: 0;
   background: linear-gradient(#2c4870, #1b304d);
-  box-shadow: 0 3px #03060b, inset 0 2px #6b85a2, inset 0 -3px #142540;
+  box-shadow: 0 3px var(--bb-ink), inset 0 2px #6b85a2, inset 0 -3px #142540;
   color: #fff;
   font: 9px/1.4 var(--bb-font-display, "Press Start 2P", monospace);
-  text-shadow: 1px 1px #03060b;
+  text-shadow: 1px 1px var(--bb-ink);
   text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
@@ -32,7 +32,7 @@
 
 .bb-pixel-select-trigger:active:not(:disabled) {
   translate: 0 2px;
-  box-shadow: 0 1px #03060b, inset 0 2px #142540;
+  box-shadow: 0 1px var(--bb-ink), inset 0 2px #142540;
 }
 
 .bb-pixel-select-trigger:focus-visible {
@@ -68,9 +68,9 @@
   margin: 0;
   padding: 4px;
   list-style: none;
-  border: 3px solid #03060b;
-  background: #0b1629;
-  box-shadow: 0 4px #03060b, inset 0 2px #2c4568, 0 10px 18px #0007;
+  border: 3px solid var(--bb-ink);
+  background: var(--bb-surface-1);
+  box-shadow: 0 4px var(--bb-ink), inset 0 2px #2c4568, 0 10px 18px #0007;
 }
 
 .bb-pixel-select.is-up .bb-pixel-select-list {

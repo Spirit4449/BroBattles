@@ -1,3 +1,4 @@
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import { spawnRespawnEffect } from '../scene/respawnEffect';
 import { endDash } from '../scene/dash';
 import { spawnKnockbackTrail } from '../scene/knockbackTrail';
@@ -22,25 +23,14 @@ export function bindLocalSocketEvents({
   getScene,
   getPlayer,
   getCurrentCharacter,
-  getGameId,
-  getPlayersInTeam,
   getOpponentPlayersRef,
   spawnHealthMarker,
   updateHealthBar,
-  getCurrentHealth,
-  setCurrentHealthValue,
-  getMaxHealth,
-  setMaxHealth,
-  getDead,
-  setDead,
-  getSuperCharge,
-  setSuperCharge,
-  setMaxSuperCharge,
+  stats,
   stopWallSlideAudio,
   onLocalDeath,
   onLocalRespawn,
   removeLocalCorpse,
-  onDebug,
   onDuckBlocked,
   onAttackInterrupted,
 }) {
@@ -57,18 +47,16 @@ export function bindLocalSocketEvents({
     const scene = getScene();
     const player = getPlayer();
 
-    const prev = getCurrentHealth();
+    const prev = stats.currentHealth;
     if (typeof data.maxHealth === "number" && data.maxHealth > 0) {
-      setMaxHealth(data.maxHealth);
-      if (getCurrentHealth() > getMaxHealth()) {
-        setCurrentHealthValue(getMaxHealth());
+      stats.maxHealth = data.maxHealth;
+      if (stats.currentHealth > stats.maxHealth) {
+        stats.currentHealth = stats.maxHealth;
       }
     }
-    setCurrentHealthValue(data.health);
+    stats.currentHealth = data.health;
 
-    const delta = getCurrentHealth() - prev;
-
-    onDebug?.();
+    const delta = stats.currentHealth - prev;
 
     if (scene && player && delta !== 0) {
       const markerY = player.body
@@ -79,7 +67,7 @@ export function bindLocalSocketEvents({
       });
     }
 
-    if (scene && scene.sound && !getDead()) {
+    if (scene && scene.sound && !stats.dead) {
       if (delta < 0) {
         scene.sound.play("sfx-damage", { volume: 5 });
         if (data.duckBlocked === true || player._ducking === true) {
@@ -96,18 +84,17 @@ export function bindLocalSocketEvents({
       }
     }
 
-    if (getCurrentHealth() <= 0) {
-      if (!getDead()) {
-        setDead(true);
+    if (stats.currentHealth <= 0) {
+      if (!stats.dead) {
+        stats.dead = true;
         if (typeof onLocalDeath === "function") {
           try {
             onLocalDeath();
           } catch (_) {}
         }
         stopWallSlideAudio?.();
-        onDebug?.();
       }
-      setCurrentHealthValue(0);
+      stats.currentHealth = 0;
     }
 
     updateHealthBar();
@@ -122,7 +109,7 @@ export function bindLocalSocketEvents({
 
     player._deathPresentationActive = true;
     player._deathPresentationAt = Number(payload?.at) || Date.now();
-    setDead(true);
+    stats.dead = true;
     try {
       onLocalDeath?.();
     } catch (_) {}
@@ -174,8 +161,8 @@ export function bindLocalSocketEvents({
 
   const superUpdateHandler = (data) => {
     if (data.username !== getUsername()) return;
-    setSuperCharge(data.charge);
-    setMaxSuperCharge(data.maxCharge);
+    stats.superCharge = data.charge;
+    stats.maxSuperCharge = data.maxCharge;
     updateHealthBar();
   };
 
@@ -185,26 +172,12 @@ export function bindLocalSocketEvents({
     const scene = getScene();
     const player = getPlayer();
 
-    const targets = Object.values(getOpponentPlayersRef() || {})
-      .map((op) => op.opponent)
-      .filter((s) => s && s.active);
-
-    performSpecial(
-      data.character,
-      scene,
-      player,
-      getPlayersInTeam(),
-      targets,
-      getUsername(),
-      getGameId(),
-      true,
-      data.aim || null,
-    );
+    performSpecial(data.character, { scene, player, isOwner: true, aim: data.aim || null });
   };
 
   const knockbackHandler = (data) => {
     const player = getPlayer();
-    if (!player || !player.body || getDead()) return;
+    if (!player || !player.body || stats.dead) return;
 
     const amountX = Number(data?.amountX) || 0;
     const amountY = Number(data?.amountY) || 0;
@@ -246,12 +219,12 @@ export function bindLocalSocketEvents({
     if (!scene || !player) return;
 
     cancelCorpseRemoval();
-    setDead(false);
+    stats.dead = false;
     if (typeof payload?.maxHealth === "number" && payload.maxHealth > 0) {
-      setMaxHealth(payload.maxHealth);
+      stats.maxHealth = payload.maxHealth;
     }
     if (typeof payload?.health === "number") {
-      setCurrentHealthValue(payload.health);
+      stats.currentHealth = payload.health;
     }
 
     try {
@@ -315,7 +288,6 @@ export function bindLocalSocketEvents({
   };
   const interruptPresentation = (sprite) => {
     sprite.emit?.('attack:interrupted');
-    sprite._thorgAttackCleanup?.();
     sprite._specialCastLockUntil = 0;
     // Ends any throw or special, so the falling pose below can play.
     sprite._bbAnimationState = {};
@@ -329,24 +301,21 @@ export function bindLocalSocketEvents({
       endDash(player, false);
     }
   };
-  socket.on("player:stomp", stompHandler);
-  socket.on("game:correction", correctionHandler);
-  socket.on("health-update", healthUpdateHandler);
-  socket.on("super-update", superUpdateHandler);
-  socket.on("player:special", specialHandler);
-  socket.on("player:knockback", knockbackHandler);
-  socket.on("player:dead", playerDeadHandler);
-  socket.on("player:respawn", playerRespawnHandler);
+  socket.on(SOCKET_EVENTS.PLAYER_STOMP, stompHandler);
+  socket.on(SOCKET_EVENTS.GAME_CORRECTION, correctionHandler);
 
-  return () => {
+  socket.on(SOCKET_EVENTS.PLAYER_KNOCKBACK, knockbackHandler);
+  socket.on(SOCKET_EVENTS.PLAYER_DEAD, playerDeadHandler);
+  socket.on(SOCKET_EVENTS.PLAYER_RESPAWN, playerRespawnHandler);
+
+  function dispose() {
     cancelCorpseRemoval();
-    socket.off("player:stomp", stompHandler);
-    socket.off("game:correction", correctionHandler);
-    socket.off("health-update", healthUpdateHandler);
-    socket.off("super-update", superUpdateHandler);
-    socket.off("player:special", specialHandler);
-    socket.off("player:knockback", knockbackHandler);
-    socket.off("player:dead", playerDeadHandler);
-    socket.off("player:respawn", playerRespawnHandler);
-  };
+    socket.off(SOCKET_EVENTS.PLAYER_STOMP, stompHandler);
+    socket.off(SOCKET_EVENTS.GAME_CORRECTION, correctionHandler);
+
+    socket.off(SOCKET_EVENTS.PLAYER_KNOCKBACK, knockbackHandler);
+    socket.off(SOCKET_EVENTS.PLAYER_DEAD, playerDeadHandler);
+    socket.off(SOCKET_EVENTS.PLAYER_RESPAWN, playerRespawnHandler);
+  }
+  return { dispose, applyHealthUpdate: healthUpdateHandler, applySuperUpdate: superUpdateHandler, presentSpecial: specialHandler };
 }

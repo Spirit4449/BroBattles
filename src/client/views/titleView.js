@@ -1,4 +1,6 @@
-import catalog from "../../shared/catalogs/titlesCatalog.json";
+import { BROWSER_EVENTS } from "../lib/browserEvents.js";
+import { API_PATHS } from "../../shared/net/apiPaths.js";
+import catalog from "../../shared/catalogs/titlesCatalog.cjs";
 import { escapeHtml } from "../../shared/site/html.cjs";
 import "../styles/titles.css";
 
@@ -38,13 +40,13 @@ export function renderTitleCollection(container, profile, { fetchJson, onSelecte
     button.addEventListener("click", async () => {
       if (button.dataset.titleId && !owned.has(button.dataset.titleId)) {
         if (document.getElementById("profile-loadout-shop")) {
-          document.dispatchEvent(new CustomEvent("bb:open-title-shop", { detail: { offerId: `title-${button.dataset.titleId}` } }));
+          document.dispatchEvent(new CustomEvent(BROWSER_EVENTS.OPEN_TITLE_SHOP, { detail: { offerId: `title-${button.dataset.titleId}` } }));
         } else window.location.href = `/?titleOffer=${encodeURIComponent(`title-${button.dataset.titleId}`)}`;
         return;
       }
       container.querySelectorAll("button").forEach(item => { item.disabled = true; });
       try {
-        const result = await fetchJson("/titles/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ titleId: button.dataset.titleId || null }) });
+        const result = await fetchJson(API_PATHS.TITLES_SELECT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ titleId: button.dataset.titleId || null }) });
         profile.selectedTitleId = result.selectedTitleId;
         onSelected?.(result.selectedTitleId);
       } catch (error) { onError?.(error); }

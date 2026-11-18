@@ -1,6 +1,6 @@
 const DEFAULT_TARGET_HALF_HEIGHT = 60;
 const DEFAULT_TARGET_HALF_WIDTH = 28;
-const { WORLD_MARGIN } = require("../../matchConfig.js");
+const { WORLD_MARGIN } = require("../../../gameConstants.js");
 const { circleAabbOverlap, attackCollisionCenter: getAttackCollisionCenter } = require("../../shotContact");
 const { sweep } = require("../../../characters/sparrowProjectile");
 
@@ -21,13 +21,6 @@ function getPlayerBounds(target, at = target) {
     right: centerX + halfW,
     top: centerY - halfH,
     bottom: centerY + halfH,
-  };
-}
-
-function getBoundsCenter(bounds) {
-  return {
-    x: (Number(bounds?.left) + Number(bounds?.right)) / 2,
-    y: (Number(bounds?.top) + Number(bounds?.bottom)) / 2,
   };
 }
 
@@ -102,4 +95,4 @@ function shotTerrain(room, shooterTeam, fallback = []) {
   return blockers.length ? [...colliders, ...blockers] : colliders;
 }
 
-module.exports = { shotTerrain, shotBlockers, wallBetween, getPlayerBounds, getBoundsCenter, normalizeAngleDelta, circleAabbOverlap, cubic, resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, clampToWorld, sweptCircleOverlapsRect };
+module.exports = { shotTerrain, shotBlockers, wallBetween, getPlayerBounds, normalizeAngleDelta, circleAabbOverlap, cubic, resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, clampToWorld, sweptCircleOverlapsRect };

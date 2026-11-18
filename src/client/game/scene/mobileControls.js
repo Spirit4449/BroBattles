@@ -1,3 +1,5 @@
+import { BROWSER_GLOBALS } from "../../lib/globals.cjs";
+import { clamp } from "../../../shared/math.js";
 // Touch controls for phones and tablets. Everything is a DOM overlay above the
 // canvas (styles in styles/mobileControls.css); localPlayer reads the state
 // through the is*/consume* accessors each frame.
@@ -41,7 +43,7 @@ const ICONS = {
 export function isTouchGameDevice() {
   try {
     if (typeof window === "undefined") return false;
-    if (window.__BB_FORCE_MOBILE_CONTROLS === true) return true;
+    if (window[BROWSER_GLOBALS.forceMobileControls] === true) return true;
     const touchPoints = Number(navigator?.maxTouchPoints || 0);
     const coarse = !!window.matchMedia?.("(pointer: coarse)")?.matches;
     const narrowViewport =
@@ -52,9 +54,6 @@ export function isTouchGameDevice() {
   }
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, Number(value) || 0));
-}
 
 function createStick() {
   return {
@@ -197,7 +196,7 @@ export function createMobileControlsController({
     const height = Number(window.innerHeight || 0);
     const inset = readSafeInsets(els.insetProbe);
     // 400px is a typical landscape phone height; tablets grow, small phones shrink.
-    const scale = clamp(Math.min(width, height) / 400, 0.74, 1.3);
+    const scale = clamp(Number(Math.min(width, height) / 400) || 0, 0.74, 1.3);
     const right = width - Math.max(10, inset.right);
     const bottom = height - Math.max(8, inset.bottom);
     const buttons = {};
@@ -288,7 +287,7 @@ export function createMobileControlsController({
     const dist = Math.hypot(dx, dy);
     stick.dx = dist > 0.001 ? dx / dist : 0;
     stick.dy = dist > 0.001 ? dy / dist : 0;
-    stick.strength = clamp(dist / Math.max(1, radius), 0, 1);
+    stick.strength = clamp(Number(dist / Math.max(1, radius)) || 0, 0, 1);
     return dist;
   }
 
@@ -334,8 +333,8 @@ export function createMobileControlsController({
       const stick = state.movement;
       stick.pointerId = event.pointerId;
       stick.active = true;
-      stick.originX = clamp(event.clientX, move.minX, Math.max(move.minX, move.zoneWidth));
-      stick.originY = clamp(event.clientY, move.minY, Math.max(move.minY, move.maxY));
+      stick.originX = clamp(Number(event.clientX) || 0, move.minX, Math.max(move.minX, move.zoneWidth));
+      stick.originY = clamp(Number(event.clientY) || 0, move.minY, Math.max(move.minY, move.maxY));
       moveStickTo(event);
       return;
     }
@@ -485,7 +484,7 @@ export function createMobileControlsController({
 
   function setStickVisual(baseEl, thumbEl, stick, travel) {
     baseEl.classList.toggle("is-active", !!stick.active);
-    const offset = clamp(stick.strength, 0, 1) * travel;
+    const offset = clamp(Number(stick.strength) || 0, 0, 1) * travel;
     thumbEl.style.transform = `translate(-50%, -50%) translate(${Math.round(stick.dx * offset)}px, ${Math.round(stick.dy * offset)}px)`;
   }
 
@@ -506,7 +505,7 @@ export function createMobileControlsController({
     els.duck.classList.toggle("is-active", state.duck.active || isDuckFromStick());
     els.dash.classList.toggle("is-active", state.dash.active);
 
-    const charge = typeof getSuperChargeRatio === "function" ? clamp(getSuperChargeRatio(), 0, 1) : 1;
+    const charge = typeof getSuperChargeRatio === "function" ? clamp(Number(getSuperChargeRatio()) || 0, 0, 1) : 1;
     els.special.classList.toggle("is-ready", charge >= 1);
     // Meters fill in whole steps, like the rest of the pixel HUD.
     els.special.style.setProperty("--bbm-charge", (Math.floor(charge * 8) / 8).toFixed(3));

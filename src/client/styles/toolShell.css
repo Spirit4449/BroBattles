@@ -1,0 +1,23 @@
+/* Shared controls for the Admin Console and Map Studio. */
+
+* { scrollbar-width: thin; scrollbar-color: var(--bb-border) transparent; }
+
+select option { color: var(--bb-text); background: var(--bb-surface-1); }
+
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
+
+.footer-keys kbd { margin-left: 6px; }
+
+input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 2px 4px 3px;
+  border: 1px solid var(--bb-ink);
+  background: var(--bb-surface-3);
+  box-shadow: 0 2px var(--bb-ink);
+  color: var(--bb-text-soft);
+  font: 7px/1.4 var(--bb-font-display);
+  text-align: center;
+}

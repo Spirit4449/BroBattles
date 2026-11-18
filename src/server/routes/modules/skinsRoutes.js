@@ -1,3 +1,5 @@
+const { httpError } = require("../../services/httpError");
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
 const { getCharacterLevel } = require("../../../shared/characters/characterStats.js");
 const {
   getSkinsCatalog,
@@ -7,14 +9,14 @@ const {
 const {
   syncSkinOwnershipForUser,
 } = require("../../services/cosmetics/skinOwnership");
-const { authedRoute, sendShopError, purchaseGrantFromShop } = require("../routeHelpers");
+const { authedRoute } = require("../http");
 
-function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
+function registerSkinsRoutes({ app, db, requireCurrentUser }) {
   app.get("/skins/catalog", (_req, res) => {
     return res.json({ success: true, catalog: getSkinsCatalog() });
   });
 
-  app.get("/skins/owned", authedRoute(requireCurrentUser, "[skins] /skins/owned", async (_req, res, user) => {
+  app.get(API_PATHS.SKINS_OWNED, authedRoute(requireCurrentUser, "[skins] /skins/owned", async (_req, res, user) => {
     const sync = await syncSkinOwnershipForUser(db, user);
     return res.json({
       success: true,
@@ -23,7 +25,7 @@ function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
     });
   }));
 
-  app.post("/skins/select", authedRoute(requireCurrentUser, "[skins] /skins/select", async (req, res, user) => {
+  app.post(API_PATHS.SKINS_SELECT, authedRoute(requireCurrentUser, "[skins] /skins/select", async (req, res, user) => {
     const character = String(req.body?.character || "")
       .trim()
       .toLowerCase();
@@ -70,113 +72,42 @@ function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
       }
     }
 
-    let savedMap;
-    if (typeof db.withTransaction === "function") {
-      try {
-        savedMap = await db.withTransaction(async (_conn, q) => {
-          const rows = await q(
-            "SELECT selected_skin_id_by_char, status FROM users WHERE user_id = ? FOR UPDATE",
-            [user.user_id],
-          );
-          if (
-            activateCharacter &&
-            String(rows?.[0]?.status || "").trim().toLowerCase() === "ready"
-          ) {
-            const readyError = new Error(
-              "Unready before changing your character or skin.",
-            );
-            readyError.statusCode = 409;
-            throw readyError;
-          }
-          const nextMap = normalizeSelectedSkinMap(
-            rows?.[0]?.selected_skin_id_by_char,
-          );
-          nextMap[character] = skinId;
-          if (activateCharacter) {
-            // Save the active character and skin together. This prevents a fast
-            // Ready click from capturing only half of the new selection.
-            await q(
-              "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE user_id = ?",
-              [character, JSON.stringify(nextMap), user.user_id],
-            );
-          } else {
-            await q(
-              "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
-              [JSON.stringify(nextMap), user.user_id],
-            );
-          }
-          return nextMap;
-        });
-      } catch (error) {
-        // Raced into Ready while the transaction held the row.
-        if (Number(error?.statusCode) !== 409) throw error;
-        return res.status(409).json({ success: false, error: error.message });
-      }
-    } else {
-      savedMap = normalizeSelectedSkinMap(
-        sync.selectedSkinIdByCharacter || user.selected_skin_id_by_char,
+    const savedMap = await db.withTransaction(async (_conn, q) => {
+      const rows = await q(
+        "SELECT selected_skin_id_by_char, status FROM users WHERE user_id = ? FOR UPDATE",
+        [user.user_id],
       );
-      savedMap[character] = skinId;
+      if (
+        activateCharacter &&
+        String(rows?.[0]?.status || "").trim().toLowerCase() === "ready"
+      ) {
+        throw httpError(409, "Unready before changing your character or skin.");
+      }
+      const nextMap = normalizeSelectedSkinMap(
+        rows?.[0]?.selected_skin_id_by_char,
+      );
+      nextMap[character] = skinId;
       if (activateCharacter) {
-        await db.runQuery(
+        // Save the active character and skin together. This prevents a fast
+        // Ready click from capturing only half of the new selection.
+        await q(
           "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE user_id = ?",
-          [character, JSON.stringify(savedMap), user.user_id],
+          [character, JSON.stringify(nextMap), user.user_id],
         );
       } else {
-        await db.setUserSelectedSkinMap(user.user_id, savedMap);
+        await q(
+          "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
+          [JSON.stringify(nextMap), user.user_id],
+        );
       }
-    }
+      return nextMap;
+    });
 
     return res.json({
       success: true,
       selectedSkinIdByCharacter: savedMap,
-      activeCharacter: activateCharacter ? character : user.char_class,
     });
   }));
-
-  app.post("/skins/buy", authedRoute(requireCurrentUser, "[skins] /skins/buy", async (req, res, user) => {
-    const character = String(req.body?.character || "")
-      .trim()
-      .toLowerCase();
-    const skinId = String(req.body?.skinId || "").trim();
-    if (!character || !skinId) {
-      return res
-        .status(400)
-        .json({ success: false, error: "character and skinId are required" });
-    }
-
-    const skin = getSkinById(skinId);
-    if (!skin || String(skin.character || "") !== character) {
-      return res.status(404).json({ success: false, error: "Unknown skin" });
-    }
-    if (skin.available === false) {
-      return res.status(400).json({
-        success: false,
-        error: "This skin is not currently available.",
-      });
-    }
-
-    const sync = await syncSkinOwnershipForUser(db, user);
-    const owns = new Set((sync.ownedSkinIds || []).map(String));
-    if (owns.has(skinId)) {
-      return res.json({
-        success: true,
-        owned: true,
-        skinId,
-        gems: Number(user.gems) || 0,
-      });
-    }
-
-    const purchase = await purchaseGrantFromShop({
-      shopService, req, user, grantType: "skin", grantId: skinId, idempotencyPrefix: "legacy-skin",
-    });
-    if (purchase) return res.json({ ...purchase, skinId });
-
-    return res.status(409).json({
-      success: false,
-      error: "This skin is not currently for sale in the Shop.",
-    });
-  }, { onError: (error, res) => sendShopError(res, error, "Unable to purchase skin") }));
 }
 
 module.exports = { registerSkinsRoutes };

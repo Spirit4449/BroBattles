@@ -1,3 +1,9 @@
+const { routeErrorMiddleware } = require("./http");
+const { registerTitlesRoutes } = require("./modules/titlesRoutes");
+const { registerSiteRoutes } = require("./modules/siteRoutes");
+const { registerMapEditorRoutes } = require("./modules/mapEditorRoutes");
+const { registerEconomyRoutes } = require("./modules/economy");
+const { registerAdminRoutes } = require("./modules/admin");
 const {
   registerPageRoutes,
   registerNotFoundRoute,
@@ -9,6 +15,7 @@ const { registerAuthRoutes } = require("./modules/authRoutes");
 const { registerPlayerCardsRoutes } = require("./modules/playerCardsRoutes");
 const { registerProfileIconsRoutes } = require("./modules/profileIconsRoutes");
 const { registerSkinsRoutes } = require("./modules/skinsRoutes");
+const { registerEmailRoutes } = require("./modules/emailRoutes");
 const { registerProfileRoutes } = require("./modules/profileRoutes");
 const { registerTrophyRoutes } = require("./modules/trophyRoutes");
 const { registerChatRoutes } = require("./modules/chatRoutes");
@@ -22,18 +29,22 @@ function registerRoutes({
   auth,
   pageRoot,
   distDir,
+  runtimeConfig,
   chatService,
   abuseControl,
   shopService,
   stripeShopService,
   friendService,
+  mapPlaytests,
 }) {
+  registerEconomyRoutes({ app, io, db, auth });
+  registerAdminRoutes({ app, io, db, auth, pageRoot, distDir, runtimeConfig, shopService, stripeShopService });
   const { getOrCreateCurrentUser, requireCurrentUser, isGuest, isAdminUser } =
     auth;
 
-  require("./modules/mapEditorRoutes").registerMapEditorRoutes({app, requireCurrentUser, isAdminUser, pageRoot});
+  registerMapEditorRoutes({app, requireCurrentUser, isAdminUser, pageRoot, mapPlaytests});
 
-  require("./modules/siteRoutes").registerSiteRoutes({ app, db, auth });
+  registerSiteRoutes({ app, db, auth });
 
   registerPageRoutes({
     app,
@@ -78,23 +89,20 @@ function registerRoutes({
     app,
     db,
     requireCurrentUser,
-    shopService,
   });
 
-  require("./modules/titlesRoutes").registerTitlesRoutes({ app, db, requireCurrentUser });
+  registerTitlesRoutes({ app, db, requireCurrentUser });
 
   registerProfileIconsRoutes({
     app,
     db,
     requireCurrentUser,
-    shopService,
   });
 
   registerSkinsRoutes({
     app,
     db,
     requireCurrentUser,
-    shopService,
   });
 
   registerShopRoutes({
@@ -104,6 +112,7 @@ function registerRoutes({
     stripeShopService,
   });
 
+  registerEmailRoutes({ app, db, requireCurrentUser });
   registerProfileRoutes({
     app,
     db,
@@ -131,6 +140,7 @@ function registerRoutes({
   });
 
   registerNotFoundRoute({ app, pageRoot });
+  app.use(routeErrorMiddleware);
 }
 
 module.exports = { registerRoutes };

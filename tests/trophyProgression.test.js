@@ -1,7 +1,10 @@
+const { httpError } = require("../src/server/services/httpError");
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createTransactionalDb } = require('./helpers/fakeDb');
+const { fakeReq, fakeRes } = require('./helpers/fakeHttp');
 
-const { buildTrophyRewardTrack, summarizeCurrencyRewards } = require('../src/server/services/trophies/trophySystem');
+const { buildTrophyRewardTrack, summarizeCurrencyRewards, calculateTrophyDelta, resolveMatchModeId } = require('../src/server/services/trophies/trophySystem');
 const { getModeUnlockReason } = require('../src/shared/trophyProgression');
 const { grantTrophyItems } = require('../src/server/services/trophies/trophyRewardGrants');
 const { registerTrophyRoutes } = require('../src/server/routes/modules/trophyRoutes');
@@ -30,6 +33,31 @@ test('road starts at 50, grows in spacing, places unlocks on exact tiers and end
   assert.deepEqual(road.at(-1).rewards.map(r => r.kind).sort(), ['card','currency','currency','profileIcon','skin']);
   const finaleCurrency = summarizeCurrencyRewards(road.at(-1).rewards);
   assert.ok(finaleCurrency.coins > 0 && finaleCurrency.gems > 0);
+});
+
+test('trophy scoring respects mode ranges, zero performance weights and zero loss mitigation', () => {
+  const { DEFAULT_MODE_ID } = require('../src/shared/gameSelection');
+  assert.equal(resolveMatchModeId({ modeId: ' ' }), DEFAULT_MODE_ID);
+  assert.equal(resolveMatchModeId({ modeId: ' bank-bust ' }), 'bank-bust');
+
+  const catalog = {
+    modeTrophyRanges: { default: { min: 10, max: 20 }, custom: { min: 20, max: 40 } },
+    performanceWeights: { hits: 0, damage: 1, kills: 0 },
+    drawRangeScale: 0,
+    lossRangeScale: 0.5,
+    lossPerformanceMitigation: 0,
+  };
+  const input = {
+    modeId: ' custom ', winnerTeam: 'team1', playerTeam: 'team1',
+    bucket: { hits: 5, damage: 50, kills: 5 },
+    maxima: { hits: 5, damage: 100, kills: 5 }, currentTrophies: 100,
+  };
+  assert.deepEqual(calculateTrophyDelta(input, catalog), { trophiesDelta: 30, performanceScore: 0.5 });
+  assert.equal(calculateTrophyDelta({ ...input, modeId: 'toString' }, catalog).trophiesDelta, 15);
+  assert.equal(calculateTrophyDelta({ ...input, winnerTeam: null }, catalog).trophiesDelta, 0);
+  const loss = { ...input, winnerTeam: 'team2' };
+  assert.equal(calculateTrophyDelta(loss, catalog).trophiesDelta, -20);
+  assert.equal(calculateTrophyDelta({ ...loss, currentTrophies: 3 }, catalog).trophiesDelta, -3);
 });
 
 test('mode access uses the host peak for parties and personal unlocks for selection', async () => {
@@ -64,34 +92,32 @@ test('trophy cosmetics require a claim, and retired 200 icon is never auto-grant
 
 class TrophyDb {
   constructor() {
-    this.state = { user: { user_id: 1, trophies: 10000, trophy_peak: 10000, coins: 90, gems: 10, char_levels: { ninja: 1, gloop: 0 } }, claims: new Set(), grants: [] };
-    this.lock = Promise.resolve();
+    const state = { user: { user_id: 1, trophies: 10000, trophy_peak: 10000, coins: 90, gems: 10, char_levels: { ninja: 1, gloop: 0 } }, claims: new Set(), grants: [] };
+    this.db = createTransactionalDb({ state, query: this.query.bind(this) });
+    this.runQuery = this.db.runQuery;
+    this.withTransaction = this.db.withTransaction;
   }
-  async withTransaction(fn) {
-    const previous = this.lock;
-    let unlock; this.lock = new Promise(resolve => { unlock = resolve; });
-    await previous;
-    const before = structuredClone(this.state);
-    try { return await fn(null, this.runQuery.bind(this)); }
-    catch (error) { this.state = before; throw error; }
-    finally { unlock(); }
+
+  get state() {
+    return this.db.state;
   }
-  async runQuery(sql, params = []) {
-    if (sql.startsWith('SELECT tier_id')) return [...this.state.claims].map(tier_id => ({tier_id}));
-    if (sql.startsWith('SELECT')) return [structuredClone(this.state.user)];
+
+  async query(state, sql, params) {
+    if (sql.startsWith('SELECT tier_id')) return [...state.claims].map(tier_id => ({tier_id}));
+    if (sql.startsWith('SELECT')) return [structuredClone(state.user)];
     if (sql.startsWith('INSERT IGNORE INTO user_trophy_reward_claims')) {
-      if (this.state.claims.has(params[1])) return { affectedRows: 0 };
-      this.state.claims.add(params[1]); return { affectedRows: 1 };
+      if (state.claims.has(params[1])) return { affectedRows: 0 };
+      state.claims.add(params[1]); return { affectedRows: 1 };
     }
     if (sql.startsWith('INSERT IGNORE INTO user_')) {
-      if (this.failGrant) throw Object.assign(new Error('storage unavailable'), { httpStatus: 503 });
-      this.state.grants.push(params[1]); return { affectedRows: 1 };
+      if (this.failGrant) throw httpError(503, "storage unavailable");
+      state.grants.push(params[1]); return { affectedRows: 1 };
     }
     if (sql.startsWith('UPDATE users SET coins')) {
-      this.state.user.coins += params[0]; this.state.user.gems += params[1]; return { affectedRows: 1 };
+      state.user.coins += params[0]; state.user.gems += params[1]; return { affectedRows: 1 };
     }
     if (sql.startsWith('UPDATE users SET char_levels')) {
-      const key = params[0].slice(2); this.state.user.char_levels[key] = Math.max(1, this.state.user.char_levels[key] || 0); return { affectedRows: 1 };
+      const key = params[0].slice(2); state.user.char_levels[key] = Math.max(1, state.user.char_levels[key] || 0); return { affectedRows: 1 };
     }
     throw new Error(`Unexpected query ${sql}`);
   }
@@ -100,8 +126,9 @@ function routeFixture(db) {
   const routes = new Map();
   registerTrophyRoutes({ app: { get: (p, h) => routes.set(p, h), post: (p, h) => routes.set(p, h) }, db, requireCurrentUser: async () => ({ user_id: 1 }) });
   return async (path, body = {}) => {
-    const response = { code: 200, status(code) { this.code = code; return this; }, json(data) { this.data = data; return this; } };
-    await routes.get(path)({body}, response); return response;
+    const response = fakeRes({ statusField: 'code', bodyField: 'data' });
+    await routes.get(path)(fakeReq({ method: 'POST', body }), response);
+    return response;
   };
 }
 
@@ -136,8 +163,25 @@ test('peak trophies preserve claim eligibility; future tiers cannot be forged', 
   assert.equal((await call('/trophies/claim', {tierId:'trophy-tier-10001'})).code, 400);
 });
 
-test('Bro grants preserve an already upgraded character', async () => {
+test('Bro grants preserve an upgraded character and award its catalog default skin', async () => {
+  const { getDefaultSkinId } = require('../src/server/services/cosmetics/skinsCatalog');
   const db = new TrophyDb(); db.state.user.char_levels.gloop = 8;
   await grantTrophyItems(db.runQuery.bind(db), 1, [{kind:'character',itemId:'gloop'}]);
   assert.equal(db.state.user.char_levels.gloop, 8);
+  assert.ok(db.state.grants.includes(getDefaultSkinId('gloop')));
+});
+
+test('overlapping leaderboard requests share one ranked page and expose only the displayed scores', async () => {
+  const { createLeaderboardService } = require('../src/server/services/trophies/leaderboardService');
+  let searches = 0;
+  const getLeaderboard = createLeaderboardService({ runQuery: async () => {
+    searches++;
+    return ['One', 'Two'].map(username => ({ user_id: 42, username, charClass: 'ninja', trophies: 20, wins: 2 }));
+  } });
+  const [one, two] = await Promise.all([getLeaderboard(1), getLeaderboard(2)]);
+  assert.equal(searches, 1);
+  assert.deepEqual(two.map(row => row.rank), [1, 2]);
+  assert.equal(one[0].username, 'One');
+  assert.equal(one[0].wins, 2);
+  assert.equal('userId' in one[0] || 'totalMatches' in one[0], false);
 });

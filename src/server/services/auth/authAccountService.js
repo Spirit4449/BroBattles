@@ -1,48 +1,11 @@
+const { USERNAME_RE, MIN_PW, MAX_PW, validateCredentials } = require("./credentials");
 const { isAccountBanned } = require("../../../shared/moderation/accountBan");
 const bcrypt = require("bcrypt");
 const { failure } = require("../serviceResult");
-const { isReservedAdminName } = require("./auth");
-
-// Account credential rules (signup, login, and profile edits all use these).
-const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,14}$/; // 3-14 chars: letters, digits, _ . -
-const MIN_PW = 6; // shortest allowed password
-const MAX_PW = 32; // longest allowed password
-
-function validateCredentials(usernameRaw, passwordRaw) {
-  const username = typeof usernameRaw === "string" ? usernameRaw.trim() : "";
-  const password = typeof passwordRaw === "string" ? passwordRaw : "";
-
-  if (!username || !password) {
-    return failure(400, { success: false, error: "Username and password are required." });
-  }
-  if (!USERNAME_RE.test(username)) {
-    return {
-      ok: false,
-      statusCode: 400,
-      payload: {
-        success: false,
-        error: "Username must be 3-14 chars: letters, numbers, _ . - only.",
-      },
-    };
-  }
-  if (isReservedAdminName(username)) {
-    return failure(409, { success: false, error: "Username is already taken." });
-  }
-  if (password.length < MIN_PW || password.length > MAX_PW) {
-    return {
-      ok: false,
-      statusCode: 400,
-      payload: {
-        success: false,
-        error: `Password must be ${MIN_PW}-${MAX_PW} characters.`,
-      },
-    };
-  }
-  return { ok: true, username, password };
-}
+const { beginSignup } = require("./signupVerificationService");
 
 async function completeSignupFromGuest(context) {
-  return require('./signupVerificationService').beginSignup(context);
+  return beginSignup(context);
 }
 
 async function loginPermanentUser({ app, db, req }) {
@@ -94,7 +57,14 @@ async function loginPermanentUser({ app, db, req }) {
   };
 }
 
+async function verifiedPasswordHash(db, userId, currentPassword) {
+  const [user] = await db.runQuery("SELECT password FROM users WHERE user_id = ? LIMIT 1", [userId]);
+  const hash = user?.password || "";
+  return await bcrypt.compare(currentPassword, hash) ? hash : null;
+}
+
 module.exports = {
+  verifiedPasswordHash,
   USERNAME_RE,
   MIN_PW,
   MAX_PW,

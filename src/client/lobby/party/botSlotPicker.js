@@ -1,3 +1,4 @@
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 // Owner-only picker for filling an empty party slot with a bot fighter.
 import socket from "../../lib/socket.js";
 import { sonner } from "../../ui/sonner.js";
@@ -70,7 +71,7 @@ function openBotPicker(slot, partyId) {
     button.addEventListener("click", () => {
       button.disabled = true;
       socket.emit(
-        "party:bot-slot:update",
+        SOCKET_EVENTS.PARTY_BOT_SLOT_UPDATE,
         { partyId, ...target, character: choice.id },
         (result) => {
           button.disabled = false;

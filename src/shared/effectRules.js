@@ -14,12 +14,9 @@ const EFFECT_RULES = {
   sparrowBurn: { durationMs: volley.burnDurationMs, totalDamage: volley.burnTotalDamage },
   gloopSlimeSlow: { durationMs: slime.slowDurationMs, modifiers: { speedMult: slime.slowSpeedMult, jumpMult: slime.slowJumpMult } },
   gloopHookSlow: { durationMs: hook.slowDurationMs, modifiers: { speedMult: hook.slowSpeedMult, jumpMult: hook.slowJumpMult } },
-  slow: { durationMs: 3000, modifiers: { speedMult: 0.45, jumpMult: 0.7 } },
-  stun: { durationMs: 1200, modifiers: { speedMult: 0, jumpMult: 0 } },
-  damageBoost: { durationMs: 5000, modifiers: { damageMult: 1.5 } },
+  ...require('./catalogs/statusEffects.catalog.cjs'),
 };
 const PARAMETERIZED_SLOWS = new Set(['slow', 'gloopSlimeSlow', 'gloopHookSlow']);
-const SCALED_POWERUPS = new Set(['rage', 'shield', 'gravityBoots']);
 
 function getEffectModifiers(key, params = {}) {
   const modifiers = { ...EFFECT_RULES[key]?.modifiers };
@@ -30,7 +27,7 @@ function getEffectModifiers(key, params = {}) {
       }
     }
   }
-  if (SCALED_POWERUPS.has(key)) {
+  if (EFFECT_RULES[key]?.scalesWithPower) {
     const powerScale = Number(params.powerScale) > 0 && Number.isFinite(Number(params.powerScale)) ? Number(params.powerScale) : 1;
     for (const field of Object.keys(modifiers)) {
       modifiers[field] = Math.max(0, 1 + (modifiers[field] - 1) * powerScale);

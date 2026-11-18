@@ -1,3 +1,4 @@
+const { normalizeDuelVariant } = require("../../shared/maps/duelVariants.js");
 const { clone, geometryFromMap, constrainPoint, upgradeDuelMap } = require('../../shared/maps/mapDocument');
 const { arenaFor } = require('../../shared/maps/arenas');
 function allRows(map) {
@@ -111,7 +112,7 @@ module.exports.exportDocument=exportDocument;
 // slot per player that mode allows (extra slots reuse the last one until moved)
 // and objectives only where the mode has them.
 function retargetMap(document, modeVariantId) {
-  if (['duels-1v1', 'duels-2v2'].includes(modeVariantId)) modeVariantId = 'duels';
+  modeVariantId = normalizeDuelVariant(modeVariantId);
   document = upgradeDuelMap(document);
   const arena=arenaFor(modeVariantId);if(!arena)throw Error(`${modeVariantId} has no arena in arenas.json yet.`);
   const copy=clone(document);copy.modeVariantId=modeVariantId;

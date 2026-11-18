@@ -1,7 +1,10 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
 import movementPhysics from '../../../../shared/physics/movementPhysics.json';
 import { createAnimationBuilder } from '../shared/animationBuilder';
+
+const { key: NAME } = characterDefinitions.gloop;
+
 export function animations(scene) {
-  const NAME = "gloop";
   if (!scene?.textures?.exists(NAME)) return;
 
   const { make, findFrames } = createAnimationBuilder(scene, NAME);

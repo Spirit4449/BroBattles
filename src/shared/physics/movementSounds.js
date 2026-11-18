@@ -6,7 +6,7 @@ const bankBustMovementSounds = {
   'sfx-step-3': 'metal-step-3',
 };
 function movementSoundKey(scene, key) {
-  return scene?._bankBustMovementAudio && bankBustMovementSounds[key]
+  return scene?.movementAudioProfile === "bank-bust" && bankBustMovementSounds[key]
     ? `bank-bust-${key}` : key;
 }
 module.exports = { bankBustMovementSounds, movementSoundKey };

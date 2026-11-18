@@ -1,6 +1,27 @@
-// gameScene/poisonWaterRenderer.js
+import { INACTIVE_POISON_BELOW_WORLD_PX } from "../../../shared/combat/matchConfig.js";
+import { GAME_VIEW } from "./gameViewport";
+export function createPoisonState() {
+  return { targetY: null, smoothY: null };
+}
 
-export function renderPoisonWater(scene, { player, dead }) {
+export function renderPoisonWater(scene, { player, dead, poisonState, active = true }) {
+  if (!active) {
+    try {
+      scene._poisonGraphics?.clear?.();
+    } catch (_) {}
+    try {
+      const cssDiv = document.getElementById("poison-water-bg");
+      if (cssDiv) cssDiv.style.display = "none";
+    } catch (_) {}
+    try {
+      const vigEl = document.getElementById("water-vignette");
+      if (vigEl) {
+        vigEl.classList.remove("water-danger-active");
+        vigEl.style.opacity = "0";
+      }
+    } catch (_) {}
+    return;
+  }
   if (!scene?._poisonGraphics) return;
 
   const now = scene.time.now;
@@ -17,22 +38,22 @@ export function renderPoisonWater(scene, { player, dead }) {
   const worldHeight =
     Number(scene.physics?.world?.bounds?.height) ||
     Number(scene.game.config.height) ||
-    1000;
+    GAME_VIEW.height;
   const worldH = (Number(scene.physics?.world?.bounds?.y) || 0) + worldHeight;
-  if (scene._poisonWaterY == null) scene._smoothPoisonY = worldH + 60;
-  if (scene._smoothPoisonY == null)
-    scene._smoothPoisonY = scene._poisonWaterY ?? worldH + 60;
-  const poisonTargetY = scene._poisonWaterY ?? worldH + 60;
-  const poisonDelta = poisonTargetY - scene._smoothPoisonY;
+  if (poisonState.targetY == null) poisonState.smoothY = worldH + INACTIVE_POISON_BELOW_WORLD_PX;
+  if (poisonState.smoothY == null)
+    poisonState.smoothY = poisonState.targetY ?? worldH + INACTIVE_POISON_BELOW_WORLD_PX;
+  const poisonTargetY = poisonState.targetY ?? worldH + INACTIVE_POISON_BELOW_WORLD_PX;
+  const poisonDelta = poisonTargetY - poisonState.smoothY;
   const poisonLerp = Math.abs(poisonDelta) > 60 ? 0.2 : 0.07;
-  scene._smoothPoisonY += poisonDelta * (1 - Math.pow(1 - poisonLerp, dt * 60));
-  const py = scene._smoothPoisonY;
+  poisonState.smoothY += poisonDelta * (1 - Math.pow(1 - poisonLerp, dt * 60));
+  const py = poisonState.smoothY;
 
   if (py < worldH + 10) {
     const W =
       Number(scene.physics?.world?.bounds?.width) ||
       Number(scene.game.config.width) ||
-      1300;
+      GAME_VIEW.width;
     const BOTTOM = worldH + 40;
     const t = scene.time.now / 1000;
 

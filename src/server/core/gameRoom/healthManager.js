@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 function processRegen(room) {
   const now = Date.now();
   for (const p of room.players.values()) {
@@ -30,7 +31,7 @@ function processRegen(room) {
 }
 
 function broadcastHealthUpdate(room, playerData, meta = {}) {
-  room.io.to(`game:${room.matchId}`).emit("health-update", {
+  room.broadcast(SOCKET_EVENTS.HEALTH_UPDATE, {
     username: playerData.name,
     health: Math.max(0, Math.round(playerData.health)),
     maxHealth: Math.max(

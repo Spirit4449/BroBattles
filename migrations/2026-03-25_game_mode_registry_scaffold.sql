@@ -10,7 +10,7 @@ SET @sql = (
         AND COLUMN_NAME = 'mode_id'
     ),
     'SELECT 1',
-    "ALTER TABLE parties ADD COLUMN mode_id VARCHAR(64) NOT NULL DEFAULT 'duels' AFTER mode"
+    'ALTER TABLE parties ADD COLUMN mode_id VARCHAR(64) NOT NULL DEFAULT ''duels'' AFTER mode'
   )
 );
 PREPARE stmt FROM @sql;
@@ -27,7 +27,7 @@ SET @sql = (
         AND COLUMN_NAME = 'mode_variant_id'
     ),
     'SELECT 1',
-    "ALTER TABLE parties ADD COLUMN mode_variant_id VARCHAR(64) NULL AFTER mode_id"
+    'ALTER TABLE parties ADD COLUMN mode_variant_id VARCHAR(64) NULL AFTER mode_id'
   )
 );
 PREPARE stmt FROM @sql;
@@ -44,7 +44,7 @@ SET @sql = (
         AND COLUMN_NAME = 'mode_id'
     ),
     'SELECT 1',
-    "ALTER TABLE matches ADD COLUMN mode_id VARCHAR(64) NOT NULL DEFAULT 'duels' AFTER mode"
+    'ALTER TABLE matches ADD COLUMN mode_id VARCHAR(64) NOT NULL DEFAULT ''duels'' AFTER mode'
   )
 );
 PREPARE stmt FROM @sql;
@@ -61,7 +61,7 @@ SET @sql = (
         AND COLUMN_NAME = 'mode_variant_id'
     ),
     'SELECT 1',
-    "ALTER TABLE matches ADD COLUMN mode_variant_id VARCHAR(64) NULL AFTER mode_id"
+    'ALTER TABLE matches ADD COLUMN mode_variant_id VARCHAR(64) NULL AFTER mode_id'
   )
 );
 PREPARE stmt FROM @sql;
@@ -78,7 +78,7 @@ SET @sql = (
         AND COLUMN_NAME = 'mode_id'
     ),
     'SELECT 1',
-    "ALTER TABLE match_tickets ADD COLUMN mode_id VARCHAR(64) NOT NULL DEFAULT 'duels' AFTER mode"
+    'ALTER TABLE match_tickets ADD COLUMN mode_id VARCHAR(64) NOT NULL DEFAULT ''duels'' AFTER mode'
   )
 );
 PREPARE stmt FROM @sql;
@@ -95,7 +95,7 @@ SET @sql = (
         AND COLUMN_NAME = 'mode_variant_id'
     ),
     'SELECT 1',
-    "ALTER TABLE match_tickets ADD COLUMN mode_variant_id VARCHAR(64) NULL AFTER mode_id"
+    'ALTER TABLE match_tickets ADD COLUMN mode_variant_id VARCHAR(64) NULL AFTER mode_id'
   )
 );
 PREPARE stmt FROM @sql;

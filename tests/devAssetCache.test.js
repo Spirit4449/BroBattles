@@ -19,6 +19,7 @@ describe("Development bundle caching", () => {
       const entry = path.join(directory, 'entry.js');
       await fs.writeFile(entry, 'window.buildVersion = 1;');
       const compiler = webpack({ mode: 'development', devtool: false, context: directory,
+        watchOptions: { poll: 100 },
         entry, output: { path: path.join(directory, 'dist'), filename: 'game.js', publicPath: '/' } });
       const options = require('../webpack.config')({}, { mode: 'development' }).devServer.devMiddleware;
       middleware = devMiddleware(compiler, { ...options, stats: 'errors-only' });
@@ -37,7 +38,10 @@ describe("Development bundle caching", () => {
         errors.push(error);
         if (!res.headersSent) res.status(500).end();
       });
-      server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+      server = await new Promise((resolve, reject) => {
+        const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+        listener.once('error', reject);
+      });
       const url = `http://127.0.0.1:${server.address().port}/game.js`;
       const first = await fetch(url);
       const tag = first.headers.get('etag');

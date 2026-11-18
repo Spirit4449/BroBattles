@@ -1,7 +1,8 @@
 import { getLobbyBgAsset } from "../game/maps/manifest";
+import { lobbyBackgroundStorageKey } from "./lobbyBackgroundCache.js";
 
 // Cross-fades the lobby backdrop to a map's art and remembers it per
-// party/solo scope so public/index.html can paint it before the bundle loads.
+// party/solo scope so lobbyPaint can restore it before the lobby bundle loads.
 let lobbyBackgroundRequestSequence = 0;
 
 export function setLobbyBackground(mapValue) {
@@ -40,13 +41,7 @@ export function setLobbyBackground(mapValue) {
       document.body.style.backgroundImage = target;
       document.body.dataset.lobbyBackgroundUrl = nextUrl;
       try {
-        const partyMatch =
-          window.location.pathname.match(/^\/party\/([^/?#]+)/);
-        const backgroundScope = partyMatch ? `party:${partyMatch[1]}` : "solo";
-        localStorage.setItem(
-          `bb_lobby_background_url:${backgroundScope}`,
-          nextUrl,
-        );
+        localStorage.setItem(lobbyBackgroundStorageKey(location.pathname), nextUrl);
       } catch (_) {}
       overlay.classList.remove("active");
     }, 240);

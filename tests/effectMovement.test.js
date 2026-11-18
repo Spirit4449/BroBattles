@@ -1,3 +1,4 @@
+const roomTransport = require('./helpers/roomTransport.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const effects = require('../src/shared/combat/runtime/effects/effectManager.js');
@@ -8,7 +9,7 @@ const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 
 function snapshot(player, now) {
   return buildWorldStatePayload({
-    players: new Map([[player.name, player]]), _powerups: new Map(),
+    players: new Map([[player.name, player]]), powerups: new Map(),
     _buildDeathDropsSnapshot: () => [],
     _buildPlayerEffectsSnapshot: () => ({ [player.name]: effects.snapshotAll(player, now) }),
   });
@@ -64,7 +65,7 @@ test('zero slows survive projectile creation, contact and hook expiry', () => {
   const { buildHookProjectileAttack, applyGloopPull, tickRuntimeControlEffects } = require('../src/shared/combat/runtime/attackRuntimes/hook.js');
   const attacker = { participantId: 'a', name: 'Gloop', char_class: 'gloop', x: 100, y: 100 };
   const target = { participantId: 'b', name: 'Target', x: 200, y: 100, isAlive: true, loaded: true };
-  const room = { players: new Map([['a', attacker], ['b', target]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
+  const room = { ...roomTransport, players: new Map([['a', attacker], ['b', target]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
   const action = { slowSpeedMult: 0, slowJumpMult: 0, slowDurationMs: 100, maxBounces: 0, bounceDampingX: 0, bounceDampingY: 0, airDrag: 0, initialVy: 0, pullLockPaddingMs: 0 };
   const descriptor = { runtime: { slowSpeedMult: 0.8, slowJumpMult: 0.8, maxBounces: 2 }, events: { onHitEffect: { type: 'gloopSlimeSlow' } } };
   const slime = buildProjectileBounceAttack(attacker, action, descriptor, 10000);
@@ -90,7 +91,7 @@ test('hooking a Draven mid-inferno cancels the channel and pulls him toward Gloo
   const { buildHookProjectileAttack, applyGloopPull, tickRuntimeControlEffects } = require('../src/shared/combat/runtime/attackRuntimes/hook.js');
   const attacker = { participantId: 'a', name: 'Gloop', char_class: 'gloop', x: 100, y: 100, isAlive: true, loaded: true };
   const draven = { participantId: 'b', name: 'Draven', char_class: 'draven', x: 400, y: 100, isAlive: true, loaded: true };
-  const room = { players: new Map([['a', attacker], ['b', draven]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
+  const room = { ...roomTransport, players: new Map([['a', attacker], ['b', draven]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
   inferno.activate(draven, 10000);
   assert.equal(inferno.isMovementSuppressed(draven, 10100), true);
   applyGloopPull(room, attacker, draven, buildHookProjectileAttack(attacker, {}, {}, 10100), 10100);
@@ -109,7 +110,7 @@ test('sparse world state: only active timers, movement only for affected players
   const idle = { name: 'Idle' }, slowed = { name: 'Slowed' };
   effects.apply(slowed, 'gloopSlimeSlow', now, { speedMult: 0.2, jumpMult: 0.3, durationMs: 500 });
   const payload = () => buildWorldStatePayload({
-    players: new Map([[idle.name, idle], [slowed.name, slowed]]), _powerups: new Map(),
+    players: new Map([[idle.name, idle], [slowed.name, slowed]]), powerups: new Map(),
     _buildDeathDropsSnapshot: () => [],
     _buildPlayerEffectsSnapshot: () => ({ Idle: effects.snapshotActive(idle, now), Slowed: effects.snapshotActive(slowed, now) }),
   });
@@ -132,19 +133,19 @@ test('world publication skips unchanged state, sends changes and retains recover
   let now = 10000;
   t.mock.method(Date, 'now', () => now);
   const sent = [];
-  const room = { matchId: 1, players: new Map(), _powerups: new Map(),
+  const room = { ...roomTransport, matchId: 1, players: new Map(), powerups: new Map(),
     _buildDeathDropsSnapshot: () => [], _buildPlayerEffectsSnapshot: () => ({}),
     io: { to: () => ({ compress() { return this; }, emit(event, data) { sent.push(data); } }) } };
   const { broadcastWorldState } = require('../src/server/core/gameRoom/roomStateManager');
   broadcastWorldState(room);
   now += 100; broadcastWorldState(room);
   assert.equal(sent.length, 1);
-  room._powerups.set('p', { id: 'p', type: 'health', x: 10, y: 20 });
+  room.powerups.set('p', { id: 'p', type: 'health', x: 10, y: 20 });
   broadcastWorldState(room);
   assert.equal(sent.length, 2);
   assert.equal(sent[1].powerups[0].id, 'p');
   now += 1100; broadcastWorldState(room);
   assert.equal(sent.length, 3);
-  room._powerups.clear(); broadcastWorldState(room);
+  room.powerups.clear(); broadcastWorldState(room);
   assert.deepEqual(sent[3].powerups, []);
 });

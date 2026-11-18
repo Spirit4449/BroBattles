@@ -1,3 +1,4 @@
+import { clamp01, lerp } from "../../../shared/math.js";
 import { movementSoundKey } from "../../../shared/physics/movementSounds";
 // Movement sounds for the local fighter: terrain footsteps plus the looping
 // wall-slide scrape and falling-air rush. One instance per player module; the
@@ -5,9 +6,6 @@ import { movementSoundKey } from "../../../shared/physics/movementSounds";
 import { MOVEMENT_VFX_CONFIG } from "../scene/effects";
 import { getTerrainSteps, footstepVolume, fallingAirVolume } from "../audio/movementAudio";
 
-const clamp = (value) => Math.max(0, Math.min(1, value)); // Phaser.Math.Clamp semantics
-const clamp01 = (value) => clamp(Number(value) || 0);
-const lerp = (from, to, t) => from + (to - from) * t;
 
 export function createLocalMovementAudio() {
   let wallSlideLoop = null;
@@ -16,6 +14,7 @@ export function createLocalMovementAudio() {
   let fallAirPlaying = false;
   let fallAirStartedAt = 0;
   let footstepCursor = 0;
+  let detachCacheListener = null;
 
   function stopFallAir() {
     if (fallAirPlaying) {
@@ -37,6 +36,7 @@ export function createLocalMovementAudio() {
   }
 
   function dispose() {
+    detachCacheListener?.();
     stopLoops();
     try { wallSlideLoop?.destroy?.(); } catch (_) {}
     try { fallAirLoop?.destroy?.(); } catch (_) {}
@@ -48,7 +48,14 @@ export function createLocalMovementAudio() {
   // as soon as its audio enters the cache.
   function attach(scene) {
     dispose();
+    footstepCursor = 0;
+    const detach = () => {
+      scene.cache.audio.events.off("add", ensureLoops);
+      scene.events.off("shutdown", detach);
+      if (detachCacheListener === detach) detachCacheListener = null;
+    };
     const ensureLoops = () => {
+      if (detachCacheListener !== detach) return;
       if (!scene.sound || scene.game?.config?.audio?.noAudio) return;
       if (!wallSlideLoop && scene.cache.audio.exists("sfx-sliding")) {
         wallSlideLoop = scene.sound.add("sfx-sliding", { loop: true, volume: 0 });
@@ -56,17 +63,16 @@ export function createLocalMovementAudio() {
       if (!fallAirLoop && scene.cache.audio.exists("sfx-fall-air")) {
         fallAirLoop = scene.sound.add("sfx-fall-air", { loop: true, volume: 0, rate: 0.72 });
       }
-      if (wallSlideLoop && fallAirLoop) scene.cache.audio.events.off("add", ensureLoops);
+      if (wallSlideLoop && fallAirLoop) detach();
     };
+    detachCacheListener = detach;
     scene.cache.audio.events.on("add", ensureLoops);
+    scene.events.once("shutdown", detach);
     ensureLoops();
-    scene.events.once("shutdown", () => {
-      scene.cache.audio.events.off("add", ensureLoops);
-    });
   }
 
   function playStep(scene, speedRatio, isDirectionChange) {
-    const speed = clamp01(speedRatio);
+    const speed = clamp01(Number(speedRatio) || 0);
     const steps = getTerrainSteps(scene._terrainType);
     footstepCursor =
       (footstepCursor + (steps.length > 1 ? Phaser.Math.Between(1, steps.length - 1) : 1)) % steps.length;
@@ -84,7 +90,7 @@ export function createLocalMovementAudio() {
       stopWallSlide();
       return;
     }
-    const speed = clamp01(speedRatio);
+    const speed = clamp01(Number(speedRatio) || 0);
     wallSlideLoop.setVolume?.(0.28 + speed * 0.17);
     wallSlideLoop.setRate?.(0.84 + speed * 0.22);
     if (!wallSlidePlaying) {
@@ -127,8 +133,8 @@ export function createLocalMovementAudio() {
         fallAirStartedAt = Date.now();
       } catch (_) {}
     }
-    const speedRatio = clamp((Number(velocityY) - 85) / (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity - 85));
-    const timeRatio = clamp((Date.now() - (fallAirStartedAt || Date.now())) / 950);
+    const speedRatio = clamp01((Number(velocityY) - 85) / (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity - 85));
+    const timeRatio = clamp01((Date.now() - (fallAirStartedAt || Date.now())) / 950);
     const targetVolume = fallingAirVolume(speedRatio, timeRatio);
     fallAirLoop.setVolume?.(lerp(Number(fallAirLoop.volume) || 0, targetVolume, 0.075));
     fallAirLoop.setRate?.(0.72 + speedRatio * 0.24 + timeRatio * 0.04);

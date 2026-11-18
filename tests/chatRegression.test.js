@@ -1,3 +1,4 @@
+const { createFakeIo } = require('./helpers/fakeIo');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const { createBrowserFixture } = require('./helpers/browserFixture');
@@ -72,8 +73,67 @@ describe('Chat integration', () => {
   });
 
 
-  function lobbyFixture({ readPending = false } = {}) {
-    const state = { partyId: 7, messages: [], reads: [] };
+  test('chat guards preserve party and battle replies with empty or malformed acknowledgements', async () => {
+    const handlers = {};
+    const checks = [];
+    const socket = {
+      id: 'sender',
+      data: { user: { user_id: 12, name: 'Player' }, partyId: 7 },
+      on: (event, handler) => { handlers[event] = handler; },
+    };
+    const guardReply = {
+      allowed: false, message: 'Wait before sending', type: 'chat_limited',
+      suspendedUntilMs: 500, level: 2, violationsUntilBan: 3, banWarning: 'Warning',
+    };
+    const abuseControl = {
+      async guardChatAction(context) {
+        checks.push(context);
+        return guardReply;
+      },
+    };
+    let sends = 0;
+    registerChatEvents(socket, {
+      abuseControl,
+      chatService: { sendPartyChatMessage() { sends++; } },
+    });
+    const players = new Map();
+    const { registerGameChatEvents } = require('../src/server/core/socketEvents/gameChatEvents');
+    registerGameChatEvents({
+      abuseControl,
+      players,
+      onSocket(_socket, event, handler) { handlers[event] = handler; },
+      broadcast() { sends++; },
+    }, socket);
+    const { SOCKET_EVENTS } = require('../src/shared/net/socketEvents');
+    const partySend = handlers[SOCKET_EVENTS.PARTY_CHAT_SEND];
+    const battleSend = handlers[SOCKET_EVENTS.GAME_CHAT_SEND];
+    let result;
+
+    await battleSend(reply => { result = reply; });
+    assert.deepEqual(result, { ok: false, error: 'not_in_game' });
+    assert.equal(checks.length, 0);
+
+    await partySend(reply => { result = reply; });
+    assert.deepEqual(result, {
+      ok: false, error: guardReply.message, type: guardReply.type, suspendedUntilMs: 500,
+    });
+    await partySend({ body: 'Hello' }, { invalid: true });
+    await partySend();
+
+    players.set(socket.id, socket.data.user);
+    await battleSend({ scope: 'all', body: 'Hello' }, reply => { result = reply; });
+    assert.deepEqual(result, {
+      ok: false, error: guardReply.message, type: guardReply.type, suspendedUntilMs: 500,
+      level: 2, violationsUntilBan: 3, banWarning: 'Warning',
+    });
+    assert.deepEqual(checks.map(check => check.source), [
+      'socket:party-chat:send', 'socket:party-chat:send', 'socket:party-chat:send', 'socket:game-chat:send',
+    ]);
+    assert.equal(sends, 0);
+  });
+
+  function lobbyFixture({ readPending = false, partyId = 7 } = {}) {
+    const state = { partyId, messages: [], reads: [] };
     const f = createBrowserFixture('', { globals: { fetch: async (url, options) => {
       const body = JSON.parse(options.body);
       state.requests.push({ url, body });
@@ -92,6 +152,16 @@ describe('Chat integration', () => {
     Object.assign(messages, { scrollTop: 0, scrollHeight: 100, clientHeight: 100 });
     return { ...f, state, controller };
   }
+
+  test('party chat loads history only after membership is confirmed', async t => {
+    const f = lobbyFixture({ partyId: null });
+    t.after(() => f.controller.destroy());
+    await f.settle();
+    assert.equal(f.state.requests.length, 0);
+    f.socket.emit('party:joined', { partyId: 7 });
+    await f.settle();
+    assert.ok(f.state.requests.some(request => request.url === '/party-chat/history' && request.body.partyId === 7));
+  });
 
   test('leaving a party prevents subsequent chat requests from using its stale id', async t => {
     const f = lobbyFixture();
@@ -190,7 +260,7 @@ describe("Party message history", () => {
   const { appendPartyChatLog, recordPartyRoster, getPartyChatLogs } = require('../src/server/services/party/partyChatLog');
   function fixture() {
     const events = [];
-    const io = { to: room => ({emit: (name, data) => events.push({room,name,data})}) };
+    const io = createFakeIo({ onEmit: (room, name, data) => events.push({ room, name, data }) });
     return {io,events};
   }
   test('join and leave logs track membership, not presence or repeated rosters', () => {
@@ -220,4 +290,92 @@ describe("Party message history", () => {
     assert.equal(getPartyChatLogs(io,7).length,100);
     assert.equal(getPartyChatLogs(io,7)[0].body,'Map 20');
   });
+});
+
+test('friends waits for account status and skips the protected endpoint for a guest', async t => {
+  const { createLobbyFixture } = require('./helpers/lobbyFixture');
+  const requests = [];
+  const f = createLobbyFixture({ globals: { fetch: async url => {
+    requests.push(url);
+    return { ok: true, json: async () => ({}) };
+  } } });
+  const controller = f.load('src/client/friends/friendsPanelController.js').createFriendsPanelController({
+    socket: f.socket, waitForAccount: true,
+  });
+  t.after(() => controller.destroy());
+  f.socket.emit('connect');
+  await controller.refresh();
+  controller.setAccountGuest(true);
+  f.socket.emit('connect');
+  await f.settle();
+  assert.deepEqual(requests, []);
+  assert.equal(controller.isGuest(), true);
+  await controller.setAccountGuest(false);
+  assert.deepEqual(requests, ['/friends']);
+});
+
+test('friends drawer derives relationships from the loaded roster and releases its listeners on destroy', async () => {
+  const { createLobbyFixture } = require('./helpers/lobbyFixture');
+  const f = createLobbyFixture({ globals: { fetch: async url => {
+    assert.equal(url, '/friends');
+    return { ok: true, json: async () => ({
+      me: { name: 'Owner', userId: 1 },
+      friends: [{ name: 'Teammate', userId: 2, status: 'online' }],
+      incoming: [{ user: { name: 'Visitor', userId: 3 } }],
+      outgoing: [{ user: { name: 'Pending', userId: 4 } }],
+    }) };
+  } } });
+  const controller = f.load('src/client/friends/friendsPanelController.js').createFriendsPanelController({ socket: f.socket });
+  await f.settle();
+  assert.equal(controller.relationshipFor('owner'), 'self');
+  assert.equal(controller.relationshipFor(' Teammate '), 'friends');
+  assert.equal(controller.relationshipFor('Visitor'), 'incoming');
+  assert.equal(controller.relationshipFor('Pending'), 'outgoing');
+  controller.open();
+  await f.settle();
+  assert.equal(controller.isOpen(), true);
+  assert.ok(f.socket.eventNames().length > 0);
+  controller.destroy();
+  assert.equal(f.document.querySelector('.bb-friends-panel'), null);
+  assert.equal(f.socket.eventNames().length, 0);
+});
+
+test('direct-message badges clear on opening a conversation and typing stops when leaving it', async () => {
+  const { API_PATHS } = require('../src/shared/net/apiPaths');
+  const { SOCKET_EVENTS } = require('../src/shared/net/socketEvents');
+  const requests = [];
+  const f = createBrowserFixture('', { globals: { fetch: async (url, options) => {
+    requests.push({ url, body: options.body && JSON.parse(options.body) });
+    return { ok: true, json: async () => url === API_PATHS.FRIENDS ? {
+      me: { userId: 1, name: 'Bob' },
+      friends: [{ userId: 2, name: 'Alice', status: 'online' }],
+    } : { messages: [] } };
+  } } });
+  const controller = f.load('src/client/friends/friendsPanelController.js').createFriendsPanelController({ socket: f.socket });
+  await f.settle();
+  controller.open();
+  await f.settle();
+  f.socket.emit(SOCKET_EVENTS.FRIENDS_MESSAGE, {
+    message: { senderId: 2, recipientId: 1, messageId: 3, body: 'Ready?' },
+  });
+  const badge = f.document.querySelector('.bb-friends-launcher .bb-chat-badge');
+  assert.equal(badge.textContent, '1');
+  assert.ok(!badge.classList.contains('hidden'));
+  f.document.querySelector('[aria-label="Chat with Alice"]').click();
+  await f.settle();
+  assert.ok(badge.classList.contains('hidden'));
+  assert.ok(requests.some(request => request.url === API_PATHS.FRIENDS_MESSAGES_READ && request.body?.friendId === 2));
+
+  const typing = [];
+  f.socket.on(SOCKET_EVENTS.FRIENDS_TYPING, value => typing.push(value));
+  const textarea = f.document.querySelector('.bb-friends-chat textarea');
+  f.event(textarea, 'input');
+  f.event(textarea, 'input');
+  f.document.querySelector('.bb-friends-back').click();
+  assert.deepEqual(typing.map(value => ({ ...value })), [
+    { friendId: 2, isTyping: true },
+    { friendId: 2, isTyping: false },
+  ]);
+  controller.destroy();
+  assert.equal(f.socket.listenerCount(SOCKET_EVENTS.FRIENDS_MESSAGE), 0);
 });

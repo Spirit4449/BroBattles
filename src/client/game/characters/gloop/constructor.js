@@ -1,6 +1,7 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { perform as performSpecial } from "./special";
 import { animations } from "./anim";
 import {
-  changeDebugState,
   performGloopSlimeball,
   spawnGloopSlimeballVisual,
   spawnGloopSlimeBud,
@@ -14,9 +15,11 @@ import { playSpriteAnimation } from "../shared/animationState";
 import { applyScaleLockedRageFx } from "../shared/powerupFx";
 import { playPlayerSound } from "../../audio/playerAudio";
 
-const NAME = "gloop";
 
 // Each slimeball or hook id is its own throw.
+
+const { key: NAME } = characterDefinitions.gloop;
+
 function playOwnerThrow(scene, sprite, id = null) {
   playSpriteAnimation({
     scene,
@@ -30,7 +33,7 @@ function playOwnerThrow(scene, sprite, id = null) {
 
 class Gloop extends CharacterEntityBase {
   static key = NAME;
-  static textureKey = NAME;
+  static performSpecial = performSpecial;
 
   static sounds = {
     attack: { key: `${NAME}-attack`, volume: 0.5 },
@@ -61,10 +64,6 @@ class Gloop extends CharacterEntityBase {
 
   static setupAnimations(scene) {
     animations(scene);
-  }
-
-  static setDebugState(enabled) {
-    changeDebugState(enabled);
   }
 
   static handleRemoteAttack(scene, data, ownerWrapper) {
@@ -135,12 +134,7 @@ class Gloop extends CharacterEntityBase {
     return applyScaleLockedRageFx(context, { particleSize: 3.7 });
   }
 
-  handlePointerDown(attackContext = null) {
-    const context = attackContext || this.consumeAttackContext();
-    return this.performDefaultAttack(() =>
-      performGloopSlimeball(this, context),
-    );
-  }
+  static basicAttack = performGloopSlimeball;
 }
 
 export default Gloop;

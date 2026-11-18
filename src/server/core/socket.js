@@ -1,11 +1,11 @@
+const { getConfig } = require("../config");
+const { SOCKET_EVENTS } = require("../../shared/net/socketEvents.js");
 const { isAccountBanned } = require("../../shared/moderation/accountBan");
 const { createPlayerActivityService } = require("../services/match/playerActivityService");
-// socket.js
 const cookie = require("cookie");
 const cookieSignature = require("cookie-signature");
 const {
   PARTY_STATUS,
-  DISCONNECT_GRACE_MS,
   TEAM_SIZE_BY_MODE,
 } = require("../services/party/partyRules");
 const { createMatchmaking } = require("./matchmaking");
@@ -27,10 +27,7 @@ const { registerChatEvents } = require("./socketEvents/chatEvents");
 const { registerFriendEvents } = require("./socketEvents/friendEvents");
 const { netTrace } = require("./gameRoom/netTraceRecorder");
 
-const DEBUG_SOCKET_EVENTS =
-  String(process.env.DEBUG_SOCKET_EVENTS || "").toLowerCase() === "1" ||
-  String(process.env.DEBUG_SOCKET_EVENTS || "").toLowerCase() === "true";
-const NOISY_EVENTS = new Set(["game:input", "heartbeat"]);
+const NOISY_EVENTS = new Set([SOCKET_EVENTS.GAME_INPUT, SOCKET_EVENTS.HEARTBEAT]);
 const NOISY_EVENT_SAMPLE_EVERY = 50;
 
 function summarizeArg(value) {
@@ -55,10 +52,6 @@ function summarizeArg(value) {
   }
   return out;
 }
-
-// Presence tracking (multi-tab safe)
-const userSockets = new Map(); // name -> Set<socketId>
-const pendingOffline = new Map(); // name -> timeoutId
 
 function readSignedCookieFromHandshake(socket, cookieName, secret) {
   const header = socket.handshake?.headers?.cookie;
@@ -85,6 +78,7 @@ function initSocket({
   io,
   COOKIE_SECRET,
   sessions,
+  navigation,
   matchResults,
   db,
   runtimeConfig,
@@ -92,16 +86,20 @@ function initSocket({
   abuseControl,
   friendService,
 }) {
+  const typingByParty = new Map();
+  const userSockets = new Map(); // name -> Set<socketId>
+  const DEBUG_SOCKET_EVENTS = getConfig().diagnostics.socketEvents;
   const partyPresence = createPartyPresenceService({ db, io });
   let gameHub;
   const playerActivity = createPlayerActivityService({
+    schedule: "deferred",
     db, io, setPresence: partyPresence.setUserPresence,
     getGameRoom: matchId => gameHub?.getGameRoom(matchId),
     onStatusChange: (name, status) => friendService?.handleStatusChange(name, status),
   });
   friendService?.attachPresence({ getStatus: playerActivity.getStatus });
   // Game hub for managing active game rooms
-  gameHub = createGameHub({ io, db, runtimeConfig, abuseControl, playerActivity, matchResults });
+  gameHub = createGameHub({ io, db, runtimeConfig, abuseControl, playerActivity, matchResults, navigation });
 
   // Matchmaking controller (power-saved loop inside)
   const mm = createMatchmaking({
@@ -121,24 +119,11 @@ function initSocket({
   // auth: attach user row from signed cookie (middleware)
   io.use(async (socket, next) => {
     try {
-      const header = socket.handshake?.headers?.cookie || "";
       const userIdStr = readSignedCookieFromHandshake(
         socket,
         "user_id", // this cookie stores an opaque session token
         COOKIE_SECRET,
       );
-      console.log("[socket-auth] handshake", {
-        socketId: socket.id,
-        host: socket.handshake?.headers?.host || null,
-        origin: socket.handshake?.headers?.origin || null,
-        referer: socket.handshake?.headers?.referer || null,
-        address: socket.handshake?.address || null,
-        url: socket.handshake?.url || null,
-        userAgent: socket.handshake?.headers?.["user-agent"] || null,
-        cookieHeaderPresent: !!header,
-        cookieHeaderLength: header.length,
-        sessionCookiePresent: !!userIdStr,
-      });
       socket.data.netTrace = netTrace.authorize(socket.handshake?.auth);
       if (!userIdStr) {
         socket.data.user = null;
@@ -148,12 +133,12 @@ function initSocket({
 
       socket.data.user = user || null;
       if (user && socket.data.netTrace) netTrace.markTracedUser(user.name);
-      if (!user) {
+      if (!user && DEBUG_SOCKET_EVENTS) {
         console.warn("[socket-auth] no user found for signed cookie", {
           socketId: socket.id,
           sessionCookiePresent: !!userIdStr,
         });
-      } else if (isAccountBanned(user)) {
+      } else if (user && isAccountBanned(user)) {
         socket.data.user = null;
         return next(new Error("Account banned"));
       }
@@ -164,19 +149,10 @@ function initSocket({
     }
   });
 
-  io.on("connection", async (socket) => {
+  io.on(SOCKET_EVENTS.CONNECTION, async (socket) => {
     const user = socket.data.user; // returns from middleware
     const userId = user?.user_id;
     const username = user?.name;
-    console.log("[socket] connection opened", {
-      socketId: socket.id,
-      userId: userId || null,
-      username: username || null,
-      host: socket.handshake?.headers?.host || null,
-      origin: socket.handshake?.headers?.origin || null,
-      address: socket.handshake?.address || null,
-      transport: socket.conn?.transport?.name || null,
-    });
 
     if (DEBUG_SOCKET_EVENTS) {
       const eventCounts = new Map();
@@ -228,18 +204,7 @@ function initSocket({
       PARTY_STATUS,
     });
 
-    registerPresenceEvents(socket, {
-      db,
-      io,
-      mm,
-      gameHub,
-      setPresence: partyPresence.setUserPresence,
-      playerActivity,
-      partyQueueTransition,
-      userSockets,
-      pendingOffline,
-      DISCONNECT_GRACE_MS,
-    });
+    registerPresenceEvents(socket, { db, gameHub, playerActivity, partyQueueTransition, userSockets });
 
     // Per-user room reaches every tab, independent of users.socket_id.
     if (userId) socket.join(`user:${Number(userId)}`);
@@ -247,11 +212,6 @@ function initSocket({
     // store socket id and mark online
     try {
       if (userId) await db.setUserSocketId(userId, socket.id);
-      console.log("[socket] setUserSocketId complete", {
-        socketId: socket.id,
-        userId: userId || null,
-        username: username || null,
-      });
     } catch (e) {
       console.warn("Could not persist socket_id:", e?.message);
     }
@@ -260,12 +220,6 @@ function initSocket({
 
     // Track this socket for the user and mark online
     if (username) {
-      console.log("User connected:", { username, socketId: socket.id });
-      const timeoutId = pendingOffline.get(username);
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        pendingOffline.delete(username);
-      }
       let set = userSockets.get(username);
       if (!set) {
         set = new Set();
@@ -280,20 +234,11 @@ function initSocket({
         if (partyId) {
           socket.join(`party:${partyId}`);
           socket.data.partyId = partyId;
-          socket.emit("party:joined", { partyId });
-          console.log("[socket] auto-joined party room", {
-            socketId: socket.id,
-            username,
-            partyId,
-          });
+          socket.emit(SOCKET_EVENTS.PARTY_JOINED, { partyId });
         } else {
           socket.join("lobby");
           socket.data.partyId = null;
-          socket.emit("party:joined", { partyId: null });
-          console.log("[socket] joined lobby room", {
-            socketId: socket.id,
-            username,
-          });
+          socket.emit(SOCKET_EVENTS.PARTY_JOINED, { partyId: null });
         }
       } catch (e) {
         console.warn(
@@ -304,6 +249,7 @@ function initSocket({
     }
 
     registerChatEvents(socket, {
+      typingByParty,
       chatService,
       abuseControl,
     });
@@ -321,6 +267,8 @@ function initSocket({
   });
 
   return {
+    start() { playerActivity.start(); return mm.start(); },
+    async dispose() { await mm.stop(); gameHub.dispose(); playerActivity.dispose(); partyPresence.dispose(); },
     getGameRoom: matchId => gameHub.getGameRoom(Number(matchId)),
     // For routes to move sockets after DB changes:
     async moveUserSocketToParty(username, partyId) {
@@ -353,12 +301,7 @@ function initSocket({
           if (room.startsWith("party:")) sock.leave(room);
         sock.join(`party:${partyId}`);
         sock.data.partyId = Number(partyId) || null;
-        sock.emit("party:joined", { partyId });
-        console.log("[socket] moveUserSocketToParty success", {
-          username,
-          partyId,
-          socketId: sid,
-        });
+        sock.emit(SOCKET_EVENTS.PARTY_JOINED, { partyId });
       } catch (e) {
         console.warn("moveUserSocketToParty failed:", e?.message);
       }
@@ -377,7 +320,7 @@ function initSocket({
           if (room.startsWith("party:")) sock.leave(room);
         sock.join("lobby");
         sock.data.partyId = null;
-        sock.emit("party:joined", { partyId: null });
+        sock.emit(SOCKET_EVENTS.PARTY_JOINED, { partyId: null });
       } catch (e) {
         console.warn("moveUserSocketToLobby failed:", e?.message);
       }

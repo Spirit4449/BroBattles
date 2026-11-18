@@ -1,3 +1,6 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { perform as performSpecial } from "./special";
+import { SOCKET_EVENTS } from "../../../../shared/net/socketEvents.js";
 // src/client/game/characters/ozzy/constructor.js
 import { animations } from "./anim";
 import { ensureFireballTextures } from "./fireballArt";
@@ -6,18 +9,17 @@ import {
   chargeOzzyFireball,
   spawnOzzyFireballAuthoritative,
   spawnOzzyFireballVisual,
-  changeDebugState,
   playOzzyCastWindup,
   consumeOzzyRelease,
 } from "./attack";
 import { playOzzyArcaneSurge } from "./effects.js";
 import CharacterEntityBase from "../shared/characterEntityBase";
 
-const NAME = "ozzy";
+const { key: NAME } = characterDefinitions.ozzy;
 
 class Ozzy extends CharacterEntityBase {
   static key = NAME;
-  static textureKey = NAME;
+  static performSpecial = performSpecial;
 
   static sounds = {
     attack: { key: "ozzy-fireball", volume: 0.55 },
@@ -32,7 +34,7 @@ class Ozzy extends CharacterEntityBase {
   };
 
   static socketEvents = {
-    "ozzy:arcane-surge": ({ scene, findSprite }, payload) =>
+    [SOCKET_EVENTS.OZZY_ARCANE_SURGE]: ({ scene, findSprite }, payload) =>
       playOzzyArcaneSurge(scene, payload, findSprite),
   };
 
@@ -54,10 +56,6 @@ class Ozzy extends CharacterEntityBase {
     animations(scene);
     // Fireball sheets are drawn in code (fireballArt.js), not loaded.
     ensureFireballTextures(scene);
-  }
-
-  static setDebugState(enabled) {
-    changeDebugState(enabled);
   }
 
   static handleRemoteAttack(scene, data, ownerWrapper) {
@@ -83,12 +81,7 @@ class Ozzy extends CharacterEntityBase {
     return true;
   }
 
-  handlePointerDown(attackContext = null) {
-    const context = attackContext || this.consumeAttackContext();
-    return this.performDefaultAttack(() =>
-      performOzzyFireball(this, context),
-    );
-  }
+  static basicAttack = performOzzyFireball;
 }
 
 export default Ozzy;

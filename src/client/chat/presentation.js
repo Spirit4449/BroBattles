@@ -1,4 +1,7 @@
+import { formatDurationLong } from "../../shared/format.js";
+import { CHAT_BODY_MAX } from "../../shared/social/textRules.js";
 import { escapeHtml } from "../../shared/site/html.cjs";
+import { postJson } from "../lib/http.js";
 import { createChatScrollController } from './scrollController.mjs';
 import { composerHeight } from './composerSize.mjs';
 import { buildProfileIconUrl } from "../views/profileIconAssets.js";
@@ -35,7 +38,6 @@ function appendReactionIcon(element, value) {
 const GAME_CHAT_RECENT_LIMIT = 40;
 const LOBBY_TYPING_IDLE_STOP_MS = 1000;
 const LOBBY_TYPING_HEARTBEAT_MS = 850;
-const LOBBY_TYPING_STALE_MS = 4000;
 const LOBBY_CHAT_BUBBLE_MS = 3800;
 
 function formatChatTime(isoValue) {
@@ -107,35 +109,9 @@ function formatReactorSummary(reactors, currentUserName, maxNames = 3) {
   const extra = names.length - maxNames;
   return extra > 0 ? `${shown} +${extra}` : shown;
 }
-function postJson(url, body) {
-  return fetch(url, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body || {}),
-  }).then(async (response) => {
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error(data?.error || "Request failed");
-      error.statusCode = Number(response.status) || 0;
-      error.payload = data || {};
-      throw error;
-    }
-    return data;
-  });
-}
 function formatSuspensionTime(suspendedUntilMs) {
   const ms = Number(suspendedUntilMs) || 0;
-  if (!ms) return "";
-  const delta = Math.max(0, ms - Date.now());
-  const seconds = Math.ceil(delta / 1000);
-  if (seconds <= 0) return "";
-  if (seconds < 60) return `${seconds}s`;
-  const mins = Math.floor(seconds / 60);
-  const rem = seconds % 60;
-  return rem ? `${mins}m ${rem}s` : `${mins}m`;
+  return ms ? formatDurationLong(ms - Date.now()) : "";
 }
 function showChatRequestError(error, fallbackTitle = "Could not send message") {
   const status = Number(error?.statusCode) || 0;
@@ -237,7 +213,7 @@ function makeChatShell({
         <button type="button" class="bb-chat-jump-latest" hidden aria-label="Jump to latest messages"></button>
         <div class="bb-chat-reply-banner hidden"></div>
         <div class="bb-chat-input-row">
-          <textarea class="bb-chat-textarea" rows="1" maxlength="500" placeholder="Write a message..."></textarea>
+          <textarea class="bb-chat-textarea" rows="1" maxlength="${CHAT_BODY_MAX}" placeholder="Write a message..."></textarea>
           <button type="button" class="bb-chat-send">Send</button>
         </div>
 
@@ -477,4 +453,4 @@ function renderGameChatLineMessage(message, currentUserName, localTeam) {
   }
   return row;
 }
-export { formatReactorSummary, bindComposerAutosize, bindChatProfile, escapeHtml, formatChatTime, buildAvatarUrl, createAvatarEl, messageIdOf, formatNameWithYou, postJson, formatSuspensionTime, showChatRequestError, buildInlineCooldownMessage, makeChatShell, renderPartyChatMessage, normalizeGameTeam, renderGameChatLineMessage, GAME_CHAT_RECENT_LIMIT, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_STALE_MS, LOBBY_CHAT_BUBBLE_MS };
+export { bindComposerAutosize, bindChatProfile, escapeHtml, formatChatTime, buildAvatarUrl, messageIdOf, formatNameWithYou, postJson, formatSuspensionTime, showChatRequestError, buildInlineCooldownMessage, makeChatShell, renderPartyChatMessage, renderGameChatLineMessage, GAME_CHAT_RECENT_LIMIT, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_CHAT_BUBBLE_MS };

@@ -1,3 +1,4 @@
+import { formatFixed as formatNumber } from "../../shared/format.js";
 const CLIENT_NETTEST_STORAGE_KEY = "bb_nettest";
 
 function readClientNetTestFlag() {
@@ -29,10 +30,7 @@ function readClientNetTestLabel() {
   }
 }
 
-function formatNumber(value, digits = 1) {
-  const num = Number(value);
-  return Number.isFinite(num) ? num.toFixed(digits) : "n/a";
-}
+
 
 function createEmptySummary() {
   return {
@@ -287,4 +285,9 @@ export function noteClientRemoteAction(packet) {
 export function noteClientLifecycle(kind, extra = "") {
   if (!clientNetTestState.enabled) return;
   emitLine(kind, extra);
+}
+
+export function logLifecycle(kind, detail, level = "log", ...args) {
+  if (shouldMuteClientDefaultLogs()) noteClientLifecycle(kind, detail);
+  else console[level](...args);
 }

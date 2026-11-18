@@ -1,3 +1,7 @@
+import profileIcons from '../../shared/catalogs/profileIconsCatalog.cjs';
+import { CONTACT_TOPICS, TOPIC_LABEL, STATUS_LABEL, SUBJECT_MIN, SUBJECT_MAX, MESSAGE_MIN, MESSAGE_MAX, INBOX_PAGE_SIZE } from "../../shared/site/supportRules.js";
+import { renderPager } from "../ui/pager";
+import { API_PATHS, supportRequestPath } from "../../shared/net/apiPaths.js";
 // Contact, feedback and My requests. Conversations reuse the in-game chat look
 // (bb-chat-* classes from styles/chat.css), the same as the admin inbox.
 import { api, element, refreshUnread } from './shell';
@@ -5,23 +9,10 @@ import { createPixelSelect } from '../ui/pixelSelect.js';
 import { pixelArrow } from '../ui/pixelArrow.js';
 import config from '../../shared/site/siteConfig.json';
 
-// Ideas and opinions belong in Feedback, so support topics are all problems.
-const TOPICS = [
-  { value: 'account', label: 'Account' },
-  { value: 'purchase', label: 'Purchase' },
-  { value: 'bug', label: 'Bug or crash' },
-  { value: 'gameplay', label: 'Gameplay' },
-  { value: 'safety', label: 'Player safety' },
-  { value: 'privacy', label: 'Privacy' },
-  { value: 'other', label: 'Something else' },
-];
-const TOPIC_LABEL = { ...Object.fromEntries(TOPICS.map(topic => [topic.value, topic.label])), idea: 'Idea', reports: 'Player report' };
-const STATUS_LABEL = { open: 'Open', in_progress: 'In progress', closed: 'Closed' };
 // Each topic borrows its Help Center icon, so a request reads at a glance.
 const TOPIC_ICON = { account: 'accounts', purchase: 'purchases', bug: 'troubleshooting', gameplay: 'gameplay', safety: 'safety', privacy: 'safety', reports: 'safety', idea: 'getting-started', other: 'getting-started' };
 const topicIcon = category => `/assets/site/help-icons/${TOPIC_ICON[category] || 'getting-started'}.png`;
-const FILTERS = [['', 'All'], ['open', 'Open'], ['in_progress', 'Active'], ['closed', 'Closed']];
-const MESSAGE_MAX = 4000;
+const FILTERS = [['', 'All'], ...Object.entries(STATUS_LABEL).map(([id, label]) => [id, id === 'in_progress' ? 'Active' : label])];
 const key = () => crypto.randomUUID();
 
 const clock = value => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
@@ -73,26 +64,26 @@ function field(label, control, hint) {
 function messageBox(id, placeholder) {
   const textarea = element('textarea');
   textarea.id = id; textarea.name = 'message'; textarea.required = true;
-  textarea.minLength = 5; textarea.maxLength = MESSAGE_MAX; textarea.rows = 6; textarea.placeholder = placeholder;
+  textarea.minLength = MESSAGE_MIN; textarea.maxLength = MESSAGE_MAX; textarea.rows = 6; textarea.placeholder = placeholder;
   const count = element('small', `0 / ${MESSAGE_MAX}`, 'site-field-count');
   textarea.addEventListener('input', () => { count.textContent = `${textarea.value.length} / ${MESSAGE_MAX}`; });
   return { textarea, count };
 }
 
-export function renderSubmit(root, kind) {
+function renderSubmit(root, kind) {
   const feedback = kind === 'feedback';
   const { frame, body } = panel(feedback ? 'Your feedback' : 'New request', feedback ? 'warm' : '');
   const form = element('form', null, 'site-form');
   let submissionKey = key();
   let topic;
   if (!feedback) {
-    topic = createPixelSelect({ options: TOPICS, value: TOPICS[0].value, label: 'Topic', onChange: () => { submissionKey = key(); } });
+    topic = createPixelSelect({ options: CONTACT_TOPICS, value: CONTACT_TOPICS[0].value, label: 'Topic', onChange: () => { submissionKey = key(); } });
     const topicField = element('div', null, 'site-field');
     topicField.append(element('span', 'Topic', 'site-field-label'), topic.element);
     form.append(topicField);
   }
   const subject = element('input');
-  subject.id = `${kind}-subject`; subject.name = 'subject'; subject.required = true; subject.minLength = 3; subject.maxLength = 120; subject.autocomplete = 'off';
+  subject.id = `${kind}-subject`; subject.name = 'subject'; subject.required = true; subject.minLength = SUBJECT_MIN; subject.maxLength = SUBJECT_MAX; subject.autocomplete = 'off';
   subject.placeholder = feedback ? 'Sum it up in a few words' : 'What do you need help with?';
   const { textarea, count } = messageBox(`${kind}-message`, feedback ? 'What would make the game better?' : 'Tell us what happened. Include your Bro, the mode and roughly when.');
   form.append(field('Subject', subject), field(feedback ? 'Your thoughts' : 'Details', textarea, count));
@@ -112,7 +103,7 @@ export function renderSubmit(root, kind) {
     try {
       const fields = { subject: subject.value, message: textarea.value, submissionKey };
       if (topic) fields.category = topic.value;
-      const result = await api(feedback ? '/api/feedback' : '/api/support/requests', fields);
+      const result = await api(feedback ? API_PATHS.API_FEEDBACK : API_PATHS.API_SUPPORT_REQUESTS, fields);
       // A new request opens straight into its conversation.
       if (!feedback) { location.assign(`/help/requests?request=${encodeURIComponent(result.id)}`); return; }
       const done = panel('Sent', 'warm');
@@ -143,7 +134,7 @@ function signInPanel(view) {
   if (feedback) actions.append(linkButton('Go to the lobby', '/', 'play'));
   else {
     const next = encodeURIComponent(location.pathname + location.search);
-    actions.append(linkButton('Log in', `/login?next=${next}`), linkButton('Create account', `/signup?next=${next}`, 'quiet', ''));
+    actions.append(linkButton('Log in', `${API_PATHS.LOGIN}?next=${next}`), linkButton('Create account', `${API_PATHS.SIGNUP}?next=${next}`, 'quiet', ''));
   }
   body.append(art, copy, actions);
   return frame;
@@ -160,7 +151,7 @@ function placeholderRows(count = 3) {
   return group;
 }
 
-export function renderInbox(root, session) {
+function renderInbox(root, session) {
   root.classList.add('site-inbox');
   // The list is the lobby's Friends drawer: same header, tabs and rows.
   const listPane = element('section', null, 'bb-chat-shell bb-friends-panel site-inbox-list');
@@ -196,7 +187,7 @@ export function renderInbox(root, session) {
   list.append(placeholderRows());
 
   const state = { page: 1, status: '', selected: Number(new URLSearchParams(location.search).get('request')) || null, generation: 0, items: [] };
-  const playerIcon = `/assets/profile-icons/${session.icon || 'ninja'}.webp`;
+  const playerIcon = `/assets/profile-icons/${session.icon || profileIcons.defaultIconId}.webp`;
 
   function showPane(pane) { root.dataset.pane = pane; }
   function emptyThread() {
@@ -225,22 +216,16 @@ export function renderInbox(root, session) {
   async function loadList({ keepThread = false } = {}) {
     const generation = ++state.generation;
     try {
-      const data = await api(`/api/support/requests?page=${state.page}${state.status ? `&status=${state.status}` : ''}`);
+      const data = await api(`${API_PATHS.API_SUPPORT_REQUESTS}?page=${state.page}${state.status ? `&status=${state.status}` : ''}`);
       if (generation !== state.generation) return;
       state.items = data.items;
       list.replaceChildren(...data.items.map(itemButton));
       listCount.textContent = `${data.total} ${data.total === 1 ? 'request' : 'requests'}`;
       if (!data.items.length) list.append(element('p', state.status ? 'Nothing in this filter.' : 'Nothing here yet.', 'bb-friends-loading site-inbox-none'));
-      const pages = Math.max(1, Math.ceil(data.total / 20));
+      const pages = Math.max(1, Math.ceil(data.total / INBOX_PAGE_SIZE));
       if (pages > 1) {
-        const prev = element('button', null, 'pixel-menu-button site-btn site-btn-quiet');
-        const next = element('button', null, 'pixel-menu-button site-btn site-btn-quiet');
-        prev.append(pixelArrow('left', 'sm')); next.append(pixelArrow('right', 'sm'));
-        prev.setAttribute('aria-label', 'Newer requests'); next.setAttribute('aria-label', 'Older requests');
-        prev.disabled = state.page <= 1; next.disabled = state.page >= pages;
-        prev.onclick = () => { state.page -= 1; loadList(); };
-        next.onclick = () => { state.page += 1; loadList(); };
-        pager.replaceChildren(prev, element('span', `${state.page} / ${pages}`), next);
+        renderPager(pager, { page: state.page, pages, compact: true, className: "pixel-menu-button site-btn site-btn-quiet",
+          labels: ["Newer requests", "Older requests"], onPage: page => { state.page = page; loadList(); } });
       } else pager.replaceChildren();
       if (keepThread) return;
       if (state.selected) open(state.selected, { keepPane: !matchMedia('(max-width: 760px)').matches });
@@ -291,10 +276,10 @@ export function renderInbox(root, session) {
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const message = text.value.trim();
-      if (message.length < 5) { error.textContent = 'Replies need at least 5 characters.'; return; }
+      if (message.length < MESSAGE_MIN) { error.textContent = `Replies need at least ${MESSAGE_MIN} characters.`; return; }
       send.disabled = true;
       try {
-        await api(`/api/support/requests/${id}/messages`, { message, submissionKey });
+        await api(supportRequestPath(id, "messages"), { message, submissionKey });
         await open(id, { keepPane: true, focusComposer: true });
         loadListQuietly();
       } catch (e) { error.textContent = e.message; send.disabled = false; }
@@ -303,7 +288,7 @@ export function renderInbox(root, session) {
   }
   async function loadListQuietly() {
     try {
-      const data = await api(`/api/support/requests?page=${state.page}${state.status ? `&status=${state.status}` : ''}`);
+      const data = await api(`${API_PATHS.API_SUPPORT_REQUESTS}?page=${state.page}${state.status ? `&status=${state.status}` : ''}`);
       state.items = data.items;
       list.replaceChildren(...data.items.map(itemButton));
     } catch (_) { /* The open conversation is still current. */ }
@@ -316,7 +301,7 @@ export function renderInbox(root, session) {
     list.querySelectorAll('.site-inbox-item').forEach(node => node.classList.toggle('is-active', Number(node.dataset.requestId) === id));
     thread.setAttribute('aria-busy', 'true');
     try {
-      const { request, messages } = await api(`/api/support/requests/${id}`);
+      const { request, messages } = await api(supportRequestPath(id));
       if (state.selected !== id) return;
       refreshUnread();
       const card = list.querySelector(`[data-request-id="${id}"]`);

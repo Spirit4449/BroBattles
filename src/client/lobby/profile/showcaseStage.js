@@ -1,3 +1,4 @@
+import { getNavigation } from "../../lib/globals.cjs";
 import { drawAmmoChargeBar } from "../../game/scene/ammoBarRenderer";
 import { createShowcaseFight } from "./showcaseFight";
 import { showcaseRoster } from "./showcaseKit";
@@ -94,7 +95,7 @@ export function createShowcaseStage(host) {
     }
   }
 
-  const sharedContext = window.__BB_NAVIGATION__?.getAudioContext?.();
+  const sharedContext = getNavigation()?.getAudioContext?.();
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: host,

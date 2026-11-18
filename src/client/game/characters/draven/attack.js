@@ -1,7 +1,8 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { trackDebugShape, isAttackDebugDraw } from "../shared/attackDebugDraw";
 import { applyTeamVisual, teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
 // Draven splash attack extracted
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
-import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
@@ -11,21 +12,15 @@ import { attackerPose, attachedRectShape } from "../../../../shared/combat/attac
 import { attackDescriptors } from "../../../../shared/characters/index.js";
 import { predictAttachedContacts, notePredictedHit } from "../shared/shotPrediction";
 
-const SPLASH = getResolvedCharacterAttackConfig("draven", "splash");
-const SPLASH_W = SPLASH.width;
-const SPLASH_H = SPLASH.height;
+const { key: NAME } = characterDefinitions.draven;
+
+const SPLASH = getResolvedCharacterAttackConfig(NAME, "splash");
 const ACTIVE_WINDOW_MS = SPLASH.activeWindowMs;
 const FLIP_UNLOCK_MS = SPLASH.flipUnlockMs;
-const DAMAGE_TICK_MS = SPLASH.damageTickMs;
-const DAMAGE_START_MS = SPLASH.damageStartMs;
 const TIP_OFFSET = SPLASH.tipOffset;
-const MIN_SPLASH_H = SPLASH.minHeight;
-const GROW_DURATION_MS = SPLASH.growDurationMs;
 const CENTER_Y_FACTOR = SPLASH.centerYFactor;
-const HITBOX_INFLATE = SPLASH.hitboxInflate;
 // Where the server draws a confirmed splash on its target.
 const IMPACT_OFFSET_Y = Number(attackDescriptors["draven-splash"]?.events?.onHitAction?.offsetY) || 0;
-var DEBUG_DRAW = false; // Draw debug rectangle of current hitbox
 
 export function performDravenSplashAttack(instance, attackContext = null) {
   const { scene, player: p } = instance;
@@ -43,13 +38,12 @@ export function performDravenSplashAttack(instance, attackContext = null) {
   playSpriteAnimation({
     scene,
     sprite: p,
-    character: "draven",
+    character: NAME,
     logical: "throw",
     fallback: "idle",
     id: attackId,
   });
 
-  // Debug visuals removed (box no longer drawn)
   // Continuous damage ticking within active window (owner only)
   let elapsed = 0;
   let dbg = null;
@@ -57,10 +51,6 @@ export function performDravenSplashAttack(instance, attackContext = null) {
   // (attackDelivery.attachedRectShape); each enemy is struck once.
   const startedAt = performance.now();
   const struck = new Set();
-  if (DEBUG_DRAW && scene && scene.add) {
-    dbg = scene.add.graphics();
-    dbg.setDepth(RENDER_LAYERS.ATTACKS);
-  }
   // Play fireball SFX (local-only)
   try {
     if (scene.sound) {
@@ -73,38 +63,25 @@ export function performDravenSplashAttack(instance, attackContext = null) {
     elapsed += dt;
     // Reinforce visual flip lock every frame
     enforceLockedFlip(p);
-    const shapes = attachedRectShape(attackerPose("draven", p.x, p.y, { flip: direction < 0 }), SPLASH,
+    const shapes = attachedRectShape(attackerPose(NAME, p.x, p.y, { flip: direction < 0 }), SPLASH,
       performance.now() - startedAt);
     for (const hit of predictAttachedContacts(shapes, { skip: struck })) {
       struck.add(hit.target.name);
       if (hit.target.sprite) spawnExplosion(scene, hit.target.sprite.x, hit.target.sprite.y + IMPACT_OFFSET_Y);
-      notePredictedHit({ delivery: "attached", character: "draven", target: hit.target, attacker: p });
+      notePredictedHit({ delivery: "attached", character: NAME, target: hit.target, attacker: p });
     }
-    if (DEBUG_DRAW && dbg) {
+    if (isAttackDebugDraw() && scene.add) {
+      if (!dbg) {
+        dbg = trackDebugShape(scene.add.graphics());
+        dbg.setDepth(RENDER_LAYERS.ATTACKS);
+      }
       dbg.clear();
-      const growT = Phaser.Math.Clamp(
-        elapsed / Math.max(1, GROW_DURATION_MS),
-        0,
-        1,
-      );
-      const currentHeight = MIN_SPLASH_H + (SPLASH_H - MIN_SPLASH_H) * growT;
-      const centerX = p.x + direction * TIP_OFFSET;
-      const baseCenterY = p.y - p.height * CENTER_Y_FACTOR;
-      const finalBottom = baseCenterY + SPLASH_H / 2;
       dbg.fillStyle(0xff6f3c, 0.08);
-      dbg.fillRect(
-        centerX - SPLASH_W / 2,
-        finalBottom - currentHeight,
-        SPLASH_W,
-        currentHeight,
-      );
       dbg.lineStyle(2, 0xff9a4d, 0.92);
-      dbg.strokeRect(
-        centerX - SPLASH_W / 2,
-        finalBottom - currentHeight,
-        SPLASH_W,
-        currentHeight,
-      );
+      for (const { left, top, right, bottom } of shapes) {
+        dbg.fillRect(left, top, right - left, bottom - top);
+        dbg.strokeRect(left, top, right - left, bottom - top);
+      }
     }
     if (elapsed >= ACTIVE_WINDOW_MS) {
       scene.events.off("update", updateListener);
@@ -124,45 +101,6 @@ export function performDravenSplashAttack(instance, attackContext = null) {
     centerYFactor: CENTER_Y_FACTOR,
     delay: SPLASH.remoteExplosionDelayMs,
   };
-}
-
-function applySplashDamage({
-  scene,
-  centerX,
-  centerY,
-  w,
-  h,
-  attacker,
-  gameId,
-  opponents,
-  hitSet,
-}) {
-  // Server now owns the damage truth for Draven splash. Keep this helper
-  // purely for optional local debug visualization without emitting hits.
-  const inflate = HITBOX_INFLATE;
-  const left = centerX - w / 2 - inflate;
-  const right = centerX + w / 2 + inflate;
-  const top = centerY - h / 2 - inflate;
-  const bottom = centerY + h / 2 + inflate;
-  if (DEBUG_DRAW) {
-    const list = Object.values(opponents || {});
-    for (const wrap of list) {
-      const spr = wrap && wrap.opponent;
-      if (!spr) continue;
-      const bounds = getSpriteBounds(spr);
-      rectsOverlap(
-        left,
-        top,
-        right,
-        bottom,
-        bounds.left,
-        bounds.top,
-        bounds.right,
-        bounds.bottom,
-      );
-    }
-  }
-  return null;
 }
 
 export function spawnExplosion(scene, x, y, owner = null) {
@@ -194,13 +132,5 @@ export function spawnExplosion(scene, x, y, owner = null) {
     return e;
   } catch (_) {
     return null;
-  }
-}
-
-export function changeDebugState(state) {
-  if (state) {
-    DEBUG_DRAW = true;
-  } else {
-    DEBUG_DRAW = false;
   }
 }

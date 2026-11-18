@@ -18,10 +18,6 @@ class BaseGameMode {
     return null;
   }
 
-  validateSelection() {
-    return { ok: true };
-  }
-
   onStart() {}
 
   tick() {}
@@ -59,12 +55,8 @@ class BaseGameMode {
   }
 
   /**
-   * Describes what a bot will eventually optimize for in this mode.
-   *
-   * BotController currently records this directive for observability only and
-   * deliberately continues to use its existing combat/navigation tactics.
-   * Modes can add a goal, target, or interaction here as their objective AI is
-   * implemented without coupling that knowledge to the generic bot runtime.
+   * Supplies objective details to the bot controller. bots/objectives.js
+   * normalizes these fields and selects standard combat or Bank Bust planning.
    */
   getBotObjective(playerData) {
     const objective = this.descriptor?.botObjective || {};

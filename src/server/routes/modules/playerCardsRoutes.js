@@ -1,3 +1,4 @@
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
 const {
   getPlayerCardById,
   getPlayerCardsCatalog,
@@ -5,15 +6,15 @@ const {
 const {
   syncPlayerCardOwnershipForUser,
 } = require("../../services/cosmetics/playerCardOwnership");
-const { authedRoute, sendShopError, purchaseGrantFromShop } = require("../routeHelpers");
+const { authedRoute } = require("../http");
 
-function registerPlayerCardsRoutes({ app, db, requireCurrentUser, shopService }) {
-  app.get("/player-cards/catalog", (_req, res) => {
+function registerPlayerCardsRoutes({ app, db, requireCurrentUser }) {
+  app.get(API_PATHS.PLAYER_CARDS_CATALOG, (_req, res) => {
     const catalog = getPlayerCardsCatalog();
     return res.json({ success: true, catalog });
   });
 
-  app.get("/player-cards/owned", authedRoute(requireCurrentUser, "[cards] /player-cards/owned", async (_req, res, user) => {
+  app.get(API_PATHS.PLAYER_CARDS_OWNED, authedRoute(requireCurrentUser, "[cards] /player-cards/owned", async (_req, res, user) => {
     const cardState = await syncPlayerCardOwnershipForUser(db, user);
     return res.json({
       success: true,
@@ -37,7 +38,7 @@ function registerPlayerCardsRoutes({ app, db, requireCurrentUser, shopService })
     return cardId;
   }
 
-  app.post("/player-cards/select", authedRoute(requireCurrentUser, "[cards] /player-cards/select", async (req, res, user) => {
+  app.post(API_PATHS.PLAYER_CARDS_SELECT, authedRoute(requireCurrentUser, "[cards] /player-cards/select", async (req, res, user) => {
     const cardId = resolveCardId(req, res);
     if (!cardId) return undefined;
     if (!(await db.userOwnsCard(user.user_id, cardId))) {
@@ -48,25 +49,6 @@ function registerPlayerCardsRoutes({ app, db, requireCurrentUser, shopService })
     await db.setUserSelectedCardId(user.user_id, cardId);
     return res.json({ success: true, selectedCardId: cardId });
   }));
-
-  app.post("/player-cards/buy", authedRoute(requireCurrentUser, "[cards] /player-cards/buy", async (req, res, user) => {
-    const cardId = resolveCardId(req, res);
-    if (!cardId) return undefined;
-
-    const purchase = await purchaseGrantFromShop({
-      shopService, req, user, grantType: "card", grantId: cardId, idempotencyPrefix: "legacy-card",
-    });
-    if (purchase) return res.json({ ...purchase, cardId });
-
-    const cardState = await syncPlayerCardOwnershipForUser(db, user);
-    if (new Set((cardState.ownedCardIds || []).map(String)).has(cardId)) {
-      return res.json({ success: true, owned: true, cardId });
-    }
-    return res.status(409).json({
-      success: false,
-      error: "This card is not currently for sale in the Shop.",
-    });
-  }, { onError: (error, res) => sendShopError(res, error, "Unable to purchase card") }));
 }
 
 module.exports = { registerPlayerCardsRoutes };

@@ -45,10 +45,6 @@ function isOfferInRotation(catalog, offer, rotation) {
   return !isRotatingSection(section) || getRotatingOfferIds(catalog, rotation, section.id, saleIds).includes(offer.id);
 }
 
-function getProfileOfferIds(catalog, rotation) {
-  return getRotatingOfferIds(catalog, rotation, "profile");
-}
-
 function getSalePrice(offer, catalog) {
   const percent = offer.saleDiscountPercent ?? (offer.kind === "bundle" ? 0 : Number(catalog?.rotation?.sales?.discountPercent) || 0);
   if (offer?.price?.type !== "virtual" || percent <= 0) return offer.price;
@@ -93,4 +89,4 @@ function ownsGrant(ownership, grant) {
   return ownership?.[collections[grant?.kind]]?.has(String(grant.id)) || false;
 }
 
-module.exports = { isRotatingSection, getSectionRotationSize, getRotatingOfferIds, isOfferInRotation, getProfileOfferIds, getSaleOfferIds, getSalePrice, getBundleValue, buildOfferIndexes, ownsGrant };
+module.exports = { isRotatingSection, getSectionRotationSize, getRotatingOfferIds, isOfferInRotation, getSaleOfferIds, getSalePrice, getBundleValue, buildOfferIndexes, ownsGrant };

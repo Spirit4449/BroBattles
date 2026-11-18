@@ -1,3 +1,5 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { clamp01 } from "../../../../shared/math.js";
 // Pixel-art cast effect for the ozzy's super (Arcane Surge), timed to the
 // frames of `ozzy-special` (see anim.js):
 //   0-330 ms   staff raised: motes spiral into the glowing staff tip
@@ -10,7 +12,9 @@ import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters
 import { rigPoint, spriteView } from "../shared/rig";
 import { attachToPlayer } from "../shared/attachToPlayer";
 
-const CAST_MS = getResolvedCharacterSpecialConfig("ozzy", "arcaneSurge").castMs || 2000;
+const { key: NAME } = characterDefinitions.ozzy;
+
+const CAST_MS = getResolvedCharacterSpecialConfig(NAME, "arcaneSurge").castMs || 2000;
 // The special animation runs about 1.72 s (anim.js); the effect fades out with it.
 export const SUPER_TIMELINE = { plantMs: 330, blastMs: 420, fadeMs: 1450, endMs: Math.min(CAST_MS, 1800), exitMs: 150 };
 const CELL = 2;
@@ -19,7 +23,6 @@ const C = {
   pale: 0xddd6fe, white: 0xf5f3ff, cyan: 0x67e8f9,
 };
 
-const clamp01 = v => Math.max(0, Math.min(1, v));
 // Opacity in thirds, never a smooth ramp.
 const steps = v => Math.ceil(clamp01(v) * 3) / 3;
 const hash = n => {
@@ -29,7 +32,7 @@ const hash = n => {
 
 // Points come from the ozzy's rig (ozzy.json `rig`): the staff tip follows
 // the frame being shown, the orb is the violet blast on the planted staff.
-const point = (sprite, name) => rigPoint(sprite, name, "ozzy") || { x: sprite.x, y: sprite.y };
+const point = (sprite, name) => rigPoint(sprite, name, NAME) || { x: sprite.x, y: sprite.y };
 
 function painter(graphics) {
   return (x, y, color, alpha = 1, size = 1) => {
@@ -192,7 +195,7 @@ export function playOzzySuperCast(scene, sprite, { elapsedMs = 0 } = {}) {
     const feet = point(sprite, "feet");
     const body = point(sprite, "chest");
     const limit = exitAt === null ? 1 : 1 - clamp01((ms - exitAt) / SUPER_TIMELINE.exitMs);
-    drawGlow(glow, tip, head, feet, Math.abs(spriteView(sprite, "ozzy").scaleX), ms, limit);
+    drawGlow(glow, tip, head, feet, Math.abs(spriteView(sprite, NAME).scaleX), ms, limit);
     if (ms < SUPER_TIMELINE.plantMs && limit === 1) drawCharge(pFront, tip, ms);
     drawPlant(pBack, feet, head, ms, limit);
     drawSurge(pBack, pFront, feet, head, body, ms, limit);

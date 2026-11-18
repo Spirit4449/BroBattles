@@ -1,21 +1,15 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
-const babel = require('@babel/core');
 const loadServerClock = require('./helpers/serverClockModule');
 const loadShotPrediction = require('./helpers/shotPredictionModule');
 const { characterHitBounds } = require('../src/shared/combat/shotContact');
 const tuning = require('../src/shared/characters/characterTuning.js');
 
-const compiled = new Map();
 function load(file, require, globals = {}) {
-  if (!compiled.has(file)) compiled.set(file, babel.transformSync(fs.readFileSync(file, 'utf8'), {
-    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-  }).code);
   const exports = {};
-  vm.runInNewContext(compiled.get(file), { exports, require, ...globals });
+  loadClientModule(file, { exports, require, ...globals });
   return exports;
 }
 const packetDedupe = load('src/client/game/characters/shared/packetDedupe.js', () => ({}), { Date });

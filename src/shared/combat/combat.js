@@ -1,3 +1,4 @@
+const { advanceAmmoClock, consumeAmmoCharge } = require("./ammoClock");
 const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig } = require("../characters/characterTuning.js");
 const { getResolvedAttackDescriptor } = require("./runtime/attackDescriptorResolver.js");
 const { characterDefinitions } = require('../characters');
@@ -7,7 +8,7 @@ const { botProfile, DEFAULT_SPECIAL_LOCK_MS, DEFAULT_SPECIAL_RANGE } = require('
 const { FIXED_DT_MS } = require('../gameConstants');
 const { launchLagMs } = require('./launchRamp');
 const { muzzleOf } = require('../characters/characterRig');
-const { shotBlockers, shotTerrain } = require('./runtime/attackRuntimes/geometry.js');
+const { resolvePlayerWidth, resolvePlayerHeight, shotBlockers, shotTerrain } = require('./runtime/attackRuntimes/geometry.js');
 const BOT_ATTACK_TO_SUPER_COOLDOWN_MS = 400;
 
 function interceptTime(dx, dy, vx, vy, speed) {
@@ -44,9 +45,9 @@ function projectileSolutions(player, target, runtime, startup, prediction, dt, s
   const speed = runtime.speed || 800, gravity = runtime.gravity || 0;
   // The rig muzzle the shot really leaves from, facing the target.
   const muzzle = runtime.muzzle && muzzleOf(player.char_class, runtime.muzzle, { x: player.x, y: player.y, flip: target.x < player.x });
-  const forward = muzzle ? muzzle.reach : (player._lastWidth || 80) * (runtime.forwardOffsetWidthFactor ?? runtime.forwardOffset ?? 0);
+  const forward = muzzle ? muzzle.reach : resolvePlayerWidth(player) * (runtime.forwardOffsetWidthFactor ?? runtime.forwardOffset ?? 0);
   const ox = muzzle ? muzzle.pivot.x : player.x;
-  const oy = muzzle ? muzzle.pivot.y : player.y - (player._lastHeight || 120) * (runtime.verticalOffsetHeightFactor ?? runtime.verticalOffset ?? 0);
+  const oy = muzzle ? muzzle.pivot.y : player.y - resolvePlayerHeight(player) * (runtime.verticalOffsetHeightFactor ?? runtime.verticalOffset ?? 0);
   const vx = (target.vx || 0) * prediction, vy = (target.vy || 0) * prediction;
   const maxTime = gravity ? (runtime.maxLifetimeMs || 3000) / 1000 : (runtime.range || 1050) / speed;
   const vector = (t) => ({ x: target.x + vx * (startup + t) - ox,
@@ -118,14 +119,7 @@ function hasClearShot(room, player, target, aim = basicAim(player, target, playe
 }
 
 function advanceAmmo(player, dt) {
-  const a = player.ammoState;
-  if (!a) return;
-  a.nextFireInMs = Math.max(0, a.nextFireInMs - dt);
-  if (a.charges < a.capacity) {
-    a.reloadTimerMs += dt;
-    while (a.reloadTimerMs >= a.reloadMs && a.charges < a.capacity) { a.reloadTimerMs -= a.reloadMs; a.charges++; }
-    if (a.charges === a.capacity) a.reloadTimerMs = 0;
-  }
+  advanceAmmoClock(player.ammoState, dt);
 }
 
 // Reuse immutable tuning only within a room tick; the next tick sees any live
@@ -133,9 +127,9 @@ function advanceAmmo(player, dt) {
 const aimTunings = new WeakMap();
 function aimTuning(character, room) {
   let cache;
-  if (room && Number.isFinite(room._tickId)) {
+  if (room && Number.isFinite(room.tickId)) {
     cache = aimTunings.get(room);
-    if (!cache || cache.tick !== room._tickId) aimTunings.set(room, cache = { tick: room._tickId, values: new Map() });
+    if (!cache || cache.tick !== room.tickId) aimTunings.set(room, cache = { tick: room.tickId, values: new Map() });
     if (cache.values.has(character)) return cache.values.get(character);
   }
   const type = attackTypes[character];
@@ -245,7 +239,7 @@ function requestBasic(room, p, target, profile, random, now) {
   const lockMs = Math.max(150, Number(descriptor?.actionFlow?.startupMs) || Number(descriptor?.runtime?.windupMs) || 0);
   kit.decorateBasicAction?.(action);
   if (!kit.serverOwnsAmmo?.(room)) {
-    ammo.charges--; ammo.nextFireInMs = ammo.cooldownMs;
+    consumeAmmoCharge(ammo);
   }
   p._botActionUntil = now + lockMs; p.animation = "throw";
   room.handlePlayerAction(p.participantId, action);

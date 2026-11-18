@@ -1,3 +1,5 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { perform as performSpecial } from "./special";
 import { predictNinja } from './network';
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
 import { animations } from "./anim";
@@ -9,7 +11,9 @@ import { aimAngle, aimFacesLeft, faceAttack } from "../shared/flipLock";
 import { beginThrow } from "./throwPresentation";
 
 // Single source of truth for this character's name/key
-const NAME = "ninja";
+
+const { key: NAME } = characterDefinitions.ninja;
+
 const RETURNING_SHURIKEN = getResolvedCharacterAttackConfig(
   NAME,
   "returningShuriken",
@@ -18,7 +22,7 @@ const RETURNING_SHURIKEN = getResolvedCharacterAttackConfig(
 class Ninja extends CharacterEntityBase {
   static key = NAME;
   // Main texture key used for this character's sprite
-  static textureKey = NAME;
+  static performSpecial = performSpecial;
 
   static sounds = {
     attack: { key: "shurikenThrow", volume: 0.5, rate: 1.3 },

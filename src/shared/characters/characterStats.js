@@ -4,6 +4,9 @@ const definitions = require('.');
 
 // Default character for new users
 const DEFAULT_CHARACTER = "ninja";
+const DEFAULT_AMMO_CAPACITY = 1;
+const DEFAULT_AMMO_COOLDOWN_MS = 1200;
+const DEFAULT_AMMO_RELOAD_MS = 1200;
 // Highest level a character can be upgraded to.
 const LEVEL_CAP = 10;
 
@@ -162,28 +165,41 @@ function unlockPrice(character) {
   return characterStats[character].unlockPrice || undefined;
 }
 
-// CommonJS for server-side compatibility
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    DEFAULT_CHARACTER,
-    LEVEL_CAP,
-    STANDARD_LEVEL_CAP,
-    canonicalCharacterKey,
-    resolveCharacterKey,
-    getCharacterDisplayName,
-    parseCharacterLevels,
-    getCharacterLevel,
-    characterStats,
-    getCharacterStats,
-    getCharacterTuning,
-    getAllCharacters,
-    defaultCharacterList,
-    getHealth,
-    getDamage,
-    getSuperChargeHits,
-    getSuperChargePerHit,
-    getSpecialDamage,
-    upgradePrice,
-    unlockPrice,
+function computeMatchStats(character, level) {
+  const stats = getCharacterStats(character) || {};
+  return {
+    maxHealth: Math.max(1, Number(getHealth(character, level)) || 1),
+    baseDamage: Math.max(0, Number(getDamage(character, level)) || 0),
+    specialDamage: Math.max(0, Number(getSpecialDamage(character, level)) || 0),
+    specialChargeHits: getSuperChargeHits(character),
+    ammoCapacity: stats.ammoCapacity || DEFAULT_AMMO_CAPACITY,
+    ammoCooldownMs: stats.ammoCooldownMs || DEFAULT_AMMO_COOLDOWN_MS,
+    ammoReloadMs: stats.ammoReloadMs || DEFAULT_AMMO_RELOAD_MS,
   };
 }
+
+module.exports = {
+  DEFAULT_CHARACTER,
+  DEFAULT_AMMO_CAPACITY,
+  DEFAULT_AMMO_COOLDOWN_MS,
+  DEFAULT_AMMO_RELOAD_MS,
+  LEVEL_CAP,
+  STANDARD_LEVEL_CAP,
+  canonicalCharacterKey,
+  resolveCharacterKey,
+  getCharacterDisplayName,
+  parseCharacterLevels,
+  getCharacterLevel,
+  characterStats,
+  getCharacterStats, computeMatchStats,
+  getCharacterTuning,
+  getAllCharacters,
+  defaultCharacterList,
+  getHealth,
+  getDamage,
+  getSuperChargeHits,
+  getSuperChargePerHit,
+  getSpecialDamage,
+  upgradePrice,
+  unlockPrice,
+};

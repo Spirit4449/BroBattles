@@ -1,51 +1,14 @@
+import { formatCount } from "../../shared/format.js";
 // Small DOM and network helpers shared by the admin page modules.
 import { DEFAULT_CHARACTER } from "../../shared/characters/characterStats";
+import { requestJson } from "../lib/http.js";
 
 export const $ = (selector, root = document) => root.querySelector(selector);
-export const fmt = (value) => Number(value || 0).toLocaleString("en-US");
+export const fmt = (value) => formatCount(value, "en-US");
 export const signed = (value) => `${value > 0 ? "+" : value < 0 ? "−" : ""}${fmt(Math.abs(value))}`;
-export const titleCase = (text) => String(text || "").charAt(0).toUpperCase() + String(text || "").slice(1);
-
-export function node(tag, text, className) {
-  const el = document.createElement(tag);
-  if (text != null) el.textContent = text;
-  if (className) el.className = className;
-  return el;
-}
-
-export function button(text, className, onClick) {
-  const el = node("button", text, className);
-  el.type = "button";
-  if (onClick) el.addEventListener("click", onClick);
-  return el;
-}
-
-export function field(labelText, control, hint) {
-  const label = node("label", null, "field");
-  label.append(node("span", labelText), control);
-  if (hint) label.append(node("small", hint, "hint"));
-  return label;
-}
-
-export function input(type, value, attrs = {}) {
-  const el = node("input");
-  el.type = type;
-  if (value != null) el.value = value;
-  for (const [key, val] of Object.entries(attrs)) el.setAttribute(key, val);
-  return el;
-}
-
-export function select(options, value) {
-  const el = node("select");
-  for (const option of options) {
-    const [val, label] = Array.isArray(option) ? option : [option, titleCase(option)];
-    const opt = node("option", label);
-    opt.value = val;
-    el.append(opt);
-  }
-  if (value != null) el.value = value;
-  return el;
-}
+import { element as node, button, field, input, select, titleCase } from "../ui/dom";
+import { openModalDialog } from "../ui/nativeDialog";
+export { node, button, field, input, select, titleCase };
 
 export function currencyIcon(currency, size = 16) {
   const img = node("img", null, "currency-icon");
@@ -55,7 +18,7 @@ export function currencyIcon(currency, size = 16) {
   return img;
 }
 
-export function avatarFor(user) {
+function avatarFor(user) {
   const icon = String(user?.selected_profile_icon_id || user?.userIcon || "").replace(/[^a-z0-9_-]/gi, "");
   return `/assets/profile-icons/${icon || user?.char_class || DEFAULT_CHARACTER}.webp`;
 }
@@ -66,16 +29,13 @@ export function setAvatar(img, user) {
   return img;
 }
 
-export async function fetchJson(url, options = {}) {
-  const res = await fetch(url, {
+export function fetchJson(url, options = {}) {
+  return requestJson(url, {
     headers: { "Content-Type": "application/json" },
     credentials: "include",
+    fallbackMessage: status => `Request failed (${status})`,
     ...options,
-    body: options.body ? JSON.stringify(options.body) : undefined,
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status})`), { status: res.status, data });
-  return data;
 }
 
 export function formatAdminDate(value, short = false) {
@@ -125,7 +85,7 @@ export function openModal(title, { wide = false, className = "", onSubmit, onClo
   const form = node("form", null, "modal-frame");
   form.method = "dialog";
   const header = node("header");
-  const close = () => { if (!dialog.isConnected) return; dialog.close(); dialog.remove(); onClose?.(); };
+  const close = () => { if (dialog.open) dialog.close(); };
   const closeButton = button("×", "dialog-close", close);
   closeButton.setAttribute("aria-label", "Close");
   header.append(node("h2", title), closeButton);
@@ -155,10 +115,10 @@ export function openModal(title, { wide = false, className = "", onSubmit, onClo
       setError(err.message);
     } finally { submit.disabled = false; }
   });
-  dialog.addEventListener("cancel", (event) => { event.preventDefault(); close(); });
-  // Only small dialogs close from a backdrop click, so editors never lose work by accident.
-  if (dismissible) dialog.addEventListener("click", (event) => { if (event.target === dialog) close(); });
-  dialog.showModal();
+  openModalDialog(dialog, {
+    backdrop: dismissible && "target",
+    onClose() { dialog.remove(); onClose?.(); },
+  });
   return { body, close, dialog, setError, submit };
 }
 

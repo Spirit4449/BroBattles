@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../net/socketEvents.js");
 const { getSuperChargePerHit } = require("../../characters/characterStats.js");
 
 // Called once per accepted enemy hit that dealt positive damage, never for
@@ -8,7 +9,7 @@ function chargeSuperForHit(room, attacker, attackType) {
   const previous = attacker.superCharge || 0;
   attacker.superCharge = Math.min(attacker.maxSuperCharge, previous + gain);
   if (attacker.superCharge === previous) return;
-  room.io.to(`game:${room.matchId}`).emit("super-update", {
+  room.broadcast(SOCKET_EVENTS.SUPER_UPDATE, {
     username: attacker.name,
     charge: attacker.superCharge,
     maxCharge: attacker.maxSuperCharge,

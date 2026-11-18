@@ -1,3 +1,4 @@
+const { resolveOwnedSelection, loadOwnedIds, grantCosmetic, grantCosmetics } = require("./cosmeticCollections");
 const { DEFAULT_CHARACTER } = require("../../../shared/characters/characterStats.js");
 const { isAutoUnlocked, unlockedCharacterSet } = require("./cosmeticUnlocks");
 const {
@@ -34,36 +35,25 @@ async function unlockProfileIconForUser(db, userId, iconId, source = "grant") {
     return { success: false, reason: "unknown_icon" };
   }
 
-  try {
-    const insertResult = await db.runQuery(
-      "INSERT IGNORE INTO user_profile_icons (user_id, icon_id, source) VALUES (?, ?, ?)",
-      [normalizedUserId, normalizedIconId, String(source || "grant")],
+  const insertResult = await grantCosmetic(
+    db.runQuery, normalizedUserId, "profileIcon", normalizedIconId, String(source || "grant"),
+  );
+  const ownedRows = await db.runQuery(
+    "SELECT selected_profile_icon_id FROM users WHERE user_id = ? LIMIT 1",
+    [normalizedUserId],
+  );
+  const selected = ownedRows?.[0]?.selected_profile_icon_id || null;
+  if (!selected) {
+    await db.runQuery(
+      "UPDATE users SET selected_profile_icon_id = ? WHERE user_id = ?",
+      [normalizedIconId, normalizedUserId],
     );
-    const ownedRows = await db.runQuery(
-      "SELECT selected_profile_icon_id FROM users WHERE user_id = ? LIMIT 1",
-      [normalizedUserId],
-    );
-    const selected = ownedRows?.[0]?.selected_profile_icon_id || null;
-    if (!selected) {
-      await db.runQuery(
-        "UPDATE users SET selected_profile_icon_id = ? WHERE user_id = ?",
-        [normalizedIconId, normalizedUserId],
-      );
-    }
-    return {
-      success: true,
-      inserted: Number(insertResult?.affectedRows) > 0,
-      iconId: normalizedIconId,
-    };
-  } catch (error) {
-    if (
-      error?.code === "ER_NO_SUCH_TABLE" ||
-      error?.code === "ER_BAD_FIELD_ERROR"
-    ) {
-      return { success: false, reason: "missing_schema" };
-    }
-    throw error;
   }
+  return {
+    success: true,
+    inserted: Number(insertResult?.affectedRows) > 0,
+    iconId: normalizedIconId,
+  };
 }
 
 async function syncProfileIconOwnershipForUser(db, userRow) {
@@ -80,69 +70,37 @@ async function syncProfileIconOwnershipForUser(db, userRow) {
   const defaultIconId = String(catalog?.defaultIconId || DEFAULT_CHARACTER);
   const autoUnlockIds = getAutoUnlockIconIds(userRow);
 
-  try {
-    if (autoUnlockIds.length) {
-      const placeholders = autoUnlockIds.map(() => "(?, ?, 'auto')").join(",");
-      const params = autoUnlockIds.flatMap((iconId) => [userId, iconId]);
-      await db.runQuery(
-        `INSERT IGNORE INTO user_profile_icons (user_id, icon_id, source) VALUES ${placeholders}`,
-        params,
-      );
-    }
+  await grantCosmetics(db.runQuery, userId, "profileIcon", autoUnlockIds, "auto");
 
-    const ownedRows = await db.runQuery(
-      "SELECT icon_id FROM user_profile_icons WHERE user_id = ?",
-      [userId],
-    );
-    const validIds = new Set(catalog.icons.map(icon => icon.id));
-    const ownedSet = new Set(ownedRows.map(row => String(row.icon_id || "")).filter(id => validIds.has(id)));
-    if (ownedSet.size === 0 && defaultIconId) {
-      await db.runQuery(
-        "INSERT IGNORE INTO user_profile_icons (user_id, icon_id, source) VALUES (?, ?, 'default')",
-        [userId, defaultIconId],
-      );
-      ownedSet.add(defaultIconId);
-    }
-
-    const selectedRaw =
-      String(userRow?.selected_profile_icon_id || "").trim() || null;
-    let selectedProfileIconId = selectedRaw;
-    if (!selectedProfileIconId || !ownedSet.has(selectedProfileIconId)) {
-      selectedProfileIconId = ownedSet.has(defaultIconId)
-        ? defaultIconId
-        : Array.from(ownedSet)[0] || null;
-      if (selectedProfileIconId) {
-        await db.runQuery(
-          "UPDATE users SET selected_profile_icon_id = ? WHERE user_id = ?",
-          [selectedProfileIconId, userId],
-        );
-      }
-    }
-
-    return {
-      ownedIconIds: Array.from(ownedSet),
-      selectedProfileIconId,
-      defaultIconId,
-    };
-  } catch (error) {
-    if (
-      error?.code === "ER_NO_SUCH_TABLE" ||
-      error?.code === "ER_BAD_FIELD_ERROR"
-    ) {
-      return {
-        ownedIconIds: autoUnlockIds,
-        selectedProfileIconId: autoUnlockIds[0] || defaultIconId || null,
-        defaultIconId,
-        schemaMissing: true,
-      };
-    }
-    throw error;
+  const ownedIds = await loadOwnedIds(db.runQuery, userId, "profileIcon");
+  const validIds = new Set(catalog.icons.map(icon => icon.id));
+  const ownedSet = new Set(ownedIds.filter(id => validIds.has(id)));
+  if (ownedSet.size === 0 && defaultIconId) {
+    await grantCosmetic(db.runQuery, userId, "profileIcon", defaultIconId, "default");
+    ownedSet.add(defaultIconId);
   }
+
+  const selectedRaw =
+    String(userRow?.selected_profile_icon_id || "").trim() || null;
+  const selectedProfileIconId = resolveOwnedSelection(selectedRaw, ownedSet, defaultIconId);
+  if (selectedRaw !== selectedProfileIconId) {
+    if (selectedProfileIconId) {
+      await db.runQuery(
+        "UPDATE users SET selected_profile_icon_id = ? WHERE user_id = ?",
+        [selectedProfileIconId, userId],
+      );
+    }
+  }
+
+  return {
+    ownedIconIds: Array.from(ownedSet),
+    selectedProfileIconId,
+    defaultIconId,
+  };
 }
 
 module.exports = {
   getAutoUnlockIconIds,
-  isIconAutoUnlockedForUser,
   unlockProfileIconForUser,
   syncProfileIconOwnershipForUser,
 };

@@ -1,10 +1,10 @@
+import { rarityRank } from "../../shared/catalogs/rarities.js";
 import { escapeHtml, assetUrl } from "../../shared/site/html.cjs";
 import { bindPlayerCardHover, presentPlayerCardMedia, createPlayerCardMedia } from "./playerCardAnimation.cjs";
 
-const CARD_RARITY_ORDER = { common: 0, rare: 1, epic: 2, legendary: 3 };
 
 export function comparePlayerCardsByRarity(a, b) {
-  const rank = card => CARD_RARITY_ORDER[String(card?.rarity || 'common').toLowerCase()] ?? 4;
+  const rank = card => rarityRank(String(card?.rarity || 'common').toLowerCase());
   return rank(a) - rank(b) || String(a?.name || '').localeCompare(String(b?.name || ''));
 }
 

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { updateTeamwork, teamPosition } = require('../src/server/core/bots/teamwork');
 const { chooseDecision } = require('../src/server/core/bots/tactics');
 const { standOn } = require('../src/server/core/bots/navigation');
-const { characterBody } = require('../src/shared/physics/duelGeometry');
+const { characterBody } = require('../src/shared/physics/characterBody');
 
 function setup(count = 3) {
   const allies = ['thorg', 'ozzy', 'sparrow'].slice(0, count).map((char_class, i) => ({
@@ -62,7 +62,7 @@ test('bots can protect a wounded human teammate without assigning the human a ro
   h.room.players.set('human', human);
   const plans = h.plan();
   assert.ok(plans.some((p) => p.role === 'defend' && p.buddyId === 'human'));
-  assert.equal(h.room._botTeamwork.get('blue').plans.has('human'), false);
+  assert.equal(h.room.botTeamwork.get('blue').plans.has('human'), false);
 });
 
 
@@ -90,7 +90,7 @@ test('stale enemy reports expire instead of tracking unseen opponents', () => {
   const h = setup();
   h.plan();
   for (const brain of h.brains) brain.teamPlan = updateTeamwork(brain, { at: 12000, enemies: [] }, 12000);
-  assert.ok([...h.room._botTeamwork.get('blue').plans.values()].every((p) => !p.targetId));
+  assert.ok([...h.room.botTeamwork.get('blue').plans.values()].every((p) => !p.targetId));
 });
 
 test('roles produce different reachable movement goals, not just labels', () => {
@@ -98,7 +98,7 @@ test('roles produce different reachable movement goals, not just labels', () => 
   const floor = { id: 'floor', x: 1000, left: 0, right: 2000, top: 650, bottom: 700,
     collision: { up: true, down: true, left: true, right: true } };
   h.room.geometry = { mapId: 98745, world: { width: 2000, height: 1000 }, colliders: [floor] };
-  h.room._powerups = new Map();
+  h.room.powerups = new Map();
   h.allies.forEach((p) => Object.assign(p, standOn(floor, p.char_class, p.x)));
   h.enemy.y = h.allies[0].y;
   h.plan();

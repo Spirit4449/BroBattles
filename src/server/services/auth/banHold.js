@@ -1,17 +1,11 @@
-const { isAccountBanned } = require('../../../shared/moderation/accountBan');
+const { isAccountBanned, BAN_REASON_COOKIE, BAN_EXPIRES_AT_COOKIE } = require('../../../shared/moderation/accountBan');
 const BAN_HOLD_DURATION_MS = 24 * 60 * 60 * 1000;
 const BAN_HOLD_UNTIL_COOKIE = "bb_ban_hold_until";
-const BAN_HOLD_REASON_COOKIE = "bb_ban_reason";
 const BAN_HOLD_USER_COOKIE = "bb_ban_user";
-
-function parseBanHoldUntil(raw) {
-  const untilMs = Number(raw) || 0;
-  return untilMs > Date.now() ? untilMs : 0;
-}
 
 function clearBanHoldCookies(res) {
   if (!res) return;
-  for (const name of [BAN_HOLD_UNTIL_COOKIE, BAN_HOLD_REASON_COOKIE, BAN_HOLD_USER_COOKIE, 'bb_ban_expires_at']) {
+  for (const name of [BAN_HOLD_UNTIL_COOKIE, BAN_REASON_COOKIE, BAN_HOLD_USER_COOKIE, BAN_EXPIRES_AT_COOKIE]) {
     res.clearCookie(name, { path: '/' });
   }
 }
@@ -45,11 +39,11 @@ function setBanHoldCookies({ req, res, reason, userId, expiresAt }) {
   const safeReason = String(reason || 'Your account has been banned.').replace(/\s+/g, ' ').trim().slice(0, 220);
   const cookieOpts = { sameSite: 'lax', secure, path: '/', maxAge: duration };
   res.cookie(BAN_HOLD_UNTIL_COOKIE, String(untilMs), cookieOpts);
-  res.cookie(BAN_HOLD_REASON_COOKIE, safeReason, cookieOpts);
-  res.cookie('bb_ban_expires_at', expiresAt ? String(new Date(expiresAt).getTime()) : '', cookieOpts);
+  res.cookie(BAN_REASON_COOKIE, safeReason, cookieOpts);
+  res.cookie(BAN_EXPIRES_AT_COOKIE, expiresAt ? String(new Date(expiresAt).getTime()) : '', cookieOpts);
   if (Number.isSafeInteger(Number(userId)) && Number(userId) > 0) {
     res.cookie(BAN_HOLD_USER_COOKIE, String(userId), { ...cookieOpts, signed: true, httpOnly: true });
   }
 }
 
-module.exports = { BAN_HOLD_DURATION_MS, BAN_HOLD_UNTIL_COOKIE, BAN_HOLD_REASON_COOKIE, BAN_HOLD_USER_COOKIE, parseBanHoldUntil, getBanHoldFromRequest, setBanHoldCookies, clearBanHoldCookies };
+module.exports = { BAN_HOLD_USER_COOKIE, getBanHoldFromRequest, setBanHoldCookies, clearBanHoldCookies };

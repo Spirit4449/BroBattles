@@ -1,15 +1,10 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
-const babel = require('@babel/core');
 function load(file, imports = () => ({})) {
   const exports = {};
-  const code = babel.transformSync(fs.readFileSync(file, 'utf8'), {
-    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-  }).code;
-  vm.runInNewContext(code, { exports, require: imports, Phaser: { Math: { RadToDeg: r => r * 180 / Math.PI } } });
+  loadClientModule(file, { exports, require: imports, Phaser: { Math: { RadToDeg: r => r * 180 / Math.PI } } });
   return exports;
 }
 const art = load('src/client/game/characters/ozzy/fireballArt.js');

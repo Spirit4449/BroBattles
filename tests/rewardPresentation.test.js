@@ -204,3 +204,30 @@ describe("UI cue lifetime", () => {
     for (const audio of audios) assert.ok(fs.statSync(path.join(__dirname, '../public', audio.src)).size > 0, audio.src);
   });
 });
+
+test('the result screen stores the local reward and Exit navigates once to the original party', async () => {
+  const { createLobbyFixture } = require('./helpers/lobbyFixture');
+  const f = createLobbyFixture();
+  const returns = [];
+  f.window.__BB_NAVIGATION__ = { prepareLobbyReturn: async id => returns.push(id) };
+  f.sessionStorage.setItem('matchId', '10');
+  const { createGameOverScreenController } = f.load('src/client/game/hud/gameOverScreenController.js');
+  const controller = createGameOverScreenController({
+    getGameData: () => ({ yourTeam: 'team1', players: [{ name: 'Owner', party_id: 7 }] }),
+    getUsername: () => 'Owner',
+    rewardStorageKey: 'test-reward',
+    getMessage: () => 'Match won',
+  });
+  controller.showGameOverScreen({ winnerTeam: 'team1', meta: { rewards: [
+    { username: 'Opponent', team: 'team2', coinsAwarded: 13 },
+    { username: 'Owner', team: 'team1', coinsAwarded: 20, wallet: { coins: 50, gems: 10, trophies: 40 } },
+  ] } });
+  assert.match(f.document.querySelector('#game-over-overlay h1').textContent, /Victory/);
+  assert.equal(JSON.parse(f.sessionStorage.getItem('test-reward')).coinsAwarded, 20);
+  const exit = f.document.getElementById('go-lobby');
+  f.event(exit, 'click');
+  f.event(exit, 'click');
+  await f.settle();
+  assert.deepEqual(returns, [7]);
+  assert.equal(f.sessionStorage.getItem('matchId'), null);
+});

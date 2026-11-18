@@ -1,3 +1,4 @@
+// CommonJS keeps these mechanics directly loadable by the Node test suite.
 const SeparateY = require('phaser/src/physics/arcade/SeparateY');
 
 // Match Arcade's gravity-first separation, but consume a completed vertical

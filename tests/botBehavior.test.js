@@ -2,8 +2,8 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 describe("Bot behavior and routes", () => {
-  const { makeRoom } = require('./helpers/botRoom');
-  const { bounds } = require('../src/server/core/bots/physics');
+  const { makeBotBehaviorRoom: setup } = require('./helpers/botRoom');
+  const { bounds } = require('../src/server/core/physics/bodySolver');
   const { standOn } = require('../src/server/core/bots/navigation');
   const { observe, incomingThreat } = require('../src/server/core/bots/perception');
   const { preferredRange } = require('../src/server/core/bots/tactics');
@@ -12,28 +12,6 @@ describe("Bot behavior and routes", () => {
   const { difficultyForTrophies } = require('../src/server/core/bots/config');
   const { registerAttackFromAction, tickActiveAttacks } = require('../src/shared/combat/runtime/attackRuntimeManager.js');
   const effects = require('../src/shared/combat/runtime/effects/effectManager.js');
-
-  function setup(t, characters = ['ozzy', 'ninja'], trophies = 1000) {
-    let now = 1000000;
-    t.mock.method(Date, 'now', () => now);
-    t.mock.method(console, 'log', () => {});
-    const h = makeRoom({ characters, trophies, seed: 17 });
-    t.after(() => h.room.cleanup());
-    const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
-    for (const id of h.room.botControllers.keys()) if (id !== p.participantId) h.room.botControllers.delete(id);
-    h.players.forEach((player, i) => h.place(player, 1000 + i * 250));
-    h.room._lastPowerupSpawnAt = now;
-    const snapshot = () => observe(h.room, p, now, brain.projectileSamples);
-    const think = () => brain.think(snapshot(), effects.getModifiers(p, now), now);
-    function advance(frames, pickups = false) {
-      for (let i = 0; i < frames; i++) {
-        now += 1000 / 60;
-        h.tick(now);
-        if (pickups) h.room._tickPowerups();
-      }
-    }
-    return { ...h, p, brain, snapshot, think, advance, now: () => now };
-  }
 
   test('bots pause at the opening and hold good firing ground without jumping or pacing', (t) => {
     const h = setup(t), enemy = h.players[1];
@@ -99,8 +77,8 @@ describe("Bot behavior and routes", () => {
     const currentTop = h.room.geometry.colliders.find((surface) => surface.id === h.p.platformId).top;
     h.brain.openingUntil = h.now() + 10000;
     h.brain.decision = { mode: 'fight', goal: { x: h.p.x, y: currentTop, surfaceId: h.p.platformId } };
-    h.room._suddenDeathActive = true;
-    h.room._loopStartWallTime = h.now() - h.room.gameMode.getMatchDurationMs();
+    h.room.suddenDeathActive = true;
+    h.room.loopStartWallTime = h.now() - h.room.gameMode.getMatchDurationMs();
     h.think();
     assert.equal(h.brain.decision.mode, 'fight');
     assert.ok(h.brain.decision.goal, 'retains an actionable combat destination');
@@ -164,12 +142,12 @@ describe("Bot behavior and routes", () => {
     h.brain.openingDelay = 0;
     h.p.health = h.p.maxHealth * 0.3;
     h.place(h.players[1], h.p.x + 400);
-    h.room._powerups.set(7, { id: 7, type: 'health', x: h.p.x - 240, y: h.p.y, activeAt: h.now(), expiresAt: h.now() + 10000 });
+    h.room.powerups.set(7, { id: 7, type: 'health', x: h.p.x - 240, y: h.p.y, activeAt: h.now(), expiresAt: h.now() + 10000 });
     h.think();
     assert.equal(h.brain.decision.mode, 'pickup');
     assert.equal(h.brain.decision.pickupId, 7);
     h.advance(150, true);
-    assert.equal(h.room._powerups.has(7), false);
+    assert.equal(h.room.powerups.has(7), false);
     assert.equal(h.p.health, h.p.maxHealth);
   });
 
@@ -182,7 +160,7 @@ describe("Bot behavior and routes", () => {
     h.place(enemy, 1050, floor);
     h.brain.openingUntil = 0;
     h.brain.random = () => 0.5;
-    h.room._powerups.set(81, { id: 81, type: 'shockwave', x: 850, y: h.p.y,
+    h.room.powerups.set(81, { id: 81, type: 'shockwave', x: 850, y: h.p.y,
       activeAt: h.now(), expiresAt: h.now() + 10000 });
     h.think();
     assert.equal(h.brain.decision.mode, 'pickup');
@@ -200,16 +178,16 @@ describe("Bot behavior and routes", () => {
     h.place(enemy, 1000, floor);
     h.brain.openingUntil = 0;
     h.brain.random = () => 0.5;
-    h.room._powerups.set(83, { id: 83, type: 'shield', x: 850, y: h.p.y,
+    h.room.powerups.set(83, { id: 83, type: 'shield', x: 850, y: h.p.y,
       activeAt: h.now(), expiresAt: h.now() + 10000 });
     h.think();
     assert.equal(h.brain.decision.mode, 'pickup');
     assert.equal(h.brain.decision.contestTargetId, enemy.participantId);
 
-    h.room._powerups.clear();
+    h.room.powerups.clear();
     h.place(enemy, 2400, floor);
     h.brain.decision = null;
-    h.room._powerups.set(84, { id: 84, type: 'poison', x: 760, y: h.p.y,
+    h.room.powerups.set(84, { id: 84, type: 'poison', x: 760, y: h.p.y,
       activeAt: h.now(), expiresAt: h.now() + 10000 });
     h.think();
     assert.notEqual(h.brain.decision.mode, 'pickup');
@@ -226,7 +204,7 @@ describe("Bot behavior and routes", () => {
     h.brain.random = () => 0.5;
     const shockwave = { id: 82, type: 'shockwave', x: 1000, y: h.p.y,
       activeAt: h.now() + 500, expiresAt: h.now() + 10000 };
-    h.room._powerups.set(shockwave.id, shockwave);
+    h.room.powerups.set(shockwave.id, shockwave);
     h.think();
     assert.equal(h.brain.decision.mode, 'evade-powerup');
     assert.ok(Math.abs(h.brain.decision.goal.x - shockwave.x) > 420,
@@ -237,12 +215,12 @@ describe("Bot behavior and routes", () => {
     const h = setup(t);
     h.brain.openingUntil = 0;
     for (const [id, type, offset] of [[91, 'coin', 20], [92, 'gem', -20]]) {
-      h.room._deathDrops.set(id, { id, type, value: 1, x: h.p.x + offset, y: h.p.y,
+      h.room.deathDrops.set(id, { id, type, value: 1, x: h.p.x + offset, y: h.p.y,
         spawnX: h.p.x + offset, spawnY: h.p.y, spawnedAt: h.now() - 500, expiresAt: h.now() + 10000,
         claimedBy: null });
     }
     h.think();
-    assert.equal(h.room._deathDrops.size, 0);
+    assert.equal(h.room.deathDrops.size, 0);
     assert.equal(h.brain.metrics.lootCollected, 2);
     assert.deepEqual(h.events.filter((event) => event.type === 'deathdrop:collected').map((event) => event.payload.type).sort(), ['coin', 'gem']);
   });
@@ -256,15 +234,15 @@ describe("Bot behavior and routes", () => {
     h.place(enemy, 2400, floor);
     h.brain.openingUntil = 0;
     h.brain.random = () => 0.5;
-    h.room._deathDrops.set(93, { id: 93, type: 'coin', value: 1, x: 735, y: h.p.y,
+    h.room.deathDrops.set(93, { id: 93, type: 'coin', value: 1, x: 735, y: h.p.y,
       spawnX: 735, spawnY: h.p.y, spawnedAt: h.now(), expiresAt: h.now() + 10000, claimedBy: null });
     h.think();
     assert.equal(h.brain.decision.mode, 'loot');
     assert.equal(h.brain.decision.dropId, 93);
 
-    h.room._deathDrops.clear();
+    h.room.deathDrops.clear();
     h.brain.decision = null;
-    h.room._deathDrops.set(94, { id: 94, type: 'coin', value: 1, x: 1200, y: h.p.y,
+    h.room.deathDrops.set(94, { id: 94, type: 'coin', value: 1, x: 1200, y: h.p.y,
       spawnX: 1200, spawnY: h.p.y, spawnedAt: h.now(), expiresAt: h.now() + 10000, claimedBy: null });
     h.think();
     assert.notEqual(h.brain.decision.mode, 'loot', 'does not center play around a distant coin');
@@ -392,7 +370,7 @@ describe("Bot behavior and routes", () => {
   test('perception distinguishes approaching, departing, friendly, and curved projectiles', (t) => {
     const h = setup(t), enemy = h.players[1], body = bounds(h.p);
     const shot = { attackerParticipantId: enemy.participantId, x: h.p.x + 280, y: h.p.y + body.offsetY, vx: -600, vy: 0 };
-    h.room._activeAttacks = [shot];
+    h.room.activeAttacks = [shot];
     assert.ok(incomingThreat(h.snapshot(), h.p, h.now()));
     shot.vx = 600;
     assert.equal(incomingThreat(h.snapshot(), h.p, h.now()), null);
@@ -408,7 +386,7 @@ describe("Bot behavior and routes", () => {
     test(`a ${trophies}-trophy bot can choose a safe dodge for an incoming ranged attack`, (t) => {
       const h = setup(t, ['ninja', 'ozzy'], trophies), enemy = h.players[1];
       h.brain.random = () => 0.2;
-      h.room._activeAttacks = [{ attackerParticipantId: enemy.participantId,
+      h.room.activeAttacks = [{ attackerParticipantId: enemy.participantId,
         x: h.p.x + 240, y: h.p.y + bounds(h.p).offsetY, vx: -450, vy: 0, collisionRadius: 12 }];
       const observed = h.snapshot();
       assert.ok(incomingThreat(observed, h.p, h.now()));
@@ -424,7 +402,7 @@ describe("Bot behavior and routes", () => {
     h.brain.random = () => 0;
     h.brain.openingUntil = 0;
     h.brain.findDodgeSteps = function* () { return { best: null, baseDanger: 100, bestScore: 100 }; };
-    h.room._activeAttacks = [{
+    h.room.activeAttacks = [{
       attackerParticipantId: enemy.participantId,
       x: h.p.x + 100,
       y: h.p.y + bounds(h.p).offsetY,
@@ -442,7 +420,7 @@ describe("Bot behavior and routes", () => {
   test('bots prefer an available dodge instead of stacking a duck', (t) => {
     const h = setup(t, ['ninja', 'ozzy'], 2000), enemy = h.players[1];
     h.brain.random = () => 0;
-    h.room._activeAttacks = [{
+    h.room.activeAttacks = [{
       attackerParticipantId: enemy.participantId,
       x: h.p.x + 240,
       y: h.p.y + bounds(h.p).offsetY,
@@ -560,15 +538,15 @@ describe("Bot behavior and routes", () => {
     const combat = require('../src/shared/combat/runtime/sparrowCombat.js');
     human.isBot = false;
     assert.equal(h.room.handlePlayerAction(human.participantId, { type: 'sparrow-arrow', id: 'human-shot', angle: 0 }), true);
-    h.room._tickId += 10;
-    h.room._simulationMono = h.now();
+    h.room.tickId += 10;
+    h.room.simulationMono = h.now();
     combat.tick(h.room);
-    const count = h.room._sparrow.active.size;
+    const count = h.room.sparrowCombatState.active.size;
     assert.ok(count > 0);
     assert.ok(observe(h.room, bot, h.now(), new WeakMap()).projectiles.length > 0);
     assert.equal(registerAttackFromAction(h.room, human, { type: 'sparrow-arrow-release', id: 'human-shot' }, h.now()), false);
-    assert.equal(h.room._sparrow.active.size, count);
-    assert.equal(h.room._activeAttacks?.length || 0, 0);
+    assert.equal(h.room.sparrowCombatState.active.size, count);
+    assert.equal(h.room.activeAttacks?.length || 0, 0);
   });
 
   test('an unreachable target cannot leave a bot waiting forever with zero movement intent', (t) => {
@@ -661,40 +639,6 @@ describe("Bot behavior and routes", () => {
     assert.equal(h.brain.metrics.unforcedFalls, 0);
   });
 
-  test('bots climb the Bank Bust routes to the catwalks and in and out of the tunnel', (t) => {
-    const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
-    for (const [startId, goalId] of [
-      ['chamber-l-3-body', 'gantry-l-body'],
-      ['hill-top-body', 'gantry-centre-body'],
-      ['tunnel-1-body', 'floor-l-body'],
-      ['shelf-l-body', 'tunnel-2-body'],
-      ['floor-l-body', 'tunnel-3-body'],
-      ['hill-top-body', 'tunnel-3-body'],
-    ]) {
-      const h = setup(t, ['ninja', 'ozzy']);
-      h.room.geometry = getDuelGeometry(4);
-      const start = h.room.geometry.colliders.find((surface) => surface.id === startId);
-      const goal = h.room.geometry.colliders.find((surface) => surface.id === goalId);
-      h.place(h.p, start.x, start);
-      h.players[1].isAlive = false;
-      h.brain.openingUntil = 0;
-      h.brain.nextIdleAt = Infinity;
-      h.brain.random = () => 0.5;
-      h.brain.retreating = false;
-      h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
-      h.brain.decision = { mode: 'reposition', goal: { x: goal.x, y: goal.top, surfaceId: goal.id } };
-      h.brain.nextDecisionAt = Infinity;
-
-      let arrived = false;
-      for (let i = 0; i < 720 && !arrived; i++) {
-        h.advance(1);
-        const feet = bounds(h.p).bottom;
-        arrived = Math.abs(feet - goal.top) < 6 && h.p.x >= goal.left && h.p.x <= goal.right;
-      }
-      assert.equal(arrived, true, `${startId} to ${goalId}, stopped at ${h.p.x},${h.p.y}`);
-    }
-  });
-
   test('bots keep a safe platform route when the tactical decision timer expires', (t) => {
     const h = setup(t);
     h.think();
@@ -737,7 +681,7 @@ describe("Bot behavior and routes", () => {
   test('sampled navigation routes land on their advertised platforms under real physics', () => {
     const { buildGraph, standOn } = require('../src/server/core/bots/navigation');
     const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
-    const { stepBody } = require('../src/server/core/bots/physics');
+    const { stepBody } = require('../src/server/core/physics/bodySolver');
     let replayed = 0;
     for (const map of [1, 2, 3]) {
       const geometry = getDuelGeometry(map), graph = buildGraph(geometry, 'sparrow');

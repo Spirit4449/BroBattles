@@ -1,3 +1,7 @@
+import { BROWSER_EVENTS } from "../../lib/browserEvents.js";
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
+import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
+import { postJson } from "../../lib/http.js";
 import { sonner } from '../../ui/sonner.js';
 import { PARTY_JOIN_REQUEST_TIMEOUT_MS } from '../../../shared/gameConstants';
 
@@ -48,10 +52,7 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
   }
 
   function getRequesterPartyLabel(payload) {
-    const party = payload?.party || {};
-    const publicName = String(
-      party?.public_name || party?.publicName || "",
-    ).trim();
+    const publicName = String(payload?.publicName || "").trim();
     const ownerName = String(payload?.ownerName || "").trim();
     return (
       publicName ||
@@ -193,7 +194,7 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
 
     __joinRequestRequesterState.partyId =
       Number(
-        payload?.party?.party_id || payload?.party?.partyId || payload?.partyId,
+        payload?.partyId,
       ) || null;
     __joinRequestRequesterState.payload = payload || null;
     __joinRequestRequesterState.visible = true;
@@ -208,29 +209,9 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     const submitBtn = document.getElementById("party-join-request-submit");
     if (submitBtn) submitBtn.disabled = true;
     try {
-      const response = await fetch("/party/join-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ partyId }),
+      const data = await postJson(API_PATHS.PARTY_JOIN_REQUEST, { partyId }, {
+        fallbackMessage: "Unable to request to join.",
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (response.status === 429 || response.status === 409) {
-          renderRequesterJoinRequestScreen({
-            ...(__joinRequestRequesterState.payload || {}),
-            requestState: data?.requestState || {
-              status: "none",
-              attemptsRemaining: 0,
-              requestCount: 4,
-            },
-            status: "none",
-            message: data?.error || "Unable to request to join.",
-          });
-          return;
-        }
-        throw new Error(data?.error || "Unable to request to join.");
-      }
       if (String(data?.requestState?.status || "").toLowerCase() === "accepted") {
         handleRequesterJoinRequestUpdate({
           partyId,
@@ -253,6 +234,19 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
         });
       }
     } catch (error) {
+      if (error.status === 429 || error.status === 409) {
+        renderRequesterJoinRequestScreen({
+          ...(__joinRequestRequesterState.payload || {}),
+          requestState: error.payload?.requestState || {
+            status: "none",
+            attemptsRemaining: 0,
+            requestCount: 4,
+          },
+          status: "none",
+          message: error.message,
+        });
+        return;
+      }
       console.error("[party] submitJoinRequestForCurrentParty failed", error);
       sonner(
         "Could not send join request",
@@ -268,12 +262,12 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     const currentPartyId = Number(
       __joinRequestRequesterState.partyId || checkIfInParty(),
     );
-    const payloadPartyId = Number(payload?.partyId || payload?.party_id || 0);
+    const payloadPartyId = Number(payload?.partyId || 0);
     const currentUserName = String(
       document.getElementById("username-text")?.textContent || "",
     );
     const targetName = String(
-      payload?.requesterName || payload?.requester_name || "",
+      payload?.requesterName || "",
     );
     if (!payloadPartyId || (currentPartyId && payloadPartyId !== currentPartyId))
       return;
@@ -435,20 +429,14 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     );
     if (!currentPartyId) return;
     try {
-      const response = await fetch("/party/join-requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ partyId: currentPartyId }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) return;
+      const data = await postJson(API_PATHS.PARTY_JOIN_REQUESTS, { partyId: currentPartyId });
       __joinRequestOwnerState.partyId = currentPartyId;
       __joinRequestOwnerState.requests = Array.isArray(data?.requests)
         ? data.requests
         : [];
       renderOwnerJoinRequestOverlay();
     } catch (error) {
+      if (error.status && !error.cause) return;
       console.warn(
         "[party] loadPendingJoinRequests failed",
         error?.message || error,
@@ -478,35 +466,19 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     }
 
     try {
-      const result = await fetch("/party/join-request/respond", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ partyId, requestId, response }),
+      await postJson(API_PATHS.PARTY_JOIN_REQUEST_RESPOND, { partyId, requestId, response }, {
+        fallbackMessage: "Unable to update join request.",
       });
-      const data = await result.json().catch(() => ({}));
-      if (!result.ok) {
-        if (result.status === 409) {
-          __joinRequestOwnerState.requests =
-            __joinRequestOwnerState.requests.filter(
-              (request) => Number(request.requestId) !== Number(requestId),
-            );
-          renderOwnerJoinRequestOverlay();
-          return;
-        }
-        throw new Error(data?.error || "Unable to update join request.");
-      }
-      __joinRequestOwnerState.requests = __joinRequestOwnerState.requests.filter(
-        (request) => Number(request.requestId) !== Number(requestId),
-      );
-      renderOwnerJoinRequestOverlay();
     } catch (error) {
-      sonner(
-        "Could not update join request",
-        error?.message || "Please try again.",
-        "error",
-      );
+      if (error.status !== 409) {
+        sonner("Could not update join request", error?.message || "Please try again.", "error");
+        return;
+      }
     }
+    __joinRequestOwnerState.requests = __joinRequestOwnerState.requests.filter(
+      (request) => Number(request.requestId) !== Number(requestId),
+    );
+    renderOwnerJoinRequestOverlay();
   }
 
   function wireJoinRequestOverlayControls() {
@@ -542,14 +514,12 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     clearRequesterAutoJoinTimer();
     __joinRequestRequesterState.partyId =
       Number(
-        payload?.party?.party_id ||
-          payload?.party?.partyId ||
-          payload?.partyId ||
+        payload?.partyId ||
           checkIfInParty(),
       ) || null;
     __joinRequestRequesterState.payload = payload || null;
     renderRequesterJoinRequestScreen(payload || {});
-    document.dispatchEvent(new Event('lobby:join-request'));
+    document.dispatchEvent(new Event(BROWSER_EVENTS.LOBBY_JOIN_REQUEST));
   }
 
   function hidePartyJoinRequestScreen() {
@@ -565,9 +535,9 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     wireJoinRequestOverlayControls();
   }
   function registerEvents() {
-    socket.on("party:join-request", (request) => {
+    socket.on(SOCKET_EVENTS.PARTY_JOIN_REQUEST, (request) => {
       const currentPartyId = getActivePartyId();
-      const requestPartyId = Number(request?.partyId || request?.party_id || 0);
+      const requestPartyId = Number(request?.partyId || 0);
       if (
         !requestPartyId ||
         (currentPartyId && requestPartyId !== Number(currentPartyId))
@@ -576,22 +546,22 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
       }
 
       const requesterName = String(
-        request?.requesterName || request?.requester_name || "",
+        request?.requesterName || "",
       );
       if (!requesterName) return;
 
       const normalizedRequest = {
-        requestId: Number(request?.requestId || request?.request_id) || null,
+        requestId: Number(request?.requestId) || null,
         partyId: requestPartyId,
         requesterUserId:
-          Number(request?.requesterUserId || request?.requester_user_id) || null,
+          Number(request?.requesterUserId) || null,
         requesterName,
         userStatus: String(
-          request?.userStatus || request?.user_status || "online",
+          request?.userStatus || "online",
         ),
         status: String(request?.status || "pending"),
-        requestedAt: request?.requestedAt || request?.requested_at || null,
-        respondedAt: request?.respondedAt || request?.responded_at || null,
+        requestedAt: request?.requestedAt || null,
+        respondedAt: request?.respondedAt || null,
       };
 
       const existingIndex = __joinRequestOwnerState.requests.findIndex(
@@ -610,7 +580,7 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
       renderOwnerJoinRequestOverlay();
     });
 
-    socket.on("party:join-request:status", (payload) => {
+    socket.on(SOCKET_EVENTS.PARTY_JOIN_REQUEST_STATUS, (payload) => {
       handleRequesterJoinRequestUpdate(payload);
       const partyId = Number(payload?.partyId || 0);
       if (partyId && __joinRequestOwnerState.partyId === partyId) {

@@ -1,13 +1,8 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
 const exportsObject = {};
-const { code } = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/combatMouse.js'), 'utf8'), {
-  babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-});
-vm.runInNewContext(code, { exports: exportsObject });
+loadClientModule(require.resolve('../src/client/game/scene/combatMouse.js'), { exports: exportsObject });
 const { COMBAT_MOUSE_CONFIG, createCombatMouseController } = exportsObject;
 function events() {
   const handlers = new Map();

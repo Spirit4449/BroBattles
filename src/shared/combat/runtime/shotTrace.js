@@ -1,4 +1,4 @@
-// Net traces only (a traced room has room._netTrace and room.traceShotGap):
+// Net traces only (a traced room has room.netTrace and room.traceShotGap):
 // how close each released shot came to a traced enemy's tested body on each
 // server step, so the report can tell what a shot that touched the victim's
 // screen without a hit really did on the server (see the networking guide,
@@ -31,7 +31,7 @@ function playerNamed(room, name) {
 // rewound boxes), or players with `boundsOf(player)`. `age`: the shot's age at
 // the step (what a hit record reports as ageMs).
 function traceShotGaps(room, { pid, attacker, a, b, radius, age, rewindMs, targets, boundsOf = null }) {
-  if (!room?._netTrace || typeof room.traceShotGap !== 'function' || pid == null || !a) return;
+  if (!room?.netTrace || typeof room.traceShotGap !== 'function' || pid == null || !a) return;
   const now = combatNow(room);
   for (const t of targets || []) {
     const player = t?.socketId !== undefined ? t : playerNamed(room, t?.name);
@@ -45,9 +45,9 @@ function traceShotGaps(room, { pid, attacker, a, b, radius, age, rewindMs, targe
 
 // Attack-runtime shots (Ozzy fireball, Gloop slimeball and hook) by delivery.
 function traceRuntimeShot(room, attack, attacker, target, a, b, radius, bounds) {
-  if (!room?._netTrace || deliveryOf(attack?.runtimeKind) !== 'released') return;
+  if (!room?.netTrace || deliveryOf(attack?.runtimeKind) !== 'released') return;
   traceShotGaps(room, { pid: attack.instanceId, attacker, a, b, radius, age: attack.elapsed, rewindMs: attack.viewRewindMs,
     targets: [target], boundsOf: () => bounds });
 }
 
-module.exports = { traceShotGaps, traceRuntimeShot, segmentBoxGap };
+module.exports = { traceShotGaps, traceRuntimeShot };

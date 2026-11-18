@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { inPartyOrder } = require("./partyOperations");
 
 function createPartyQueueTransitionService({ db, io, mm }) {
@@ -11,7 +12,7 @@ function createPartyQueueTransitionService({ db, io, mm }) {
         try {
           await db.setUserStatus(m.name, "online");
         } catch (_) {}
-        io.to(`party:${partyId}`).emit("status:update", {
+        io.to(`party:${partyId}`).emit(SOCKET_EVENTS.STATUS_UPDATE, {
           partyId,
           name: m.name,
           status: "online",
@@ -41,10 +42,7 @@ function createPartyQueueTransitionService({ db, io, mm }) {
           [partyId],
         );
         await resetPartyMembersOnline(partyId);
-        io.to(`party:${partyId}`).emit("match:cancelled", { reason });
-        console.log(
-          `[cancel][party] cancelled party ${partyId}${reason ? ` reason=${reason}` : ""}`,
-        );
+        io.to(`party:${partyId}`).emit(SOCKET_EVENTS.MATCH_CANCELLED, { reason });
       }
       if (userId) return await mm.queueLeave({ partyId: null, userId });
       return { cancelled: true };
@@ -62,9 +60,6 @@ function createPartyQueueTransitionService({ db, io, mm }) {
   }) {
     try {
       if (await userHasLiveMatch(username)) {
-        console.log(
-          `[transition] user=${username} moving to live game, not canceling`,
-        );
         return;
       }
 
@@ -78,7 +73,7 @@ function createPartyQueueTransitionService({ db, io, mm }) {
         if (await userHasLiveMatch(username)) return;
         if (pid && !wasQueued) {
           await db.setUserStatus(username, "offline");
-          io.to(`party:${pid}`).emit("status:update", { partyId: pid, name: username, status: "offline" });
+          io.to(`party:${pid}`).emit(SOCKET_EVENTS.STATUS_UPDATE, { partyId: pid, name: username, status: "offline" });
           return;
         }
         if (pid) {
@@ -86,15 +81,13 @@ function createPartyQueueTransitionService({ db, io, mm }) {
             "UPDATE parties SET status = 'idle' WHERE party_id = ? AND status = 'queued'", [pid],
           );
           await db.setUserStatus(username, "offline");
-          io.to(`party:${pid}`).emit("status:update", { partyId: pid, name: username, status: "offline" });
+          io.to(`party:${pid}`).emit(SOCKET_EVENTS.STATUS_UPDATE, { partyId: pid, name: username, status: "offline" });
           await resetPartyMembersOnline(pid, { excludeName: username });
           const payload = reason ? { reason } : {};
-          io.to(`party:${pid}`).emit("match:cancelled", payload);
-          console.log(`[cancel][emit] user=${username} party=${pid}`);
+          io.to(`party:${pid}`).emit(SOCKET_EVENTS.MATCH_CANCELLED, payload);
         } else if (allowSoloEmit && socket) {
           const payload = reason ? { reason } : {};
-          socket.emit("match:cancelled", payload);
-          console.log(`[cancel][emit] solo user=${username}`);
+          socket.emit(SOCKET_EVENTS.MATCH_CANCELLED, payload);
         }
       });
     } catch (_) {}

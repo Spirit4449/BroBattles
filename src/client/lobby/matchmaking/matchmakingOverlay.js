@@ -3,6 +3,7 @@
 import { getLobbyBgAsset, getLobbyPlatformAsset } from "../../game/maps/manifest";
 import { bodyDisplayUrl, buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { DEFAULT_CHARACTER, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
+import { nameKey } from "../../../shared/social/textRules.js";
 import { refreshPlatformGrounding } from "../party/platformGrounding.mjs";
 
 const MATCHMAKING_EXIT_MS = 190;
@@ -13,7 +14,6 @@ const LOBBY_CHROME_SELECTOR =
   "#navbar, .lobby-party-actions, .lobby-quick-actions, #lobby-area, #bottom-bar, .bb-chat-lobby-wrap";
 
 const isBotPlayer = (p) => !!(p?.isConfiguredBot || p?.isBot || p?.botSlotKey);
-const humanKey = (p) => String(p?.name || "").trim().toLowerCase();
 const SEAT_MOVE_MS = 420;
 
 // "ally" / "enemy" relative to the viewer, or null while the team is unknown.
@@ -28,7 +28,7 @@ function describeRoster(players, yourTeam) {
   return players.filter(Boolean).map((player) => {
     const side = sideOf(player, yourTeam);
     const bot = isBotPlayer(player);
-    const base = bot ? `bot:${side || "any"}` : `player:${humanKey(player)}`;
+    const base = bot ? `bot:${side || "any"}` : `player:${nameKey(player?.name)}`;
     const n = counts.get(base) || 0;
     counts.set(base, n + 1);
     return { key: `${base}#${n}`, player, side, bot };
@@ -95,7 +95,7 @@ export function createMatchmakingOverlay() {
   }
 
   function resetSession(seatedPlayers) {
-    const humans = seatedPlayers.filter((p) => p && !isBotPlayer(p)).map(humanKey);
+    const humans = seatedPlayers.filter((p) => p && !isBotPlayer(p)).map(player => nameKey(player.name));
     session.humans = new Set(humans);
     session.bots = seatedPlayers.filter(isBotPlayer).length;
     session.lobby = new Set(humans);
@@ -117,7 +117,7 @@ export function createMatchmakingOverlay() {
         if (bots > session.bots) arriving.add(entry.key);
         continue;
       }
-      const name = humanKey(entry.player);
+      const name = nameKey(entry.player?.name);
       if (!session.humans.has(name)) {
         session.humans.add(name);
         arriving.add(entry.key);
@@ -161,7 +161,7 @@ export function createMatchmakingOverlay() {
       seats[index] = entry.key;
     }
     for (const entry of guesses) {
-      const preferred = session.lobby.has(humanKey(entry.player)) && !entry.bot
+      const preferred = session.lobby.has(nameKey(entry.player?.name)) && !entry.bot
         ? "ally"
         : freeCount("enemy") >= freeCount("ally") ? "enemy" : "ally";
       const index = freeSeat(preferred) >= 0 ? freeSeat(preferred) : freeSeat();

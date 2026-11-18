@@ -4,7 +4,7 @@ export const KEY_SLOTS = Object.freeze([
   ['dash','Dash',32],['attack','Attack',74],['special','Special',73],['interact','Mode interaction',69],
 ]);
 export const DEFAULT_BINDINGS = Object.freeze(Object.fromEntries(KEY_SLOTS.map(([id,,code])=>[id,code])));
-export const validKey = code => Number.isInteger(code) && ((code>=65&&code<=90)||(code>=48&&code<=57)||(code>=37&&code<=40)||code===32);
+const validKey = code => Number.isInteger(code) && ((code>=65&&code<=90)||(code>=48&&code<=57)||(code>=37&&code<=40)||code===32);
 export function normalizeBindings(raw) {
   const result={...DEFAULT_BINDINGS};
   if(!raw || typeof raw!=='object')return result;

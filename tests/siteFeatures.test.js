@@ -1,5 +1,38 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
+
+test("a fullscreen button reused by a new page scope has one active click handler", async () => {
+  const { createBrowserFixture } = require("./helpers/browserFixture");
+  const f = createBrowserFixture('<button data-fullscreen-toggle>Fullscreen</button>');
+  const button = f.document.querySelector("[data-fullscreen-toggle]");
+  let fullscreenRequests = 0;
+  f.document.documentElement.requestFullscreen = async () => { fullscreenRequests++; };
+
+  function mount() {
+    const dispose = [];
+    const scope = { active: true, onDispose: callback => dispose.push(callback) };
+    f.window.__BB_PAGE_SCOPE__ = scope;
+    const { wireFullscreenToggles } = loadClientModule("src/client/ui/fullscreen.js", {
+      document: f.document, window: f.window, localStorage: f.window.localStorage, Event: f.window.Event,
+    });
+    return { ready: wireFullscreenToggles(), retire() {
+      scope.active = false;
+      dispose.forEach(callback => callback());
+    } };
+  }
+
+  const first = mount();
+  await first.ready;
+  first.retire();
+  button.click();
+  assert.equal(fullscreenRequests, 0);
+  const second = mount();
+  await second.ready;
+  button.click();
+  assert.equal(fullscreenRequests, 1);
+  second.retire();
+});
 
 describe("Public site and account workflows", () => {
   const { validateSubmission,createSiteSupportService }=require('../src/server/services/site/siteSupportService');
@@ -17,8 +50,6 @@ describe("Public site and account workflows", () => {
   test('feedback needs only a subject and message, while support still needs a topic', async t => {
     const { makeAuthHelpers } = require('../src/server/services/auth/auth');
     const { registerSiteRoutes } = require('../src/server/routes/modules/siteRoutes');
-    t.mock.method(require('../src/server/services/email/emailService'), 'startEmailWorker', () => {});
-    t.mock.method(require('../src/server/services/email/marketingService'), 'startMarketingWorker', () => {});
     const user = { user_id: 12, name: 'Player', expires_at: null };
     const inserts = [];
     const query = async (sql, params) => {
@@ -40,6 +71,12 @@ describe("Public site and account workflows", () => {
     assert.equal(await post('POST /api/feedback', withoutTopic), 200);
     assert.deepEqual(inserts[0].params.slice(1, 3), ['feedback', 'feedback']);
     assert.equal(await post('POST /api/support/requests', withoutTopic), 400);
+    const { adminInboxPath, supportRequestPath } = require('../src/shared/net/apiPaths');
+    assert.ok(routes.has(`GET ${adminInboxPath('feedback', ':id')}`));
+    assert.ok(routes.has(`POST ${adminInboxPath('support', ':id', 'status')}`));
+    assert.ok(routes.has(`POST ${supportRequestPath(undefined, 'messages')}`));
+    assert.equal(adminInboxPath('support', 5, 'messages'), '/api/admin/support/5/messages');
+    assert.equal(supportRequestPath(5), '/api/support/requests/5');
   });
   test('support ownership is checked before reads or writes',async()=>{
     const calls=[];const db={withTransaction:fn=>fn(null,async(sql,params)=>{calls.push({sql,params});return [];})};
@@ -51,8 +88,6 @@ describe("Public site and account workflows", () => {
   test('banned members remain signed in for support requests and replies', async t => {
     const { makeAuthHelpers } = require('../src/server/services/auth/auth');
     const { registerSiteRoutes } = require('../src/server/routes/modules/siteRoutes');
-    t.mock.method(require('../src/server/services/email/emailService'), 'startEmailWorker', () => {});
-    t.mock.method(require('../src/server/services/email/marketingService'), 'startMarketingWorker', () => {});
     const user = { user_id: 12, name: 'Restricted', expires_at: null, is_banned: 1, ban_reason: 'Test ban' };
     const writes = [];
     const query = async (sql, params) => {
@@ -100,8 +135,6 @@ describe("Public site and account workflows", () => {
   });
   test('admin inbox bypasses request limits while preserving authorization and player limits', async t => {
     const { registerSiteRoutes } = require('../src/server/routes/modules/siteRoutes');
-    t.mock.method(require('../src/server/services/email/emailService'), 'startEmailWorker', () => {});
-    t.mock.method(require('../src/server/services/email/marketingService'), 'startMarketingWorker', () => {});
     t.mock.method(global, 'setInterval', () => ({ unref() {} }));
     const user = { user_id: 1, name: 'Admin' };
     let admin = user, queries = 0;
@@ -609,8 +642,6 @@ describe("Public site and account workflows", () => {
   });
 
   test('lobby profile wires its actual Change Name button to the shared dialog', () => {
-    const { transformFileSync } = require('@babel/core');
-    const vm = require('node:vm');
     const button = {};
     const overlay = { querySelector: () => null };
     let wiredButton, options;
@@ -624,13 +655,11 @@ describe("Public site and account workflows", () => {
         if (request.includes('nameChangeDialog')) return { wireNameChangeDialog: (target, config) => { wiredButton = target; options = config; } };
         if (request.includes('accountSettings')) return { wireAccountSettings: () => ({ close() {} }) };
         if (request.includes('wallet')) return { subscribeWallet() {} };
+        if (request.endsWith('/ui')) return { registerOverlay() {} };
         return {};
       },
     };
-    const compiled = transformFileSync(require.resolve('../src/client/lobby/profile/profileController.js'), {
-      presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-    });
-    vm.runInNewContext(compiled.code, context);
+    loadClientModule(require.resolve('../src/client/lobby/profile/profileController.js'), context);
     context.exports.createProfileController({ getUserData: () => ({}) }).initProfilePopup();
     assert.equal(wiredButton, button);
     assert.equal(typeof options.getProfile, 'function');
@@ -638,11 +667,11 @@ describe("Public site and account workflows", () => {
   });
 
   function nameDialogHarness(profile, fetchJson = async () => ({})) {
-    const { transformFileSync } = require('@babel/core');
-    const vm = require('node:vm');
     function element() {
       return { handlers: {}, isConnected: true, disabled: false,
         addEventListener(type, fn) { this.handlers[type] = fn; },
+        removeEventListener(type) { delete this.handlers[type]; },
+        hasAttribute(name) { return name === 'open' && this.open; },
         setAttribute() {}, focus() { this.focused = true; }, remove() { this.isConnected = false; },
       };
     }
@@ -668,12 +697,13 @@ describe("Public site and account workflows", () => {
         removeEventListener: type => windowHandlers.delete(type),
       },
       require: request => request.includes('popupMotion') ? { dismissPopup: (_dialog, done) => done() }
-        : request.includes('dialogDismiss') ? { wireBackdropDismiss() {} } : {},
+        : request.includes('nativeDialog') ? nativeDialog.exports
+        : request.endsWith('/social/textRules.js') ? require('../src/shared/social/textRules') : {},
     };
-    const compiled = transformFileSync(require.resolve('../src/client/account/nameChangeDialog.js'), {
-      presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-    });
-    vm.runInNewContext(compiled.code, context);
+    dialog.ownerDocument = { defaultView: context.window };
+    const nativeDialog = { exports: {}, require: () => ({ wireBackdropDismiss() {} }) };
+    loadClientModule(require.resolve('../src/client/ui/nativeDialog.js'), nativeDialog);
+    loadClientModule(require.resolve('../src/client/account/nameChangeDialog.js'), context);
     context.exports.wireNameChangeDialog(button, {
       getProfile: () => profile, fetchJson, onChanged: data => { changed = data; },
     });
@@ -821,4 +851,41 @@ describe("HTML escaping", () => {
     }
     assert.equal(assetUrl("/assets/player-cards/default/default.webp?v=2"), "/assets/player-cards/default/default.webp?v=2");
   });
+});
+
+test('the public profile route reads cosmetics and stats without private balances or ownership repair', async () => {
+  const { registerProfileRoutes } = require('../src/server/routes/modules/profileRoutes');
+  const { getPlayerCardsCatalog } = require('../src/server/services/cosmetics/playerCardsCatalog');
+  const { getProfileIconsCatalog } = require('../src/server/services/cosmetics/profileIconsCatalog');
+  const target = { user_id: 5, name: 'Visitor', char_class: 'ninja', char_levels: { ninja: 1 }, coins: 500, gems: 90 };
+  const queries = [];
+  const db = { runQuery: async sql => {
+    assert.match(sql.trim(), /^SELECT /);
+    queries.push(sql);
+    if (sql.includes('FROM users WHERE name')) return [target];
+    if (sql.includes('AS player_trophies_delta')) return [{
+      match_id: 1, map: 1, winner_team: 'team1', player_team: 'team1', created_at: new Date(),
+      summary: JSON.stringify({ players: [{ userId: 5, name: 'Visitor', team: 'team1', trophiesDelta: 2, coinsAwarded: 90, gemsAwarded: 5 }] }),
+    }];
+    if (sql.includes('COUNT(*) AS wins')) return [{ wins: 4 }];
+    return [];
+  } };
+  let handler;
+  registerProfileRoutes({ app: { get(path, route) { if (path === '/profile/view') handler = route; }, post() {} },
+    db, requireCurrentUser: async () => ({ user_id: 1 }) });
+  let result;
+  const response = { json(data) { result = data; }, status() { return this; } };
+  await handler({ query: { username: 'Visitor' } }, response);
+  assert.equal(result.profile.username, 'Visitor');
+  assert.equal(result.profile.selectedCardId, getPlayerCardsCatalog().defaultCardId);
+  assert.equal(result.profile.profileIconId, getProfileIconsCatalog().defaultIconId);
+  assert.equal(result.profile.wins, 4);
+  assert.equal(result.profile.battles[0].trophiesDelta, 2);
+  assert.deepEqual(Object.keys(result.profile.battles[0]).sort(),
+    ['createdAt', 'mapLabel', 'matchId', 'modeLabel', 'outcome', 'trophiesDelta']);
+  for (const key of ['coins', 'gems', 'ownedCardIds', 'nameChangeCost', 'nextNameChangeAt']) {
+    assert.equal(Object.hasOwn(result.profile, key), false, key);
+  }
+  await handler({ query: { username: 'Visitor' } }, response);
+  assert.equal(queries.filter(sql => sql.includes('COUNT(*) AS wins')).length, 1);
 });

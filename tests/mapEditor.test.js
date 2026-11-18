@@ -14,7 +14,8 @@ describe("Document editing and persistence", () => {
   const {validateAssets}=require('../src/server/services/maps/mapAssetValidation');
   const {mapArena}=require('../src/shared/maps/arenas');
   const {allRows,snapMove,resizeRow,removeRows,retargetMap}=require('../src/client/editor/editorModel');
-  const {spawnForParticipant,characterBody}=require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
+const { spawnForParticipant } = require('../src/shared/physics/duelGeometry');
   const powerups=require('../src/server/core/gameRoom/powerupManager');
   const frameNames=Object.keys(require("../src/shared/characters/index.js").characterFrames);
   function repository(t){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'bb-maps-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));return new MapRepository(dir);}
@@ -58,9 +59,59 @@ describe("Document editing and persistence", () => {
    assert.deepEqual(new MapRepository(repo.directory).get(1),saved);
    assert.ok(fs.existsSync(path.join(repo.directory,'history','1',original.revision+'.json')));
   });
+  test('legacy import preserves the effective revision, archive, editor-created maps and metadata', t => {
+    const repo = repository(t);
+    const legacy = clone(defaults[0]);
+    legacy.id = 37;
+    legacy.label = 'Published from the old editor';
+    const file = path.join(repo.directory, '37.json');
+    fs.writeFileSync(file, JSON.stringify(legacy));
+    const existing = repo.get(37);
+    assert.deepEqual(repo.importLegacy(), [{ id: 37, revision: existing.revision, imported: true }]);
+    assert.deepEqual(repo.importLegacy(), [{ id: 37, revision: existing.revision, imported: false }]);
+    fs.unlinkSync(file);
+    assert.deepEqual(repo.get(37), existing);
+    assert.ok(repo.listMetadata().some(map => map.id === 37 && map.label === legacy.label));
+    assert.ok(fs.existsSync(repo.revisionFile(37, existing.revision)));
+    assert.equal(repo.pinHistory().filter(entry => entry.error).length, 0);
+    const pinned = JSON.parse(fs.readFileSync(path.join(repo.directory, 'pinned', '37', existing.revision + '.json')));
+    const asset = Object.values(pinned.assets)[0];
+    const filePath = require('../src/server/services/maps/mapAssetFiles').resolveAssetFile(asset.url, repo.directory);
+    fs.writeFileSync(filePath, 'corrupt fixture');
+    assert.match(repo.pinHistory()[0].error.message, /Damaged map artwork/);
+  });
+
+  test('draft recovery restores undo and redo even if the current document matches a saved state', () => {
+    const { restoreDraft } = loadClientModule('src/client/editor/draftStore.js', { require: specifier => {
+      assert.equal(specifier, '../../shared/maps/mapDocument');
+      return require('../src/shared/maps/mapDocument');
+    } });
+    const before = clone(defaults[0]);
+    const after = { ...before, label: 'After an edit' };
+    const restored = restoreDraft({ version: 1, document: before, revision: 'saved', stack: [before, after], index: 0 }, before.id);
+    assert.equal(restored.revision, 'saved');
+    assert.deepEqual(JSON.parse(JSON.stringify(restored.history.redo())), after);
+    assert.deepEqual(JSON.parse(JSON.stringify(restored.history.undo())), before);
+    restored.document.label = 'Edited after reload';
+    assert.equal(restored.history.commit(restored.document), true);
+    assert.equal(restored.history.undo().label, before.label);
+    assert.equal(restoreDraft({ version: 1, document: before }, before.id + 1), null);
+  });
+
   test('new maps can be created and listed without changing source modules',t=>{
    const repo=repository(t),doc=clone(defaults[0]),id=Math.max(...defaults.map(d=>d.id))+1;doc.id=id;doc.label='Bigger Peaks';doc.metadata={...doc.metadata,key:'bigger-peaks'};
    repo.save(doc,null);assert.equal(repo.list().length,defaults.length+1);assert.equal(repo.forMatch(91,id).mapId,id);assert.throws(()=>repo.save(doc,null),e=>e.status===409);
+  });
+  test('another publisher holds the revision until it releases its map lock', t => {
+    const repo = repository(t);
+    const { document, revision } = repo.get(1);
+    const lock = path.join(repo.directory, 'locks', '1.lock');
+    fs.mkdirSync(path.dirname(lock));
+    fs.writeFileSync(lock, 'other publisher');
+    assert.throws(() => repo.save({ ...document, label: 'New map name' }, revision), error => error.status === 409);
+    assert.equal(repo.get(1).revision, revision);
+    fs.unlinkSync(lock);
+    assert.notEqual(repo.save({ ...document, label: 'New map name' }, revision).revision, revision);
   });
   test('invalid maps never replace the last good saved map',t=>{
    const repo=repository(t),{document,revision}=repo.get(1);const mutations=[d=>d.bounds={world:{x:0,y:0,width:5000,height:1000}},d=>d.modeVariantId='duels-9v9',d=>d.spawns.players.team1.push(clone(d.spawns.players.team1[0])),d=>d.layout.platforms[1].id='p0',d=>d.textureSizes['lushy-base'].width=999,d=>d.spawns.players.team1[0].anchorId='deleted',d=>d.powerups.types=['bogus'],d=>d.assets['lushy-base'].url='/assets/../.env',d=>d.scenery.layers=[]];
@@ -100,7 +151,11 @@ describe("Document editing and persistence", () => {
   test('empty powerup list disables spawning and per-map rules are applied',()=>{
    const m=clone(defaults[0]);m.spawns.powerups=[];assert.deepEqual(powerups.getPlatformSpawnPoints({geometry:geometryFromMap(m)}),[]);
    m.spawns.powerups=[constrainPoint(m,{id:'fixed',type:'freeze'},1150,650,{width:32,height:40})];m.powerups={...m.powerups,maxActive:1,omenMs:123,spawnLift:11,despawnMs:456};
-   const room={status:'active',geometry:geometryFromMap(m),_powerups:new Map(),_nextPowerupId:1};powerups.spawnPowerup(room);powerups.spawnPowerup(room);assert.equal(room._powerups.size,1);const p=[...room._powerups.values()][0];assert.equal(p.type,'freeze');assert.equal(p.activeAt-p.spawnedAt,123);assert.equal(p.expiresAt-p.activeAt,456);assert.equal(p.y,resolvePowerupPoints(room.geometry)[0].y-11);
+   const room={status:'active',geometry:geometryFromMap(m),powerups:new Map(),_nextPowerupId:1};
+   room.geometry.settings.types=[];
+   powerups.spawnPowerup(room);assert.equal(room.powerups.size,0,'an empty allowlist overrides even a fixed spawn');
+   room.geometry.settings.types=['freeze'];
+   powerups.spawnPowerup(room);powerups.spawnPowerup(room);assert.equal(room.powerups.size,1);const p=[...room.powerups.values()][0];assert.equal(p.type,'freeze');assert.equal(p.activeAt-p.spawnedAt,123);assert.equal(p.expiresAt-p.activeAt,456);assert.equal(p.y,resolvePowerupPoints(room.geometry)[0].y-11);
   });
   test('admin routes reject non-admin reads and writes and enforce revision protocol',async()=>{
    const handlers={};const app={get:(url,fn)=>handlers[`GET ${url}`]=fn,put:(url,fn)=>handlers[`PUT ${url}`]=fn,post:(url,fn)=>handlers[`POST ${url}`]=fn,delete:(url,fn)=>handlers[`DELETE ${url}`]=fn};
@@ -110,8 +165,8 @@ describe("Document editing and persistence", () => {
 
   test('Mangrove Meadow grass catches descending players while undersides allow passage',()=>{
    const {sweepMovement}=require('../src/shared/physics/sweptCollision');
-   for(const file of ['../src/shared/maps/2.json','../data/maps/2.json']){
-    const geometry=geometryFromMap(require(file));
+   for(const doc of [defaults.find(map => map.id === 2), new MapRepository().get(2).document]){
+    const geometry=geometryFromMap(doc);
     for(const surface of geometry.colliders){
      const x=(surface.left+surface.right)/2-10;
      const below={x,y:surface.bottom+10,width:20,height:20};
@@ -165,7 +220,7 @@ describe("Asset uploads and revisions", () => {
    assert.deepEqual(validateDocument(map),[]);
   });
 
-  test('upload, backend save, immutable match assets, export after save and failed-save rollback',t=>{
+  test('upload publication pins artwork without overwriting shipped assets and a failed save leaves the prior revision live',t=>{
    const dir=fs.mkdtempSync(path.join(os.tmpdir(),'bb-map-assets-')),previous=process.env.BB_MAP_DIR;
    process.env.BB_MAP_DIR=dir;
    const target=`/assets/editor-qa-${randomUUID()}.webp`,root=path.resolve(__dirname,'..'),publicFile=path.join(root,'public',target),distFile=path.join(root,'dist',target);
@@ -179,7 +234,8 @@ describe("Asset uploads and revisions", () => {
    replaceAssetReferences(edited,edited.assets[key],upload);edited.layout.platforms[1].x+=16;
    const result=repo.save(edited,saved.revision);
    assert.deepEqual(new MapRepository(dir).get(1),result);
-   assert.deepEqual(fs.readFileSync(publicFile),replacement);
+   assert.deepEqual(fs.readFileSync(publicFile),original);
+   assert.deepEqual(fs.readFileSync(files.resolveAssetFile(result.document.assets[key].url)),replacement);
    assert.deepEqual(fs.readFileSync(files.resolveAssetFile(live.map.assets[key].url)),original);
    assert.equal(result.document.assets[key].sourceUrl,target);
    assert.equal(exportDocument(result.document).document.assets[key].url,target);
@@ -187,10 +243,15 @@ describe("Asset uploads and revisions", () => {
    assert.throws(()=>repo.save(edited,saved.revision),e=>e.status===409);
    const failed=clone(result.document),nextUpload=files.stageUpload({targetUrl:target,fileName:'replacement.webp',base64:original.toString('base64')});
    replaceAssetReferences(failed,failed.assets[key],nextUpload);
-   const badDirectory=path.join(dir,'not-a-directory');fs.writeFileSync(badDirectory,'blocked');const brokenRepo=new MapRepository(badDirectory);
-   assert.throws(()=>brokenRepo.save(failed,brokenRepo.get(1).revision));
-   assert.deepEqual(fs.readFileSync(publicFile),replacement,'failed map save restores public artwork');
-   assert.deepEqual(fs.readFileSync(distFile),replacement,'failed map save restores served artwork');
+   const rename = fs.renameSync;
+   const blockPublish = t.mock.method(fs, 'renameSync', (from, to) => {
+     if (to === repo.publicationFile(1)) throw Error('publication unavailable');
+     return rename(from, to);
+   });
+   assert.throws(()=>repo.save(failed,result.revision), /publication unavailable/);
+   blockPublish.mock.restore();
+   assert.deepEqual(repo.get(1), result);
+   assert.deepEqual(fs.readFileSync(publicFile),original,'failed map save leaves shipped artwork intact');
    assert.throws(()=>files.stageUpload({targetUrl:target,fileName:'bad.png',base64:'aGVsbG8='}),e=>e.status===400);
    assert.throws(()=>files.stageUpload({targetUrl:'/assets/map-revisions/test.webp',fileName:'test.webp',base64:original.toString('base64')}),e=>e.status===400);
   });
@@ -251,9 +312,9 @@ describe("Isolated playtest lifecycle", () => {
    assert.throws(()=>service.get(created.session,{user_id:100}),e=>e.status===404);
    assert.equal(room.geometry.world.width,mapArena(map).world.width);assert.equal(room.matchData.modeVariantId,map.modeVariantId);
    let writes=0;room.db={runQuery(){writes++;throw Error('Playtest persistence attempted');}};
-   await room._finishGame();await room._distributeMatchRewards();assert.equal(writes,0);
+   await room.finishGame();await room.distributeMatchRewards();assert.equal(writes,0);
    const bot=[...room.players.values()][0];assert.ok(bot,'real GameRoom initializes its bot roster');
-   bot.isAlive=false;bot.health=0;const plan=room.gameMode.getRespawnPlan(bot);room._scheduleRespawn(bot,plan);
+   bot.isAlive=false;bot.health=0;const plan=room.gameMode.getRespawnPlan(bot);room.scheduleRespawn(bot,plan);
    t.mock.timers.tick(plan.delayMs+1);assert.equal(bot.isAlive,true);assert.ok(bot.health>0);assert.ok(emitted.some(e=>e.type==='player:respawn'));
    service.remove(created.session);assert.equal(service.sessions.size,0);assert.equal(room._disposed,true);
   });
@@ -367,4 +428,17 @@ describe('Map Studio nested dropdowns', () => {
     assert.equal(trigger.getAttribute('aria-expanded'), 'false');
     assert.equal(picker.element.querySelector('[role=listbox]').hidden, true);
   });
+});
+
+test('the lobby replaces its map list without changing the shipped catalog', () => {
+  const { createBrowserFixture } = require('./helpers/browserFixture');
+  const f = createBrowserFixture();
+  const lobby = f.load('src/client/lib/gameSelectionCatalog.js');
+  const { mapsCatalog } = f.load('src/shared/maps/index.js');
+  const shipped = mapsCatalog.maps[0];
+  const published = { ...shipped, label: 'Published arena' };
+  lobby.registerMapCatalog([published]);
+  assert.equal(lobby.getMapById(shipped.id).label, published.label);
+  assert.equal(mapsCatalog.maps[0], shipped);
+  assert.notEqual(shipped.label, published.label);
 });

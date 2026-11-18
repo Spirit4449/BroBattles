@@ -1,12 +1,29 @@
 const { isAccountBanned } = require("../../shared/moderation/accountBan");
 const { HTTP_BUCKETS, HTTP_ROUTE_POLICIES } = require("../services/moderation/abusePolicy");
+const { bannedResult } = require("../services/moderation/accountRestrictionService");
 const { setBanHoldCookies } = require("../services/auth/banHold");
 
+const { logIgnored } = require("../lib/logIgnored");
 const { createRequestWindow } = require("../lib/requestWindow");
 
 function getClientIp(req) {
   // Express resolves req.ip against the configured trusted proxy addresses.
   return req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+function sendBan(res, req, user, decision) {
+  const message = decision?.message || bannedResult().message;
+  const expiresAt = user?.ban_expires_at || null;
+  setBanHoldCookies({
+    req, res, userId: user?.user_id, expiresAt,
+    reason: decision?.message || String(user?.ban_reason || "Abuse policy violation"),
+  });
+  return res.status(403).json({
+    success: false, banned: true, redirect: "/banned", error: message,
+    ...(decision
+      ? { type: decision.type, suspendedUntilMs: Number(decision.suspendedUntilMs) || null }
+      : { message: String(user?.ban_reason || message), banExpiresAt: expiresAt }),
+  });
 }
 
 function createAbuseHttpMiddleware({ abuseControl, resolveUser = async () => null }) {
@@ -26,19 +43,10 @@ function createAbuseHttpMiddleware({ abuseControl, resolveUser = async () => nul
         return res.status(429).json({ success: false, error: "Too many requests." });
       }
       const user = await resolveUser(req, res);
-      req.abuseResolvedUser = user || null;
+      req.authContext = { user: user || null };
 
       if (isAccountBanned(user) && !policy.allowBanned) {
-        setBanHoldCookies({
-          req,
-          res,
-          userId: user.user_id,
-          expiresAt: user.ban_expires_at,
-          reason: String(user?.ban_reason || "Abuse policy violation"),
-        });
-        return res
-          .status(403)
-          .json({ success: false, banned: true, redirect: "/banned", error: "Your account has been banned.", message: String(user.ban_reason || "Your account has been banned."), banExpiresAt: user.ban_expires_at || null });
+        return sendBan(res, req, user);
       }
 
       // Login stays available to restricted accounts; rate-limit those attempts
@@ -81,31 +89,18 @@ function createAbuseHttpMiddleware({ abuseControl, resolveUser = async () => nul
         `[abuse] http blocked route=${routeKey} user=${Number(user?.user_id) || 0} identity=${identityKey} type=${String(decision?.type || "rate_limited")}`,
       );
 
-      if (decision?.type === "ban" || decision?.clearAuth) {
-        if (decision?.type === "ban") {
-          setBanHoldCookies({
-            req,
-            res,
-            userId: user?.user_id,
-            expiresAt: user?.ban_expires_at,
-            reason: String(decision?.message || "Abuse policy violation"),
-          });
-        }
-        if (decision?.type !== "ban") try {
+      if (decision?.type === "ban") return sendBan(res, req, user, decision);
+      if (decision?.clearAuth) {
+        try {
           res.clearCookie("user_id", req.app.locals?.SIGNED_COOKIE_OPTS || {});
-          res.clearCookie(
-            "display_name",
-            req.app.locals?.DISPLAY_COOKIE_OPTS || {},
-          );
-        } catch (_) {}
+          res.clearCookie("display_name", req.app.locals?.DISPLAY_COOKIE_OPTS || {});
+        } catch (error) { logIgnored("clear blocked account cookies", error); }
       }
 
-      const status = decision?.type === "ban" ? 403 : 429;
-      return res.status(status).json({
+      return res.status(429).json({
         success: false,
         error: decision?.message || "Too many requests.",
         type: decision?.type || "rate_limited",
-        ...(decision?.type === "ban" ? { banned: true, redirect: "/banned" } : {}),
         suspendedUntilMs: Number(decision?.suspendedUntilMs || 0) || null,
       });
     } catch (error) {

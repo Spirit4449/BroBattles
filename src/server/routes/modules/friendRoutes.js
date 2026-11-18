@@ -1,13 +1,7 @@
-function registerFriendRoutes({ app, requireCurrentUser, friendService, abuseControl }) {
-  function sendError(res, error) {
-    const status = Number(error?.statusCode) || 500;
-    if (status >= 500) console.warn("[friends] route failed:", error?.message);
-    return res.status(status).json({
-      error: status >= 500 ? "Something went wrong. Please try again." : error?.message,
-      cooldownUntilMs: Number(error?.cooldownUntilMs) || null,
-    });
-  }
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
+const { authedRoute } = require("../http");
 
+function registerFriendRoutes({ app, requireCurrentUser, friendService, abuseControl }) {
   // Shares the chat rate limiter so requests and DMs cannot be used to spam.
   async function guard(res, user, actionType, source) {
     if (!abuseControl) return true;
@@ -26,68 +20,69 @@ function registerFriendRoutes({ app, requireCurrentUser, friendService, abuseCon
   }
 
   function route(method, path, handler) {
-    app[method](path, async (req, res) => {
-      try {
-        const user = await requireCurrentUser(req, res);
-        if (!user) return res.status(401).json({ error: "Please sign in to use friends." });
-        const result = await handler(user, req, res);
-        if (!res.headersSent) res.json({ success: true, ...result });
-      } catch (error) {
-        sendError(res, error);
-      }
-    });
+    app[method](path, authedRoute(requireCurrentUser, `[friends] ${path}`, async (req, res, user) => {
+      const result = await handler(user, req, res);
+      if (!res.headersSent) res.json({ success: true, ...result });
+    }, {
+      shape: "bare",
+      fallback: "Something went wrong. Please try again.",
+      authMessage: "Please sign in to use friends.",
+      extra: (error) => ({
+        cooldownUntilMs: Number(error?.details?.cooldownUntilMs ?? error?.cooldownUntilMs) || null,
+      }),
+    }));
   }
 
-  route("get", "/friends", (user) => friendService.getOverview(user));
+  route("get", API_PATHS.FRIENDS, (user) => friendService.getOverview(user));
 
-  route("get", "/friends/suggestions", async (user) => ({
+  route("get", API_PATHS.FRIENDS_SUGGESTIONS, async (user) => ({
     suggestions: await friendService.getSuggestions(user),
   }));
 
-  route("get", "/friends/relationship", async (user, req) => ({
+  route("get", API_PATHS.FRIENDS_RELATIONSHIP, async (user, req) => ({
     relationship: await friendService.getRelationship(user, Number(req.query?.userId)),
   }));
 
-  route("get", "/friends/privacy", (user) => friendService.getPrivacySettings(user));
+  route("get", API_PATHS.FRIENDS_PRIVACY, (user) => friendService.getPrivacySettings(user));
 
-  route("post", "/friends/privacy", (user, req) => friendService.updatePrivacy(user, req.body?.privacy));
+  route("post", API_PATHS.FRIENDS_PRIVACY, (user, req) => friendService.updatePrivacy(user, req.body?.privacy));
 
-  route("post", "/friends/request", async (user, req, res) => {
+  route("post", API_PATHS.FRIENDS_REQUEST, async (user, req, res) => {
     if (!(await guard(res, user, "reaction", "POST /friends/request"))) return;
     const { userId, username, friendCode, query } = req.body || {};
     return friendService.sendRequest(user, { userId, username, friendCode, query });
   });
 
-  route("post", "/friends/respond", (user, req) =>
+  route("post", API_PATHS.FRIENDS_RESPOND, (user, req) =>
     friendService.respondToRequest(user, Number(req.body?.requestId), !!req.body?.accept));
 
-  route("post", "/friends/cancel", (user, req) =>
+  route("post", API_PATHS.FRIENDS_CANCEL, (user, req) =>
     friendService.cancelRequest(user, Number(req.body?.requestId)));
 
-  route("post", "/friends/remove", (user, req) =>
+  route("post", API_PATHS.FRIENDS_REMOVE, (user, req) =>
     friendService.removeFriend(user, Number(req.body?.friendId)));
 
-  route("post", "/friends/messages/history", (user, req) =>
+  route("post", API_PATHS.FRIENDS_MESSAGES_HISTORY, (user, req) =>
     friendService.getConversation(user, Number(req.body?.friendId), {
       beforeMessageId: req.body?.beforeMessageId,
       limit: req.body?.limit,
     }));
 
-  route("post", "/friends/messages/send", async (user, req, res) => {
+  route("post", API_PATHS.FRIENDS_MESSAGES_SEND, async (user, req, res) => {
     if (!(await guard(res, user, "message", "POST /friends/messages/send"))) return;
     return { message: await friendService.sendMessage(user, Number(req.body?.friendId), req.body?.body) };
   });
 
-  route("post", "/friends/messages/react", async (user, req, res) => {
+  route("post", API_PATHS.FRIENDS_MESSAGES_REACT, async (user, req, res) => {
     if (!(await guard(res, user, "reaction", "POST /friends/messages/react"))) return;
     return { message: await friendService.reactToMessage(user, Number(req.body?.messageId), req.body?.reaction) };
   });
 
-  route("post", "/friends/messages/read", (user, req) =>
+  route("post", API_PATHS.FRIENDS_MESSAGES_READ, (user, req) =>
     friendService.markRead(user, Number(req.body?.friendId)));
 
   // Invites have their own escalating per-friend cooldown in partyInviteStore.
-  route("post", "/friends/party-invite", (user, req) =>
+  route("post", API_PATHS.FRIENDS_PARTY_INVITE, (user, req) =>
     friendService.sendPartyInvite(user, Number(req.body?.friendId)));
 }
 

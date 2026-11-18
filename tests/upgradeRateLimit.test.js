@@ -8,6 +8,7 @@ function setup({ anonymous = false } = {}) {
   const user = { user_id: 1, is_banned: 0 };
   const db = {
     getUserById: async () => user,
+    withTransaction: fn => fn(null, db.runQuery),
     runQuery: async (sql, args) => {
       if (sql.includes("UPDATE users") && sql.includes("http_offense_level")) {
         user.http_offense_level = args[0];
@@ -97,7 +98,6 @@ test("eight failed upgrades trigger protection; successes and server errors do n
 
 test("concurrent successful upgrades are never provisionally counted", async () => {
   const { request, abuseControl } = setup();
-  await abuseControl.ensureSchema();
   const pending = await Promise.all(Array.from({ length: 30 }, () => request(200, "/upgrade", true)));
   for (const { res, reachedRoute } of pending) {
     assert.equal(reachedRoute, true);
@@ -144,4 +144,93 @@ test('upgrade returns the committed coin balance, independently of the client ba
   await routes['/upgrade']({ body: { character: 'ninja' } }, res);
   assert.equal(res.code, 200);
   assert.equal(res.body.coins, coins - res.body.spent);
+});
+
+test("character purchases still debit gems and grant the matching profile icon", async () => {
+  const { registerEconomyRoutes } = require("../src/server/routes/modules/economy");
+  const { unlockPrice } = require("../src/shared/characters/characterStats");
+  const { fakeRes } = require("./helpers/fakeHttp");
+  const character = "sparrow";
+  const price = unlockPrice(character);
+  const routes = new Map();
+  const user = { user_id: 1, name: "Buyer" };
+  const grants = [];
+  let gems = price + 10;
+
+  const query = async (sql, params) => {
+    if (sql.includes("SET gems = gems - ?")) {
+      assert.deepEqual(params, [price, `$.${character}`, user.name, price, `$.${character}`]);
+      gems -= price;
+      return { affectedRows: 1 };
+    }
+    if (sql.includes("AS lvl")) return [{ gems, lvl: 1 }];
+    if (sql.includes("INSERT IGNORE INTO user_profile_icons")) {
+      grants.push(params);
+      return { affectedRows: 1 };
+    }
+    if (sql.includes("SELECT selected_profile_icon_id")) return [{ selected_profile_icon_id: "ninja" }];
+    assert.fail(`Unexpected query: ${sql}`);
+  };
+
+  registerEconomyRoutes({
+    app: { post: (path, handler) => routes.set(path, handler) },
+    auth: { requireCurrentUser: async () => user },
+    db: { runQuery: query, withTransaction: (fn) => fn(null, query) },
+  });
+  const res = fakeRes();
+  await routes.get("/buy")({ body: { character } }, res);
+  assert.deepEqual(res.body, { success: true, character, newLevel: 1, spent: price, gems: 10 });
+  assert.deepEqual(grants, [[user.user_id, character, "character_unlock"]]);
+});
+
+test("simultaneous chat violations advance distinct levels and an automatic ban closes all sessions after commit", async () => {
+  const { createTransactionalDb } = require("./helpers/fakeDb");
+  const { CHAT_ACTION_LIMITS, CHAT_ESCALATION_STEPS } = require("../src/server/services/moderation/abusePolicy");
+  const userId = 17;
+  const events = [];
+  const db = createTransactionalDb({
+    state: { user_id: userId, chat_offense_level: 0 },
+    async query(row, sql, args) {
+      if (sql.includes("SELECT")) return [{ ...row }];
+      if (sql.includes("UPDATE users SET chat_offense_level")) {
+        Object.assign(row, { chat_offense_level: args[0], chat_last_violation_at: args[1], chat_suspended_until: args[2] });
+      }
+      if (sql.includes("UPDATE users SET is_banned")) row.is_banned = 1;
+      if (sql.includes("INSERT INTO user_abuse_events")) events.push(args[3]);
+      return { affectedRows: 1 };
+    },
+  });
+  const transaction = db.withTransaction;
+  db.withTransaction = async fn => {
+    const result = await transaction(fn);
+    events.push("commit");
+    return result;
+  };
+  const io = { in(room) {
+    events.push(room);
+    return { emit: name => events.push(name), disconnectSockets: () => events.push("disconnect") };
+  } };
+  const policy = createAbuseControlService({ db, io });
+  const send = () => policy.guardChatAction({ userId, source: "chat", actionType: "message" });
+  for (let i = 0; i < CHAT_ACTION_LIMITS.message.limit; i++) await send();
+  const decisions = await Promise.all([send(), send()]);
+  assert.deepEqual(decisions.map(result => result.level).sort(), [1, 2]);
+  assert.equal(db.state.chat_offense_level, 2);
+  assert.equal(db.calls.filter(call => call.sql.includes("FOR UPDATE")).length, 2);
+  db.state.chat_offense_level = CHAT_ESCALATION_STEPS.find(step => step.type === "ban").level - 1;
+  assert.equal((await send()).type, "ban");
+  assert.equal(db.state.is_banned, 1);
+  assert.deepEqual(events.slice(-5), ["ban", "commit", "user:17", "auth:banned", "disconnect"]);
+});
+
+test("moderation surfaces storage faults and resumes enforcement after recovery", async () => {
+  let attempts = 0;
+  const service = createAbuseControlService({ db: { async runQuery() {
+    if (++attempts === 1) throw new Error("temporary connection loss");
+    return [{ user_id: 1, is_banned: 1 }];
+  } } });
+  const guard = () => service.guardChatAction({ userId: 1, actionType: "message" });
+  await assert.rejects(guard(), /temporary connection loss/);
+  assert.equal((await guard()).allowed, false);
+  assert.equal(attempts, 2);
 });

@@ -1,3 +1,6 @@
+const { listParticipants } = require('../../services/match/matchLifecycleService');
+const { logIgnored } = require("../../lib/logIgnored");
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { appendPartyChatLog } = require("../../services/party/partyChatLog");
 const { deleteMatchBots } = require("../../services/match/matchRosterService");
 const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../../../shared/combat/matchConfig.js");
@@ -50,7 +53,7 @@ function potentialStartGame(room, { force = false } = {}) {
   if (room.status !== "waiting" || room._disposed) return;
   if (force) {
     if (!room.hasConnectedHumanPlayers()) {
-      void room._cancelMatchAsAbandoned("No players loaded into the match");
+      void room.cancelMatchAsAbandoned("No players loaded into the match");
       return;
     }
     startGame(room, "deadline");
@@ -86,7 +89,7 @@ function startGame(room, reason = "all_ready") {
     console.warn(`[GameRoom ${room.matchId}] mode onStart failed`, e?.message);
   }
 
-  room.io.to(`game:${room.matchId}`).emit("game:start", {
+  room.broadcast(SOCKET_EVENTS.GAME_START, {
     countdownMs: COUNTDOWN_MS,
     spawns: Object.fromEntries(Array.from(room.players.values(), p => [p.name, { x: p.x, y: p.y }])),
   });
@@ -133,20 +136,14 @@ function startGame(room, reason = "all_ready") {
 async function broadcastParticipantStatus(room, statusLabel) {
   if (!statusLabel) return;
   try {
-    const participants = await room.db.runQuery(
-      `SELECT mp.party_id, u.name
-         FROM match_participants mp
-         JOIN users u ON u.user_id = mp.user_id
-        WHERE mp.match_id = ?`,
-      [room.matchId],
-    );
+    const participants = await listParticipants(room.db.runQuery.bind(room.db), room.matchId);
     for (const p of participants || []) {
       try {
         await room.db.setUserStatus(p.name, statusLabel);
-      } catch (_) {}
+      } catch (error) { logIgnored("match finish player state", error); }
       const pid = Number(p.party_id);
       if (!Number.isFinite(pid) || pid <= 0) continue;
-      room.io.to(`party:${pid}`).emit("status:update", {
+      room.io.to(`party:${pid}`).emit(SOCKET_EVENTS.STATUS_UPDATE, {
         partyId: pid,
         name: p.name,
         status: statusLabel,
@@ -200,7 +197,7 @@ function checkVictoryCondition(room) {
       return;
     }
 
-    room._finishGame(latestVictoryState.winnerTeam ?? null, {
+    room.finishGame(latestVictoryState.winnerTeam ?? null, {
       ...(latestVictoryState.meta || {}),
     });
   };
@@ -258,9 +255,7 @@ async function finishGame(room, winnerTeam, meta = {}) {
   let rewardSummary = [];
   let rewardsPending = false;
   try {
-    rewardSummary = room.matchResults
-      ? await room.matchResults.complete(room, winnerTeam)
-      : await room._distributeMatchRewards(winnerTeam);
+    rewardSummary = await room.distributeMatchRewards(winnerTeam);
     room._resultPending = false;
   } catch (error) {
     rewardsPending = true;
@@ -269,10 +264,7 @@ async function finishGame(room, winnerTeam, meta = {}) {
   const finalMeta = { ...(meta || {}), rewards: rewardSummary, rewardsPending };
 
   try {
-    const participants = await room.db.runQuery(
-      "SELECT mp.party_id, mp.team, u.name FROM match_participants mp JOIN users u ON u.user_id = mp.user_id WHERE mp.match_id = ? AND mp.party_id IS NOT NULL",
-      [room.matchId],
-    );
+    const participants = (await listParticipants(room.db.runQuery.bind(room.db), room.matchId)).filter(player => Number(player.party_id) > 0);
     for (const partyId of new Set((participants || []).map(player => Number(player.party_id)))) {
       appendPartyChatLog(room.io, partyId, {
         kind: "battle", key: `battle:${room.matchId}`,
@@ -286,7 +278,7 @@ async function finishGame(room, winnerTeam, meta = {}) {
   }
 
 
-  room.io.to(`game:${room.matchId}`).emit("game:over", {
+  room.broadcast(SOCKET_EVENTS.GAME_OVER, {
     matchId: room.matchId,
     winnerTeam,
     meta: finalMeta,
@@ -306,7 +298,7 @@ async function finishGame(room, winnerTeam, meta = {}) {
       room._resultRetry = null;
       if (room._disposed) return;
       try {
-        await room.matchResults.complete(room, winnerTeam);
+        await room.distributeMatchRewards(winnerTeam);
         room._resultPending = false;
         if (room.onFinished) room.onFinished(); else room.cleanup();
       } catch (error) {
@@ -325,7 +317,7 @@ async function finishGame(room, winnerTeam, meta = {}) {
     try {
       if (room.onFinished) room.onFinished();
       else room.cleanup();
-    } catch (_) {}
+    } catch (error) { logIgnored("finished room cleanup", error); }
   }, 15000);
   room._finishCleanupTimer.unref?.();
 }

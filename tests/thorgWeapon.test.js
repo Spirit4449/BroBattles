@@ -103,11 +103,13 @@ describe("Weapon presentation", () => {
     assert.equal(h.sounds[0].destroyCount, 1);
   });
 
-  for (const event of ['destroy', 'shutdown', 'presentation:reset']) test(`video attack cleans up on ${event}`, () => {
+  for (const event of ['destroy', 'shutdown', 'presentation:reset', 'attack:interrupted']) test(`video attack cleans up on ${event}`, () => {
     const h = videoHarness();
     weaponModule.startThorgSweep(h.scene, h.body);
     h.tick(100);
-    if (event === 'destroy') h.body.destroy(); else h.scene.events.emit(event);
+    if (event === 'destroy') h.body.destroy();
+    else if (event === 'attack:interrupted') h.body.emit(event);
+    else h.scene.events.emit(event);
     assert.equal(h.body._thorgSweepActive, false);
     assert.equal(h.sounds[0].destroyCount, 1);
     assert.equal(h.scene.events.listenerCount('update'), 0);

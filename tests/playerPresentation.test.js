@@ -1,11 +1,8 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
+const { loadClientModule } = require('./helpers/clientModule');
 
 describe("Health and invisibility", () => {
-  const { loadClientModule } = require('./helpers/clientModule');
   const { test, describe } = require('node:test');
 
 
@@ -109,22 +106,8 @@ describe("Bounded vault effects", () => {
 
 
 
-  const moduleExports = {};
-  vm.runInNewContext(
-    babel.transformSync(
-      fs.readFileSync("src/client/game/modes/bankBust/vaultEffects.js", "utf8"),
-      { babelrc: false, configFile: false, presets: [["@babel/preset-env", { targets: { node: "current" } }]] },
-    ).code,
-    {
-      exports: moduleExports,
-      Math,
-      Number,
-      Infinity,
-      // Its one import, the shared coin motion, is the real module.
-      require: (specifier) => require(require("node:path").resolve("src/client/game/modes/bankBust", specifier)),
-    },
-  );
-  const { createVaultEffects, stepLoose, coinsForHit, hitStrength } = moduleExports;
+  const { createClientModuleGraph } = require("./helpers/clientModule");
+  const { createVaultEffects } = createClientModuleGraph().load("src/client/game/modes/bankBust/vaultEffects.js");
 
   const LAYERS = { GAME_OBJECTS: 10, POWERUPS: 20, SCENERY_FRONT: 33, PLAYER_HUD: 40, ATTACKS: 60 };
   const VAULT = { x: 700, y: 124, width: 216, height: 224 };

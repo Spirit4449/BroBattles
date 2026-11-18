@@ -1,4 +1,4 @@
-/* Map Studio. Colors, type and frames come from public/styles/ui-system.css;
+/* Map Studio. Colors, type and frames come from ui-system.css;
    this file keeps the studio dense: pixel type for chrome, Lato for values. */
 :root {
   --studio-bg: var(--bb-bg-deep);
@@ -70,9 +70,7 @@ button.danger { background: var(--bb-danger-gradient); }
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
-select option { color: var(--bb-text); background: var(--bb-surface-1); }
-input[type="number"] { width: 100%; appearance: textfield; -moz-appearance: textfield; }
-input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
+input[type="number"] { width: 100%; }
 input[type="search"] { width: 100%; }
 input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -95,20 +93,6 @@ input[type="checkbox"]:checked {
   image-rendering: pixelated;
 }
 input[type="checkbox"]:focus-visible { outline: 2px solid var(--bb-border-highlight); outline-offset: 2px; }
-
-kbd {
-  display: inline-block;
-  min-width: 18px;
-  padding: 2px 4px 3px;
-  border: 1px solid var(--bb-ink);
-  background: var(--bb-surface-3);
-  box-shadow: 0 2px var(--bb-ink);
-  color: var(--bb-text-soft);
-  font: 7px/1.4 var(--bb-font-display);
-  text-align: center;
-}
-
-* { scrollbar-width: thin; scrollbar-color: var(--bb-border) transparent; }
 
 /* ---- Layout ---- */
 #studio {
@@ -365,7 +349,7 @@ kbd {
 
 .asset-row { margin-bottom: 14px; overflow: hidden; border: 2px solid var(--bb-ink); background: var(--bb-card-gradient); box-shadow: 0 3px var(--bb-ink), inset 0 0 0 1px var(--bb-border-soft); transition: box-shadow var(--bb-motion-fast) ease; }
 .asset-row.drop-target { box-shadow: 0 3px var(--bb-ink), inset 0 0 0 2px var(--bb-green); }
-.asset-preview { display: flex; align-items: center; justify-content: center; height: 96px; padding: 14px; border-bottom: 2px solid var(--bb-ink); background: radial-gradient(ellipse at center, #22385a, #0b1629); }
+.asset-preview { display: flex; align-items: center; justify-content: center; height: 96px; padding: 14px; border-bottom: 2px solid var(--bb-ink); background: radial-gradient(ellipse at center, #22385a, var(--bb-surface-1)); }
 .asset-preview img { max-width: 100%; max-height: 68px; object-fit: contain; image-rendering: pixelated; }
 .asset-info { display: grid; gap: 4px; padding: 10px 12px 0; }
 .asset-info strong { font-size: 13px; overflow-wrap: anywhere; }
@@ -400,7 +384,6 @@ footer {
 #status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #status.is-error { color: #ff9b9b; }
 .footer-keys { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 11px; }
-.footer-keys kbd { margin-left: 6px; }
 
 /* ---- Dialog ---- */
 dialog {

@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../net/socketEvents.js");
 const { isPlaced } = require('../../targetable.js');
 const { exposeDamageHitbox } = require('../damageHitboxes.js');
 const { getResolvedCharacterSpecialConfig } = require("../../../characters/characterTuning");
@@ -79,7 +80,7 @@ function applyGloopPull(room, attacker, target, attack, now) {
     );
   } catch (_) {}
 
-  room.io.to(`game:${room.matchId}`).emit("game:action", {
+  room.broadcast(SOCKET_EVENTS.GAME_ACTION, {
     playerName: attacker.name,
     character: attacker.char_class,
     origin: { x: attacker.x, y: attacker.y },
@@ -270,4 +271,4 @@ function tickHookProjectile(room, attack, descriptor, now) {
   return false;
 }
 
-module.exports = { resolveLiveGloopPullDestination, applyGloopPull, tickRuntimeControlEffects, buildHookProjectileAttack, tickHookProjectile };
+module.exports = { applyGloopPull, tickRuntimeControlEffects, buildHookProjectileAttack, tickHookProjectile };

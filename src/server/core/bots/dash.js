@@ -1,4 +1,4 @@
-const { bounds, stepBody, startDash, forecastGeometry, movementGeometry } = require('./physics');
+const { bounds, stepBody, startDash, forecastGeometry, movementGeometry } = require('../physics/bodySolver');
 const { maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange } = require('./tactics');
 const { hasClearShot } = require('../../../shared/combat/combat.js');
@@ -71,7 +71,7 @@ function *tryStompSteps(brain, observed, mods, context, now) {
   if (brain.random() >= 0.4) return false;
   const direction = { x: 0, y: 1 };
   yield;
-  now = brain.room._botNow ?? now;
+  now = brain.room.botNow ?? now;
   if (p.grounded || !canDash(brain, mods, now)) return false;
   const candidate = previewDash(p, direction, movementGeometry(brain.room), mods, now, context.poisonAt);
   if (!stompTargets(candidate, observed, now).length) return false;
@@ -136,7 +136,7 @@ function *tryDashSteps(brain, observed, target, threat, mods, context, now) {
     const score = avoided + escaped + closed;
     if (score > bestScore) { best = { direction, candidate }; bestScore = score; }
   }
-  now = brain.room._botNow ?? now;
+  now = brain.room.botNow ?? now;
   // Planning can span ticks: recheck availability and the landing at activation.
   if (!best || !canDash(brain, mods, now)) return false;
   const candidate = previewDash(p, best.direction, movementGeometry(brain.room), mods, now, context.poisonAt);

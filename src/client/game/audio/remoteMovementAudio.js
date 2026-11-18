@@ -1,10 +1,10 @@
+import { clamp01 as clamp } from "../../../shared/math.js";
 import { movementSoundKey } from "../../../shared/physics/movementSounds";
 import { playPlayerSound, playerSoundVolume } from './playerAudio';
 import { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound, fallingAirVolume } from './movementAudio';
 import { MOVEMENT_VFX_CONFIG } from '../scene/effects';
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
 
-const clamp = value => Math.max(0, Math.min(1, value));
 
 // Each remote fighter owns its cadence and loops. Volumes use the local mix
 // levels; the shared listener applies distance and spectator attenuation.

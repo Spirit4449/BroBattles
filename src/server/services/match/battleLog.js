@@ -1,5 +1,9 @@
+const { DUEL_MODE_ID } = require("../../../shared/maps/duelVariants.js");
 const { DEFAULT_CHARACTER, resolveCharacterKey } = require("../../../shared/characters/characterStats.js");
 const {
+  DEFAULT_MODE_ID,
+  DEFAULT_VARIANT_ID,
+  DEFAULT_MAP_ID,
   getModeById,
   getVariantDescriptor,
   getMapById,
@@ -7,9 +11,9 @@ const {
 } = require("./gameSelectionCatalog");
 
 function formatModeLabel(modeId, modeVariantId) {
-  const mId = String(modeId || "duels").toLowerCase();
+  const mId = String(modeId || DEFAULT_MODE_ID).toLowerCase();
   const vId = String(modeVariantId || "").toLowerCase();
-  if (mId === "duels") {
+  if (mId === DUEL_MODE_ID) {
     if (vId.includes("1v1")) return "1v1 Duel";
     if (vId.includes("2v2")) return "2v2 Duel";
     return "Duel";
@@ -84,11 +88,12 @@ async function recordMatchOutcome(db, room, winnerTeam, rewardSummary = []) {
     });
   }
 
+  const modeId = room.matchData?.modeId || DEFAULT_MODE_ID;
   const summary = {
     matchId,
-    modeId: room.matchData?.modeId || "duels",
-    modeVariantId: room.matchData?.modeVariantId || "duels-1v1",
-    mapId: Number(room.matchData?.map) || 1,
+    modeId,
+    modeVariantId: room.matchData?.modeVariantId || getVariantDescriptor(modeId).variant?.id || DEFAULT_VARIANT_ID,
+    mapId: Number(room.matchData?.map) || DEFAULT_MAP_ID,
     winnerTeam: winnerTeam || "draw",
     completedAt: new Date().toISOString(),
     players: playersList,
@@ -96,52 +101,29 @@ async function recordMatchOutcome(db, room, winnerTeam, rewardSummary = []) {
 
   const summaryJson = JSON.stringify(summary);
 
-  try {
-    await db.runQuery(
-      "UPDATE matches SET status = 'completed', winner_team = ?, summary = ? WHERE match_id = ?",
-      [winnerTeam, summaryJson, matchId],
-    );
-  } catch (error) {
-    if (db.strictResults || error?.code !== "ER_BAD_FIELD_ERROR") throw error;
-    console.warn("[battleLog] Missing result columns; apply migrations/2026-09-03_match_battle_log.sql");
-    // Fallback if summary column does not exist yet
-    try {
-      await db.runQuery(
-        "UPDATE matches SET status = 'completed', winner_team = ? WHERE match_id = ?",
-        [winnerTeam, matchId],
-      );
-    } catch (fallbackError) {
-      if (fallbackError?.code !== "ER_BAD_FIELD_ERROR") throw fallbackError;
-      await db.runQuery(
-        "UPDATE matches SET status = 'completed' WHERE match_id = ?",
-        [matchId],
-      );
-    }
-  }
+  await db.runQuery(
+    "UPDATE matches SET status = 'completed', winner_team = ?, summary = ? WHERE match_id = ?",
+    [winnerTeam, summaryJson, matchId],
+  );
 
-  // Update participant stats for humans if columns exist
+  // Record participant stats for human players.
   for (const p of playersList) {
     if (p.userId && !p.isBot) {
-      try {
-        await db.runQuery(
-          `UPDATE match_participants
-              SET trophies_delta = ?, kills = ?, damage = ?, hits = ?, coins_awarded = ?, gems_awarded = ?
-            WHERE match_id = ? AND user_id = ?`,
-          [
-            p.trophiesDelta,
-            p.kills,
-            p.damage,
-            p.hits,
-            p.coinsAwarded,
-            p.gemsAwarded,
-            matchId,
-            p.userId,
-          ],
-        );
-      } catch (error) {
-        if (db.strictResults || error?.code !== "ER_BAD_FIELD_ERROR") throw error;
-        // Safe to ignore if individual combat stat columns have not been added yet
-      }
+      await db.runQuery(
+        `UPDATE match_participants
+            SET trophies_delta = ?, kills = ?, damage = ?, hits = ?, coins_awarded = ?, gems_awarded = ?
+          WHERE match_id = ? AND user_id = ?`,
+        [
+          p.trophiesDelta,
+          p.kills,
+          p.damage,
+          p.hits,
+          p.coinsAwarded,
+          p.gemsAwarded,
+          matchId,
+          p.userId,
+        ],
+      );
     }
   }
 
@@ -153,49 +135,24 @@ async function getBattleLogForUser(db, userId, limit = 10) {
   const uid = Number(userId);
   const safeLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 10)));
 
-  let matchRows = [];
-  try {
-    matchRows = await db.runQuery(
-      `SELECT m.match_id, m.mode, m.mode_id, m.mode_variant_id, m.map, m.status, m.winner_team, m.created_at,
-              m.summary,
-              mp.team AS player_team, mp.char_class AS player_char_class,
-              mp.trophies_delta AS player_trophies_delta,
-              mp.kills AS player_kills,
-              mp.damage AS player_damage,
-              mp.hits AS player_hits,
-              mp.coins_awarded AS player_coins_awarded,
-              mp.gems_awarded AS player_gems_awarded
-         FROM match_participants mp
-         JOIN matches m ON m.match_id = mp.match_id
-        WHERE mp.user_id = ?
-          AND m.status = 'completed'
-        ORDER BY m.created_at DESC, m.match_id DESC
-        LIMIT ?`,
-      [uid, safeLimit],
-    );
-  } catch (err) {
-    if (err?.code !== "ER_BAD_FIELD_ERROR") throw err;
-    // If optional columns (summary, trophies_delta, mode_id, winner_team) are missing
-    try {
-      matchRows = await db.runQuery(
-        `SELECT m.*,
-                mp.team AS player_team, mp.char_class AS player_char_class
-           FROM match_participants mp
-           JOIN matches m ON m.match_id = mp.match_id
-          WHERE mp.user_id = ?
-            AND m.status = 'completed'
-          ORDER BY m.created_at DESC, m.match_id DESC
-          LIMIT ?`,
-        [uid, safeLimit],
-      );
-    } catch (fallbackErr) {
-      console.warn(
-        "[battleLog] Failed to query match rows",
-        fallbackErr?.message,
-      );
-      return [];
-    }
-  }
+  const matchRows = await db.runQuery(
+    `SELECT m.match_id, m.mode, m.mode_id, m.mode_variant_id, m.map, m.status, m.winner_team, m.created_at,
+            m.summary,
+            mp.team AS player_team, mp.char_class AS player_char_class,
+            mp.trophies_delta AS player_trophies_delta,
+            mp.kills AS player_kills,
+            mp.damage AS player_damage,
+            mp.hits AS player_hits,
+            mp.coins_awarded AS player_coins_awarded,
+            mp.gems_awarded AS player_gems_awarded
+       FROM match_participants mp
+       JOIN matches m ON m.match_id = mp.match_id
+      WHERE mp.user_id = ?
+        AND m.status = 'completed'
+      ORDER BY m.created_at DESC, m.match_id DESC
+      LIMIT ?`,
+    [uid, safeLimit],
+  );
 
   if (!matchRows || !matchRows.length) {
     return [];
@@ -227,60 +184,57 @@ async function getBattleLogForUser(db, userId, limit = 10) {
   const participantsByMatch = new Map();
   if (matchesNeedingLookup.length) {
     const ph = matchesNeedingLookup.map(() => "?").join(",");
-    try {
-      const partRows = await db.runQuery(
-        `SELECT mp.*,
-                u.name, u.selected_profile_icon_id AS profile_icon_id
-           FROM match_participants mp
-           LEFT JOIN users u ON u.user_id = mp.user_id
-          WHERE mp.match_id IN (${ph})`,
-        matchesNeedingLookup,
-      );
-      for (const pr of partRows || []) {
-        const mid = pr.match_id;
-        if (!participantsByMatch.has(mid)) participantsByMatch.set(mid, []);
-        participantsByMatch.get(mid).push({
-          userId: pr.user_id ? Number(pr.user_id) : null,
-          name: pr.name || "Player",
-          team: pr.team || "team1",
-          charClass: resolveCharacterKey(pr.char_class),
-          profileIconId: resolvePlayerIconId(pr),
-          isBot: false,
-          kills: nullableNumber(pr.kills),
-          damage: nullableNumber(pr.damage),
-          hits: nullableNumber(pr.hits),
-          trophiesDelta: nullableNumber(pr.trophies_delta),
-          coinsAwarded: nullableNumber(pr.coins_awarded),
-          gemsAwarded: nullableNumber(pr.gems_awarded),
-        });
-      }
-    } catch (_) {}
+    const partRows = await db.runQuery(
+      `SELECT mp.match_id, mp.user_id, mp.team, mp.char_class, mp.kills, mp.damage, mp.hits,
+              mp.trophies_delta, mp.coins_awarded, mp.gems_awarded,
+              u.name, u.selected_profile_icon_id AS profile_icon_id
+         FROM match_participants mp
+         LEFT JOIN users u ON u.user_id = mp.user_id
+        WHERE mp.match_id IN (${ph})`,
+      matchesNeedingLookup,
+    );
+    for (const pr of partRows || []) {
+      const mid = pr.match_id;
+      if (!participantsByMatch.has(mid)) participantsByMatch.set(mid, []);
+      participantsByMatch.get(mid).push({
+        userId: pr.user_id ? Number(pr.user_id) : null,
+        name: pr.name || "Player",
+        team: pr.team || "team1",
+        charClass: resolveCharacterKey(pr.char_class),
+        profileIconId: resolvePlayerIconId(pr),
+        isBot: false,
+        kills: nullableNumber(pr.kills),
+        damage: nullableNumber(pr.damage),
+        hits: nullableNumber(pr.hits),
+        trophiesDelta: nullableNumber(pr.trophies_delta),
+        coinsAwarded: nullableNumber(pr.coins_awarded),
+        gemsAwarded: nullableNumber(pr.gems_awarded),
+      });
+    }
 
     // Check if bots exist for any of these matches
-    try {
-      const botRows = await db.runQuery(
-        `SELECT match_id, name, team, char_class, trophies
-           FROM match_bot_participants
-          WHERE match_id IN (${ph})`,
-        matchesNeedingLookup,
-      );
-      for (const br of botRows || []) {
-        const mid = br.match_id;
-        if (!participantsByMatch.has(mid)) participantsByMatch.set(mid, []);
-        participantsByMatch.get(mid).push({
-          userId: null,
-          name: br.name || "Bot",
-          team: br.team || "team2",
-          charClass: resolveCharacterKey(br.char_class),
-          profileIconId: resolvePlayerIconId(br),
-          isBot: true,
-          kills: null,
-          damage: null,
-          hits: null,
-          trophiesDelta: null,
-        });
-      }
-    } catch (_) {}
+    const botRows = await db.runQuery(
+      `SELECT match_id, name, team, char_class
+         FROM match_bot_participants
+        WHERE match_id IN (${ph})`,
+      matchesNeedingLookup,
+    );
+    for (const br of botRows || []) {
+      const mid = br.match_id;
+      if (!participantsByMatch.has(mid)) participantsByMatch.set(mid, []);
+      participantsByMatch.get(mid).push({
+        userId: null,
+        name: br.name || "Bot",
+        team: br.team || "team2",
+        charClass: resolveCharacterKey(br.char_class),
+        profileIconId: resolvePlayerIconId(br),
+        isBot: true,
+        kills: null,
+        damage: null,
+        hits: null,
+        trophiesDelta: null,
+      });
+    }
   }
 
   const battles = [];
@@ -299,14 +253,14 @@ async function getBattleLogForUser(db, userId, limit = 10) {
     }
 
     const selection = normalizeSelectionFromRow(row);
-    const modeId = summary?.modeId || selection.modeId || "duels";
+    const modeId = summary?.modeId || selection.modeId || DEFAULT_MODE_ID;
     const modeVariantId =
-      summary?.modeVariantId || selection.modeVariantId || "duels-1v1";
+      summary?.modeVariantId || selection.modeVariantId || DEFAULT_VARIANT_ID;
     const modeDef = getModeById(modeId);
     const modeArt = modeDef?.artAsset || "/assets/map-banners/duels.webp";
     const modeLabel = formatModeLabel(modeId, modeVariantId);
 
-    const mapId = Number(summary?.mapId || selection.mapId || row.map || 1);
+    const mapId = Number(summary?.mapId || selection.mapId || row.map || DEFAULT_MAP_ID);
     const mapDef = getMapById(mapId);
     const mapLabel = mapDef?.label || `Map ${mapId}`;
     const mapBanner =
@@ -488,7 +442,6 @@ module.exports = {
   getHighestWinStreak,
   getCurrentWinStreak,
   formatModeLabel,
-  resolvePlayerIconId,
   recordMatchOutcome,
   getBattleLogForUser,
 };

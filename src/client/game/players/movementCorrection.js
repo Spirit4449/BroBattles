@@ -1,3 +1,4 @@
+// CommonJS keeps these mechanics directly loadable by the Node test suite.
 // A positional contact correction must not erase motion tangent to the face.
 // Phaser Body.reset() also stops velocity AND acceleration, unlike a teleport.
 function applyMovementCorrection(player, correction) {

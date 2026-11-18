@@ -1,6 +1,7 @@
+const { defineSocketHandler, checkChat, respondWithError } = require("./handler");
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { resolveCharacterKey } = require("../../../shared/characters/characterStats.js");
 const TYPING_STALE_MS = 4500;
-const typingByParty = new Map(); // partyId -> Map<userIdOrName, typer>
 
 function normalizeTypingKey(user) {
   const userId = Number(user?.user_id) || 0;
@@ -17,7 +18,7 @@ function normalizePartyId(value) {
   return partyId > 0 ? partyId : 0;
 }
 
-function getTypingMapForParty(partyId) {
+function getTypingMapForParty(typingByParty, partyId) {
   const normalizedPartyId = normalizePartyId(partyId);
   if (!normalizedPartyId) return null;
   let map = typingByParty.get(normalizedPartyId);
@@ -37,12 +38,12 @@ function pruneTypingMap(map, now = Date.now()) {
   }
 }
 
-function broadcastTyping(io, partyId) {
+function broadcastTyping(typingByParty, io, partyId) {
   const normalizedPartyId = normalizePartyId(partyId);
   if (!normalizedPartyId) return;
   const map = typingByParty.get(normalizedPartyId);
   if (!map) {
-    io?.to?.(`party:${normalizedPartyId}`)?.emit?.("party-chat:typing", {
+    io?.to?.(`party:${normalizedPartyId}`)?.emit?.(SOCKET_EVENTS.PARTY_CHAT_TYPING, {
       partyId: normalizedPartyId,
       typers: [],
     });
@@ -61,13 +62,13 @@ function broadcastTyping(io, partyId) {
       profileIconId: String(entry?.profileIconId || "") || null,
     }))
     .filter((entry) => !!entry.name);
-  io?.to?.(`party:${normalizedPartyId}`)?.emit?.("party-chat:typing", {
+  io?.to?.(`party:${normalizedPartyId}`)?.emit?.(SOCKET_EVENTS.PARTY_CHAT_TYPING, {
     partyId: normalizedPartyId,
     typers,
   });
 }
 
-function clearUserTypingFromAllParties(io, user, keepPartyId = 0) {
+function clearUserTypingFromAllParties(typingByParty, io, user, keepPartyId = 0) {
   const key = normalizeTypingKey(user);
   if (!key) return;
   const keepId = normalizePartyId(keepPartyId);
@@ -78,125 +79,93 @@ function clearUserTypingFromAllParties(io, user, keepPartyId = 0) {
     if (!map.size) {
       typingByParty.delete(partyId);
     }
-    broadcastTyping(io, partyId);
+    broadcastTyping(typingByParty, io, partyId);
   }
 }
 
-// Rate limits socket chat writes; replies through the ack and returns false
-// when the user is throttled or banned.
-async function guardChat(socket, abuseControl, actionType, source, cb) {
-  if (!abuseControl) return true;
-  const guard = await abuseControl.guardChatAction({
-    userId: Number(socket.data?.user?.user_id) || 0,
-    actionType,
-    source,
+function registerChatEvents(socket, { chatService, abuseControl, typingByParty = new Map() }) {
+  const chatGuard = (actionType, source) => () => checkChat(abuseControl, {
+    userId: Number(socket.data?.user?.user_id) || 0, actionType, source,
   });
-  if (guard?.allowed) return true;
-  cb?.({
-    ok: false,
-    error: guard?.message || "You are sending messages too fast.",
-    type: guard?.type || "chat_limited",
-    suspendedUntilMs: Number(guard?.suspendedUntilMs || 0) || null,
-  });
-  return false;
-}
+  socket.on(SOCKET_EVENTS.PARTY_CHAT_SEND, defineSocketHandler(async (payload = {}, cb) => {
+    const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
+    const message = await chatService.sendPartyChatMessage({
+      partyId,
+      user: socket.data.user,
+      body: payload?.body,
+      replyToMessageId: payload?.replyToMessageId,
+    });
+    cb?.({ ok: true, message });
+  }, { onError: respondWithError("Failed to send message"), guard: chatGuard("message", "socket:party-chat:send") }));
 
-function registerChatEvents(socket, { chatService, abuseControl }) {
-  socket.on("party-chat:send", async (payload = {}, cb) => {
-    try {
-      if (!(await guardChat(socket, abuseControl, "message", "socket:party-chat:send", cb))) return;
-      const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
-      const message = await chatService.sendPartyChatMessage({
-        partyId,
-        user: socket.data.user,
-        body: payload?.body,
-        replyToMessageId: payload?.replyToMessageId,
-      });
-      cb?.({ ok: true, message });
-    } catch (error) {
-      cb?.({ ok: false, error: error?.message || "Failed to send message" });
+  socket.on(SOCKET_EVENTS.PARTY_CHAT_REACT, defineSocketHandler(async (payload = {}, cb) => {
+    const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
+    const message = await chatService.reactToPartyChatMessage({
+      partyId,
+      user: socket.data.user,
+      messageId: payload?.messageId,
+      reaction: payload?.reaction,
+    });
+    cb?.({ ok: true, message });
+  }, { onError: respondWithError("Failed to react"), guard: chatGuard("reaction", "socket:party-chat:react") }));
+
+  socket.on(SOCKET_EVENTS.PARTY_CHAT_READ, defineSocketHandler(async (payload = {}, cb) => {
+    const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
+    const result = await chatService.markPartyChatRead({
+      partyId,
+      user: socket.data.user,
+      lastMessageId: payload?.lastMessageId,
+    });
+    cb?.({ ok: true, ...result });
+  }, { onError: respondWithError("Failed to mark read") }));
+
+  socket.on(SOCKET_EVENTS.PARTY_CHAT_TYPING, defineSocketHandler((payload = {}, cb) => {
+    const partyId = normalizePartyId(
+      payload?.partyId || socket.data?.partyId,
+    );
+    const user = socket.data?.user || {};
+    const key = normalizeTypingKey(user);
+    if (!partyId || !key || partyId !== normalizePartyId(socket.data?.partyId)) {
+      cb?.({ ok: false, error: "Party not found" });
+      return;
     }
-  });
 
-  socket.on("party-chat:react", async (payload = {}, cb) => {
-    try {
-      if (!(await guardChat(socket, abuseControl, "reaction", "socket:party-chat:react", cb))) return;
-      const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
-      const message = await chatService.reactToPartyChatMessage({
-        partyId,
-        user: socket.data.user,
-        messageId: payload?.messageId,
-        reaction: payload?.reaction,
-      });
-      cb?.({ ok: true, message });
-    } catch (error) {
-      cb?.({ ok: false, error: error?.message || "Failed to react" });
+    const isTyping = !!payload?.isTyping;
+    const map = getTypingMapForParty(typingByParty, partyId);
+    if (!map) {
+      cb?.({ ok: false, error: "Party not found" });
+      return;
     }
-  });
 
-  socket.on("party-chat:read", async (payload = {}, cb) => {
-    try {
-      const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
-      const result = await chatService.markPartyChatRead({
-        partyId,
-        user: socket.data.user,
-        lastMessageId: payload?.lastMessageId,
-      });
-      cb?.({ ok: true, ...result });
-    } catch (error) {
-      cb?.({ ok: false, error: error?.message || "Failed to mark read" });
-    }
-  });
-
-  socket.on("party-chat:typing", (payload = {}, cb) => {
-    try {
-      const partyId = normalizePartyId(
-        payload?.partyId || socket.data?.partyId,
-      );
-      const user = socket.data?.user || {};
-      const key = normalizeTypingKey(user);
-      if (!partyId || !key || partyId !== normalizePartyId(socket.data?.partyId)) {
-        cb?.({ ok: false, error: "Party not found" });
-        return;
-      }
-
-      const isTyping = !!payload?.isTyping;
-      const map = getTypingMapForParty(partyId);
-      if (!map) {
-        cb?.({ ok: false, error: "Party not found" });
-        return;
-      }
-
-      clearUserTypingFromAllParties(
-        chatService?.io || socket.nsp?.server,
-        user,
-        partyId,
-      );
-
-      if (isTyping) {
-        map.set(key, {
-          userId: Number(user?.user_id) || null,
-          name: String(user?.name || "").trim() || "Player",
-          charClass: resolveCharacterKey(user?.char_class),
-          profileIconId: String(user?.selected_profile_icon_id || "") || null,
-          updatedAt: Date.now(),
-        });
-      } else {
-        map.delete(key);
-      }
-
-      if (!map.size) {
-        typingByParty.delete(partyId);
-      }
-      broadcastTyping(chatService?.io || socket.nsp?.server, partyId);
-      cb?.({ ok: true });
-    } catch (error) {
-      cb?.({ ok: false, error: error?.message || "Failed to update typing" });
-    }
-  });
-
-  socket.on("disconnect", () => {
     clearUserTypingFromAllParties(
+      typingByParty,
+      chatService?.io || socket.nsp?.server,
+      user,
+      partyId,
+    );
+
+    if (isTyping) {
+      map.set(key, {
+        userId: Number(user?.user_id) || null,
+        name: String(user?.name || "").trim() || "Player",
+        charClass: resolveCharacterKey(user?.char_class),
+        profileIconId: String(user?.selected_profile_icon_id || "") || null,
+        updatedAt: Date.now(),
+      });
+    } else {
+      map.delete(key);
+    }
+
+    if (!map.size) {
+      typingByParty.delete(partyId);
+    }
+    broadcastTyping(typingByParty, chatService?.io || socket.nsp?.server, partyId);
+    cb?.({ ok: true });
+  }, { onError: respondWithError("Failed to update typing") }));
+
+  socket.on(SOCKET_EVENTS.DISCONNECT, () => {
+    clearUserTypingFromAllParties(
+      typingByParty,
       chatService?.io || socket.nsp?.server,
       socket.data?.user || {},
     );

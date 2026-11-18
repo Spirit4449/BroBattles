@@ -1,12 +1,6 @@
 const fs = require("fs");
 
-function deepFreeze(value) {
-  if (value && typeof value === "object" && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const child of Object.values(value)) deepFreeze(child);
-  }
-  return value;
-}
+const { deepFreeze } = require("../../shared/deepFreeze");
 
 // Catalog JSON is read once and shared. Callers receive frozen data so one
 // request cannot corrupt the catalog for every later lookup. `build` derives

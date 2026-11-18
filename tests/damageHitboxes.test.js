@@ -1,3 +1,4 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { exposeDamageHitbox, damageHitboxSnapshot, SAMPLE_TTL_MS } = require('../src/shared/combat/runtime/damageHitboxes.js');
@@ -6,7 +7,7 @@ const { hitCircleTargets, hitRectTargets } = require('../src/shared/combat/runti
 test('damage geometry is debug-only, replaced per source, and expires even after attack removal', () => {
   const room = { matchData: {} }, source = { attackerName: 'A', instanceId: 'shot' };
   exposeDamageHitbox(room, source, { kind: 'circle', x: 0, y: 0, radius: 8 }, 100);
-  assert.equal(room._damageHitboxes, undefined);
+  assert.equal(room.damageHitboxes, undefined);
   assert.equal(damageHitboxSnapshot(room, 100), undefined);
   room.matchData.editorDebugHitboxes = true;
   exposeDamageHitbox(room, source, { kind: 'circle', x: 0, y: 0, radius: 8 }, 100);
@@ -16,7 +17,7 @@ test('damage geometry is debug-only, replaced per source, and expires even after
   assert.equal(shapes.length, 2);
   assert.equal(shapes[0].x, 10);
   assert.deepEqual(damageHitboxSnapshot(room, 110 + SAMPLE_TTL_MS), []);
-  assert.equal(room._damageHitboxes.size, 0);
+  assert.equal(room.damageHitboxes.size, 0);
 });
 
 test('shared target queries expose damage shapes even when there are no enemies', () => {
@@ -46,7 +47,7 @@ test('every registered generic damage runtime publishes its collision geometry w
         if (tickRuntimeAttack(room, attack, now + step * room.FIXED_DT_MS)) break;
       }
     }
-    assert.ok(room._damageHitboxes?.size > 0, `${type} must expose a damage volume`);
+    assert.ok(room.damageHitboxes?.size > 0, `${type} must expose a damage volume`);
     covered.add(descriptor.runtime.kind);
   }
   // Cone is supported for future attacks but has no current descriptor.
@@ -102,13 +103,13 @@ test('dedicated Ninja and Sparrow protocols expose each basic and special projec
       t.after(() => room.cleanup());
       room.matchData.editorDebugHitboxes = true;
       room.geometry = { ...room.geometry, colliders: [] };
-      room._tickId = 0; room._simulationMono = 0;
+      room.tickId = 0; room.simulationMono = 0;
       const player = players[0];
       Object.assign(player, { x: 500, y: 200, connected: true, superCharge: player.maxSuperCharge });
       players[1].loaded = false;
       assert.equal(combat.request(room, player, { id: 'debug', angle: 0, power: 1, aim: { angle: 0, power: 1 } }, special), true);
       for (let step = 0; step < 60; step++) {
-        room._tickId++; room._simulationMono += 1000 / 60;
+        room.tickId++; room.simulationMono += 1000 / 60;
         combat.tick(room);
       }
       const shapes = damageHitboxSnapshot(room);
@@ -120,12 +121,9 @@ test('dedicated Ninja and Sparrow protocols expose each basic and special projec
 
 test('overlay follows the debug toggle and cleans up stale frames and scene listeners', () => {
   const { EventEmitter } = require('node:events');
-  const fs = require('node:fs'), vm = require('node:vm'), babel = require('@babel/core');
   const moduleExports = {};
   let now = 100, circles = 0, destroyed = false;
-  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/damageHitboxDebug.js'), 'utf8'), {
-    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-  }).code, { exports: moduleExports, require: require("node:module").createRequire(require.resolve("../src/client/game/scene/damageHitboxDebug.js")), Date: { now: () => now } });
+  loadClientModule(require.resolve('../src/client/game/scene/damageHitboxDebug.js'), { exports: moduleExports, require: require("node:module").createRequire(require.resolve("../src/client/game/scene/damageHitboxDebug.js")), Date: { now: () => now } });
   const graphics = { setDepth() { return this; }, clear() {}, lineStyle() {}, strokeCircle() { circles++; }, destroy() { destroyed = true; } };
   const events = new EventEmitter(), socket = new EventEmitter();
   const scene = { add: { graphics: () => graphics }, events, physics: { world: { drawDebug: true } }, cameras: { main: { zoom: 1 } } };

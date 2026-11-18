@@ -1,3 +1,4 @@
+const roomTransport = require('./helpers/roomTransport.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { tickPowerups } = require('../src/server/core/gameRoom/powerupManager');
@@ -8,10 +9,10 @@ function fixture() {
   const player = { name: 'player', x: 100, y: 100, isAlive: true, connected: true, loaded: true, team: 'team1' };
   const rewards = {};
   const events = [];
-  const room = {
+  const room = { ...roomTransport,
     status: 'active', players: new Map([['player', player]]),
-    _powerups: new Map(), _deathDrops: new Map(), _lastPowerupSpawnAt: 10000,
-    _ensureRewardBucket: () => rewards,
+    powerups: new Map(), deathDrops: new Map(), _lastPowerupSpawnAt: 10000,
+    ensureRewardBucket: () => rewards,
     io: { to: () => ({ emit: (event, payload) => events.push({ event, payload }) }) },
   };
   return { room, rewards, events };
@@ -21,21 +22,21 @@ test('powerups wait 500ms after activation, rather than after the warning starts
   const { room, events } = fixture();
   let now = 10000;
   t.mock.method(Date, 'now', () => now);
-  room._powerups.set(1, { id: 1, type: 'rage', x: 100, y: 100,
+  room.powerups.set(1, { id: 1, type: 'rage', x: 100, y: 100,
     spawnedAt: 8000, activeAt: 10000, expiresAt: 20000 });
   for (now of [10000, 10499]) {
     tickPowerups(room);
-    assert.equal(room._powerups.size, 1);
+    assert.equal(room.powerups.size, 1);
     assert.equal(events.length, 0);
   }
   now = 10500;
   tickPowerups(room);
-  assert.equal(room._powerups.size, 0);
+  assert.equal(room.powerups.size, 0);
   assert.equal(events.length, 1);
 });
 
 test('powerups are collected only when the hurtbox overlaps the orb circle', t => {
-  const { characterBody } = require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
   const { POWERUP_PICKUP_RADIUS } = require('../src/shared/combat/matchConfig.js');
   const body = characterBody('ninja');
   const { room } = fixture();
@@ -50,10 +51,10 @@ test('powerups are collected only when the hurtbox overlaps the orb circle', t =
     [side + POWERUP_PICKUP_RADIUS + 2, player.y + body.offsetY, false],
     [side + POWERUP_PICKUP_RADIUS - 2, player.y + body.offsetY, true],
   ]) {
-    room._powerups.clear();
-    room._powerups.set(1, { id: 1, type: 'rage', x, y, spawnedAt: 8000, activeAt: 10000, expiresAt: 30000 });
+    room.powerups.clear();
+    room.powerups.set(1, { id: 1, type: 'rage', x, y, spawnedAt: 8000, activeAt: 10000, expiresAt: 30000 });
     tickPowerups(room);
-    assert.equal(room._powerups.size === 0, collected, `orb at (${x}, ${y})`);
+    assert.equal(room.powerups.size === 0, collected, `orb at (${x}, ${y})`);
   }
 });
 
@@ -62,19 +63,19 @@ for (const type of ['coin', 'gem']) {
     const { room, rewards, events } = fixture();
     let now = 10000;
     t.mock.method(Date, 'now', () => now);
-    room._deathDrops.set(1, { id: 1, type, value: 1, spawnX: 100, spawnY: 100,
+    room.deathDrops.set(1, { id: 1, type, value: 1, spawnX: 100, spawnY: 100,
       spawnedAt: 10000, expiresAt: 20000 });
     const collect = () => handleDeathDropPickup(room, 'player', { id: 1, x: 100, y: 100 });
     for (now of [10000, 10499]) {
       collect();
-      assert.equal(room._deathDrops.size, 1);
+      assert.equal(room.deathDrops.size, 1);
       assert.equal(events.length, 0);
       assert.deepEqual(rewards, {});
     }
     now = 10500;
     collect();
     collect();
-    assert.equal(room._deathDrops.size, 0);
+    assert.equal(room.deathDrops.size, 0);
     assert.equal(events.length, 1);
     assert.equal(rewards[type === 'coin' ? 'dropCoins' : 'dropGems'], 1);
   });
@@ -96,4 +97,27 @@ test('Bank Bust random gold stays visible but uncollectible for 500ms', () => {
   mode._collectRandomGold(10500);
   assert.equal(state.randomGold.pickups.length, 0);
   assert.equal(awarded, 5);
+});
+
+test('death drop proposals preserve world-zero coordinates and retry after a lost acknowledgement', () => {
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { PICKUP_DELAY_MS } = require('../src/shared/powerups');
+  let now = 1000;
+  const api = createClientModuleGraph({ globals: { Date: { now: () => now } } })
+    .load('src/client/game/powerups/deathDropPickupClient.js');
+  const sent = [];
+  const client = api.createDeathDropPickupClient({
+    socket: { emit: (event, payload) => sent.push(payload) },
+    getDead: () => false,
+    getLocalPlayer: () => ({ x: 1000, y: 1000, body: { center: { x: 0, y: 0 } } }),
+  });
+  const visual = { settled: true, settledX: 0, settledY: 0 };
+  client.propose(1, visual, PICKUP_DELAY_MS - 1);
+  assert.equal(sent.length, 0);
+  client.propose(1, visual, PICKUP_DELAY_MS);
+  client.propose(1, visual, PICKUP_DELAY_MS);
+  assert.deepEqual(Array.from(sent, p => [p.id, p.x, p.y]), [[1, 0, 0]]);
+  now += 1000;
+  client.propose(1, visual, PICKUP_DELAY_MS);
+  assert.equal(sent.length, 2);
 });

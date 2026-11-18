@@ -103,16 +103,11 @@ body.shop-is-open .sonner-wrap {
   position: fixed;
   inset: 0;
   z-index: 14000;
-  display: none;
   place-items: center;
   padding: 12px;
   color: #f5f7ff;
   font-family: "Lato", sans-serif;
   isolation: isolate;
-}
-
-.shop-overlay.is-open {
-  display: grid;
 }
 
 .shop-backdrop {
@@ -173,15 +168,6 @@ body.shop-is-open .sonner-wrap {
   grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
   transform-origin: center;
-}
-
-.shop-window::after {
-  content: "";
-  position: absolute;
-  z-index: 40;
-  inset: 7px;
-  border: 2px solid rgba(255, 255, 255, 0.055);
-  pointer-events: none;
 }
 
 .shop-header {

@@ -49,15 +49,21 @@ The Assets tab is a library of reusable platform artwork. **New platform artwork
 
 URLs must point under `/assets/`, corresponding to `public/assets/` in the repository. Dropping a PNG, WebP, or JPEG onto an artwork card (or choosing **Replace image**) stages a replacement, updates matching references across the document, and preserves platform size and collision placement. Animated image replacements retain their animation/frame configuration and are validated when saving or starting a playtest.
 
-**Save map** publishes uploaded artwork to its game asset path and updates the production `dist` copy if present. Uploaded images are also stored at immutable revision URLs so existing matches retain their artwork. A failed document save restores any overwritten artwork. Files must be at most 8 MB and 16384 pixels per dimension.
+**Save map** publishes uploaded artwork at immutable revision URLs in the environment’s map store. The source asset path stays available when exporting the document. Existing live matches retain their pinned artwork. Files must be at most 8 MB and 16384 pixels per dimension.
 
 **Import** and **Export** are in the ⋯ menu beside **Save map**. Export produces a portable JSON document. Image files are not embedded. If artwork was uploaded, an export dialog lists every game file that must be copied manually, including uploads that have already been saved. Keep the replacement image files alongside your export.
 
 ## Persistence and deployment
 
-Built-in documents live in `src/shared/maps/{id}.json`. The backend reads saved overrides from `data/maps/{id}.json`, or from `BB_MAP_DIR` if configured. Back up that directory and `public/assets` together and keep them writable/persistent on the server. Generated asset revisions, map history and match snapshots are runtime data excluded from Git. Saved overrides take precedence over built-in documents. Legacy duel overrides and imports are upgraded to shared Duels maps while retaining layout, art and arena profile; former 1v1 documents gain a second anchored spawn per team. Existing match snapshots stay pinned.
+Built-in documents live in `src/shared/maps/{id}.json`. The backend resolves the revision selected by `published/{id}.json` inside `data/maps` or `BB_MAP_DIR`. It can also read a legacy `{id}.json` override. On a clean installation without publications or overrides, it reads the shipped document.
 
-Each save validates the document and its image/frame files, checks the revision to reject stale writes, and atomically replaces the document. Previous document revisions are retained in `history/{id}/`. Browser drafts recover unsaved edits; a stale draft must be exported and merged with the latest document before saving.
+Before removing legacy overrides from a rollout, back up the map directory and `public/assets` together. Run `node scripts/maps/import-publications.cjs` on each existing environment while the overrides are present. The importer preserves each effective revision ID and leaves the legacy file available. A failed import leaves the prior map active and reports the map ID.
+
+Each save validates the document and its image/frame files, rejects stale revisions, writes the immutable document and artwork, then atomically updates the pointer. Published and former revisions use `history/{id}/`. The matching files under `pinned/{id}/` reference immutable artwork in `assets/revisions/`. Back up the full map store and keep it writable by the game server. Browser drafts recover the document and its undo and redo history even after switching maps or reloading. A stale draft keeps its local history and is subject to the usual save conflict. The importer also pins older team-size variants and checks each archived asset against its SHA-256 filename. Each publisher holds `locks/{id}.lock` while comparing the revision and replacing the pointer. If a publisher crashes, check the PID in the lock file on its host and clear that lock after confirming the process has stopped.
+
+Run `node scripts/art/render-map-full-previews.cjs [mapId ...]` to render from the effective map documents and publish new full-arena previews through the same repository. Set `BB_MAP_DIR` to select the target environment. The preview bytes are saved with their content hash, and the update observes the same stale-revision check as Map Studio.
+
+The November 17 local archive import recovered three Candy Land source images from Git commit `0596810a75`. Six older Iron Junction image names were missing from Git and the source asset directory. The restored `shape-climb-base-3`, `shape-climb-hill-3`, `shape-gantry-gate`, `shape-gantry-out`, `shape-lane-in` and `shape-lane-out` WebPs use archived artwork of matching dimensions that predates the corresponding save. Those old documents recorded filenames without checksums, so the original byte identity of those six images is uncertain. The imported copies now carry content hashes.
 
 New maps are discovered by the lobby catalog without adding JavaScript modules. Matches receive a fixed document/artwork snapshot when first loaded, so later saves apply to new matches. Production additionally persists match snapshots across server restarts.
 
@@ -70,13 +76,12 @@ The format is data-only JSON, validated by `src/shared/maps/mapDocument.js`. Sta
 
 ### Iron Junction is generated, not hand-edited
 
-Map 4 is written by `scripts/maps/build-iron-junction.cjs`, which emits both
-`src/shared/maps/4.json` and `data/maps/4.json`. Authoring it in code is what
+Map 4 is written by `scripts/maps/build-iron-junction.cjs`, which emits
+`src/shared/maps/4.json`. Authoring it in code is what
 keeps the two halves exact mirrors and keeps every surface's height honest: the
 generator places artwork by the surface you want to stand on and works the
 sprite offset out itself. Edit the script and re-run it rather than editing the
-JSON; a Map Studio save will win at runtime and silently diverge from the
-source.
+JSON. To install a new generated layout into an environment with an existing publication, import the generated document in Map Studio and save it there.
 
 #### Art drawn in code
 
@@ -139,7 +144,8 @@ A few animated pieces sit in the walls (`DECO_PLACES` in the build script): a
 clock, a coin chute, a furnace grate, a fuse box, a rat and a leaking
 valve. Each is different and used once, and most of each loop is still; keep it that
 way, because a wall of moving things reads as noise. They are four-frame strips
-painted by Codex's `image_gen` into `output/bank-bust-art/v5`, installed by
+painted by Codex's `image_gen` into the local, Git-ignored source directory
+`output/bank-bust-art/v5` and installed by
 `scripts/art/install-iron-junction-deco.cjs`, which lines the frames up and reduces
 them to a 2px grid. The build refuses a placement that is not inside solid ground,
 unless it is marked as hanging on the tunnel's back wall. About one brick in ten

@@ -1,0 +1,196 @@
+/* Join-request dialogs follow the shared window-and-inset visual hierarchy. */
+:is(
+  .party-request-banner,
+  .party-request-card,
+  .party-request-empty,
+  .party-request-summary-card,
+  .party-request-pill
+) {
+  border-radius: var(--bb-radius-card);
+}
+
+:is(.party-join-request-panel, .party-join-request-owner-panel) {
+  font-family: var(--bb-font-body);
+}
+
+:is(.party-join-request-panel, .party-join-request-owner-panel)
+  .trophy-overlay-head h2 {
+  line-height: 1.5;
+}
+
+.party-request-banner,
+.party-request-summary-card,
+.party-request-empty {
+  border-color: var(--bb-border-soft);
+  background: rgba(26, 49, 84, 0.58);
+  box-shadow: var(--bb-inset-shadow);
+}
+
+.party-request-banner,
+.party-request-summary-card {
+  border-width: 2px;
+}
+
+.party-request-banner[data-status="pending"] {
+  border-color: var(--bb-blue);
+  background: rgba(26, 49, 84, 0.72);
+}
+
+.party-request-banner[data-status="accepted"] {
+  border-color: var(--bb-green);
+  background: rgba(7, 136, 95, 0.2);
+}
+
+.party-request-banner[data-status="rejected"] {
+  border-color: var(--bb-red);
+  background: rgba(169, 40, 51, 0.2);
+}
+
+
+.party-request-pill {
+  border-color: var(--bb-border-soft);
+  color: var(--bb-text-soft);
+  background: var(--bb-surface-raised);
+}
+
+.party-request-submit {
+  background: var(--bb-primary-gradient);
+}
+
+.party-request-return,
+.party-request-button:not(.party-request-accept):not(.party-request-reject) {
+  background: linear-gradient(180deg, #29405f, #1d2e47);
+}
+
+.party-request-accept {
+  background: var(--bb-success-gradient);
+}
+
+.party-request-reject {
+  background: var(--bb-danger-gradient);
+}
+
+.party-request-summary-card span,
+.party-request-card-copy span,
+.party-request-empty {
+  color: var(--bb-text-soft);
+}
+
+.party-request-summary-card strong,
+.party-request-card-copy strong {
+  color: var(--bb-text);
+}
+
+:is(
+  .character-select-popup .popup-header,
+  .shop-header,
+  .profile-loadout-head
+) {
+  border-bottom: 2px solid rgba(255, 255, 255, 0.14);
+  background: var(--bb-header-gradient);
+}
+
+:is(
+  .party-join-request-panel,
+  .party-join-request-owner-panel,
+  .party-discovery-panel,
+  .party-settings-panel
+) .trophy-overlay-head {
+  margin: -16px -16px 16px;
+  padding: 12px 16px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.14);
+  background: var(--bb-header-gradient);
+}
+
+/* Party discovery and settings use the shared palette and control treatments. */
+.party-discovery-input,
+.party-public-name-input {
+  font-size: var(--bb-text-sm);
+  letter-spacing: 0;
+  font-family: var(--bb-font-display);
+}
+
+.party-discovery-refresh {
+  background: var(--bb-primary-gradient);
+  color: var(--bb-text);
+}
+
+.party-discovery-status,
+.party-settings-status {
+  color: var(--bb-text-soft);
+  font-size: var(--bb-text-md);
+}
+
+.party-discovery-status.has-count {
+  color: #d8e9ff;
+}
+
+
+.party-discovery-title {
+  font-size: var(--bb-text-lg);
+  color: var(--bb-text);
+  font-weight: 700;
+}
+
+
+.party-discovery-meta {
+  color: var(--bb-text-soft);
+  font-size: var(--bb-text-sm);
+}
+
+.party-discovery-meta-label {
+  color: var(--bb-text-muted);
+  font-size: var(--bb-text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-weight: 600;
+}
+
+.party-discovery-member img {
+  border-radius: var(--bb-radius-media);
+  background: var(--bb-bg-deep);
+}
+
+.party-discovery-member-name {
+  color: var(--bb-text-soft);
+  font-size: var(--bb-text-sm);
+  font-weight: 600;
+}
+
+.party-discovery-join {
+  color: var(--bb-text);
+  background: var(--bb-success-gradient);
+}
+
+.party-public-name-label {
+  font-weight: 600;
+  color: var(--bb-text);
+  font-size: var(--bb-text-md);
+}
+
+.party-settings-hint {
+  color: var(--bb-text-muted);
+  font-size: var(--bb-text-sm);
+}
+
+.party-settings-save {
+  color: var(--bb-text);
+  background: var(--bb-success-gradient);
+}
+
+:is(.party-discovery-status, .party-settings-status).is-error {
+  color: var(--bb-red);
+}
+
+:is(.party-discovery-panel, .party-settings-panel) {
+  font-family: var(--bb-font-body);
+}
+
+:is(.party-discovery-panel, .party-settings-panel) .trophy-overlay-head p {
+  color: var(--bb-text-soft);
+}
+
+
+:is(.party-discovery-panel, .party-settings-panel) .trophy-overlay-head h2 {
+  line-height: 1.5;
+}

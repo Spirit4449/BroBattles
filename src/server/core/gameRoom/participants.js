@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { participantId, getParticipant } = require("../../../shared/combat/runtime/participants");
 const { isGhost } = require("../../../shared/combat/targetable.js");
 function applyParticipantKnockback(room, player, impulse) {
@@ -12,8 +13,8 @@ function applyParticipantKnockback(room, player, impulse) {
   // The server moves bots, ghosts and silent humans (inputManager.stepIdleHumans);
   // a human client applies its own knockback.
   if (player.isBot || isGhost(player) || player._idleFallback) {
-    require('../bots/physics').applyImpulse(player, impulse, room._botNow || Date.now());
+    require('../physics/bodySolver').applyImpulse(player, impulse, room.botNow || Date.now());
   }
-  if (!player.isBot && player.socketId) room.io.to(player.socketId).emit('player:knockback', impulse);
+  if (!player.isBot && player.socketId) room.sendTo(player, SOCKET_EVENTS.PLAYER_KNOCKBACK, impulse);
 }
 module.exports = { participantId, getParticipant, applyParticipantKnockback };

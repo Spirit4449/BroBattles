@@ -1,3 +1,4 @@
+const { characterDefinitions } = require("../../../characters");
 const { combatNow } = require("../clock");
 const attackRuntimeManager = require("../attackRuntimeManager.js");
 const { broadcastAction, stampRelease } = require("../characterActionRegistry.js");
@@ -5,7 +6,7 @@ const {
   getResolvedCharacterSpecialConfig,
 } = require("../../../characters/characterTuning.js");
 
-const KEY = "gloop";
+const { key: KEY } = characterDefinitions.gloop;
 const HOOK = getResolvedCharacterSpecialConfig(KEY, "hook") || {};
 
 function toFinite(value, fallback) {

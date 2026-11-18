@@ -1,6 +1,15 @@
 # Art prompt provenance
 
-Historical source records consolidated on 2026-10-05. These quotations preserve generation prompts, source identifiers and extraction context, including superseded experiments. Words such as “current”, “final”, “now”, dimensions and test results describe the original record only. For installed behavior, use [the art guide](README.md) and current assets/catalogs. Absolute workstation paths and ignored output folders are provenance references, not required checkout files.
+Historical source records consolidated on 2026-10-05. These quotations preserve generation prompts, source identifiers and extraction context, including superseded experiments. Words such as “current”, “final”, “now”, dimensions and test results describe the original record only. For installed behavior, use [the art guide](README.md) and current assets/catalogs.
+
+Historical `output/` references identify Git-ignored working files such as
+manifests, prompts, and intermediate images. Absolute `/Users/nisch/` paths
+identify files on the original workstation. Reproducing an export that uses
+those files requires a copy from the original run or an external archive.
+
+The notes here record prompts, available source identifiers, and installation
+history. For third-party material, licensing and attribution depend on the source
+terms and any asset-specific records.
 
 ## body-art (historical)
 
@@ -464,8 +473,8 @@ was rejected; the approved main is retained unchanged as the art master.
 Both map backgrounds and Mangrove artwork remain unchanged.
 
 Built-in `image_gen` sources, exact variant prompts, logical pixel art and
-nearest-neighbor 4K PNG masters are retained under `output/lushy-pixel-final/`.
-`export-lushy-platform-set.cjs` verifies exact 4x pixel replication for variants.
+nearest-neighbor 4K PNG masters are retained locally under the Git-ignored `output/lushy-pixel-final/`.
+`scripts/art/export-lushy-platform-set.cjs` verifies exact 4x pixel replication for variants.
 Installed WebPs are portable masters if the ignored working output is absent.
 
 `node scripts/art/install-meadow-peaks-art.cjs` aligns grass surfaces to the

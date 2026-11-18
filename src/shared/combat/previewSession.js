@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../net/socketEvents.js");
 // In-process host for the same combat runtimes used by GameRoom. No sockets,
 // accounts, rewards, or timers: callers advance a clock and consume events.
 const characters = require('../characters');
@@ -41,18 +42,18 @@ class PreviewSession {
   constructor(roster, { onEvent = () => {}, random = Math.random, halfWidth = 260 } = {}) {
     this.matchId = 'preview'; this.status = 'active'; this.FIXED_DT_MS = FIXED_DT_MS;
     // Nonzero epoch also preserves duplicate-hit windows on the first frame.
-    this.now = 100000; this._simulationMono = 0; this._tickId = 0;
-    this.combatClock = { now: () => this.now, mono: () => this._simulationMono };
+    this.now = 100000; this.simulationMono = 0; this.tickId = 0;
+    this.combatClock = { now: () => this.now, mono: () => this.simulationMono };
     this.combatRandom = random; this.onEvent = onEvent;
     this.players = new Map(roster.map(entry => [entry.id, createPreviewPlayer(entry)]));
     this.geometry = { world: { x: -halfWidth, y: -600, width: halfWidth * 2, height: 850 },
       colliders: [{ left: -halfWidth, right: halfWidth, top: 0, bottom: 200, collision: { up: true } }] };
-    this._scheduledActions = []; this._activeAttacks = [];
-    this.io = { to: () => ({ emit: (type, payload) => this.emit(type, payload) }) };
+    this._scheduledActions = []; this.activeAttacks = [];
+    require('./runtime/hostContract').assertHost(this);
     characterCombat.initialize(this);
   }
   onCombatError(error) { throw error; }
-  emit(type, payload) { this.onEvent(type, payload); }
+  broadcast(type, payload) { this.onEvent(type, payload); }
   scheduleAction(callback, delayMs, now = this.now) { this._scheduledActions.push({ callback, at: now + delayMs }); }
   handlePlayerAction(id, action) {
     const player = this.players.get(id);
@@ -67,31 +68,32 @@ class PreviewSession {
   }
   requestSpecial(id, payload) { return requestSpecial(this, id, payload); }
   handleHit(id, payload, options) { return damage.handleHit(this, id, payload, options); }
-  _getAttackMaxDist(character, type) { return validation.getAttackMaxDist(character, type); }
-  _recordCombatStat(player, delta) {
+  getAttackMaxDist(character, type) { return validation.getAttackMaxDist(character, type); }
+  getHistoricalPosition(player, time) { return validation.getHistoricalPosition(player, time); }
+  recordCombatStat(player, delta) {
     if (!player) return;
     player.combatStats ||= {};
     for (const [key, value] of Object.entries(delta)) player.combatStats[key] = (player.combatStats[key] || 0) + value;
   }
-  _broadcastHealthUpdate(player, details) { this.emit('health-update', { username: player.name, health: player.health, ...details }); }
-  _maybeBroadcastHealth(player, now, details) { this._broadcastHealthUpdate(player, details); }
-  _handlePlayerDeath(player, details) {
+  broadcastHealthUpdate(player, details) { this.broadcast(SOCKET_EVENTS.HEALTH_UPDATE, { username: player.name, health: player.health, ...details }); }
+  maybeBroadcastHealth(player, now, details) { this.broadcastHealthUpdate(player, details); }
+  handlePlayerDeath(player, details) {
     if (!player.isAlive) return;
     player.isAlive = false; player.vx = player.vy = 0;
     player.activeEffects = {}; player.effects = {};
-    this.emit('player:death', { username: player.name, ...details });
+    this.broadcast('player:death', { username: player.name, ...details });
   }
-  _applyPowerupToPlayer(player, type, now, params) { applyPowerupToPlayer(this, player, type, now, params); }
+  applyPowerupToPlayer(player, type, now, params) { applyPowerupToPlayer(this, player, type, now, params); }
   applyKnockback(player, impulse) {
     player.vx = Number(impulse.amountX) || 0; player.vy = Number(impulse.amountY) || 0;
     player._previewImpulseUntil = this.now + 250; player.grounded = false;
-    this.emit('player:knockback', { username: player.name, ...impulse });
+    this.broadcast(SOCKET_EVENTS.PLAYER_KNOCKBACK, { username: player.name, ...impulse });
   }
   broadcastSnapshot() {}
-  _checkVictoryCondition() {}
+  checkVictoryCondition() {}
   step(beforeCombat = () => {}) {
     if (this.status !== 'active') return;
-    this.now += FIXED_DT_MS; this._simulationMono += FIXED_DT_MS; this._tickId++;
+    this.now += FIXED_DT_MS; this.simulationMono += FIXED_DT_MS; this.tickId++;
     const due = this._scheduledActions.filter(action => action.at <= this.now);
     this._scheduledActions = this._scheduledActions.filter(action => action.at > this.now);
     for (const action of due) action.callback();
@@ -105,7 +107,7 @@ class PreviewSession {
   bootstrap() { return characterCombat.bootstrap(this); }
   dispose() {
     this.status = 'disposed'; characterCombat.dispose(this);
-    this._scheduledActions.length = 0; this._activeAttacks.length = 0; this.onEvent = () => {};
+    this._scheduledActions.length = 0; this.activeAttacks.length = 0; this.onEvent = () => {};
   }
 }
-module.exports = { PreviewSession, createPreviewPlayer };
+module.exports = { PreviewSession };

@@ -10,7 +10,7 @@ const { Server } = require('socket.io');
 const { GameRoom } = require('../../src/server/core/gameRoom');
 const combat = require('../../src/shared/combat/runtime/sparrowCombat.js');
 const attacks = require('../../src/shared/combat/runtime/attackRuntimeManager.js');
-const { characterBody } = require('../../src/shared/physics/duelGeometry');
+const { characterBody } = require('../../src/shared/physics/characterBody');
 const { STEP_MS } = require('../../src/shared/characters/sparrowProjectile');
 const root = path.resolve(__dirname, '../..');
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'sparrow-lab-'));
@@ -33,7 +33,7 @@ function lab(rtt, jitter) {
     io:delayedIo,db:{runQuery:async()=>[]},
   });
   room.status='active';room._netTestEnabled=true;
-  room.botControllers.clear();room._checkVictoryCondition=()=>{};
+  room.botControllers.clear();room.checkVictoryCondition=()=>{};
   room.geometry={world:{x:0,y:0,width:900,height:500},colliders:[{id:'floor',left:0,right:900,top:420,bottom:500}]};
   const players=[...room.players.values()];
   players.forEach((p,i)=>{
@@ -42,7 +42,7 @@ function lab(rtt, jitter) {
       _bodyHalfWidth:body.halfWidth,_bodyHalfHeight:body.halfHeight,_bodyCenterOffsetX:body.offsetX,
       _bodyCenterOffsetY:body.offsetY,_lastWidth:body.displayWidth,_lastHeight:body.displayHeight});
   });
-  room._simulationMono=performance.now();
+  room.simulationMono=performance.now();
   const value={room,players,rtt,jitter,times:[],bytes:()=>bytes};labs.set(key,value);return value;
 }
 io.on('connection',socket=>{
@@ -65,12 +65,12 @@ const timer=setInterval(()=>{
   while(acc>=STEP_MS){
     acc-=STEP_MS;
     for(const [key,l] of labs){
-      const {room}=l;room._simulationMono+=STEP_MS;room._tickId++;
+      const {room}=l;room.simulationMono+=STEP_MS;room.tickId++;
       const start=performance.now();
       room.processTick();attacks.tickActiveAttacks(room);combat.tick(room);
       l.times.push(performance.now()-start);if(l.times.length>600)l.times.shift();
-      if(room._tickId%2===0)room.broadcastSnapshot();
-      if(room._tickId%120===0){
+      if(room.tickId%2===0)room.broadcastSnapshot();
+      if(room.tickId%120===0){
         const sorted=l.times.slice().sort((a,b)=>a-b);
         stats.rooms[key]={tickP95Ms:sorted[Math.floor(sorted.length*.95)],bytes:l.bytes(),samples:l.times.length};
       }

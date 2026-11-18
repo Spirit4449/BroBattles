@@ -14,7 +14,16 @@
 set -u
 
 GAME_APP="${BB_PM2_GAME_APP:-game}"
-PM2_HOME="${PM2_HOME:-/home/nisch/.pm2}"
+PM2_USER="${BB_PM2_USER:-$(stat -c %U -- "${BASH_SOURCE[0]}")}"
+PM2_UNIT="${BB_PM2_UNIT:-pm2-${PM2_USER}.service}"
+if [ -z "${PM2_HOME:-}" ]; then
+  if ! IFS=: read -r _ _ _ _ _ pm2_user_home _ < <(getent passwd "$PM2_USER") ||
+     [ -z "$pm2_user_home" ]; then
+    logger -t pi-cpu-reserve "cannot resolve home directory for pm2 user $PM2_USER"
+    exit 1
+  fi
+  PM2_HOME="$pm2_user_home/.pm2"
+fi
 OTHER_CPUS="${BB_OTHER_CPUS:-0-2}"
 OTHER_NICE="${BB_OTHER_NICE:-10}"
 LOW_WEIGHT=25
@@ -32,7 +41,7 @@ for unit in $LOW_UNITS; do
   set_unit "$unit" CPUWeight "$LOW_WEIGHT"
 done
 set_unit mariadb.service AllowedCPUs "$OTHER_CPUS"
-set_unit pm2-nisch.service CPUWeight "$GAME_WEIGHT"
+set_unit "$PM2_UNIT" CPUWeight "$GAME_WEIGHT"
 
 if command -v docker >/dev/null; then
   for id in $(docker ps -q); do
@@ -68,6 +77,6 @@ done
 # user.slice and so off the reserved core.
 for file in "$PM2_HOME"/pids/"$GAME_APP"-[0-9]*.pid; do
   pid="$(cat "$file" 2>/dev/null)" || continue
-  grep -q 'pm2-nisch.service' /proc/"$pid"/cgroup 2>/dev/null ||
-    logger -t pi-cpu-reserve "game pid $pid is not under pm2-nisch.service; restart pm2 with systemctl restart pm2-nisch"
+  grep -Fq -- "$PM2_UNIT" /proc/"$pid"/cgroup 2>/dev/null ||
+    logger -t pi-cpu-reserve "game pid $pid is not under $PM2_UNIT; restart pm2 with systemctl restart $PM2_UNIT"
 done

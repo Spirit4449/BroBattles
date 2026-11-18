@@ -1,3 +1,4 @@
+const { BROWSER_GLOBALS } = require('../../src/client/lib/globals.cjs');
 const { BannerPlugin } = require('webpack');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -11,7 +12,7 @@ class PageRuntimePlugin {
     const exclude = /bundles\/navigation(?:\.|$)/;
     // Lazy chunks can start with "use strict", which requires simple parameters.
     new BannerPlugin({ raw: true, test: /\.js$/, exclude, banner: `;(function(__scope){if(!__scope)return;(function(${bindings}){` }).apply(compiler);
-    new BannerPlugin({ raw: true, footer: true, test: /\.js$/, exclude, banner: `\n})(${scopeArguments});})(window.__BB_NAVIGATION__ ? window.__BB_NAVIGATION__.scriptScope() : window);` }).apply(compiler);
+    new BannerPlugin({ raw: true, footer: true, test: /\.js$/, exclude, banner: `\n})(${scopeArguments});})(window.${BROWSER_GLOBALS.navigation} ? window.${BROWSER_GLOBALS.navigation}.scriptScope() : window);` }).apply(compiler);
     compiler.hooks.thisCompilation.tap('BattlePreload', compilation => {
       compilation.hooks.processAssets.tap({ name: 'BattlePreload', stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL }, () => {
         const root = path.resolve(compiler.context, 'public/assets');

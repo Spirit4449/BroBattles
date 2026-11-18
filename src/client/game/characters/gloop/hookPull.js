@@ -1,3 +1,14 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
+
+const { key: NAME } = characterDefinitions.gloop;
+
+const HOOK = getResolvedCharacterSpecialConfig(NAME, "hook");
+
+export function resolveHookPullDuration(action) {
+  return Math.max(100, Number(action?.pullDurationMs) || HOOK.pullDurationMs);
+}
+
 // The server cancels a Draven inferno when the hook catches him; every client
 // drops the channel's hover, lock and overlay so the pull reads from the start.
 export function interruptHookedChannel(scene, targetName) {
@@ -25,15 +36,15 @@ export function pullLocalPlayerByHook(action, {
   const endY = Number(action?.end?.y);
   if (!Number.isFinite(endX) || !Number.isFinite(endY)) return false;
 
-  const pullDurationMs = Math.max(100, Number(action?.pullDurationMs) || 640);
+  const pullDurationMs = resolveHookPullDuration(action);
   try {
-    setExternalControlLockUntil?.(Date.now() + pullDurationMs + 120);
+    setExternalControlLockUntil?.(Date.now() + pullDurationMs + HOOK.pullLockPaddingMs);
   } catch (_) {}
 
   const startX = Number.isFinite(Number(localPlayer.x)) ? Number(localPlayer.x) : endX;
   const startY = Number.isFinite(Number(localPlayer.y)) ? Number(localPlayer.y) : endY;
   const sourceName = String(action?.sourceName || action?.playerName || "").trim() || null;
-  const stopDistance = Math.max(1, Number(action?.pulledStopDistance) || 54);
+  const stopDistance = Math.max(1, Number(action?.pulledStopDistance) || HOOK.pulledStopDistance);
 
   try {
     if (localPlayer._gloopHookPullTween?.isPlaying?.()) {

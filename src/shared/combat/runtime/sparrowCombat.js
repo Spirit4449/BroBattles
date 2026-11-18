@@ -1,3 +1,5 @@
+const { ATTACK_REPLAY_WINDOW_MS } = require("../matchConfig.js");
+const { SOCKET_EVENTS } = require("../../net/socketEvents.js");
 const { combatNow } = require("./clock");
 const { shotTerrain } = require('./attackRuntimes/geometry.js');
 const { exposeDamageHitbox } = require('./damageHitboxes.js');
@@ -13,13 +15,13 @@ function initialize(room) {
   // Protocol version protects joins from stale clients; combat is always authoritative.
   room.sparrowCombatVersion = model.VERSION;
   snapshotEpoch(room);
-  room._sparrow = { active: new Map(), pending: [], requests: new Map(), terminals: [], metrics: [] };
+  room.sparrowCombatState = { active: new Map(), pending: [], requests: new Map(), terminals: [], metrics: [] };
 }
 function timing(room) {
-  return { epoch: room._snapshotEpoch, sentMono: room.combatClock?.mono?.() ?? performance.now(), simMono: room._simulationMono ?? performance.now() };
+  return { epoch: room.snapshotEpoch, sentMono: room.combatClock?.mono?.() ?? performance.now(), simMono: room.simulationMono ?? performance.now() };
 }
 function emit(room, player, action) {
-  room.io.to(`game:${room.matchId}`).emit('game:action', {
+  room.broadcast(SOCKET_EVENTS.GAME_ACTION, {
     playerName: player.name, character: 'sparrow',
     action: { ...action, sparrowCombatVersion: model.VERSION, ownerEcho: true, ...timing(room) },
   });
@@ -31,7 +33,7 @@ function result(room, p, id, accepted, reason, extra = {}) {
   return action;
 }
 function request(room, p, data, special = false) {
-  const state = room._sparrow, now = combatNow(room);
+  const state = room.sparrowCombatState, now = combatNow(room);
   const { id, key } = requestIdentity(p, data);
   const previous = state.requests.get(key);
   if (previous) { emit(room, p, previous.action); return previous.action.accepted; }
@@ -42,9 +44,9 @@ function request(room, p, data, special = false) {
   const accepted = !reason;
   if (accepted) {
     spendShot(room, p, special, now);
-    if (special) room.io.to(`game:${room.matchId}`).emit('player:special', { username: p.name, character: 'sparrow', aim: data.aim });
+    if (special) room.broadcast(SOCKET_EVENTS.PLAYER_SPECIAL, { username: p.name, character: 'sparrow', aim: data.aim });
     const startup = model.attackConfig(special).castDelayMs || 0;
-    state.pending.push({ ownerId: participantId(p), id, shot, dueTick: room._tickId + Math.ceil(startup / model.STEP_MS),
+    state.pending.push({ ownerId: participantId(p), id, shot, dueTick: room.tickId + Math.ceil(startup / model.STEP_MS),
       viewRewindMs: clampDeliveryRewind('released', data?.viewRewindMs), viewRewindRequestedMs: Number(data?.viewRewindMs) || 0 });
     // Keep public windups available to existing animations and bot perception.
     require('./characterActionRegistry.js').broadcastAction(room, p, {
@@ -90,15 +92,15 @@ function finish(room, attack, contact) {
     terminal.appliedDamage = outcome?.appliedDamage || 0;
     terminal.accepted = outcome?.accepted === true;
   }
-  room._sparrow.active.delete(attack.projectile.id);
-  room._sparrow.terminals.push(terminal);
-  if (room._sparrow.terminals.length > 256) room._sparrow.terminals.shift();
+  room.sparrowCombatState.active.delete(attack.projectile.id);
+  room.sparrowCombatState.terminals.push(terminal);
+  if (room.sparrowCombatState.terminals.length > 256) room.sparrowCombatState.terminals.shift();
   if (owner) emit(room, owner, terminal);
 }
 // Resolved on first use (circular imports); kept out of the per-tick path.
 let botCombat = null;
 function tick(room) {
-  const started = performance.now(), state = room._sparrow;
+  const started = performance.now(), state = room.sparrowCombatState;
   for (const p of room.players.values()) {
     // BotController already advances bot ammunition each fixed step.
     if (!p.isBot && p.char_class === 'sparrow' && p.isAlive) (botCombat ||= require('../combat.js')).advanceAmmo(p, model.STEP_MS);
@@ -106,13 +108,13 @@ function tick(room) {
   const pending = state.pending;
   state.pending = [];
   for (const cast of pending) {
-    if (cast.dueTick > room._tickId) { state.pending.push(cast); continue; }
+    if (cast.dueTick > room.tickId) { state.pending.push(cast); continue; }
     const owner = getParticipant(room, cast.ownerId);
     if (!owner) continue;
     if (!owner.isAlive || owner.connected === false || !owner.loaded || room.status !== 'active') {
       result(room, owner, cast.id, false, 'cancelled'); continue;
     }
-    const projectiles = model.createVolley(pose(owner), cast.shot, `${owner.name}:${cast.id}`, room._simulationMono);
+    const projectiles = model.createVolley(pose(owner), cast.shot, `${owner.name}:${cast.id}`, room.simulationMono);
     for (const projectile of projectiles) state.active.set(projectile.id, {
       projectile, clientRequestId: cast.id, attackerName: owner.name, attackerParticipantId: cast.ownerId,
       attackType: cast.shot.special ? 'sparrow-burning-arrow' : 'sparrow-arrow',
@@ -126,11 +128,11 @@ function tick(room) {
     if (!owner || owner.connected === false || room.status !== 'active') {
       finish(room, attack, { reason: 'cancelled', x: attack.x, y: attack.y }); continue;
     }
-    const nextAge = Math.min(attack.projectile.maxLifetimeMs, Math.max(0, room._simulationMono - attack.projectile.launchMono));
+    const nextAge = Math.min(attack.projectile.maxLifetimeMs, Math.max(0, room.simulationMono - attack.projectile.launchMono));
     const next = model.sample(attack.projectile, nextAge);
     exposeDamageHitbox(room, attack.projectile, { kind: 'sweep', a: { x: attack.x, y: attack.y }, b: { x: next.x, y: next.y }, radius: attack.collisionRadius });
     const targets = targetList(room, owner, attack.viewRewindMs);
-    if (room._netTrace) traceShotGaps(room, { pid: attack.projectile.id, attacker: owner, a: { x: attack.x, y: attack.y }, b: next,
+    if (room.netTrace) traceShotGaps(room, { pid: attack.projectile.id, attacker: owner, a: { x: attack.x, y: attack.y }, b: next,
       radius: attack.collisionRadius, age: nextAge, rewindMs: attack.viewRewindMs, targets });
     const contact = model.firstContact(attack, next, attack.collisionRadius, shotTerrain(room, owner.team), targets);
     Object.assign(attack, next, { age: nextAge });
@@ -140,21 +142,21 @@ function tick(room) {
     }
   }
   const wall = combatNow(room);
-  for (const [key, entry] of state.requests) if (wall - entry.at > 12000) state.requests.delete(key);
+  for (const [key, entry] of state.requests) if (wall - entry.at > ATTACK_REPLAY_WINDOW_MS) state.requests.delete(key);
   state.metrics.push(performance.now() - started);
   if (state.metrics.length > 240) state.metrics.shift();
 }
 function bootstrap(room) {
   return { sparrowCombatVersion: room.sparrowCombatVersion, ...timing(room),
     collisionGeometry: { colliders: room.geometry.colliders, world: room.geometry.world },
-    projectiles: [...room._sparrow.active.values()].map(packetFor), terminals: room._sparrow.terminals.slice() };
+    projectiles: [...room.sparrowCombatState.active.values()].map(packetFor), terminals: room.sparrowCombatState.terminals.slice() };
 }
 function isTrustedContact(room, attack, payload) {
-  return attack && room._sparrow.active.get(attack.projectile.id) === attack &&
+  return attack && room.sparrowCombatState.active.get(attack.projectile.id) === attack &&
     payload.instanceId === attack.projectile.id && payload.attacker === attack.attackerName && payload.attackType === attack.attackType;
 }
 function dispose(room) {
-  const state = room._sparrow;
+  const state = room.sparrowCombatState;
   if (!state) return;
   state.active.clear();
   state.pending.length = 0;

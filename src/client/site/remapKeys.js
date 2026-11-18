@@ -1,3 +1,4 @@
+import { BROWSER_EVENTS } from "../lib/browserEvents.js";
 import { KEY_SLOTS, assignBinding, eventKeyCode } from './keyBindings.mjs';
 import { renderKeyLabel } from './controlsGuide.mjs';
 import { getSettings, saveSettings, subscribeSettings } from './preferences';
@@ -20,7 +21,7 @@ export function remapKeys(dialog) {
   details.addEventListener('toggle',()=>{if(!details.open)cancel();});
   document.addEventListener('keydown',capture,true);document.addEventListener('keyup',capture,true);
   const off=subscribeSettings(cancel);update();
-  dialog.addEventListener('settingsreset',()=>{
+  dialog.addEventListener(BROWSER_EVENTS.SETTINGS_RESET,()=>{
     active=null;delete dialog.dataset.remapping;
     for(const button of buttons.values()){
       button.classList.remove('is-in-use');button.classList.add('is-resetting-key');button.textContent='RESET!';

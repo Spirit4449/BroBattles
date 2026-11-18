@@ -1,23 +1,19 @@
+import { createRemoteMovementFx } from "./remoteMovementFx";
+import { standingBodyHeight, applyBodyFlipOffset, hudTopY } from "./playerBodyGeometry";
+import { getHealth, resolveCharacterKey } from "../../../shared/characters/characterStats.js";
 import { spawnRespawnEffect } from '../scene/respawnEffect';
-import { presentRemoteDash } from '../scene/dash';
-import { presentRemoteKnockback } from '../scene/knockbackTrail';
-import { spritePresentation } from '../characters/shared/spritePresentation';
+import { spritePresentation, sizePlayerBody } from '../characters/shared/spritePresentation';
 import { bindPlayerOrigin, playerAnchor } from '../characters/shared/rig';
-import { applyTeamVisual, ENEMY_BODY_OVERLAY_ALPHA, TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
-import { bindCanvasName } from "../../site/preferences";
+import { applyTeamVisual, ENEMY_BODY_OVERLAY_ALPHA, isAllyTeam, TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
+import { createPlayerWorldHud } from "../scene/playerWorldHud";
 import { attachTeamFootRing } from "./teamFootRing";
-// opplayer.js
-
 import {
   getTextureKey,
   resolveAnimKey,
-  getStats,
   getEffectsClass,
 } from "../characters";
 import { performSpecial } from "../characters/special";
 import { clearAction } from "../characters/shared/animationState";
-import { player } from "./localPlayer";
-import socket from "../../lib/socket";
 import {
   drawSuperChargeBar,
   resetSuperBarAnimation,
@@ -27,29 +23,12 @@ import {
   resetHealthBarAnimation,
 } from "../scene/healthBarRenderer";
 import {
-  destroyStatusIconStack,
   setStatusIconStackVisible,
-  syncStatusIconStack,
 } from "../scene/statusIconStack";
-import {
-  MOVEMENT_VFX_CONFIG,
-  spawnDeathBurst,
-  spawnDirectionChangeBurst,
-  spawnFastFallTrail,
-  spawnHealthMarker,
-  spawnJumpTakeoff,
-  spawnLandingImpact,
-  spawnRunDust,
-  spawnSpawnBurst,
-  spawnChromaReveal,
-  spawnWallKickCloud,
-  spawnWallSlideBurst,
-  spawnWallSlideTrail,
-} from "../scene/effects";
+import { spawnDeathBurst, spawnHealthMarker, spawnSpawnBurst, spawnChromaReveal } from "../scene/effects";
 import { RENDER_LAYERS } from "../scene/renderLayers";
 import { playDuckTransitionSound } from "../audio/movementAudio.js";
 import { playPlayerSound } from "../audio/playerAudio.js";
-import { createRemoteMovementAudio } from "../audio/remoteMovementAudio";
 import { DUCK_HEIGHT_RATIO } from "../../../shared/physics/ducking.js";
 import { INVISIBLE_ALPHA, invisibleAttackAlpha } from "../powerups/invisibilityReveal.js";
 
@@ -58,33 +37,18 @@ const OP_PLAYER_NAME_OFFSET_Y = 42;
 const LOADING_GHOST_ALPHA = 0.6;
 
 export default class RemotePlayer {
-  constructor(
-    scene,
-    character,
-    skinId,
-    username,
-    team,
-    spawnPlatform,
-    spawn,
-    playersInTeam,
-    map,
-  ) {
+  constructor({ scene, character, skinId, username, team, getPlayerEffects, maxHealth = getHealth(resolveCharacterKey(character), 1) }) {
     this.scene = scene;
+    this.getPlayerEffects = getPlayerEffects;
     this.character = character;
     this.skinId = String(skinId || "").trim();
     this.username = username;
     this.team = team;
-    this.spawnPlatform = spawnPlatform;
-    this.spawn = spawn;
-    this.map = map;
-    this.mapObjects;
-    this.playersInTeam = playersInTeam;
-    this.opMaxHealth = 1000;
-    this.opCurrentHealth = 1000;
+    this.opMaxHealth = maxHealth;
+    this.opCurrentHealth = maxHealth;
     this.opSuperCharge = 0;
     this.opMaxSuperCharge = 100;
     this.opHealthBarWidth = 52;
-    this.movementTween = null; // Store reference to current movement tween
     this.effects = null; // per-opponent effects (e.g., Draven fire)
     this.presenceConnected = true;
     this.presenceLoaded = false;
@@ -96,10 +60,7 @@ export default class RemotePlayer {
     this._deathPresentationActive = false;
     this._corpseRemoved = false;
     this._corpseRemovalTimer = null;
-    this._movementVfxState = null;
-    this._runDustVfxAt = 0;
-    this._fastFallVfxAt = 0;
-    this._lastMovementFxSeq = null;
+    this.movementFx = createRemoteMovementFx();
     this._hudAnchorX = null;
     this._hudAnchorY = null;
     this.createOpPlayer();
@@ -112,7 +73,7 @@ export default class RemotePlayer {
     this.opponent._bbCharacter = String(this.character || "").toLowerCase();
     this.opponent._bbSkinId = this.skinId;
     this.opponent._bbSkinTextureKey = textureKey;
-    this.opponent._bbTeamColor = ["teammate", "ally", true].includes(this.team) ? TEAM_GREEN : TEAM_RED;
+    this.opponent._bbTeamColor = isAllyTeam(this.team) ? TEAM_GREEN : TEAM_RED;
     // Enemies carry a slight red body filter: a frame recolor in Canvas, an
     // overlay sprite in WebGL.
     const isEnemy = this.opponent._bbTeamColor === TEAM_RED;
@@ -121,14 +82,8 @@ export default class RemotePlayer {
     this.opponent.username = this.username; // Attach username for collision detection
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
     this.opponent.setVisible(false);
-    const stats = getStats(this.character);
     const presentation = spritePresentation(this.character, this.opponent.texture);
     this.bodyConfig = presentation.body;
-    // Apply per-character max health for correct bar scaling
-    if (stats && typeof stats.maxHealth === "number") {
-      this.opMaxHealth = stats.maxHealth;
-      this.opCurrentHealth = this.opMaxHealth;
-    }
     this.opponent.setScale(presentation.scale);
     this.opponent.setOrigin(presentation.originX, presentation.originY);
     bindPlayerOrigin(this.opponent, presentation);
@@ -142,14 +97,7 @@ export default class RemotePlayer {
 
     // Configure frame/body BEFORE computing spawn for correct initial grounding
     this.opFrame = this.opponent.frame;
-    const bs = this.bodyConfig;
-    const widthShrink = bs.widthShrink;
-    const heightShrink = bs.heightShrink;
-    this.opponent.body.setSize(
-      this.opFrame.realWidth - widthShrink,
-      this.opFrame.realHeight - heightShrink,
-    );
-    this.opponent.body.updateFromGameObject?.();
+    sizePlayerBody(this.opponent, this.opFrame, this.bodyConfig);
     this.applyFlipOffset();
 
     // Set depth so opponent renders above all map objects (bank bust graphics are at depths 7-24)
@@ -171,22 +119,14 @@ export default class RemotePlayer {
 
     // Sets the text of the name to username
     const bodyTop = this.hudTopY();
-    this.opPlayerName = this.scene.add.text(
-      this.opponent.x,
-      bodyTop - OP_PLAYER_NAME_OFFSET_Y,
-      this.username,
-    );
-    bindCanvasName(this.opPlayerName, this.username);
-    this.opPlayerName.setStyle({
-      fontFamily: "'Press Start 2P', monospace",
-      fontSize: "7px",
-      fill: "#ffffff",
-      stroke: "#000000",
-      strokeThickness: 3,
+    this._worldHud = createPlayerWorldHud(this.scene, {
+      username: this.username, getPlayerEffects: this.getPlayerEffects, x: this.opponent.x, y: bodyTop - OP_PLAYER_NAME_OFFSET_Y, nameDepth: 50,
     });
-    this.opPlayerName.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 0, true, true);
-    this.opPlayerName.setOrigin(0.5, 0);
-    this.opPlayerName.setDepth(50); // always above map objective props
+    ({
+      playerName: this.opPlayerName, healthText: this.opHealthText, healthBar: this.opHealthBar,
+      duckShieldGlow: this.opDuckShieldGlow, duckShieldIcon: this.opDuckShieldIcon,
+      superBar: this.opSuperBar, superBarBack: this.opSuperBarBack, statusIcons: this._powerupStatusIcons,
+    } = this._worldHud);
 
     this.spectateIcon = this.scene.add.image(0, 0, "spectate-icon");
     this.spectateIcon
@@ -196,108 +136,52 @@ export default class RemotePlayer {
       .setVisible(false);
     this._isSpectated = false;
 
-    this.opHealthText = this.scene.add.text(0, 0, "", {
-      fontFamily: "'Press Start 2P', monospace",
-      fontSize: "8px",
-      color: "#FFFFFF",
-      stroke: "#000000",
-      strokeThickness: 4,
-    });
-
-    this.opHealthBar = this.scene.add.graphics();
-    this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-    this.opDuckShieldGlow = this.scene.add.image(0, 0, "pu-icon-shield-webp");
-    this.opDuckShieldGlow
-      .setDisplaySize(20, 23)
-      .setTint(0xff8d32)
-      .setAlpha(0.4)
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setDepth(RENDER_LAYERS.PLAYER_HUD + 1.5)
-      .setVisible(false);
-    this.opDuckShieldIcon = this.scene.add.image(0, 0, "pu-icon-shield-webp");
-    this.opDuckShieldIcon
-      .setDisplaySize(13, 15)
-      .setDepth(RENDER_LAYERS.PLAYER_HUD + 3)
-      .setVisible(false);
-    this._duckShieldGlowTween = this.scene.tweens.add({
-      targets: this.opDuckShieldGlow,
-      displayWidth: { from: 18, to: 22 },
-      displayHeight: { from: 21, to: 26 },
-      duration: 520,
-      ease: "Sine.InOut",
-      yoyo: true,
-      repeat: -1,
-    });
-    this.opSuperBarBack = this.scene.add.graphics();
-    this.opSuperBar = this.scene.add.graphics();
-
     // Initially updates health bar and name positioning
     this.updateHealthBar();
     this.updateUIPosition();
     this.setPresenceState(this.presenceConnected, this.presenceLoaded);
 
-    // Listen for health updates for this opponent
-    this.healthUpdateListener = (data) => {
-      // data: { username, health, gameId }
-      if (data.username === this.username) {
-        const prevHealth = this.opCurrentHealth;
-        if (typeof data.maxHealth === "number" && data.maxHealth > 0) {
-          this.opMaxHealth = data.maxHealth;
-          if (this.opCurrentHealth > this.opMaxHealth)
-            this.opCurrentHealth = this.opMaxHealth;
-        }
-        this.opCurrentHealth = data.health;
-        const delta = this.opCurrentHealth - prevHealth;
-        if (
-          delta !== 0 &&
-          this.scene &&
-          this.opponent &&
-          this.opponent.active
-        ) {
-          const bodyTop = this.opponent.body
-            ? this.opponent.body.y
-            : this.opponent.y - this.opponent.height / 2;
-          spawnHealthMarker(this.scene, this.opponent.x, bodyTop - 18, delta, {
-            depth: 11,
-            team: this.team,
-          });
-        }
-        if (this.opCurrentHealth <= 0) {
-          this.opCurrentHealth = 0;
-          this.updateHealthBar(true);
-        } else {
-          this.updateHealthBar();
-        }
-      }
-    };
-    socket.on("health-update", this.healthUpdateListener);
+  }
 
-    // Listen for super updates
-    this.superUpdateListener = (data) => {
-      if (data.username === this.username) {
-        this.opSuperCharge = data.charge;
-        this.opMaxSuperCharge = data.maxCharge;
-        this.updateHealthBar();
-      }
-    };
-    socket.on("super-update", this.superUpdateListener);
+  applyHealthUpdate(data) {
+    const prevHealth = this.opCurrentHealth;
+    if (typeof data.maxHealth === "number" && data.maxHealth > 0) {
+      this.opMaxHealth = data.maxHealth;
+      if (this.opCurrentHealth > this.opMaxHealth)
+        this.opCurrentHealth = this.opMaxHealth;
+    }
+    this.opCurrentHealth = data.health;
+    const delta = this.opCurrentHealth - prevHealth;
+    if (
+      delta !== 0 &&
+      this.scene &&
+      this.opponent &&
+      this.opponent.active
+    ) {
+      const bodyTop = this.opponent.body
+        ? this.opponent.body.y
+        : this.opponent.y - this.opponent.height / 2;
+      spawnHealthMarker(this.scene, this.opponent.x, bodyTop - 18, delta, {
+        depth: 11,
+        team: this.team,
+      });
+    }
+    if (this.opCurrentHealth <= 0) {
+      this.opCurrentHealth = 0;
+      this.updateHealthBar(true);
+    } else {
+      this.updateHealthBar();
+    }
+  }
 
-    this.specialListener = (data) => {
-      if (data.username === this.username) {
-        performSpecial(
-          data.character,
-          this.scene,
-          this.opponent,
-          this.playersInTeam,
-          [player], // Target local player
-          this.username,
-          null,
-          false, // isOwner
-          data.aim || null,
-        );
-      }
-    };
-    socket.on("player:special", this.specialListener);
+  applySuperUpdate(data) {
+    this.opSuperCharge = data.charge;
+    this.opMaxSuperCharge = data.maxCharge;
+    this.updateHealthBar();
+  }
+
+  presentSpecial(data) {
+    performSpecial(data.character, { scene: this.scene, player: this.opponent, aim: data.aim || null });
   }
 
   // WebGL path for the enemy red filter. A tint multiplies, so it
@@ -332,282 +216,14 @@ export default class RemotePlayer {
 
   _onSceneUpdate() {
     if (this.effects && this.opponent && !this._powerupInvisible) {
-      // Determine simple moving state: horizontal velocity or recent tweening
-      const moving =
-        (this.opponent.body && Math.abs(this.opponent.body.velocity.x) > 5) ||
-        !!this.movementTween;
+      const moving = !!this.opponent.body && Math.abs(this.opponent.body.velocity.x) > 5;
       const isDead = this.opCurrentHealth <= 0;
       this.effects.update(this.scene.game.loop.delta, moving, isDead);
     }
   }
 
   updateMovementVfx(movementState, animationState = movementState) {
-    if (this.opponent?.active && this.opCurrentHealth > 0 &&
-        this.presenceLoaded && this.presenceConnected && this._spawnPresented) {
-      this._movementAudio ||= createRemoteMovementAudio(this.scene, this.opponent);
-      this._movementAudio.update(movementState, animationState);
-    } else {
-      this._movementAudio?.reset();
-    }
-    presentRemoteDash(this.scene, this.opponent, movementState, this,
-      this.opCurrentHealth <= 0);
-    presentRemoteKnockback(this.scene, this.opponent, movementState, this,
-      this.opCurrentHealth <= 0 || this._powerupInvisible ||
-      !this.presenceLoaded || !this.presenceConnected || !this._spawnPresented);
-    if (
-      !this.scene?.add ||
-      !this.opponent?.active ||
-      !movementState ||
-      this._powerupInvisible
-    ) {
-      return;
-    }
-    const grounded = !!movementState.grounded;
-    const velocityY = Number(movementState.vy) || 0;
-    const velocityX = Number(movementState.vx) || 0;
-    const animation = String(animationState?.animation || "").toLowerCase();
-    const reportedWallSide =
-      movementState.wallSide === "left" || movementState.wallSide === "right"
-        ? movementState.wallSide
-        : movementState.flip
-          ? "left"
-          : "right";
-    const wallSliding =
-      !grounded &&
-      (typeof movementState.wallSliding === "boolean"
-        ? movementState.wallSliding
-        : animation.includes("wallslid"));
-    const body = this.opponent.body;
-    const centerX = Number(body?.center?.x) || this.opponent.x;
-    const bottom =
-      Number(body?.bottom) ||
-      this.opponent.y +
-        (this.opponent.displayHeight || this.opponent.height) * 0.5;
-    const bodyWidth = Number(body?.width) || this.opponent.displayWidth;
-    const previous = this._movementVfxState;
-    const airbornePeakBottomY = grounded
-      ? null
-      : Math.min(
-          Number.isFinite(previous?.airbornePeakBottomY)
-            ? previous.airbornePeakBottomY
-            : bottom,
-          bottom,
-        );
-    let handledNetworkFx = null;
-    const movementFxSeq = Number(movementState.movementFxSeq);
-    if (Number.isFinite(movementFxSeq)) {
-      if (this._lastMovementFxSeq === null) {
-        this._lastMovementFxSeq = movementFxSeq;
-      } else if (movementFxSeq > this._lastMovementFxSeq) {
-        this._lastMovementFxSeq = movementFxSeq;
-        handledNetworkFx = String(movementState.movementFxType || "");
-
-        if (handledNetworkFx === "jump") {
-          spawnJumpTakeoff(this.scene, centerX, bottom - 2, {
-            bodyWidth,
-            velocityX,
-          });
-        } else if (handledNetworkFx === "land") {
-          spawnLandingImpact(this.scene, centerX, bottom - 2, {
-            bodyWidth,
-            impactVelocity: Number(movementState.movementFxImpactVelocity) || 0,
-            fallDistance: Number(movementState.movementFxFallDistance) || 0,
-            cameraShake: false,
-          });
-        } else if (handledNetworkFx === "turn") {
-          spawnDirectionChangeBurst(this.scene, centerX, bottom - 2, {
-            previousDirection:
-              Number(movementState.movementFxDirection) ||
-              -Math.sign(velocityX),
-            speedRatio: Phaser.Math.Clamp(
-              Math.abs(velocityX) / MOVEMENT_VFX_CONFIG.runSpeedReference,
-              0,
-              1,
-            ),
-          });
-        } else if (handledNetworkFx === "wall-jump") {
-          const eventWallSide =
-            movementState.movementFxWallSide === "left" ||
-            movementState.movementFxWallSide === "right"
-              ? movementState.movementFxWallSide
-              : reportedWallSide;
-          const contactX = body
-            ? body.x + (eventWallSide === "left" ? 0 : body.width)
-            : centerX +
-              (eventWallSide === "left" ? -bodyWidth * 0.5 : bodyWidth * 0.5);
-          const contactY = body
-            ? body.y + body.height * 0.62
-            : this.opponent.y + 12;
-          spawnWallKickCloud(
-            this.scene,
-            contactX,
-            contactY,
-            Number(movementState.movementFxDirection) < 0 ? -1 : 1,
-            { follow: this.opponent },
-          );
-        }
-      } else if (movementFxSeq < this._lastMovementFxSeq) {
-        // A respawned/reconnected sender starts a fresh event sequence.
-        this._lastMovementFxSeq = movementFxSeq;
-      }
-    }
-
-    if (previous) {
-      if (
-        handledNetworkFx !== "jump" &&
-        previous.grounded &&
-        !grounded &&
-        velocityY < -40
-      ) {
-        spawnJumpTakeoff(this.scene, centerX, bottom - 2, {
-          bodyWidth,
-          velocityX,
-        });
-      } else if (
-        handledNetworkFx !== "land" &&
-        !previous.grounded &&
-        grounded
-      ) {
-        spawnLandingImpact(this.scene, centerX, bottom - 2, {
-          bodyWidth,
-          impactVelocity: Math.max(previous.airborneVelocityY, velocityY),
-          fallDistance: Math.max(
-            0,
-            bottom -
-              (Number.isFinite(previous.airbornePeakBottomY)
-                ? previous.airbornePeakBottomY
-                : bottom),
-          ),
-          cameraShake: false,
-        });
-      }
-    }
-
-    if (
-      previous?.wallSliding &&
-      !wallSliding &&
-      !grounded &&
-      handledNetworkFx !== "wall-jump" &&
-      Math.abs(velocityX) > 220
-    ) {
-      const previousWallSide = previous.wallSide || "left";
-      const contactX = body
-        ? body.x + (previousWallSide === "left" ? 0 : body.width)
-        : centerX +
-          (previousWallSide === "left" ? -bodyWidth * 0.5 : bodyWidth * 0.5);
-      const contactY = body
-        ? body.y + body.height * 0.62
-        : this.opponent.y + 12;
-      spawnWallKickCloud(
-        this.scene,
-        contactX,
-        contactY,
-        velocityX < 0 ? -1 : 1,
-        { follow: this.opponent },
-      );
-    }
-
-    const runSpeedRatio = Phaser.Math.Clamp(
-      Math.abs(velocityX) / MOVEMENT_VFX_CONFIG.runSpeedReference,
-      0,
-      1,
-    );
-    const runDirection = Math.sign(velocityX);
-    const now = performance.now();
-    if (grounded && runDirection !== 0 && Math.abs(velocityX) > 35) {
-      if (
-        previous?.grounded &&
-        previous.runDirection &&
-        runDirection !== previous.runDirection &&
-        handledNetworkFx !== "turn" &&
-        Math.abs(velocityX) >= MOVEMENT_VFX_CONFIG.directionChangeMinSpeed
-      ) {
-        spawnDirectionChangeBurst(this.scene, centerX, bottom - 2, {
-          previousDirection: previous.runDirection,
-          speedRatio: runSpeedRatio,
-        });
-      }
-      const runInterval = Phaser.Math.Linear(
-        MOVEMENT_VFX_CONFIG.runDustMaxIntervalMs,
-        MOVEMENT_VFX_CONFIG.runDustMinIntervalMs,
-        runSpeedRatio,
-      );
-      if (!this._runDustVfxAt || now - this._runDustVfxAt >= runInterval) {
-        this._runDustVfxAt = now;
-        spawnRunDust(this.scene, centerX - runDirection * 10, bottom - 2, {
-          direction: runDirection,
-          intensity: runSpeedRatio,
-        });
-      }
-    } else {
-      this._runDustVfxAt = 0;
-    }
-
-    if (
-      !grounded &&
-      !wallSliding &&
-      velocityY >= MOVEMENT_VFX_CONFIG.fastFallStartVelocity
-    ) {
-      const fastFallRatio = Phaser.Math.Clamp(
-        (velocityY - MOVEMENT_VFX_CONFIG.fastFallStartVelocity) /
-          (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity -
-            MOVEMENT_VFX_CONFIG.fastFallStartVelocity),
-        0,
-        1,
-      );
-      const fastFallInterval = Phaser.Math.Linear(
-        MOVEMENT_VFX_CONFIG.fastFallTrailMaxIntervalMs,
-        MOVEMENT_VFX_CONFIG.fastFallTrailMinIntervalMs,
-        fastFallRatio,
-      );
-      if (
-        !this._fastFallVfxAt ||
-        now - this._fastFallVfxAt >= fastFallInterval
-      ) {
-        this._fastFallVfxAt = now;
-        spawnFastFallTrail(this.scene, this.opponent, { velocityY });
-      }
-    } else {
-      this._fastFallVfxAt = 0;
-    }
-
-    if (wallSliding) {
-      const side = reportedWallSide;
-      const contactX = body
-        ? body.x + (side === "left" ? 0 : body.width)
-        : centerX + (side === "left" ? -bodyWidth * 0.5 : bodyWidth * 0.5);
-      const contactY = body
-        ? body.y + body.height * 0.68
-        : this.opponent.y + 12;
-      const slideRatio = Phaser.Math.Clamp(
-        velocityY / MOVEMENT_VFX_CONFIG.wallSlideSpeedReference,
-        0,
-        1,
-      );
-      if (!previous?.wallSliding) {
-        spawnWallSlideBurst(this.scene, contactX, contactY, side);
-      }
-      spawnWallSlideTrail(this.scene, contactX, contactY, side, {
-        speedRatio: slideRatio,
-        velocityY,
-        owner: this,
-      });
-    }
-
-    this._movementVfxState = {
-      grounded,
-      wallSliding,
-      airborneVelocityY: grounded
-        ? 0
-        : Math.max(Number(previous?.airborneVelocityY) || 0, velocityY),
-      airbornePeakBottomY,
-      runDirection:
-        grounded &&
-        Math.abs(velocityX) < MOVEMENT_VFX_CONFIG.directionChangeMinSpeed
-          ? previous?.runDirection || runDirection
-          : runDirection,
-      wallSide: wallSliding ? reportedWallSide : previous?.wallSide || null,
-    };
+    this.movementFx.update(this, movementState, animationState);
   }
 
   setDucking(ducking) {
@@ -626,7 +242,7 @@ export default class RemotePlayer {
 
   // Collider height while standing, in body source units.
   standingBodyHeight() {
-    return (this.opFrame?.realHeight ?? this.opponent.height) - (this.bodyConfig?.heightShrink || 0);
+    return standingBodyHeight(this.opponent, this.opFrame, this.bodyConfig);
   }
 
   // Crouching shrinks the collider to DUCK_HEIGHT_RATIO with the feet kept in
@@ -651,25 +267,11 @@ export default class RemotePlayer {
   // Top of the world HUD (name, bars). Ducking only nudges it down slightly
   // instead of following the shrunken collider, like the local player's HUD.
   hudTopY() {
-    const sprite = this.opponent;
-    if (Number.isFinite(sprite._bbHudTopOffset)) return sprite.y + sprite._bbHudTopOffset;
-    if (!sprite.body) return sprite.y - sprite.height / 2;
-    if (!sprite._ducking || !this.opFrame) return sprite.body.y;
-    return sprite.body.bottom - this.standingBodyHeight() * Math.abs(sprite.scaleY || 1) + 8;
+    return hudTopY(this.opponent, this.opFrame, this.bodyConfig);
   }
 
-  // Adjust body offset depending on facing; uses optional flipOffset from body config
   applyFlipOffset() {
-    if (!this.opponent || !this.opponent.body) return;
-    const bs = this.bodyConfig || {};
-    const flipOffset = bs.flipOffset || 0;
-    const extra = this.opponent.flipX ? flipOffset : 0;
-    const frameW = this.opFrame ? this.opFrame.realWidth : this.opponent.width;
-    const bodyW = bs.sourceUnits ? this.opponent.body.sourceWidth : this.opponent.body.width;
-    const ox = frameW / 2 - bodyW / 2 + (bs.offsetXFromHalf ?? 0) + extra;
-    // A shrunken (ducking) collider keeps its bottom at the standing feet.
-    const oy = bs.offsetY + this.standingBodyHeight() - this.opponent.body.sourceHeight;
-    this.opponent.body.setOffset(ox, oy);
+    applyBodyFlipOffset(this.opponent, this.opFrame, this.bodyConfig);
   }
 
   // Public helper to sync UI positions immediately (used after teleports/initial position set).
@@ -717,7 +319,7 @@ export default class RemotePlayer {
   // A fighter that has not finished loading is drawn as a faded ghost at its
   // server position, with faded UI: the server can still hit it.
   setPresenceState(connected, loaded) {
-    if (connected === false || loaded === false) this._movementAudio?.reset();
+    if (connected === false || loaded === false) this.movementFx.resetAudio();
     this.presenceConnected = connected !== false;
     this.presenceLoaded = loaded !== false;
     const visible =
@@ -865,8 +467,7 @@ export default class RemotePlayer {
       this.opHealthText.setText(`0`);
     }
     // Teammates should be green, opponents red
-    const isTeammate =
-      this.team === "teammate" || this.team === "ally" || this.team === true;
+    const isTeammate = isAllyTeam(this.team);
     drawHealthBar(this.opHealthBar, {
       x: healthBarX,
       y,
@@ -878,36 +479,10 @@ export default class RemotePlayer {
     });
     this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
 
-    const showDuckShield =
-      !dead &&
-      !!this.opponent?._ducking &&
-      this.opHealthBar.visible !== false &&
-      !this._powerupInvisible &&
-      !this._deathPresentationActive &&
-      !this._corpseRemoved;
-    const shieldX = healthBarX + this.opHealthBarWidth + 1;
-    const powerupX = healthBarX - 1;
-    const shieldY = y + 4.5;
-    this.opDuckShieldGlow
-      ?.setPosition(shieldX, shieldY)
-      .setVisible(showDuckShield);
-    this.opDuckShieldIcon
-      ?.setPosition(shieldX, shieldY)
-      .setVisible(showDuckShield);
-    syncStatusIconStack({
-      scene: this.scene,
-      icons: this._powerupStatusIcons,
-      effects: this.opponent?._powerupEffects,
-      recentEffects: this.opponent?._recentPowerupEffects,
-      x: powerupX,
-      y: shieldY,
-      visible:
-        !dead &&
-        this.opHealthBar.visible !== false &&
-        !this._powerupInvisible &&
-        !this._deathPresentationActive &&
-        !this._corpseRemoved,
-      startIndex: 0,
+    this._worldHud?.layout({
+      x: healthBarX, y, width: this.opHealthBarWidth, sprite: this.opponent,
+      visible: !dead && this.opHealthBar.visible !== false &&
+        !this._powerupInvisible && !this._deathPresentationActive && !this._corpseRemoved,
     });
 
     this.opHealthText.setPosition(hudX - this.opHealthText.width / 2, y - 8);
@@ -966,7 +541,7 @@ export default class RemotePlayer {
 
   startDeathPresentation(meta = {}) {
     this.noteLifeEvent(meta, true);
-    this._movementAudio?.reset();
+    this.movementFx.resetAudio();
     if (
       !this.opponent ||
       !this.opponent.active ||
@@ -975,9 +550,7 @@ export default class RemotePlayer {
       return;
 
     this._deathPresentationActive = true;
-    this._movementVfxState = null;
-    this._runDustVfxAt = 0;
-    this._fastFallVfxAt = 0;
+    this.movementFx.reset();
     this._spawnPresented = true;
     this.opCurrentHealth = 0;
     if (Number.isFinite(meta?.x) && Number.isFinite(meta?.y)) {
@@ -986,12 +559,6 @@ export default class RemotePlayer {
     }
     this.hideWorldUi();
 
-    if (this.movementTween) {
-      try {
-        this.movementTween.remove();
-      } catch (_) {}
-      this.movementTween = null;
-    }
     if (this.effects) {
       this.scene.events.off("update", this._onSceneUpdate, this);
       this.effects.destroy?.();
@@ -1042,7 +609,7 @@ export default class RemotePlayer {
 
   handleRespawn(meta = {}) {
     this.noteLifeEvent(meta, false);
-    this._movementAudio?.reset();
+    this.movementFx.resetAudio();
     if (!this.opponent) return;
     this._corpseRemovalTimer?.remove?.(false);
     this._corpseRemovalTimer = null;
@@ -1050,9 +617,7 @@ export default class RemotePlayer {
     this._corpseRemoved = false;
     this._worldUiHidden = false;
     this._spawnPresented = true;
-    this._movementVfxState = null;
-    this._runDustVfxAt = 0;
-    this._fastFallVfxAt = 0;
+    this.movementFx.reset();
     this._networkSnapUntil = performance.now() + 220;
     if (typeof meta?.maxHealth === "number" && meta.maxHealth > 0) {
       this.opMaxHealth = meta.maxHealth;
@@ -1095,30 +660,10 @@ export default class RemotePlayer {
 
   // Clean up method to stop any active tweens and remove sprites
   destroy() {
-    this._movementAudio?.destroy();
+    this.movementFx.destroy();
     this._corpseRemovalTimer?.remove?.(false);
     this._corpseRemovalTimer = null;
-    if (this.healthUpdateListener) {
-      socket.off("health-update", this.healthUpdateListener);
-      this.healthUpdateListener = null;
-    }
     this._destroyEnemyRedOverlay();
-    if (this.superUpdateListener) {
-      socket.off("super-update", this.superUpdateListener);
-      this.superUpdateListener = null;
-    }
-    if (this.specialListener) {
-      socket.off("player:special", this.specialListener);
-      this.specialListener = null;
-    }
-    if (this.movementTween) {
-      this.movementTween.remove();
-      this.movementTween = null;
-    }
-    if (this._duckShieldGlowTween) {
-      this._duckShieldGlowTween.remove();
-      this._duckShieldGlowTween = null;
-    }
     if (this.effects) {
       this.scene.events.off("update", this._onSceneUpdate, this);
       this.effects.destroy?.();
@@ -1127,38 +672,8 @@ export default class RemotePlayer {
     if (this.opponent) {
       this.opponent.destroy();
     }
-    if (this.opPlayerName) {
-      this.opPlayerName.destroy();
-    }
-    if (this.spectateIcon) {
-      this.spectateIcon.destroy();
-    }
-    if (this.opHealthText) {
-      this.opHealthText.destroy();
-    }
-    if (this.opHealthBar) {
-      this.opHealthBar.destroy();
-    }
-    if (this.opDuckShieldIcon) {
-      this.opDuckShieldIcon.destroy();
-    }
-    if (this.opDuckShieldGlow) {
-      this.opDuckShieldGlow.destroy();
-    }
-    destroyStatusIconStack(this._powerupStatusIcons);
-    if (this.opSuperBar) {
-      this.opSuperBar.destroy();
-    }
-    if (this.opSuperBarBack) {
-      this.opSuperBarBack.destroy();
-    }
-    if (Array.isArray(this._botColliders)) {
-      for (const collider of this._botColliders) {
-        try {
-          collider?.destroy?.();
-        } catch (_) {}
-      }
-      this._botColliders = [];
-    }
+    this.spectateIcon?.destroy();
+    this._worldHud?.destroy();
+    this._worldHud = null;
   }
 }

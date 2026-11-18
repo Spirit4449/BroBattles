@@ -6,8 +6,8 @@ function fixture(t,isBot=false){
   const f=makeRoom({characters:['ninja','ozzy']});t.after(()=>f.room.cleanup());
   const [p,target]=f.players;Object.assign(p,{x:100,y:200,isBot,connected:true});
   Object.assign(target,{x:350,y:192,_bodyHalfWidth:20,_bodyHalfHeight:40,_bodyCenterOffsetX:0,_bodyCenterOffsetY:0,connected:true});
-  f.room.geometry={...f.room.geometry,colliders:[]};f.room._tickId=0;f.room._simulationMono=0;
-  f.step=(count=1)=>{for(let i=0;i<count;i++){f.room._tickId++;f.room._simulationMono+=model.STEP_MS;combat.tick(f.room);}};
+  f.room.geometry={...f.room.geometry,colliders:[]};f.room.tickId=0;f.room.simulationMono=0;
+  f.step=(count=1)=>{for(let i=0;i<count;i++){f.room.tickId++;f.room.simulationMono+=model.STEP_MS;combat.tick(f.room);}};
   f.actions=type=>f.events.filter(e=>e.type==='game:action'&&e.payload.action.type===type).map(e=>e.payload.action);
   return f;
 }
@@ -17,9 +17,9 @@ test('basic requests use canonical tuning and consume ammo once, for humans and 
     assert.equal(f.room.handlePlayerAction(p.participantId,request),true);assert.equal(p.ammoState.charges,0);
     assert.equal(f.room.handlePlayerAction(p.participantId,request),true);
     assert.equal(f.room.handlePlayerAction(p.participantId,{...request,id:'second'}),false);
-    f.step();const q=[...f.room._ninja.active.values()][0].projectile;
+    f.step();const q=[...f.room.ninjaCombatState.active.values()][0].projectile;
     assert.equal(q.x,130);assert.equal(q.y,192);assert.equal(q.cfg.forwardDistance,500);
-    assert.equal(f.room._ninja.active.size,1);
+    assert.equal(f.room.ninjaCombatState.active.size,1);
   }
 });
 test('a request flood is answered up to the per-second limit, then dropped silently',t=>{
@@ -46,7 +46,7 @@ test('client hit and map-return claims cannot create damage or change phase',t=>
   assert.equal(target.health,hp);
   f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'shot',angle:0});f.step();
   assert.equal(f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken-return',id:'shot'}),false);
-  assert.equal([...f.room._ninja.active.values()][0].projectile.phase,'outward');
+  assert.equal([...f.room.ninjaCombatState.active.values()][0].projectile.phase,'outward');
 });
 test('registered contact damages despite moving shooter, once per leg',t=>{
   const f=fixture(t),[p,target]=f.players,hp=target.health;
@@ -60,7 +60,7 @@ test('thin terrain turns both human and bot shurikens back before targets behind
     f.room.geometry={...f.room.geometry,colliders:[{left:220,right:221,top:0,bottom:500}]};
     f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'wall',angle:0});f.step(20);
     assert.equal(target.health,hp);
-    const q=[...f.room._ninja.active.values()][0]?.projectile;
+    const q=[...f.room.ninjaCombatState.active.values()][0]?.projectile;
     assert.ok(q?.phase==='stall'||q?.phase==='return'||f.actions('ninja-terminal').some(a=>a.reason==='returned'));
   }
 });
@@ -77,19 +77,19 @@ test('human and bot supers share staggered projectiles without browser damage cl
     assert.equal(combat.request(f.room,p,{id:'super',aim:{angle:0}},true),true);
     assert.equal(p.superCharge,0);f.step(35);
     assert.equal(f.actions('ninja-launch').length,model.swarmConfig().count);
-    assert.ok([...f.room._ninja.active.values()].every(e=>e.projectile.special));
+    assert.ok([...f.room.ninjaCombatState.active.values()].every(e=>e.projectile.special));
   }
 });
 test('death cancels unreleased swarm shots but preserves flying shots in reconnect state',t=>{
   const f=fixture(t),p=f.players[0];p.superCharge=p.maxSuperCharge;
   combat.request(f.room,p,{id:'super',aim:{angle:0}},true);f.step();
-  const q=[...f.room._ninja.active.values()][0].projectile,startX=q.x;
-  f.room._handlePlayerDeath(p);f.step(5);
-  assert.ok(q.x>startX);assert.equal(f.room._ninja.active.size,1);assert.equal(f.room._ninja.pending.length,0);
+  const q=[...f.room.ninjaCombatState.active.values()][0].projectile,startX=q.x;
+  f.room.handlePlayerDeath(p);f.step(5);
+  assert.ok(q.x>startX);assert.equal(f.room.ninjaCombatState.active.size,1);assert.equal(f.room.ninjaCombatState.pending.length,0);
   const state=combat.bootstrap(f.room);assert.equal(state.active.length,1);
   assert.equal(state.terminals.length,model.swarmConfig().count-1);
   assert.equal(f.actions('ninja-launch').length,1);
-  f.step(500);assert.equal(f.room._ninja.active.size,0);
+  f.step(500);assert.equal(f.room.ninjaCombatState.active.size,0);
   assert.notEqual(f.actions('ninja-terminal').at(-1).reason,'owner-unavailable');
 });
 test('basic and super shurikens still damage after owner death, without allowing new throws',t=>{
@@ -98,10 +98,10 @@ test('basic and super shurikens still damage after owner death, without allowing
     p.superCharge=p.maxSuperCharge;
     assert.equal(combat.request(f.room,p,{id:'released',angle:0,aim:{angle:0}},special),true);
     f.step();
-    const sample=structuredClone([...f.room._ninja.active.values()][0].projectile);
+    const sample=structuredClone([...f.room.ninjaCombatState.active.values()][0].projectile);
     for(let i=0;i<12;i++)model.step(sample,p,[]);
     target.x=sample.x;target.y=sample.y;
-    f.room._handlePlayerDeath(p);f.step(24);
+    f.room.handlePlayerDeath(p);f.step(24);
     assert.ok(target.health<hp);
     assert.ok(f.actions('ninja-impact').some(a=>a.appliedDamage>0));
     assert.equal(combat.request(f.room,p,{id:'dead',angle:0,aim:{angle:0}},special),false);

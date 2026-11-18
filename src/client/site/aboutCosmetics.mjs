@@ -1,3 +1,5 @@
+import { escapeHtml } from "../../shared/site/html.cjs";
+
 // "Make it yours": a collection grid of real cosmetics. While it's on screen,
 // one tile at a time unlocks a different item of the same kind, swapping with
 // a pixel dissolve: the old item breaks into blocks, the new one assembles.
@@ -6,17 +8,14 @@ const BLOCK = 10;
 const COVER_MS = 300;
 const REVEAL_MS = 380;
 
-function escape(value) {
-  return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-}
 function tileMarkup(item) {
-  const label = `<span class="about-tile-label"><span class="rarity-tag tag rarity-${escape(item.rarity)}">${escape(item.rarity)}</span><strong>${escape(item.name)}</strong></span>`;
+  const label = `<span class="about-tile-label"><span class="rarity-tag tag rarity-${escapeHtml(item.rarity)}">${escapeHtml(item.rarity)}</span><strong>${escapeHtml(item.name)}</strong></span>`;
   if (item.kind === 'card') {
     const w = item.window;
-    return `<span class="about-tile-art about-card-art"><span class="about-card"><img class="about-card-frame" src="${escape(item.image)}" alt=""/><img class="about-card-bro" src="${escape(item.bro)}" alt="" style="left:${(w.x * 100).toFixed(2)}%;top:${(w.y * 100).toFixed(2)}%;width:${(w.w * 100).toFixed(2)}%;height:${(w.h * 100).toFixed(2)}%"/></span></span>${label}`;
+    return `<span class="about-tile-art about-card-art"><span class="about-card"><img class="about-card-frame" src="${escapeHtml(item.image)}" alt=""/><img class="about-card-bro" src="${escapeHtml(item.bro)}" alt="" style="left:${(w.x * 100).toFixed(2)}%;top:${(w.y * 100).toFixed(2)}%;width:${(w.w * 100).toFixed(2)}%;height:${(w.h * 100).toFixed(2)}%"/></span></span>${label}`;
   }
-  if (item.kind === 'title') return `<span class="about-tile-art about-title-art"><span class="bb-player-title" style="--title-color:${escape(item.color)};--title-gleam:${escape(item.gleam)}">${escape(item.name)}</span></span>${label}`;
-  return `<span class="about-tile-art"><img src="${escape(item.image)}" alt=""/></span>${label}`;
+  if (item.kind === 'title') return `<span class="about-tile-art about-title-art"><span class="bb-player-title" style="--title-color:${escapeHtml(item.color)};--title-gleam:${escapeHtml(item.gleam)}">${escapeHtml(item.name)}</span></span>${label}`;
+  return `<span class="about-tile-art"><img src="${escapeHtml(item.image)}" alt=""/></span>${label}`;
 }
 const shuffled = count => {
   const order = Array.from({ length: count }, (_, i) => i);

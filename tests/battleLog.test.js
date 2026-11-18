@@ -1,3 +1,5 @@
+const roomTransport = require('./helpers/roomTransport.js');
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
@@ -87,6 +89,19 @@ test("recordMatchOutcome writes summary JSON and updates participants", async ()
 
   assert.ok(executedQueries.some((q) => q.sql.includes("UPDATE matches SET status = 'completed'")));
   assert.ok(executedQueries.some((q) => q.sql.includes("UPDATE match_participants")));
+});
+
+test("recordMatchOutcome uses the selected mode's default when a room omits the variant", async () => {
+  const { getModeById } = require("../src/shared/gameSelection");
+  const mode = getModeById("bank-bust");
+  const summary = await recordMatchOutcome(
+    { runQuery: async () => [{ affectedRows: 1 }] },
+    { matchId: 42, matchData: { modeId: mode.id } },
+    "draw",
+  );
+
+  assert.equal(summary.modeId, mode.id);
+  assert.equal(summary.modeVariantId, mode.defaultVariantId);
 });
 
 test("getBattleLogForUser parses summary and provides modeArt, mapBanner, and player details", async () => {
@@ -320,9 +335,8 @@ test("getBattleLogForUser returns empty array when no completed matches", async 
   assert.deepEqual(battles, []);
 });
 
-test("legacy schema preserves the winner and available participant stats", async () => {
+test("historical matches preserve the winner and available participant stats", async () => {
   const db = { async runQuery(sql) {
-    if (sql.includes("m.summary")) throw Object.assign(new Error("Missing column"), { code: "ER_BAD_FIELD_ERROR" });
     if (sql.includes("JOIN matches")) return [{ match_id: 77, mode: 1, map: 1, winner_team: "team2", player_team: "team1" }];
     if (sql.includes("LEFT JOIN users")) return [{ match_id: 77, user_id: 101, name: "Hero", team: "team1", kills: 1, damage: 840, trophies_delta: -8 }];
     return [];
@@ -343,7 +357,7 @@ test("unrecorded history is unknown, not a draw or invented zero", async () => {
   assert.equal(battle.playerStats.kills, null);
 });
 
-test("a missing participant column does not discard a saved match summary", async () => {
+test("a missing required participant column surfaces the schema error", async () => {
   const db = { async runQuery(sql) {
     if (sql.includes("mp.gems_awarded")) throw Object.assign(new Error("Missing column"), { code: "ER_BAD_FIELD_ERROR" });
     if (sql.includes("JOIN matches")) return [{
@@ -353,10 +367,18 @@ test("a missing participant column does not discard a saved match summary", asyn
     }];
     return [];
   }};
-  const [battle] = await getBattleLogForUser(db, 101);
-  assert.equal(battle.outcome, "victory");
-  assert.equal(battle.playerStats.damage, 900);
-  assert.equal(battle.trophiesDelta, 16);
+  await assert.rejects(getBattleLogForUser(db, 101), { code: "ER_BAD_FIELD_ERROR" });
+});
+
+test("a failed historical roster read does not return a partial battle", async () => {
+  for (const missing of ["LEFT JOIN users", "FROM match_bot_participants"]) {
+    const db = { async runQuery(sql) {
+      if (sql.includes("JOIN matches")) return [{ match_id: 77, summary: null }];
+      if (sql.includes(missing)) throw new Error("Roster unavailable");
+      return [];
+    } };
+    await assert.rejects(getBattleLogForUser(db, 101), /Roster unavailable/);
+  }
 });
 
 test("explicit draws and zero stats survive summary round-trip", async () => {
@@ -395,7 +417,7 @@ test("finishing a game persists results before game-over and bot cleanup, once o
   t.mock.timers.enable({ apis: ["setTimeout"] });
   t.mock.method(console, "log", () => {});
   const events = [];
-  const room = {
+  const room = { ...roomTransport,
     matchId: 81, status: "active", _scheduledActions: [], botControllers: new Map(),
     players: new Map([
       ["human", { user_id: 101, name: "Hero", team: "team1" }],
@@ -407,7 +429,8 @@ test("finishing a game persists results before game-over and bot cleanup, once o
       return [];
     } },
     io: { to() { return { emit(type) { events.push({ type }); } }; } },
-    async _broadcastParticipantStatus() {},
+    async broadcastParticipantStatus() {},
+    distributeMatchRewards: require("../src/server/core/gameRoom").GameRoom.prototype.distributeMatchRewards,
     matchResults: { async complete(room, winner) {
       const rewards = [{ username: "Hero", kills: 2, damage: 950, hits: 12, trophiesDelta: 18 }];
       await recordMatchOutcome(room.db, room, winner, rewards);
@@ -423,16 +446,11 @@ test("finishing a game persists results before game-over and bot cleanup, once o
 });
 
 test("renderer hides unknown results and combat stats, labels the summary, and escapes match labels", async () => {
-  const { transformFileSync } = require("@babel/core");
-  const vm = require("node:vm");
-  const compiled = transformFileSync(require.resolve("../src/client/views/battleLogView.js"), {
-    presets: [["@babel/preset-env", { targets: { node: "current" } }]],
-  });
   const context = { exports: {}, require: (request) => {
     if (request === "../../shared/site/html.cjs") return require("../src/shared/site/html.cjs");
     throw new Error(`Unexpected renderer dependency: ${request}`);
   } };
-  vm.runInNewContext(compiled.code, context);
+  loadClientModule(require.resolve("../src/client/views/battleLogView.js"), context);
   const { renderBattleLog } = context.exports;
   const container = {};
   renderBattleLog(container, [{ matchId: 1, outcome: "unknown", player: { name: '<img src=x onerror=alert(1)>' }, playerStats: {} }]);

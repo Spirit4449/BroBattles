@@ -1,3 +1,4 @@
+const { parseJsonOr } = require("../../lib/json");
 const path = require("path");
 const { DEFAULT_CHARACTER } = require("../../../shared/characters/characterStats.js");
 const { createCatalogLoader } = require("../../lib/catalogLoader");
@@ -143,24 +144,18 @@ function getSkinGameAssets(character, skinId) {
 }
 
 function normalizeSelectedSkinMap(raw) {
-  if (!raw) return {};
-  if (typeof raw === "object") {
-    return Object.fromEntries(
-      Object.entries(raw)
-        .map(([character, skinId]) => [
-          String(character || "")
-            .trim()
-            .toLowerCase(),
-          String(skinId || "").trim(),
-        ])
-        .filter(([character, skinId]) => character && skinId),
-    );
-  }
-  try {
-    return normalizeSelectedSkinMap(JSON.parse(String(raw || "{}")));
-  } catch (_) {
-    return {};
-  }
+  let decoded = parseJsonOr(raw, null);
+  while (typeof decoded === "string") decoded = parseJsonOr(decoded, null);
+  if (!decoded || typeof decoded !== "object") return {};
+
+  return Object.fromEntries(
+    Object.entries(decoded)
+      .map(([character, skinId]) => [
+        String(character || "").trim().toLowerCase(),
+        String(skinId || "").trim(),
+      ])
+      .filter(([character, skinId]) => character && skinId),
+  );
 }
 
 function resolveSelectedSkinId({ character, selectedSkinMap, ownedSkinIds }) {

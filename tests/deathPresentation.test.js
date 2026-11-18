@@ -173,8 +173,7 @@ describe("Local respawn", () => {
     const dispose = exports.bindLocalSocketEvents({
       socket: { on: (name, fn) => { handlers[name] = fn; }, off: noop },
       getUsername: () => 'self', getScene: () => scene, getPlayer: () => player,
-      getCurrentCharacter: () => 'ninja', getDead: () => dead,
-      setDead: v => { dead = v; }, setMaxHealth: noop, setCurrentHealthValue: noop,
+      getCurrentCharacter: () => 'ninja', stats: { get dead() { return dead; }, set dead(v) { dead = v; } },
       stopWallSlideAudio: () => {},
       updateHealthBar: () => order.push('hud'),
       removeLocalCorpse: () => player.setVisible(false),
@@ -196,7 +195,7 @@ describe("Local respawn", () => {
     assert.equal(player.visible, false, 'a current death still removes its corpse');
     respawn();
     die();
-    dispose();
+    dispose.dispose();
     assert.equal(timers[2].removed, true);
     timers[2].callback();
     assert.equal(player.visible, true, 'disposed handlers cannot hide a sprite');
@@ -327,4 +326,35 @@ describe("Local respawn", () => {
     handlers['powerup:tick']({ username: 'self', type: 'freeze' });
     assert.deepEqual(sounds, [{ key: 'pu-tick-freeze', config: { volume: 0.7 } }]);
   });
+});
+
+test('one match listener dispatches fighter updates to the active roster by name', () => {
+  const noop = () => {};
+  const events = new (require('node:events').EventEmitter)();
+  const actual = [];
+  const fighter = name => ({
+    applyHealthUpdate: p => actual.push([name, 'health', p.health]),
+    applySuperUpdate: p => actual.push([name, 'super', p.charge]),
+    presentSpecial: p => actual.push([name, 'special', p.character]),
+  });
+  const self = fighter('self'), opponentPlayers = { other: fighter('other') };
+  const { createMatchCoordinator } = loadClientModule('src/client/game/match/matchCoordinator.js', {
+    require: () => ({ getCharacterSocketEvents: () => [], startServerClockSync: noop, stopServerClockSync: noop,
+      resyncServerClock: noop, resetCharacterNetworks: noop, createSnapshotDecoder: () => ({ reset: noop }) }),
+    window: {}, setInterval, clearInterval, setTimeout, clearTimeout,
+  });
+  const room = createMatchCoordinator({ socket: events, getUsername: () => 'self', getPlayer: () => null,
+    getLocalFighterEvents: () => self, hud: {}, opponentPlayers, teamPlayers: {},
+    getGameEnded: () => true, getIsLiveGame: () => true, getLatestPlayerEffects: () => ({}), lastHealthByPlayer: {}, lastShieldActiveAt: {} });
+  room.register();
+  try {
+    room.register();
+    for (const event of ['health-update', 'super-update', 'player:special']) assert.equal(events.listenerCount(event), 1);
+    events.emit('health-update', { username: 'other', health: 10 });
+    events.emit('super-update', { username: 'self', charge: 0.5 });
+    opponentPlayers.late = fighter('late');
+    events.emit('player:special', { username: 'late', character: 'ninja' });
+    assert.deepEqual(actual, [['other', 'health', 10], ['self', 'super', 0.5], ['late', 'special', 'ninja']]);
+  } finally { room.dispose(); }
+  for (const event of ['health-update', 'super-update', 'player:special']) assert.equal(events.listenerCount(event), 0);
 });

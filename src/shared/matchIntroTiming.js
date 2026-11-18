@@ -10,8 +10,14 @@
 const PREGAME_MS = 5000;
 const PREGAME_GRACE_MS = 2000;
 const COUNTDOWN_MS = 5000;
+const COUNTDOWN_RISER_MS = 3000;
 // Start even if no client ever reports loaded (stuck tabs, closed browsers).
 const START_DEADLINE_MS = 45000;
+// Client recovery and presentation timing around the shared countdown.
+const START_WATCHDOG_TIMEOUT_MS = 15000;
+const START_RECOVERY_GRACE_MS = 6000;
+const START_INPUT_GRACE_MS = 250;
+const RESULTS_PRESENTATION_DELAY_MS = 2000;
 
 /**
  * When the countdown should begin, given server receipt times of each human's
@@ -30,6 +36,11 @@ module.exports = {
   PREGAME_MS,
   PREGAME_GRACE_MS,
   COUNTDOWN_MS,
+  COUNTDOWN_RISER_MS,
   START_DEADLINE_MS,
+  START_WATCHDOG_TIMEOUT_MS,
+  START_RECOVERY_GRACE_MS,
+  START_INPUT_GRACE_MS,
+  RESULTS_PRESENTATION_DELAY_MS,
   plannedCountdownStart,
 };

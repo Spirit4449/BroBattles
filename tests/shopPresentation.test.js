@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createLobbyFixture } = require('./helpers/lobbyFixture');
+const { TEST_NOW } = require('./helpers/fakeClock');
 
 function fixture() {
   let observer;
@@ -10,13 +11,17 @@ function fixture() {
     state: { owned: false, available: true }, isNew: true,
     grants: [{ kind: 'currency', currency: 'coins', name: 'Coins', amount: 10 }] };
   const data = {
-    serverNow: new Date().toISOString(), wallet: { coins: 0, gems: 0 },
+    serverNow: new Date(TEST_NOW).toISOString(), wallet: { coins: 0, gems: 0 },
     sectionMeta: [{ id: 'sales', name: 'New Collection', icon: '/icon.svg', rotation: 'sales', collapsible: false }],
     sections: { sales: [bundle] },
-    rotations: { sales: { nextRefreshAt: new Date(Date.now() + 60000).toISOString() } },
+    rotations: { sales: { nextRefreshAt: new Date(TEST_NOW + 60000).toISOString() } },
     notifications: { hasNew: true, sections: { sales: { cycleKey: 'cycle', refreshed: true, offerIds: [bundle.id, 'collapsed-pack'], hasNew: true } } },
   };
   const f = createLobbyFixture({ globals: {
+    Date: class extends Date {
+      constructor(...args) { super(...(args.length ? args : [TEST_NOW])); }
+      static now() { return TEST_NOW; }
+    },
     IntersectionObserver: class {
       constructor(callback) { observer = callback; }
       observe() {} disconnect() {}
@@ -208,4 +213,17 @@ test('an empty collection section shows Collection complete, not Nothing availab
   const skins = f.document.querySelector('#shop-section-skins').textContent;
   assert.match(skins, /Collection complete/);
   assert.doesNotMatch(skins, /Nothing available/);
+});
+
+test('shared countdown formats retain the shop clock and compact lobby hint labels', () => {
+  const { formatCountdown, formatDurationShort, formatDurationLong, formatUsd } = require('../src/shared/format');
+  const now = Date.UTC(2026, 0, 1);
+  const oneMinute = 60_000;
+  assert.equal(formatCountdown(now + oneMinute + 1_500, now), '00:01:01');
+  assert.equal(formatCountdown(now + oneMinute + 1_500, now, 'compact'), '1m 1s');
+  assert.equal(formatCountdown(now + 24 * 60 * oneMinute, now), '1d 0h 0m');
+  assert.equal(formatCountdown(now + 24 * 60 * oneMinute, now, 'compact'), '1d 0h');
+  assert.equal(formatDurationShort(oneMinute + 1), '2m');
+  assert.equal(formatDurationLong(oneMinute + 1), '1m 1s');
+  assert.equal(formatUsd(123_456), '$1,234.56');
 });

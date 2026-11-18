@@ -1,10 +1,5 @@
+import { prefersReducedMotion } from "./domMotion";
 const POPUP_MOTION_MS = 150;
-
-function prefersReducedMotion() {
-  return Boolean(
-    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches,
-  );
-}
 
 export function dismissPopup(element, onDismissed) {
   if (!element) {

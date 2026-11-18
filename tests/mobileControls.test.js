@@ -1,12 +1,7 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
 
-const { code } = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/mobileControls.js'), 'utf8'), {
-  babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-});
 
 function events(target = {}) {
   const handlers = new Map();
@@ -35,7 +30,7 @@ function setup({ superRatio = 1 } = {}) {
   body.contains = () => true;
   const context = { exports: {}, window: win, navigator: { maxTouchPoints: 5 },
     document: { body, createElement: element } };
-  vm.runInNewContext(code, context);
+  loadClientModule(require.resolve('../src/client/game/scene/mobileControls.js'), context);
   const fired = [];
   const player = { x: 100, y: 200, flipX: false };
   const controller = context.exports.createMobileControlsController({

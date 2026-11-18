@@ -1,3 +1,4 @@
+const { getConfig } = require("../../config");
 const fs = require('node:fs');
 const path = require('node:path');
 function readBuildVersion() {
@@ -5,9 +6,9 @@ function readBuildVersion() {
   catch (_) { return null; }
 }
 function createVersionService({ build = readBuildVersion(), fetchImpl = globalThis.fetch, now = Date.now,
-  repository = process.env.BB_VERSION_REPOSITORY || 'Spirit4449/APCSP-Create-Project---Final',
-  branch = process.env.BB_DEPLOY_BRANCH || 'main', token = process.env.BB_VERSION_GITHUB_TOKEN,
-  production = process.env.NODE_ENV === 'production' } = {}) {
+  repository = getConfig().version.repository,
+  branch = getConfig().version.branch, token = getConfig().version.token,
+  production = getConfig().isProd } = {}) {
   let cached, expires = 0, pending;
   return async function getVersion() {
     const base = { ...build, branch, status: 'unknown', checkedAt: null };
@@ -35,4 +36,4 @@ function createVersionService({ build = readBuildVersion(), fetchImpl = globalTh
     try { return await pending; } finally { pending = null; }
   };
 }
-module.exports = { createVersionService, readBuildVersion };
+module.exports = { createVersionService };

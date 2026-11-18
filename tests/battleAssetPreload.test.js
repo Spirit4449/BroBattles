@@ -23,7 +23,7 @@ describe("Selection warming", () => {
       buildCharacterSkinWeaponUrl: (character, skin) => skin ? `/assets/${character}/${skin}-weapon.webp` : null,
     });
     const api = loadClientModule(require.resolve('../src/client/lobby/preloadBattle.js'), {
-      window, require: name => name.includes('skinAssets') ? {
+      window, require: name => name.endsWith('/session.mjs') ? { getUser: () => state.user || null } : name.includes('skinAssets') ? {
         buildCharacterSkinAtlasUrls: context.buildCharacterSkinAtlasUrls,
         buildCharacterSkinWeaponUrl: context.buildCharacterSkinWeaponUrl,
       } : name.includes('playerCardAnimation') ? {
@@ -59,24 +59,24 @@ describe("Selection warming", () => {
   });
 
   test('confirmed solo character changes replace stale roster skin assets', () => {
-    const { state, window, warm } = setup();
-    window.__BRO_BATTLES_USERDATA__ = { name: 'self', char_class: 'ninja', selected_skin_id_by_char: { ninja: 'blue' } };
+    const { state, warm } = setup();
+    state.user = { name: 'self', char_class: 'ninja', selected_skin_id_by_char: { ninja: 'blue' } };
     warm({ modeId: 'duels', modeVariantId: 'duels-1v1', mapId: 1 }, [{ name: 'self', char_class: 'ninja', selected_skin_game_assets: { spritesheetUrl: '/assets/old-custom.webp' } }]);
     assert.ok(state.urls.includes('/assets/old-custom.webp'));
-    window.__BRO_BATTLES_USERDATA__.char_class = 'ozzy';
-    window.__BRO_BATTLES_USERDATA__.selected_skin_id_by_char.ozzy = 'gold';
+    state.user.char_class = 'ozzy';
+    state.user.selected_skin_id_by_char.ozzy = 'gold';
     warm();
     assert.ok(state.urls.includes('/assets/ozzy/gold.webp'));
     assert.ok(!state.urls.some(url => /old-custom|ninja/.test(url)));
   });
 
   test('the equipped card warms even before a lobby mode selection is available', () => {
-    const { state, window, warm } = setup();
-    window.__BRO_BATTLES_USERDATA__ = { name: 'self', selected_card_id: 'arena-crown' };
+    const { state, warm } = setup();
+    state.user = { name: 'self', selected_card_id: 'arena-crown' };
     warm();
     assert.equal(state.card, 'arena-crown');
     assert.deepEqual(state.urls, []);
-    window.__BRO_BATTLES_USERDATA__.selected_card_id = 'default';
+    state.user.selected_card_id = 'default';
     warm();
     assert.equal(state.card, 'default');
   });
@@ -114,7 +114,7 @@ describe("Character assets", () => {
         const queued = [];
         const load = Object.fromEntries(['image', 'audio', 'spritesheet', 'atlas'].map(type =>
           [type, (key, url, atlas) => queued.push({ type, key, urls: type === 'atlas' ? [url, atlas] : [url].flat() })]));
-        load.on = () => {};
+        load.once = () => {};
         Character.preload({ load, sound: { get: () => null } }, '/assets', { includeBaseAtlas });
         assert.ok(queued.length > 0);
         for (const { type, key, urls } of queued) {

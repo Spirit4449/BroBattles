@@ -1,5 +1,7 @@
+import { readJson, writeJson } from "../lib/safeStorage.js";
 import { DEFAULT_BINDINGS, normalizeBindings } from './keyBindings.mjs';
-const KEY = 'bb_settings_v1';
+import { SETTINGS_STORAGE_KEY } from '../../shared/storageKeys.js';
+const SETTINGS_CHANGED = 'bb:settings-changed';
 export const GRAPHICS_OPTIONS = Object.freeze([
   { value: 'low', label: 'Low', renderScale: 0.5, pixelMultiplier: 0.25 },
   { value: 'medium', label: 'Medium', renderScale: 1, pixelMultiplier: 1 },
@@ -15,23 +17,23 @@ const subscribers = new Set();
 export function normalizeSettings(raw={}) {
   if (!raw || typeof raw !== 'object') raw={};
   const number=(key,min,max)=>typeof raw[key]==='number' && Number.isFinite(raw[key]) ? Math.min(max,Math.max(min,raw[key])) : DEFAULT_SETTINGS[key];
-  return { keys:normalizeBindings(raw.keys), sensitivity:number('sensitivity',0.25,3), sfx:number('sfx',0,1), music:number('music',0,1), graphics:GRAPHICS_OPTIONS.some(option => option.value === raw.graphics) ? raw.graphics : DEFAULT_SETTINGS.graphics, autoHideCursor:typeof raw.autoHideCursor==='boolean'?raw.autoHideCursor:true, streamer:typeof raw.streamer==='boolean'?raw.streamer:false };
+  return { keys:normalizeBindings(raw.keys), sensitivity:number('sensitivity',0.25,3), sfx:number('sfx',0,1), music:number('music',0,1), graphics:GRAPHICS_OPTIONS.some(option => option.value === raw.graphics) ? raw.graphics : DEFAULT_SETTINGS.graphics, autoHideCursor:typeof raw.autoHideCursor==='boolean'?raw.autoHideCursor:DEFAULT_SETTINGS.autoHideCursor, streamer:typeof raw.streamer==='boolean'?raw.streamer:DEFAULT_SETTINGS.streamer };
 }
-function read() { try { return normalizeSettings(JSON.parse(localStorage.getItem(KEY))); } catch (_) { return {...DEFAULT_SETTINGS}; } }
+function read() { return normalizeSettings(readJson(() => localStorage, SETTINGS_STORAGE_KEY)); }
 let settings=read();
 export function getSettings() { return {...settings,keys:{...settings.keys}}; }
 export function subscribeSettings(fn) { subscribers.add(fn); return ()=>subscribers.delete(fn); }
 function announce() { subscribers.forEach(fn=>fn(getSettings())); }
-export function saveSettings(update) { settings=normalizeSettings({...settings,...update}); try { localStorage.setItem(KEY,JSON.stringify(settings)); } catch (_) {} announce();
+export function saveSettings(update) { settings=normalizeSettings({...settings,...update}); writeJson(() => localStorage, SETTINGS_STORAGE_KEY, settings); announce();
   // Navigation and each page bundle have separate module instances.
-  if (typeof CustomEvent !== 'undefined' && typeof window !== 'undefined') window.dispatchEvent?.(new CustomEvent('bb:settings-changed', { detail: settings }));
+  if (typeof CustomEvent !== 'undefined' && typeof window !== 'undefined') window.dispatchEvent?.(new CustomEvent(SETTINGS_CHANGED, { detail: settings }));
 }
-if (typeof window !== 'undefined') window.addEventListener('bb:settings-changed', event => {
+if (typeof window !== 'undefined') window.addEventListener(SETTINGS_CHANGED, event => {
   if (event.detail === settings) return;
   settings = normalizeSettings(event.detail); announce();
 });
 export function resetSettings() { saveSettings(DEFAULT_SETTINGS); }
-if (typeof window!=='undefined') window.addEventListener('storage',event=>{ if(event.key===KEY || event.key===null){settings=read();announce();} });
+if (typeof window!=='undefined') window.addEventListener('storage',event=>{ if(event.key===SETTINGS_STORAGE_KEY || event.key===null){settings=read();announce();} });
 export function bindAudio(audio, channel, baseVolume) {
   const update=()=>{ audio.volume=Math.min(1,Math.max(0,baseVolume*settings[channel])); };
   update(); const unsubscribe=subscribeSettings(update);

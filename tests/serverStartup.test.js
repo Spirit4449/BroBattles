@@ -5,6 +5,66 @@ const path = require('node:path');
 describe("Application bootstrap", () => {
   const { spawnSync } = require('node:child_process');
 
+  test('malformed explicit listener and password settings fail before startup', () => {
+    const { loadConfig } = require('../src/server/config');
+    for (const [key, values] of Object.entries({ PORT: ['bad', '0', '65536'], BCRYPT_ROUNDS: ['bad', '0', '32'] })) {
+      for (const value of values) assert.throws(() => loadConfig({ [key]: value }), new RegExp(key));
+    }
+    assert.equal(loadConfig({ PORT: ' ' }).port, loadConfig({}).port);
+    assert.deepEqual(loadConfig({}).admin.users, []);
+    const tracing = loadConfig({
+      BB_NET_TRACE_TOKEN: 'a'.repeat(16),
+      BB_NET_TRACE_DIR: 'data/test-traces',
+      BB_NET_TRACE_CPU_PROFILE_S: '2.5',
+    }).netTrace;
+    assert.ok(Object.isFrozen(tracing));
+    assert.equal(tracing.enabled, true);
+    assert.equal(tracing.dir, path.resolve('data/test-traces'));
+    assert.equal(tracing.cpuProfileSeconds, 2.5);
+    for (const value of ['', 'bad', 'Infinity', '-1', '999999999']) {
+      assert.equal(loadConfig({ BB_NET_TRACE_CPU_PROFILE_S: value }).netTrace.cpuProfileSeconds, 0);
+    }
+  });
+
+  test('only configured permanent accounts can use admin routes', async () => {
+    const { loadConfig } = require('../src/server/config');
+    const { isAdminUser, isReservedAdminName, makeAuthHelpers } = require('../src/server/services/auth/auth');
+    const { users } = loadConfig({ ADMIN_USERS: '17, Staff' }).admin;
+    assert.equal(isAdminUser({ user_id: 17, name: 'Other' }, users), true);
+    assert.equal(isAdminUser({ user_id: 18, name: 'staff' }, users), true);
+    assert.equal(isAdminUser({ user_id: 17, name: 'staff', expires_at: new Date() }, users), false);
+    assert.equal(isReservedAdminName(' STAFF ', users), true);
+    assert.equal(isReservedAdminName('17', users), false);
+    assert.equal(isAdminUser({ user_id: 1, name: 'nishay' }, loadConfig({}).admin.users), false);
+    const { requireAdminUser } = makeAuthHelpers({}, { SIGNED_COOKIE_OPTS: {}, DISPLAY_COOKIE_OPTS: {} });
+    assert.equal(await requireAdminUser({ authContext: { user: null } }, {}), null);
+  });
+
+  test('configured settings stay fixed for tracing and credential checks after initialization', () => {
+    const script = `
+      const assert = require('node:assert/strict');
+      const { initializeConfig, getConfig } = require('./src/server/config');
+      const settings = initializeConfig({
+        ADMIN_USERS: 'Staff', COOKIE_SECRET: 'test-session-secret',
+        BB_NET_TRACE_TOKEN: 'a'.repeat(16), BB_NET_TRACE_CPU_PROFILE_S: '3',
+      });
+      process.env.BB_NET_TRACE_TOKEN = 'b'.repeat(16);
+      process.env.ADMIN_USERS = 'Other';
+      const { netTrace } = require('./src/server/core/gameRoom/netTraceRecorder');
+      const { validateCredentials } = require('./src/server/services/auth/authAccountService');
+      assert.equal(getConfig(), settings);
+      assert.ok(netTrace.authorize({ netTrace: { token: 'a'.repeat(16), runId: 'boot' } }));
+      assert.equal(netTrace.authorize({ netTrace: { token: 'b'.repeat(16), runId: 'boot' } }), null);
+      assert.deepEqual(validateCredentials('staff', 'password123'), {
+        ok: false, statusCode: 409, payload: { success: false, error: 'Username is already taken.' },
+      });
+    `;
+    const result = spawnSync(process.execPath, ['-e', script], {
+      cwd: path.resolve(__dirname, '..'), encoding: 'utf8', timeout: 5000,
+    });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+  });
+
   for (const mode of ['development', 'production']) {
     test(`${mode} server loads its real imports and registers routes before acquiring the database`, () => {
       const root = path.resolve(__dirname, '..');
@@ -21,7 +81,7 @@ describe("Application bootstrap", () => {
               return application;
             } });
           }
-          if (request === './core/socket.js' && parent.filename.endsWith('/src/server/server.js')) {
+          if (request === './core/socket.js' && parent.filename.endsWith('/src/server/application.js')) {
             const actual = originalLoad.apply(this, arguments);
             return { ...actual, initSocket(dependencies) {
               const db = originalLoad.call(Module, './core/sql', parent, false);
@@ -49,7 +109,7 @@ describe("Application bootstrap", () => {
           }
           return originalLoad.apply(this, arguments);
         };
-        require('./src/server/server.js');
+        require('./src/server/server.js').startServer();
       `;
       const result = spawnSync(process.execPath, ['-e', script], {
         cwd: root,
@@ -131,6 +191,37 @@ describe("Stripe startup listener", () => {
     assert.equal(listener.getSigningSecret(), '');
   });
 
+  test('application-owned shutdown signals the local child once and waits for close', async t => {
+    t.mock.method(console, 'log', () => {});
+    const { PassThrough } = require('node:stream');
+    const child = new (require('node:events').EventEmitter)();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    const signals = [];
+    child.kill = (signal = 'SIGTERM') => { signals.push(signal); return true; };
+    const listener = createStripeListener({
+      production: false, stripe: {}, secretKey: 'sk_test_example', spawnCli: () => child,
+    });
+    const before = ['SIGINT', 'SIGUSR2'].map(signal => process.listenerCount(signal));
+    await listener.start(4321);
+    assert.deepEqual(['SIGINT', 'SIGUSR2'].map(signal => process.listenerCount(signal)), before);
+    const first = listener.stop();
+    assert.equal(listener.stop(), first);
+    let drained = false;
+    first.then(() => { drained = true; });
+    await Promise.resolve();
+    assert.equal(drained, false);
+    assert.deepEqual(signals, ['SIGTERM']);
+    child.stderr.write('Ready! Your webhook signing secret is whsec_late\n');
+    assert.equal(listener.getSigningSecret(), '');
+    child.emit('close', null, 'SIGTERM');
+    await first;
+    assert.equal(drained, true);
+    assert.equal(listener.getStatus().state, 'stopped');
+    await listener.stop();
+    assert.deepEqual(signals, ['SIGTERM']);
+  });
+
   test('production verifies the public endpoint and event subscriptions', async () => {
     const endpoint = { url: 'https://shop.example' + webhookPath, status: 'enabled', enabled_events: ['*'] };
     const stripe = { webhookEndpoints: { list: () => [endpoint] } };
@@ -141,4 +232,84 @@ describe("Stripe startup listener", () => {
     await listener.start(3002);
     assert.equal(listener.getStatus().state, 'error');
   });
+});
+
+test('periodic cleanup only retires old matches without a live room or pending rewards', async t => {
+  const { installFakeClock } = require('./helpers/fakeClock');
+  installFakeClock(t, { apis: ['setInterval'] });
+  t.mock.method(console, 'log', () => {});
+  t.mock.method(console, 'warn', () => {});
+  const { startCleanupJobs } = require('../src/server/jobs/cleanup');
+  const calls = [];
+  const db = {
+    withTransaction(fn) { return fn(null, this.runQuery.bind(this)); },
+    async runQuery(sql, params) {
+      calls.push({ sql, params });
+      if (sql.startsWith('SELECT match_id')) return [1, 2, 3].map(match_id => ({ match_id }));
+      if (sql.startsWith('UPDATE matches')) return { affectedRows: 1 };
+      return [];
+    },
+    findAndRemoveInactiveMembers: async () => [],
+    deleteEmptyParties: async () => 0,
+    deleteExpiredGuestsAndMemberships: async () => ({}),
+    setOfflineIfLastSeenOlderThan: async () => [],
+  };
+  const scheduler = require("../src/server/jobs/scheduler").createScheduler();
+  t.after(() => scheduler.stop());
+  startCleanupJobs({
+    scheduler,
+    db, io: {}, matchResults: { isPending: id => id === 1 }, getGameRoom: id => id === 2 ? {} : null,
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  const paramsFor = prefix => calls.find(call => call.sql.startsWith(prefix)).params;
+  assert.deepEqual(paramsFor("UPDATE matches SET status='completed'"), [3]);
+  assert.deepEqual(paramsFor("UPDATE parties p JOIN match_participants"), [3]);
+  assert.deepEqual(paramsFor('DELETE FROM match_bot_participants'), [3]);
+  assert.deepEqual(paramsFor('DELETE FROM match_participants'), [3]);
+});
+
+test('stale bot cleanup leaves live match rosters to guarded match retirement', async () => {
+  const { startCleanupJobs } = require('../src/server/jobs/cleanup');
+  const jobs = new Map();
+  const calls = [];
+  startCleanupJobs({
+    scheduler: { every: (name, _delay, fn) => jobs.set(name, fn) },
+    db: { runQuery: async sql => calls.push(sql) },
+  });
+
+  await jobs.get('stale bots')();
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /m\.status IN \('completed','cancelled'\)/);
+  assert.match(calls[0], /OR \(m\.status = 'queued' AND m\.created_at < NOW\(\) - INTERVAL \d+ MINUTE\)/);
+});
+
+test('importing the server leaves listeners, timers, and database pools untouched', () => {
+  const { spawnSync } = require('node:child_process');
+  const script = `
+    require("mysql2/promise").createPool = () => { throw Error("pool created while importing"); };
+    global.setInterval = () => { throw Error("interval created while importing"); };
+    require("node:http").Server.prototype.listen = () => { throw Error("listen during import"); };
+    require("./src/server/server");
+    require("./src/server/core/sql");
+  `;
+  const child = spawnSync(process.execPath, ['-e', script], { cwd: path.resolve(__dirname, '..'), encoding: 'utf8', timeout: 3000 });
+  assert.equal(child.status, 0, child.stderr);
+});
+
+test('scheduler skips overlapping ticks and drains a running job before stopping', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const scheduler = require('../src/server/jobs/scheduler').createScheduler();
+  let calls = 0, finish;
+  scheduler.every('example', 10, () => { calls++; return new Promise(resolve => { finish = resolve; }); }, { immediate: true });
+  await Promise.resolve();
+  t.mock.timers.tick(100);
+  let stopped = false;
+  const close = scheduler.stop().then(() => { stopped = true; });
+  await Promise.resolve();
+  assert.equal(calls, 1);
+  assert.equal(stopped, false);
+  finish();
+  await close;
+  t.mock.timers.tick(100);
+  assert.equal(calls, 1);
 });

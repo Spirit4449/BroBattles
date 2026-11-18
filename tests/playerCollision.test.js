@@ -118,7 +118,8 @@ describe("Platform corners", () => {
 
   const Body = require('phaser/src/physics/arcade/Body');
   const World = require('phaser/src/physics/arcade/World');
-  const { characterBody, getDuelGeometry } = require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
+const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
   const { processPlayerPlatformCollision } = require('../src/client/game/players/platformCollision');
 
   function fixture(character = 'thorg', side = 'left') {

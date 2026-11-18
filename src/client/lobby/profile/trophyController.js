@@ -1,12 +1,15 @@
+import { getUser, updateUser } from "../session.mjs";
+import { formatBadgeCount } from "../../chat/badges.mjs";
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
 import { applyWallet, walletRevision } from "../wallet.mjs";
 import { currencyRewardImage } from "../../views/rewardPresentation.js";
 import { playSound } from "../../ui/uiSounds.js";
-import { createRewardPresentation } from "../shop/shop.js";
+import { createRewardPresentation } from "../shop/rewardPresentation.js";
 import { buildProfileIconUrl } from "../../views/profileIconAssets.js";
 import "../../styles/trophyRewards.css";
 import { escapeHtml, fetchLobbyJson, openOverlay, isOverlayOpen } from '../ui';
 
-export function createTrophyController({ getUserData, onRewardsClaimed }) {
+export function createTrophyController({ getUserData = getUser, onRewardsClaimed }) {
   let claimBusy = false;
   const presentation = createRewardPresentation({
     state: { overlay: document.body, reveal: null },
@@ -32,11 +35,10 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
       resizeFrame = null;
       const list = document.getElementById("trophy-track-list");
       const oldSpacing = Number(list?.querySelector(".trophy-track-canvas")?.dataset.tierSpacing) || 0;
-      renderTrophyTrack({
-        ...trophyProgressionState,
-        __preserveScroll: true,
-        __scrollLeft: Number(list?.scrollLeft) || 0,
-        __oldSpacing: oldSpacing,
+      renderTrophyTrack(trophyProgressionState, {
+        preserveScroll: true,
+        scrollLeft: Number(list?.scrollLeft) || 0,
+        oldSpacing,
       });
     });
   });
@@ -47,7 +49,7 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
     const value = Math.max(0, Number(count) || 0);
     if (!badge || !button) return;
     if (value > 0) {
-      badge.textContent = value > 99 ? "99+" : String(value);
+      badge.textContent = formatBadgeCount(value);
       badge.classList.remove("hidden");
       button.classList.add("has-claimable");
     } else {
@@ -220,22 +222,18 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
       return trophyProgressionRefreshPromise;
     }
     const revision = walletRevision();
-    trophyProgressionRefreshPromise = fetchLobbyJson("/trophies/progression")
+    trophyProgressionRefreshPromise = fetchLobbyJson(API_PATHS.TROPHIES_PROGRESSION)
       .then((progression) => {
         const recoveredClaim = progression.tiers?.some(tier => tier.claimed && trophyProgressionState?.tiers?.find(previous => previous.tierId === tier.tierId)?.claimed === false);
         if (!claimBusy && progression?.player && getUserData()) {
           applyWallet(getUserData(), progression.player, revision);
-          getUserData().char_levels = progression.player.char_levels || getUserData().char_levels;
-          getUserData().trophy_peak = progression.player.trophyPeak;
+          updateUser({ char_levels: progression.player.char_levels || getUserData().char_levels, trophy_peak: progression.player.trophyPeak });
           updateLobbyResourceCounts();
         }
         const reconciled = reconcileTrophyTrackState(progression);
         if (!reconciled && isOverlayOpen("trophy-track-overlay")) {
           const list = document.getElementById("trophy-track-list");
-          progression.__preserveScroll = true;
-          progression.__scrollLeft = Number(list?.scrollLeft) || 0;
-          progression.__skipAnimation = true;
-          renderTrophyTrack(progression);
+          renderTrophyTrack(progression, { preserveScroll: true, scrollLeft: Number(list?.scrollLeft) || 0 });
         }
         if (recoveredClaim && !claimBusy) onRewardsClaimed?.();
         return progression;
@@ -246,11 +244,12 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
     return trophyProgressionRefreshPromise;
   }
 
-  function renderTrophyTrack(state) {
+  function renderTrophyTrack(progression, { preserveScroll = false, scrollLeft, oldSpacing } = {}) {
+    const state = { ...progression, tiers: (progression?.tiers || []).map(tier => ({ ...tier })) };
     const container = document.getElementById("trophy-track-list");
-    const shouldPreserveScroll = !!state?.__preserveScroll;
-    const previousScrollLeft = Number.isFinite(Number(state?.__scrollLeft))
-      ? Number(state.__scrollLeft)
+    const shouldPreserveScroll = preserveScroll;
+    const previousScrollLeft = Number.isFinite(Number(scrollLeft))
+      ? Number(scrollLeft)
       : trophyRoadLastScrollLeft;
     if (!container) return;
 
@@ -415,15 +414,14 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
         const startingWallet = { coins: Number(getUserData()?.coins) || 0, gems: Number(getUserData()?.gems) || 0 };
         let committed = false;
         try {
-          const result = await fetchLobbyJson("/trophies/claim", {
+          const result = await fetchLobbyJson(API_PATHS.TROPHIES_CLAIM, {
             method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tierId }),
           });
           committed = true;
           tier.claimed = true;
           tier.canClaim = false;
           if (getUserData() && result.player) {
-            getUserData().char_levels = result.player.char_levels || getUserData().char_levels;
-            getUserData().trophy_peak = result.player.trophyPeak;
+            updateUser({ char_levels: result.player.char_levels || getUserData().char_levels, trophy_peak: result.player.trophyPeak });
           }
           trophyProgressionState.availableClaimCount = Math.max(0, trophyProgressionState.availableClaimCount - 1);
           setTrophyClaimBadge(trophyProgressionState.availableClaimCount);
@@ -469,8 +467,8 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
         ratioToX(overallRatio) - container.clientWidth / 2,
       ),
     );
-    const preservedScrollLeft = state?.__oldSpacing
-      ? previousScrollLeft * tierSpacing / state.__oldSpacing
+    const preservedScrollLeft = oldSpacing
+      ? previousScrollLeft * tierSpacing / oldSpacing
       : previousScrollLeft;
     const nextScrollLeft = shouldPreserveScroll
       ? Math.max(
@@ -506,17 +504,16 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
     }
 
     try {
-      const progression = await fetchLobbyJson("/trophies/progression");
+      const progression = await fetchLobbyJson(API_PATHS.TROPHIES_PROGRESSION);
       const layoutChanged = hasExistingCanvas &&
         Number(existingCanvas.dataset.viewportWidth) !== list.clientWidth;
       if (hasExistingCanvas && !layoutChanged && reconcileTrophyTrackState(progression)) {
         return;
       }
-      progression.__preserveScroll = preserveScroll || hasExistingCanvas;
-      progression.__scrollLeft =
-        Number(list?.scrollLeft) || trophyRoadLastScrollLeft;
-      if (layoutChanged) progression.__oldSpacing = Number(existingCanvas.dataset.tierSpacing) || 0;
-      renderTrophyTrack(progression);
+      renderTrophyTrack(progression, {
+        preserveScroll: preserveScroll || hasExistingCanvas, scrollLeft: Number(list?.scrollLeft) || trophyRoadLastScrollLeft,
+        oldSpacing: layoutChanged ? Number(existingCanvas.dataset.tierSpacing) || 0 : 0,
+      });
     } catch (err) {
       if (!hasExistingCanvas && list) {
         list.innerHTML = `<div class="trophy-rewards-state">
@@ -530,7 +527,7 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
 
   async function refreshTrophyClaimAvailability() {
     try {
-      const progression = await fetchLobbyJson("/trophies/progression");
+      const progression = await fetchLobbyJson(API_PATHS.TROPHIES_PROGRESSION);
       setTrophyClaimBadge(Number(progression?.availableClaimCount) || 0);
     } catch (_) {
       setTrophyClaimBadge(0);

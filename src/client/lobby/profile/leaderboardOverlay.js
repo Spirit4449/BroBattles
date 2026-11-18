@@ -1,3 +1,4 @@
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
 import { titleMarkup } from "../../views/titleView.js";
 // Trophy leaderboard overlay.
 import { escapeHtml, fetchLobbyJson, openOverlay } from "../ui";
@@ -74,7 +75,7 @@ export async function openLeaderboardOverlay(profilePopup) {
         <strong>Loading standings</strong>
         <span>Checking the latest rankings...</span>
       </div>`;
-  const data = await fetchLobbyJson("/leaderboard/trophies?limit=100");
+  const data = await fetchLobbyJson(API_PATHS.LEADERBOARD_TROPHIES + "?limit=100");
   renderLeaderboardRows(
     Array.isArray(data?.leaderboard) ? data.leaderboard : [],
     profilePopup,

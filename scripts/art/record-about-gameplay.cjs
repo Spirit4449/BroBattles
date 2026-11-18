@@ -23,6 +23,8 @@ const { difficultyForTrophies } = require('../../src/server/core/bots/config');
 const { getHealth, getDamage, getSpecialDamage } = require('../../src/shared/characters/characterStats');
 const { snapshotEpoch } = require('../../src/shared/combat/runtime/clock');
 
+const { SETTINGS_STORAGE_KEY, BATTLE_TUTORIAL_MATCH_KEY } = require('../../src/shared/storageKeys.js');
+
 const root = path.resolve(__dirname, '../..');
 const output = path.join(root, 'output/about-gameplay');
 const installed = path.join(root, 'public/assets/site/gameplay');
@@ -106,19 +108,13 @@ async function main() {
     let html = fs.readFileSync(path.join(root, 'public/game.html'), 'utf8')
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '');
     html = html.replace('</body>', `<script>
-      window.updateLoading = p => { if(p>=100) {
-        document.querySelector('#loading-wrap')?.remove();
-        document.querySelector('#matchmaking-screen')?.remove();
-        document.querySelector('#game-bg')?.classList.add('visible');
-        document.dispatchEvent(new Event('game:ready'));
-      }};
-      window.markMatchBackgroundReady = () => {};
-      localStorage.setItem('bb-battle-tutorial-v1', '1');
-      localStorage.setItem('bb_settings_v1', JSON.stringify({graphics:'super-high', music:0, sfx:0}));
+      // Use a non-match value so no recording enables the first-match tutorial.
+      localStorage.setItem(${JSON.stringify(BATTLE_TUTORIAL_MATCH_KEY)}, 'recording');
+      localStorage.setItem(${JSON.stringify(SETTINGS_STORAGE_KEY)}, JSON.stringify({graphics:'super-high', music:0, sfx:0}));
     </script><script src="/bundles/phaser-arcade-physics.min.js"></script>
     <script>const OriginalGame = Phaser.Game; Phaser.Game = class extends OriginalGame { constructor(config) { super({...config, fps:{...config.fps, target:60}}); window.__filmGame = this; } };</script>
     <script src="/bundles/game.bundle.js"></script>
-    <script>window.__BOOT_GAME__();</script></body>`);
+    </body>`);
     res.type('html').send(html);
   });
   app.use('/assets', express.static(path.join(root, 'public/assets')));
@@ -173,7 +169,7 @@ async function main() {
       room.status = 'active'; room._netTestEnabled = true;
       // Leave the action running long enough to choose an edit after a knockout.
       // Health, movement, attacks, ammo and super charge use normal match rules.
-      room._checkVictoryCondition = () => {};
+      room.checkVictoryCondition = () => {};
       room._requiredUserIds.clear();
       gameData = { ...room.matchData, matchId: room.matchId, mapSnapshot,
         yourName: 'Camera', yourTeam: 'spectator', yourCharacter: 'ninja', isGuest: true,

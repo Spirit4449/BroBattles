@@ -1,10 +1,7 @@
-// Read-only report of which migrations/*.sql files appear unapplied. Expected
-// tables, columns and indexes are derived from each file's additive DDL
-// (including DDL embedded in conditional PREPARE strings), so new migrations
-// are covered without registering them. Changes made only inside an apply
-// script, or destructive statements, are not detected.
+// Read-only schema verification, with migration-file hints for missing objects.
 const fs = require('node:fs');
-const { MIGRATIONS_DIR, connect, hasColumn, hasIndex, hasTable } = require('./db.cjs');
+const { MIGRATIONS_DIR, connect, readMigration } = require('./db.cjs');
+const { findSchemaProblems, readSchema } = require('../../src/server/core/schemaContract');
 
 const NAME = '`?(\\w+)`?';
 
@@ -32,30 +29,31 @@ function expectedSchema(sql) {
 
 const describe = (item) => item.kind === 'table' ? `table ${item.table}` : `${item.kind} ${item.table}.${item.name}`;
 
-async function isPresent(conn, item) {
-  if (item.kind === 'table') return hasTable(conn, item.table);
-  if (item.kind === 'column') return hasColumn(conn, item.table, item.name);
-  return hasIndex(conn, item.table, item.name);
-}
-
 async function main() {
   const conn = await connect();
-  let pending = 0;
   try {
+    const metadata = await readSchema({ runQuery: async sql => (await conn.query(sql))[0] });
+    const problems = findSchemaProblems(metadata);
+    const names = {
+      table: new Set(metadata.columns.map(row => row.tableName)),
+      column: new Set(metadata.columns.map(row => `${row.tableName}.${row.columnName}`)),
+      index: new Set(metadata.keys.map(row => `${row.tableName}.${row.indexName}`)),
+    };
     for (const file of fs.readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort()) {
-      const expected = expectedSchema(fs.readFileSync(`${MIGRATIONS_DIR}/${file}`, 'utf8'));
-      const missing = [];
-      for (const item of expected) if (!(await isPresent(conn, item))) missing.push(describe(item));
-      if (missing.length) pending++;
-      const status = !expected.length ? 'unchecked' : missing.length ? 'MISSING' : 'applied';
-      console.log(`${status.padEnd(9)} ${file}${missing.length ? `\n          ${missing.join(', ')}` : ''}`);
+      const expected = expectedSchema(readMigration(file));
+      const missing = expected.filter(item =>
+        !names[item.kind].has(item.kind === 'table' ? item.table : `${item.table}.${item.name}`));
+      const status = !expected.length ? 'data-only' : missing.length ? 'check DDL' : 'DDL found';
+      console.log(`${status.padEnd(9)} ${file}${missing.length ? `\n          ${missing.map(describe).join(', ')}` : ''}`);
+    }
+    if (problems.length) {
+      console.error(`\nDatabase schema problems:\n${problems.map(problem => `  ${problem}`).join('\n')}`);
+      process.exitCode = 1;
+    } else {
+      console.log('\nDatabase satisfies the startup schema contract.');
     }
   } finally {
     await conn.end();
-  }
-  if (pending) {
-    console.log(`\n${pending} migration(s) look unapplied. Run the matching scripts/apply-*-migration.cjs or the SQL file.`);
-    process.exitCode = 1;
   }
 }
 

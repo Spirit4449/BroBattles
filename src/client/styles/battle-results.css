@@ -1,0 +1,953 @@
+/* Match completion is a compact reward reveal, not a dense scoreboard. */
+.bb-game-over-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 14000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 20px;
+  color: var(--bb-text);
+  background: var(--bb-popup-backdrop);
+  font-family: var(--bb-font-body);
+}
+
+.bb-game-over-card {
+  position: relative;
+  width: min(680px, 94vw);
+  max-height: min(800px, 92dvh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 26px 24px;
+  text-align: center;
+  isolation: isolate;
+}
+
+.bb-game-over-card::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  opacity: 0.48;
+  background:
+    linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.055) 45%, transparent 68%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 5px);
+}
+
+
+
+.bb-game-over-hero {
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0 -26px;
+  padding: 20px 26px 18px;
+  overflow: hidden;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.13);
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.24), transparent 35%),
+    var(--bb-header-gradient);
+  box-shadow: inset 0 -12px 24px rgba(3, 7, 18, 0.16);
+}
+
+.bb-game-over-card.is-victory .bb-game-over-hero {
+  background:
+    radial-gradient(circle at 50% 12%, rgba(218, 255, 237, 0.28), transparent 36%),
+    linear-gradient(100deg, #16775c, #228e70 48%, #3569a9);
+}
+
+.bb-game-over-card.is-defeat .bb-game-over-hero {
+  background:
+    radial-gradient(circle at 50% 12%, rgba(255, 214, 222, 0.19), transparent 36%),
+    linear-gradient(100deg, #6d2940, #88434c 48%, #45457f);
+}
+
+.bb-game-over-kicker {
+  display: block;
+  margin-bottom: 9px;
+  color: rgba(236, 245, 255, 0.78);
+  font-family: var(--bb-font-display);
+  font-size: 7px;
+  line-height: 1.2;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  animation: bb-game-over-rise 420ms 90ms var(--bb-ease) both;
+}
+
+.bb-game-over-title {
+  margin: 0;
+  color: #fff;
+  font-family: var(--bb-font-display);
+  font-size: clamp(30px, 5.2vw, 50px);
+  line-height: 1.12;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-shadow:
+    0 4px 0 rgba(2, 5, 12, 0.48),
+    0 0 24px rgba(255, 255, 255, 0.18);
+  animation: bb-game-over-title-in 620ms 80ms cubic-bezier(0.12, 0.78, 0.25, 1.2) both;
+}
+
+.bb-game-over-title.is-victory {
+  color: #baffd4;
+  text-shadow:
+    0 4px 0 #07533b,
+    0 0 30px rgba(119, 255, 183, 0.38);
+}
+
+.bb-game-over-title.is-defeat {
+  color: #ffb3bd;
+  text-shadow:
+    0 4px 0 #641e32,
+    0 0 25px rgba(255, 117, 139, 0.25);
+  animation: bb-game-over-defeat-in 820ms 80ms cubic-bezier(0.22, 0.7, 0.3, 1) both;
+}
+
+.bb-game-over-title.is-draw {
+  color: #ffe6a6;
+}
+
+.bb-game-over-hero p {
+  margin: 9px 0 0;
+  color: rgba(242, 247, 255, 0.88);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  animation: bb-game-over-rise 430ms 230ms var(--bb-ease) both;
+}
+
+.bb-game-over-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 3px 3px 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bb-border) transparent;
+}
+
+.bb-game-over-summary,
+.bb-game-over-results {
+  margin-top: 17px;
+  text-align: left;
+}
+
+.bb-game-over-panel { position: relative; width: min(680px, 94vw); }
+.bb-game-over-panel > .bb-game-over-card { width: 100%; }
+.bb-game-over-streak {
+  position: absolute;
+  top: -10px;
+  left: -16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 6px;
+  border: 4px solid #090f1d;
+  border-radius: 0;
+  background: repeating-linear-gradient(0deg, #402d1c 0 4px, #382819 4px 8px);
+  color: #ffe4a2;
+  box-shadow: 3px 4px 0 #0008, inset 0 3px var(--bb-coin), inset 3px 0 #9c692c,
+    inset -3px 0 #805026, inset 0 -3px #6a4324;
+  font-family: var(--bb-font-display);
+  text-align: center;
+  pointer-events: none;
+  transform: rotate(-7deg);
+  animation: bb-streak-corner-in 400ms 180ms steps(5, end) both;
+}
+.bb-game-over-streak-icon { width: 34px; height: 38px; object-fit: contain; image-rendering: pixelated; }
+.bb-game-over-streak strong { display: block; font-size: 6px; line-height: 1.5; text-transform: uppercase; }
+.bb-game-over-streak-count {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  line-height: 1.25;
+  text-shadow: 2px 2px #100e19;
+  transition: opacity 140ms steps(3, end), transform 140ms steps(3, end);
+}
+.bb-game-over-streak-count.is-changing { opacity: 0; transform: translateY(-7px); }
+.bb-game-over-streak-count.is-counted { animation: bb-streak-count-in 350ms steps(4, end) both; }
+.bb-game-over-streak.is-lost {
+  background: repeating-linear-gradient(0deg, #352c3c 0 4px, #2b2533 4px 8px);
+  color: #e8b9c8;
+  box-shadow: 3px 4px 0 #0008, inset 0 3px #bb879b, inset 3px 0 #7c5368,
+    inset -3px 0 #594152, inset 0 -3px #493445;
+}
+.bb-game-over-streak.is-lost .bb-game-over-streak-icon { content: url("/assets/icons/win-streak-poster.webp"); animation: bb-streak-extinguish 900ms 500ms steps(5, end) both; }
+.bb-streak-sparks { position: absolute; inset: 0; pointer-events: none; }
+.bb-streak-sparks i { position: absolute; left: calc(12% + var(--spark) * 10%); top: 40%; width: 3px; height: 3px; background: #ffcf52; animation: bb-streak-spark 1200ms calc(350ms + var(--spark) * 110ms) steps(6, end) 2 both; }
+.bb-streak-sparks i:nth-child(even) { background: #ff823d; top: 65%; }
+.is-lost .bb-streak-sparks i { background: #958595; animation-name: bb-streak-ash; animation-iteration-count: 1; }
+@keyframes bb-streak-corner-in { from { opacity: 0; transform: translateY(-12px) rotate(-12deg); } to { opacity: 1; transform: rotate(-7deg); } }
+@keyframes bb-streak-count-in { from { opacity: 0; transform: translateY(7px) scale(1.2); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes bb-streak-spark { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-35px); } }
+@keyframes bb-streak-ash { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: .8; } 100% { opacity: 0; transform: translateY(30px); } }
+@keyframes bb-streak-extinguish { from { filter: grayscale(0); opacity: 1; } to { filter: grayscale(1); opacity: .5; } }
+@media (max-width: 680px) {
+  .bb-game-over-panel { width: min(520px, 96vw); }
+  .bb-game-over-panel:has(.bb-game-over-streak) .bb-game-over-hero { padding-top: 48px; }
+  .bb-game-over-streak { top: -6px; left: 6px; padding: 4px 9px 4px 5px; gap: 4px; }
+  .bb-game-over-streak-icon { width: 28px; height: 32px; }
+  .bb-game-over-streak strong { font-size: 5px; }
+  .bb-game-over-streak-count { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bb-game-over-streak, .bb-game-over-streak-count.is-counted,
+  .bb-game-over-streak.is-lost .bb-game-over-streak-icon { animation: none; }
+  .bb-game-over-streak-count { transition: none; }
+  .bb-game-over-streak.is-lost .bb-game-over-streak-icon { filter: grayscale(1); opacity: .5; }
+  .bb-streak-sparks { display: none; }
+}
+
+.bb-game-over-summary {
+  animation: bb-game-over-rise 500ms 260ms var(--bb-ease) both;
+}
+
+.bb-game-over-results {
+  animation: bb-game-over-rise 500ms 390ms var(--bb-ease) both;
+}
+
+.bb-game-over-summary h2,
+.bb-game-over-results h2 {
+  margin: 0 0 10px;
+  color: var(--bb-text-muted);
+  font-family: var(--bb-font-display);
+  font-size: 8px;
+  line-height: 1.35;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 rgba(2, 5, 12, 0.7);
+}
+
+.bb-game-over-rewards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bb-game-over-reward {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  overflow: hidden;
+  border: 2px solid #4e5562;
+  background: linear-gradient(180deg, #1d2a3c, #101a29);
+  box-shadow:
+    0 4px 0 var(--bb-ink),
+    inset 0 2px rgba(255, 255, 255, 0.08);
+}
+
+.bb-game-over-reward::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  opacity: 0.18;
+  background: linear-gradient(110deg, transparent 38%, #fff 50%, transparent 62%);
+  transform: translateX(-100%);
+  animation: bb-game-over-sheen 850ms 650ms ease-out both;
+}
+
+.bb-game-over-reward.is-coins {
+  border-color: #7b6532;
+}
+
+.bb-game-over-reward.is-gems {
+  border-color: #376879;
+}
+
+.bb-game-over-reward.is-trophies {
+  border-color: #796a3d;
+}
+
+.bb-game-over-reward.is-negative {
+  border-color: #7c3d4d;
+  background: linear-gradient(180deg, #3b2230, #1d1521);
+}
+
+.bb-game-over-reward.is-zero {
+  opacity: 0.58;
+}
+
+.bb-game-over-reward-icon {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+}
+
+.bb-game-over-reward-icon i {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  opacity: 0.34;
+  background: #f5c94d;
+  filter: blur(9px);
+}
+
+.bb-game-over-reward.is-gems .bb-game-over-reward-icon i {
+  background: #56d8ff;
+}
+
+.bb-game-over-reward.is-negative .bb-game-over-reward-icon i {
+  background: #ff6f8b;
+}
+
+.bb-game-over-reward-icon img {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.45));
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.bb-game-over-reward.is-collecting .bb-game-over-reward-icon img {
+  opacity: 0.58;
+  transform: scale(0.86);
+}
+
+.bb-game-over-reward > span:last-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bb-game-over-reward small {
+  color: var(--bb-text-muted);
+  font-family: var(--bb-font-display);
+  font-size: 6px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.bb-game-over-reward strong {
+  overflow: hidden;
+  color: #ffd45d;
+  font-family: var(--bb-font-display);
+  font-size: clamp(12px, 2vw, 17px);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.bb-game-over-reward.is-gems strong {
+  color: #71e3ff;
+}
+
+.bb-game-over-reward.is-trophies strong {
+  color: #ffe08b;
+}
+
+.bb-game-over-reward.is-negative strong {
+  color: #ff91a6;
+}
+
+.bb-game-over-results-table {
+  overflow: hidden;
+  border: 2px solid var(--bb-border-soft);
+  background: rgba(8, 18, 36, 0.76);
+  box-shadow: var(--bb-inset-shadow);
+}
+
+.bb-game-over-result-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(76px, 1fr) minmax(58px, 0.7fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 40px;
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(176, 219, 255, 0.13);
+  color: var(--bb-text-soft);
+  font-family: var(--bb-font-display);
+  font-size: 9px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.bb-game-over-result-row:last-child {
+  border-bottom: 0;
+}
+
+.bb-game-over-result-row > :first-child {
+  overflow: hidden;
+  color: var(--bb-text);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bb-game-over-result-row.is-header {
+  min-height: 30px;
+  color: var(--bb-text-muted);
+  background: rgba(32, 55, 86, 0.55);
+  font-size: 7px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.bb-game-over-result-row.is-header > :first-child {
+  color: var(--bb-text-muted);
+}
+
+.bb-game-over-result-row.is-you {
+  background: linear-gradient(90deg, rgba(61, 145, 235, 0.2), rgba(61, 145, 235, 0.07));
+  box-shadow: inset 3px 0 #4b9cf0;
+}
+
+.bb-game-over-you {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 3px 5px;
+  color: #b9dcff;
+  background: rgba(66, 145, 226, 0.26);
+  font-family: var(--bb-font-display);
+  font-size: 6px;
+  line-height: 1;
+  text-transform: uppercase;
+  vertical-align: 2px;
+}
+
+.bb-game-over-action {
+  min-width: min(300px, 82vw);
+  min-height: 50px;
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: 22px;
+  padding: 12px 20px;
+  color: #fff;
+  background: var(--bb-primary-gradient);
+  animation: bb-game-over-rise 500ms 510ms var(--bb-ease) both;
+}
+
+.bb-game-over-wallet {
+  position: fixed;
+  z-index: 15000;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-14px) scale(0.96);
+}
+
+.bb-game-over-wallet.is-active {
+  animation: bb-game-over-wallet-in 340ms var(--bb-ease) forwards;
+}
+
+.bb-game-over-wallet.is-complete > span {
+  border-color: #6989ac;
+}
+
+.bb-game-over-wallet.is-leaving {
+  animation: bb-game-over-wallet-out 360ms ease-in forwards;
+}
+
+.bb-game-over-wallet > span {
+  min-width: 108px;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 2px solid #324c6d;
+  background: rgba(7, 15, 28, 0.96);
+  box-shadow:
+    0 5px 0 var(--bb-ink),
+    0 9px 20px rgba(0, 0, 0, 0.38),
+    inset 0 2px rgba(255, 255, 255, 0.08);
+  transform-origin: center;
+  transition: border-color 180ms ease;
+}
+
+.bb-game-over-wallet img {
+  width: 25px;
+  height: 25px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.bb-game-over-wallet > span > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bb-game-over-wallet small {
+  color: #8da2bf;
+  font-family: var(--bb-font-display);
+  font-size: 5px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.bb-game-over-wallet strong {
+  overflow: hidden;
+  color: #fff;
+  font-family: var(--bb-font-display);
+  font-size: 8px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.bb-game-over-celebration {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bb-game-over-celebration i {
+  --spark-angle: calc(var(--spark-index) * 25.72deg);
+  position: absolute;
+  left: 50%;
+  top: 88px;
+  width: 4px;
+  height: 13px;
+  background: #c8e8ff;
+  box-shadow: 0 0 8px currentColor;
+  opacity: 0;
+  animation: bb-game-over-burst 760ms calc(110ms + var(--spark-index) * 13ms) cubic-bezier(0.1, 0.65, 0.22, 1) both;
+}
+
+.bb-game-over-card.is-victory .bb-game-over-celebration i:nth-child(3n + 1) {
+  color: #74ffc0;
+  background: #74ffc0;
+}
+
+.bb-game-over-card.is-victory .bb-game-over-celebration i:nth-child(3n + 2),
+.bb-game-over-card.is-draw .bb-game-over-celebration i:nth-child(odd) {
+  color: #ffe580;
+  background: #ffe580;
+}
+
+.bb-game-over-card.is-defeat .bb-game-over-celebration i {
+  left: calc(12% + var(--spark-index) * 5.8%);
+  top: 42px;
+  color: #e990a1;
+  background: #e990a1;
+  animation: bb-game-over-defeat-fall 1100ms calc(160ms + var(--spark-index) * 36ms) ease-in both;
+}
+
+.bb-game-over-flying-reward {
+  position: fixed;
+  z-index: 15010;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform;
+  filter:
+    drop-shadow(0 5px 6px rgba(0, 0, 0, 0.58))
+    drop-shadow(0 0 7px rgba(255, 220, 112, 0.42));
+}
+
+.bb-game-over-flying-reward.is-gems {
+  filter:
+    drop-shadow(0 5px 6px rgba(0, 0, 0, 0.58))
+    drop-shadow(0 0 8px rgba(86, 216, 255, 0.55));
+}
+
+.bb-game-over-wallet-spark {
+  position: fixed;
+  z-index: 15011;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #fff4c7;
+  background: #ffbf35;
+  box-shadow: 0 0 8px rgba(255, 193, 53, 0.8);
+  pointer-events: none;
+}
+
+.bb-game-over-wallet-spark.is-gems {
+  border-color: #e3fbff;
+  background: #56d8ff;
+  box-shadow: 0 0 9px rgba(86, 216, 255, 0.9);
+}
+
+.bb-game-over-wallet-spark.is-trophies {
+  border-color: #fff6ce;
+  background: #f7d567;
+  box-shadow: 0 0 9px rgba(247, 213, 103, 0.9);
+}
+
+@keyframes bb-game-over-title-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.72);
+    letter-spacing: -3px;
+  }
+  72% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.045);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bb-game-over-defeat-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) rotate(-1deg);
+    letter-spacing: 4px;
+  }
+  62% {
+    opacity: 1;
+    transform: translateY(5px) rotate(0.5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(3px) rotate(0);
+    letter-spacing: 2px;
+  }
+}
+
+@keyframes bb-game-over-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bb-game-over-sheen {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(110%); }
+}
+
+@keyframes bb-game-over-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--spark-angle)) translateY(0) scale(0.3);
+  }
+  24% { opacity: 0.95; }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--spark-angle)) translateY(-155px) scale(0.55);
+  }
+}
+
+@keyframes bb-game-over-defeat-fall {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -12px) rotate(-8deg) scaleY(0.7);
+  }
+  18% { opacity: 0.58; }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 150px) rotate(16deg) scaleY(1.15);
+  }
+}
+
+@keyframes bb-game-over-wallet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bb-game-over-wallet-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+}
+
+@media (max-width: 680px) {
+  .bb-game-over-backdrop {
+    align-items: center;
+    padding: max(66px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+  }
+
+  .bb-game-over-card,
+  .bb-game-over-card.is-mobile {
+    width: min(520px, 96vw);
+    max-height: calc(100dvh - max(84px, env(safe-area-inset-top)));
+    padding: 0 14px 16px;
+  }
+
+  .bb-game-over-hero {
+    margin: 0 -14px;
+    padding: 16px 14px 14px;
+  }
+
+  .bb-game-over-kicker {
+    margin-bottom: 7px;
+    font-size: 6px;
+  }
+
+  .bb-game-over-title {
+    font-size: clamp(24px, 9vw, 36px);
+  }
+
+  .bb-game-over-hero p {
+    margin-top: 7px;
+    font-size: 12px;
+  }
+
+  .bb-game-over-summary,
+  .bb-game-over-results {
+    margin-top: 13px;
+  }
+
+  .bb-game-over-rewards {
+    gap: 6px;
+  }
+
+  .bb-game-over-reward {
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 4px;
+    text-align: center;
+  }
+
+  .bb-game-over-reward-icon {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+  }
+
+  .bb-game-over-reward-icon img {
+    width: 29px;
+    height: 29px;
+  }
+
+  .bb-game-over-reward > span:last-child {
+    align-items: center;
+    gap: 4px;
+  }
+
+  .bb-game-over-reward small {
+    font-size: 7px;
+  }
+
+  .bb-game-over-reward strong {
+    font-size: clamp(12px, 3.8vw, 15px);
+  }
+
+  .bb-game-over-result-row {
+    grid-template-columns: minmax(0, 1.65fr) minmax(66px, 0.85fr) minmax(45px, 0.5fr);
+    gap: 6px;
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 11px;
+  }
+
+  .bb-game-over-result-row.is-header {
+    min-height: 27px;
+    font-size: 7px;
+  }
+
+  .bb-game-over-action {
+    width: 100%;
+    min-height: 50px;
+    margin-top: 16px;
+    font-size: 11px;
+  }
+
+  .bb-game-over-wallet {
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    left: max(8px, env(safe-area-inset-left));
+    justify-content: flex-end;
+    gap: 5px;
+  }
+
+  .bb-game-over-wallet > span {
+    min-width: 0;
+    width: min(31%, 96px);
+    min-height: 38px;
+    grid-template-columns: 21px minmax(0, 1fr);
+    gap: 5px;
+    padding: 5px 6px;
+  }
+
+  .bb-game-over-wallet img {
+    width: 21px;
+    height: 21px;
+  }
+
+  .bb-game-over-wallet small {
+    font-size: 6px;
+  }
+
+  .bb-game-over-wallet strong {
+    font-size: 8px;
+  }
+}
+
+/* Landscape phones: too short for the stacked card, so the result banner sits
+   beside the rewards and the exit button stays on screen without scrolling. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .bb-game-over-backdrop {
+    align-items: center;
+    padding: max(52px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+
+  .bb-game-over-panel {
+    width: min(820px, 100%);
+  }
+
+  .bb-game-over-card,
+  .bb-game-over-card.is-mobile {
+    width: 100%;
+    max-height: calc(100dvh - max(52px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
+    display: grid;
+    grid-template-columns: minmax(190px, 0.8fr) minmax(0, 1.5fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    padding: 0;
+  }
+
+  .bb-game-over-hero {
+    grid-row: 1 / 3;
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin: 0;
+    padding: 18px 16px;
+    border-bottom: 0;
+    border-right: 2px solid rgba(255, 255, 255, 0.13);
+  }
+
+  .bb-game-over-panel:has(.bb-game-over-streak) .bb-game-over-hero {
+    padding-top: 52px;
+  }
+
+  .bb-game-over-title {
+    font-size: clamp(24px, 8vh, 38px);
+  }
+
+  .bb-game-over-hero p {
+    margin-top: 10px;
+    font-size: 13px;
+  }
+
+  .bb-game-over-content {
+    grid-column: 2;
+    grid-row: 1;
+    padding: 4px 14px 2px;
+  }
+
+  .bb-game-over-summary,
+  .bb-game-over-results {
+    margin-top: 12px;
+  }
+
+  .bb-game-over-rewards {
+    gap: 8px;
+  }
+
+  .bb-game-over-reward {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .bb-game-over-reward-icon {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+  }
+
+  .bb-game-over-reward-icon img {
+    width: 30px;
+    height: 30px;
+  }
+
+  .bb-game-over-reward small {
+    font-size: 7px;
+  }
+
+  .bb-game-over-reward strong {
+    font-size: 15px;
+  }
+
+  .bb-game-over-result-row {
+    min-height: 34px;
+    padding: 6px 12px;
+    font-size: 10px;
+  }
+
+  .bb-game-over-result-row.is-header {
+    min-height: 26px;
+    font-size: 7px;
+  }
+
+  .bb-game-over-action {
+    grid-column: 2;
+    grid-row: 2;
+    width: calc(100% - 28px);
+    min-width: 0;
+    min-height: 48px;
+    margin: 10px 14px 14px;
+    font-size: 11px;
+  }
+
+  .bb-game-over-streak {
+    top: -6px;
+    left: 4px;
+    padding: 4px 9px 4px 5px;
+    gap: 4px;
+  }
+
+  .bb-game-over-streak-icon {
+    width: 28px;
+    height: 32px;
+  }
+
+  .bb-game-over-streak-count {
+    font-size: 15px;
+  }
+
+  .bb-game-over-wallet {
+    top: max(6px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    gap: 6px;
+  }
+
+  .bb-game-over-wallet > span {
+    min-width: 96px;
+    min-height: 38px;
+    padding: 4px 8px;
+  }
+
+  .bb-game-over-wallet small {
+    font-size: 6px;
+  }
+
+  .bb-game-over-wallet strong {
+    font-size: 9px;
+  }
+}

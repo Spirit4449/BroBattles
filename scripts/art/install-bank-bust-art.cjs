@@ -85,26 +85,19 @@ const union = (boxes) => {
   return { left, top, width: right - left, height: bottom - top };
 };
 
-/** Splits a keyed image into its steel body and its white accent mask. */
-function splitKey(src) {
+/** Replaces legacy magenta team markers with steel. */
+function cleanVaultBody(src) {
   const { data, width, height, channels } = src;
   const body = Buffer.from(data);
-  const accent = Buffer.alloc(width * height * 4, 0);
-  let keyed = 0;
   for (let i = 0; i < width * height; i++) {
     const o = i * channels;
     if (data[o + 3] <= 8) continue;
     if (!isKey(data[o], data[o + 1], data[o + 2])) continue;
-    keyed++;
     body[o] = STEEL.r;
     body[o + 1] = STEEL.g;
     body[o + 2] = STEEL.b;
-    accent[i * 4] = 255;
-    accent[i * 4 + 1] = 255;
-    accent[i * 4 + 2] = 255;
-    accent[i * 4 + 3] = data[o + 3];
   }
-  return { body, accent, keyed, width, height, channels };
+  return body;
 }
 
 async function write(buffer, width, height, channels, box, outName) {
@@ -141,18 +134,8 @@ async function installVaults() {
   const box = union(images.map(alphaBounds));
   for (let i = 0; i < states.length; i++) {
     const src = images[i];
-    const { body, accent, keyed } = splitKey(src);
+    const body = cleanVaultBody(src);
     await write(body, src.width, src.height, src.channels, box, `vault-${states[i]}.webp`);
-    // The current vault carries its team colour as a glow and a hit outline
-    // drawn by the runtime, not as a painted accent. Writing an empty mask
-    // would just put a transparent sprite over the door every frame, so when
-    // there is no key the stale mask is removed instead.
-    const accentName = `vault-${states[i]}-accent.webp`;
-    if (keyed) await write(accent, src.width, src.height, 4, box, accentName);
-    else if (!DRY && fs.existsSync(path.join(DEST, accentName))) {
-      fs.unlinkSync(path.join(DEST, accentName));
-      console.log(`removed ${accentName} (artwork has no team-colour key)`);
-    }
   }
 }
 
@@ -162,9 +145,9 @@ async function installVaults() {
 // and detailed next to 64px girders, so each one is resampled here to the size
 // it is actually drawn at and then drawn 1:1.
 const DRAW_WIDTH = {
-  "vault-intact.webp": 264, "vault-intact-accent.webp": 264,
-  "vault-damaged.webp": 264, "vault-damaged-accent.webp": 264,
-  "vault-breached.webp": 264, "vault-breached-accent.webp": 264,
+  "vault-intact.webp": 264,
+  "vault-damaged.webp": 264,
+  "vault-breached.webp": 264,
 };
 
 async function resampleToDrawSize() {

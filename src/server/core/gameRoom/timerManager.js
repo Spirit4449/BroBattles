@@ -1,8 +1,10 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { exposeDamageHitbox } = require('../../../shared/combat/runtime/damageHitboxes.js');
 const { isPlaced } = require('../../../shared/combat/targetable.js');
 const {
   GAME_DURATION_MS,
   SD_DAMAGE_PER_SEC,
+  INACTIVE_POISON_BELOW_WORLD_PX,
   SUDDEN_DEATH_MAX_MS,
   TIMER_EMIT_INTERVAL_MS,
 } = require("../../../shared/combat/matchConfig.js");
@@ -14,6 +16,10 @@ function matchDurationMs(room) {
     1000,
     Number(room.gameMode?.getMatchDurationMs?.()) || GAME_DURATION_MS,
   );
+}
+
+function poisonYAt(room, now, duration = matchDurationMs(room)) {
+  return room.computePoisonY(Math.max(0, now - room.loopStartWallTime - duration));
 }
 
 function decideSuddenDeathWinner(room) {
@@ -61,7 +67,7 @@ function decideSuddenDeathWinner(room) {
 function tickTimerAndSuddenDeath(room) {
   if (room.status !== "active") return;
   const now = Date.now();
-  const elapsed = now - room._loopStartWallTime;
+  const elapsed = now - room.loopStartWallTime;
   const totalDurationMs = matchDurationMs(room);
   const shouldUseSuddenDeath = room.gameMode?.supportsSuddenDeath?.() !== false;
   const remaining = Math.max(0, totalDurationMs - elapsed);
@@ -71,31 +77,31 @@ function tickTimerAndSuddenDeath(room) {
   const world = room.geometry.world;
   const worldBottomY = world.y + world.height;
   const poisonY = suddenDeath
-    ? room._computePoisonY(sdElapsed)
-    : worldBottomY + 60;
+    ? poisonYAt(room, now, totalDurationMs)
+    : worldBottomY + INACTIVE_POISON_BELOW_WORLD_PX;
 
   if (!shouldUseSuddenDeath && elapsed >= totalDurationMs) {
     const outcome = room.gameMode?.onTimerExpired?.() || null;
     if (outcome?.terminal) {
-      room._finishGame(outcome.winnerTeam ?? null, {
+      room.finishGame(outcome.winnerTeam ?? null, {
         ...(outcome.meta || {}),
       });
       return;
     }
   }
 
-  if (suddenDeath && !room._suddenDeathActive) {
-    room._suddenDeathActive = true;
-    room.io.to(`game:${room.matchId}`).emit("game:sudden-death:start", {
+  if (suddenDeath && !room.suddenDeathActive) {
+    room.suddenDeathActive = true;
+    room.broadcast(SOCKET_EVENTS.GAME_SUDDEN_DEATH_START, {
       poisonY,
     });
     console.log(`[GameRoom ${room.matchId}] Sudden death started`);
   }
 
-  if (room._suddenDeathActive) {
+  if (room.suddenDeathActive) {
     if (sdElapsed >= SUDDEN_DEATH_MAX_MS) {
       const outcome = decideSuddenDeathWinner(room);
-      room._finishGame(outcome.winnerTeam, {
+      room.finishGame(outcome.winnerTeam, {
         suddenDeathTimeout: true,
         tiebreakReason: outcome.reason,
         team1Alive: outcome.teams.team1.alive,
@@ -119,11 +125,11 @@ function tickTimerAndSuddenDeath(room) {
       const old = p.health;
       p.health = Math.max(0, p.health - dmgPerTick);
       if (p.health !== old) {
-        room._maybeBroadcastHealth(p, now, { cause: "poison" });
+        room.maybeBroadcastHealth(p, now, { cause: "poison" });
         if (p.health <= 0) {
           p.health = 0;
-          room._broadcastHealthUpdate(p, { cause: "poison" });
-          room._handlePlayerDeath(p, { cause: "poison", at: now });
+          room.broadcastHealthUpdate(p, { cause: "poison" });
+          room.handlePlayerDeath(p, { cause: "poison", at: now });
         }
       }
     }
@@ -131,7 +137,7 @@ function tickTimerAndSuddenDeath(room) {
 
   if (now - room._lastTimerEmitMs >= TIMER_EMIT_INTERVAL_MS) {
     room._lastTimerEmitMs = now;
-    room.io.to(`game:${room.matchId}`).emit("game:timer", {
+    room.broadcast(SOCKET_EVENTS.GAME_TIMER, {
       elapsed,
       remaining,
       total: totalDurationMs,
@@ -144,14 +150,14 @@ function tickTimerAndSuddenDeath(room) {
 // Snapshot spacing statistics live in timingDiagnostics (noted by the caller).
 function emitSnapshotWithTiming(room, snapMono) {
   room.broadcastSnapshot({
-    tickId: room._tickId,
+    tickId: room.tickId,
     tMono: snapMono,
   });
   netTestLogger.noteSnapshot(room, snapMono);
 }
 
 module.exports = {
-  matchDurationMs,
+  matchDurationMs, poisonYAt,
   tickTimerAndSuddenDeath,
   emitSnapshotWithTiming,
 };

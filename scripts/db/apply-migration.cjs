@@ -1,9 +1,45 @@
-// Applies one named, additive migration and verifies it. Every step is safe
-// to re-run; none rewrites existing game data.
+// Applies a named schema or backfill step. The bootstrap is for empty schemas.
 //
 //   node scripts/db/apply-migration.cjs <name>      (npm run migrate:apply -- <name>)
 //   node scripts/db/apply-migration.cjs --list
 const { hasColumn, hasIndex, readMigration, runScript } = require('./db.cjs');
+const { assertSchema } = require('../../src/server/core/schemaContract');
+
+// Explicit order includes helper-only changes and same-day dependencies.
+const BOOTSTRAP_ORDER = [
+  '0000_base_schema.sql',
+  '2026-03-25_game_mode_registry_scaffold.sql',
+  '2026-04-06_trophy_reward_claims.sql',
+  '2026-04-09_party_discovery_visibility.sql',
+  '2026-04-11_party_chat.sql',
+  '2026-04-14_party_join_requests.sql',
+  'player-cards',
+  '2026-04-14_profile_icons.sql',
+  '2026-04-15_abuse_controls.sql',
+  '2026-04-16_skins.sql',
+  '2026-08-31_shop_commerce.sql',
+  '2026-09-03_adaptive_bots.sql',
+  '2026-09-03_party_member_selection.sql',
+  'hardening',
+  'site',
+  'email',
+  'signup-marketing',
+  'email-polish',
+  'party-slots',
+  'trophy-road',
+  'friends',
+  'shop-views',
+  'friend-last-seen',
+  'highest-win-streak',
+  'name-changes',
+  'privacy-settings',
+  'party-hidden-bros',
+  'titles',
+  'temporary-bans',
+  '2026-11-12_ozzy_sparrow.sql',
+  'shop-payment-intent-unique',
+  'party-member-rename-cascade',
+];
 
 async function requireTables(conn, tables) {
   const [rows] = await conn.query(
@@ -15,6 +51,47 @@ async function requireTables(conn, tables) {
 }
 
 const MIGRATIONS = {
+  bootstrap: {
+    describe: 'Build the full game schema in an empty database.',
+    async run(conn) {
+      const [[{ tableCount }]] = await conn.query(
+        'SELECT COUNT(*) AS tableCount FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()',
+      );
+      if (Number(tableCount) !== 0) {
+        throw new Error('Bootstrap requires an empty database. Use the individual migration steps on an existing installation.');
+      }
+      await conn.query('SET SESSION default_storage_engine = InnoDB');
+      for (const step of BOOTSTRAP_ORDER) {
+        try {
+          if (step.endsWith('.sql')) await conn.query(readMigration(step));
+          else await MIGRATIONS[step].run(conn);
+        } catch (error) {
+          throw new Error(`Bootstrap failed at ${step}: ${error.message}`, { cause: error });
+        }
+      }
+      await assertSchema({ runQuery: async sql => (await conn.query(sql))[0] });
+    },
+  },
+  'player-cards': {
+    describe: 'Player-card ownership and equipped card.',
+    async run(conn) {
+      await conn.query(readMigration('2026-04-14_player_cards.sql'));
+      await requireTables(conn, ['user_cards']);
+      if (!(await hasColumn(conn, 'users', 'selected_card_id'))) throw new Error('Missing users.selected_card_id');
+    },
+  },
+  'shop-payment-intent-unique': {
+    describe: 'Require a unique Stripe payment intent per shop order.',
+    async run(conn) {
+      await conn.query(readMigration('2026-11-17_shop_payment_intent_unique.sql'));
+    },
+  },
+  'party-member-rename-cascade': {
+    describe: 'Keep party membership linked when a user changes their name.',
+    async run(conn) {
+      await conn.query(readMigration('2026-11-17_party_member_rename_cascade.sql'));
+    },
+  },
   'temporary-bans': {
     describe: 'Optional expiry for account bans and suspensions.',
     async run(conn) {
@@ -176,15 +253,19 @@ const MIGRATIONS = {
   },
 };
 
-const name = process.argv[2];
-if (!name || name === '--list' || !MIGRATIONS[name]) {
-  if (name && name !== '--list') console.error(`Unknown migration "${name}".`);
-  console.log('Migrations:');
-  for (const [key, { describe }] of Object.entries(MIGRATIONS)) console.log(`  ${key.padEnd(18)} ${describe}`);
-  if (name && name !== '--list') process.exitCode = 1;
-} else {
-  runScript(`${name} migration`, async (conn) => {
-    await MIGRATIONS[name].run(conn);
-    console.log(`${name} migration applied and verified.`);
-  });
+if (require.main === module) {
+  const name = process.argv[2];
+  if (!name || name === '--list' || !Object.hasOwn(MIGRATIONS, name)) {
+    if (name && name !== '--list') console.error(`Unknown migration "${name}".`);
+    console.log('Migrations:');
+    for (const [key, { describe }] of Object.entries(MIGRATIONS)) console.log(`  ${key.padEnd(18)} ${describe}`);
+    if (name && name !== '--list') process.exitCode = 1;
+  } else {
+    runScript(`${name} migration`, async (conn) => {
+      await MIGRATIONS[name].run(conn);
+      console.log(`${name} migration applied and verified.`);
+    });
+  }
 }
+
+module.exports = { bootstrapSchema: MIGRATIONS.bootstrap.run };

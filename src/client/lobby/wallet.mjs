@@ -1,3 +1,4 @@
+import { getUser, updateUser } from "./session.mjs";
 // All acknowledged wallet changes flow through here; views subscribe once.
 const listeners = new Set();
 let revision = 0;
@@ -8,11 +9,14 @@ export function subscribeWallet(listener) {
 }
 export function applyWallet(user, wallet, expectedRevision = revision) {
   if (!user || !wallet || expectedRevision !== revision) return false;
+  const patch = {};
   for (const currency of ["coins", "gems"]) {
     if (wallet[currency] == null) continue;
     const value = Number(wallet[currency]);
-    if (Number.isFinite(value) && value >= 0) user[currency] = value;
+    if (Number.isFinite(value) && value >= 0) patch[currency] = value;
   }
+  if (user === getUser()) updateUser(patch);
+  else Object.assign(user, patch);
   revision += 1;
   const balance = { coins: Number(user.coins) || 0, gems: Number(user.gems) || 0 };
   for (const currency of ["coins", "gems"]) {

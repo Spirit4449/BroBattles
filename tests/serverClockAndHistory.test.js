@@ -1,3 +1,4 @@
+const roomTransport = require('./helpers/roomTransport.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const input = require('../src/server/core/gameRoom/inputManager');
@@ -11,7 +12,7 @@ test('humans record one history sample per accepted packet and rewind linearly b
   let now = 100000;
   t.mock.method(Date, 'now', () => now);
   const player = { socketId: 'p', name: 'P', char_class: 'ninja', x: 0, y: 0, isAlive: true, connected: true };
-  const room = { players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
+  const room = { ...roomTransport, players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
   input.resetMovementBudget(player, now);
   // A teleport (spawn) starts history afresh at the new position.
   assert.deepEqual(player._posHistory.map(({ x, y, t }) => ({ x, y, t })), [{ x: 0, y: 0, t: now }]);
@@ -129,7 +130,7 @@ function victimFairnessRun({ lead = true, up = 20, down = 40, rewindMs = 120, of
   Date.now = () => now;
   try {
     const player = { socketId: 'v', name: 'V', char_class: 'ninja', x: selfX(0), y: FOOT_Y, isAlive: true, connected: true };
-    const room = { players: new Map([['v', player]]), geometry: { colliders: [], world: { x: 0, y: 0, width: 4000, height: 1000 } }, io: { to: () => ({ emit() {} }) } };
+    const room = { ...roomTransport, players: new Map([['v', player]]), geometry: { colliders: [], world: { x: 0, y: 0, width: 4000, height: 1000 } }, io: { to: () => ({ emit() {} }) } };
     input.resetMovementBudget(player, now);
     const clock = new CombatClock(); clock.reset('room'); clock.projectileLead = lead;
     clock.wallOffset = () => clientDate(0) - local(0);

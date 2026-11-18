@@ -43,14 +43,11 @@ function getResolvedCharacterEffectConfig(character, effectKey = null) {
   return cloneValue(effectTuning?.[effectKey] || {});
 }
 
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    CHARACTER_BODY_DEFAULTS,
-    getResolvedCharacterBodyConfig,
-    getResolvedCharacterAttackConfig,
-    getResolvedCharacterAimConfig,
-    getResolvedCharacterSpecialAimConfig,
-    getResolvedCharacterSpecialConfig,
-    getResolvedCharacterEffectConfig,
-  };
-}
+module.exports = {
+  getResolvedCharacterBodyConfig,
+  getResolvedCharacterAttackConfig,
+  getResolvedCharacterAimConfig,
+  getResolvedCharacterSpecialAimConfig,
+  getResolvedCharacterSpecialConfig,
+  getResolvedCharacterEffectConfig,
+};

@@ -1,7 +1,7 @@
-const { deleteMatchBots } = require('../services/match/matchRosterService');
+const { retireInterruptedMatch } = require("../services/match/matchLifecycleService");
 const { updateOrDeleteParty } = require("../services/party/party");
 
-function startCleanupJobs({ db, io, matchResults = null, getGameRoom = () => null }) {
+function startCleanupJobs({ scheduler, db, io, matchResults = null, getGameRoom = () => null }) {
   // Inactive member cleanup (every 30 minutes)
   let _cleanupRunning = false;
   async function cleanupInactiveMembers() {
@@ -32,7 +32,7 @@ function startCleanupJobs({ db, io, matchResults = null, getGameRoom = () => nul
         if (count && count > 0) {
           console.log(`[inactive] Deleted ${count} empty parties`);
         }
-      } catch {}
+      } catch (error) { console.warn("[cleanup] empty parties", error.message); }
       try {
         const expired = await db.deleteExpiredGuestsAndMemberships();
         if (expired && expired.count > 0) {
@@ -55,8 +55,7 @@ function startCleanupJobs({ db, io, matchResults = null, getGameRoom = () => nul
     }
   }
 
-  setInterval(cleanupInactiveMembers, 1000 * 60 * 30);
-  cleanupInactiveMembers();
+  scheduler.every("inactive members", 1000 * 60 * 30, cleanupInactiveMembers, { immediate: true });
 
   // Update status to offline (every 15 seconds)
   let _offlineMarkRunning = false;
@@ -82,8 +81,7 @@ function startCleanupJobs({ db, io, matchResults = null, getGameRoom = () => nul
       _offlineMarkRunning = false;
     }
   }
-  setInterval(inactiveStatus, 1000 * 15);
-  inactiveStatus();
+  scheduler.every("inactive statuses", 15000, inactiveStatus, { immediate: true });
 
   // Cleanup long-running matches (> 5 minutes) every 30 minutes and on start
   let _matchCleanupRunning = false;
@@ -100,42 +98,7 @@ function startCleanupJobs({ db, io, matchResults = null, getGameRoom = () => nul
       const ids = old.map((r) => r.match_id)
         .filter(id => !matchResults?.isPending(id) && !getGameRoom(id));
       if (!ids.length) return;
-      const ph = ids.map(() => "?").join(",");
-
-      // Mark matches completed
-      await db.runQuery(
-        `UPDATE matches SET status='completed' WHERE match_id IN (${ph})`,
-        ids,
-      );
-
-      // Reset any involved parties back to idle
-      let partyIds = [];
-      try {
-        const parties = await db.runQuery(
-          `SELECT DISTINCT party_id FROM match_participants WHERE match_id IN (${ph}) AND party_id IS NOT NULL`,
-          ids,
-        );
-        partyIds = parties.map((p) => p.party_id).filter(Boolean);
-        if (partyIds.length) {
-          const ph2 = partyIds.map(() => "?").join(",");
-          await db.runQuery(
-            `UPDATE parties SET status='idle' WHERE party_id IN (${ph2})`,
-            partyIds,
-          );
-        }
-      } catch (_) {}
-
-      for (const id of ids) await deleteMatchBots(db, id);
-
-      // Remove participants for these matches to reflect completion
-      await db.runQuery(
-        `DELETE FROM match_participants WHERE match_id IN (${ph})`,
-        ids,
-      );
-
-      console.log(
-        `[match:cleanup] Completed ${ids.length} match(es) >5m; reset ${partyIds.length} party(ies)`,
-      );
+      for (const id of ids) await retireInterruptedMatch(db, id);
     } catch (e) {
       console.warn("match cleanup failed:", e?.message || e);
     } finally {
@@ -143,16 +106,17 @@ function startCleanupJobs({ db, io, matchResults = null, getGameRoom = () => nul
     }
   }
 
-  setInterval(cleanupLongMatches, 1000 * 60 * 30);
-  cleanupLongMatches();
+  scheduler.every("long matches", 1000 * 60 * 30, cleanupLongMatches, { immediate: true });
   async function cleanupStaleBots() {
+    // Live matches are handled by cleanupLongMatches, which checks for both an
+    // active room and an unsettled result before touching participant records.
     try {
       await db.runQuery(`DELETE b FROM match_bot_participants b JOIN matches m ON m.match_id = b.match_id
-        WHERE m.status IN ('completed','cancelled') OR m.created_at < NOW() - INTERVAL 10 MINUTE`);
-    } catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') console.warn('[bots] stale cleanup failed:', error.message); }
+        WHERE m.status IN ('completed','cancelled')
+           OR (m.status = 'queued' AND m.created_at < NOW() - INTERVAL 10 MINUTE)`);
+    } catch (error) { console.warn('[bots] stale cleanup failed:', error.message); }
   }
-  cleanupStaleBots();
-  setInterval(cleanupStaleBots, 60000).unref?.();
+  scheduler.every("stale bots", 60000, cleanupStaleBots, { immediate: true });
 
   return { cleanupInactiveMembers, inactiveStatus, cleanupLongMatches };
 }

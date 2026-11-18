@@ -1,3 +1,4 @@
+const { computeMatchStats } = require('../src/shared/characters/characterStats');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
@@ -19,7 +20,7 @@ function fixture(t, character = 'draven') {
 test('character charge requirements are hit counts at every level', t => {
   const { room } = fixture(t);
   for (const [character, hits] of Object.entries({ ninja: 6, thorg: 3, draven: 4, ozzy: 5, sparrow: 6, gloop: 6 })) {
-    for (const level of [1, 5, 10]) assert.equal(room._computeStats(character, level).specialChargeHits, hits);
+    for (const level of [1, 5, 10]) assert.equal(computeMatchStats(character, level).specialChargeHits, hits);
     assert.equal(getSuperChargeHits(character), hits);
     assert.equal(getSuperChargePerHit(character, 'basic'), 1);
   }
@@ -62,11 +63,11 @@ test('each registered arrow in one volley grants one hit, including simultaneous
   for (let i = 0; i < 3; i++) {
     const id = `volley:${i}`;
     const arrow = { projectile: { id }, attackerName: p.name, attackType: 'sparrow-arrow' };
-    room._sparrow.active.set(id, arrow);
+    room.sparrowCombatState.active.set(id, arrow);
     const payload = { attacker: p.name, target: target.name, instanceId: id, attackType: arrow.attackType };
     room.handleHit(p.participantId, payload, { server: true, sparrowProjectile: arrow });
     room.handleHit(p.participantId, payload, { server: true, sparrowProjectile: arrow });
-    room._sparrow.active.delete(id);
+    room.sparrowCombatState.active.delete(id);
   }
   assert.equal(p.superCharge, 3);
 });
@@ -109,13 +110,32 @@ test('Inferno reduces incoming damage only during its channel and stacks with sh
 
 test('authoritative client sync preserves fractional super charge', async () => {
   const { createLocalStateSync } = await import('../src/client/game/players/localStateSync.js');
-  let charge, max;
+  const stats = {};
   const sync = createLocalStateSync({
-    setSuperCharge: value => { charge = value; },
-    setMaxSuperCharge: value => { max = value; },
+    stats,
     updateHealthBar() {},
   });
   sync.applyAuthoritativeState({ superCharge: 3.75, maxSuperCharge: 4 });
-  assert.equal(charge, 3.75);
-  assert.equal(max, 4);
+  assert.equal(stats.superCharge, 3.75);
+  assert.equal(stats.maxSuperCharge, 4);
+});
+
+test('reload carries partial progress through a stalled frame and replicated catch-up', () => {
+  const { loadClientModule } = require('./helpers/clientModule');
+  const { advanceAmmoClock } = require('../src/shared/combat/ammoClock');
+  const { createLocalAmmo } = loadClientModule(require.resolve('../src/client/game/players/localAmmo.js'));
+  const { catchUpAmmo } = require('./helpers/projectileReplicationModule')();
+  const initial = { capacity: 4, charges: 0, cooldownMs: 150, nextFireInMs: 100, reloadMs: 500, reloadTimerMs: 125 };
+  const local = createLocalAmmo();
+  local.applyAuthoritative(initial);
+  local.tick(1150);
+  const server = { ...initial };
+  for (let elapsed = 0; elapsed < 1150; elapsed += 10) advanceAmmoClock(server, 10);
+  assert.deepEqual([local.state.charges, local.state.reloadTimerMs], [2, 275]);
+  assert.equal(local.state.charges, server.charges);
+  assert.equal(local.state.reloadTimerMs, server.reloadTimerMs);
+  assert.deepEqual({ ...catchUpAmmo(initial, 1150) }, server);
+  local.tick(5000);
+  assert.equal(local.state.charges, initial.capacity);
+  assert.equal(local.state.reloadTimerMs, 0);
 });

@@ -1,6 +1,7 @@
+import { API_PATHS } from "../../shared/net/apiPaths.js";
 // Lobby tooltip hints: guest sign-up nudge, mode variety, featured sale,
 // suggested public parties and recent teammates coming online.
-import { createLobbyHintController, getRecentModeStreak } from "./lobbyHintController.mjs";
+import { LOBBY_HINT_STORAGE_KEY, createLobbyHintController, getRecentModeStreak } from "./lobbyHintController.mjs";
 import { fetchLobbyJson } from "./ui";
 import { getDiscoveryModeLabel } from "./party/partyOverlays.js";
 import { buildProfileIconUrl } from "../views/profileIconAssets.js";
@@ -9,7 +10,7 @@ import { pixelSpriteUrl } from "../friends/pixelArt.js";
 import { resolveCharacterKey } from "../../shared/characters/characterStats.js";
 
 async function loadLobbyHintData() {
-  const profilePayload = await fetchLobbyJson("/profile/data").catch(() => ({
+  const profilePayload = await fetchLobbyJson(API_PATHS.PROFILE_DATA).catch(() => ({
     profile: { totalMatches: 0, battles: [] },
   }));
   const profile = profilePayload?.profile || {};
@@ -39,7 +40,7 @@ function getSaleHintPrice(price) {
 
 async function loadSuggestedParties(getExistingPartyId) {
   if (getExistingPartyId()) return [];
-  const payload = await fetchLobbyJson("/party/discover", {
+  const payload = await fetchLobbyJson(API_PATHS.PARTY_DISCOVER, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query: "" }),
@@ -150,7 +151,7 @@ function startFriendsOnlineHints(controller, context, friendsController) {
 // stops suggestions.
 export async function initializeLobbyHints({ shop, userData, guest, newGuestCreated, getExistingPartyId, friendsController }) {
   const controller = createLobbyHintController({
-    storageKey: `bb_lobby_hints_v1:${userData?.user_id || userData?.name || "guest"}`,
+    storageKey: `${LOBBY_HINT_STORAGE_KEY}:${userData?.user_id || userData?.name || "guest"}`,
   });
 
   if (guest && newGuestCreated) {

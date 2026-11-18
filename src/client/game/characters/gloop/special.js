@@ -1,3 +1,5 @@
+import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { resolveHookPullDuration } from "./hookPull";
 import { prepareHandAnimation, handPose, HAND_TEXTURE } from "./handAnimation";
 import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
@@ -11,7 +13,8 @@ import { releasedFlightAge } from "../shared/projectileReplication";
 import { serverClock } from "../../match/serverClock";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
 
-const NAME = "gloop";
+const { key: NAME } = characterDefinitions.gloop;
+
 const HOOK = getResolvedCharacterSpecialConfig(NAME, "hook");
 const ACTIVE_HOOK_VISUALS = new WeakMap();
 // Each hook is drawn once, whether predicted locally or echoed by the server.
@@ -185,7 +188,7 @@ function createHookVisual(scene, owner, angle, start, id) {
     visual.latch = { target: hit.target.name, sprite,
       offset: sprite ? { x: hand.x - sprite.x, y: hand.y - sprite.y } : { x: 0, y: 0 } };
     burst(hand.x, hand.y, 8, 120);
-    notePredictedHit({ delivery: "released", character: "gloop", target: hit.target, attacker: owner });
+    notePredictedHit({ delivery: "released", character: NAME, target: hit.target, attacker: owner });
     return true;
   }
   // An enemy's hook stops on this player's body as drawn, tested like the
@@ -201,7 +204,7 @@ function createHookVisual(scene, owner, angle, start, id) {
     // the fully led hook was here (victimLagMs).
     const targetLead = serverClock.enemyLeadMs?.(visual.launch?.viewRewindMs) || 0;
     const hit = localBodyContact(from, center, HOOK.collisionRadius, { lagMs: visual.launch ? victimLagMs(targetLead, visual.ageState?.shown || 0) : 0 });
-    if (enemyShotTraced()) traceEnemyShot(visual.id, owner.username, "gloop", center.x, center.y, HOOK.collisionRadius, visual.ageState?.shown || 0, visual.launch?.viewRewindMs, 0, visual.flightAge ?? null);
+    if (enemyShotTraced()) traceEnemyShot(visual.id, owner.username, NAME, center.x, center.y, HOOK.collisionRadius, visual.ageState?.shown || 0, visual.launch?.viewRewindMs, 0, visual.flightAge ?? null);
     const sprite = hit?.target?.sprite, origin = hit?.origin || sprite;
     if (!sprite) return false;
     visual.phase = "latched"; visual.elapsed = 0; visual.recoil = 0.6;
@@ -246,7 +249,7 @@ function createHookVisual(scene, owner, angle, start, id) {
       const { latch } = visual;
       if (latch.sprite?.active) hand.setPosition(latch.sprite.x + latch.offset.x, latch.sprite.y + latch.offset.y);
       if (latch.victim) {
-        if (enemyShotTraced()) traceEnemyShot(visual.id, owner.username, "gloop", hand.x, hand.y, HOOK.collisionRadius, visual.ageState?.shown || 0, visual.launch?.viewRewindMs, 1,
+        if (enemyShotTraced()) traceEnemyShot(visual.id, owner.username, NAME, hand.x, hand.y, HOOK.collisionRadius, visual.ageState?.shown || 0, visual.launch?.viewRewindMs, 1,
           visual.launch ? releasedFlightAge(serverClock, visual.ageState, visual.launch, performance.now(), visual.enemy) : null);
         // No catch for this player in time: the server's hook missed; let go,
         // as an unconfirmed prediction does.
@@ -363,7 +366,7 @@ export function playHookCatchAction(scene, ownerPlayer, actionData = null, isOwn
   if (visual.target) visual.targetOffset = {
     x: start.x - visual.target.x, y: start.y - visual.target.y,
   };
-  visual.returnMs = Math.max(100, Number(actionData?.pullDurationMs) || 640);
+  visual.returnMs = resolveHookPullDuration(actionData);
   visual.hand.setPosition(start.x, start.y);
   const closed = resolveHandTextureKey(scene, "closed");
   if (closed && !visual.hand._gripAnimated) visual.hand.setTexture?.(closed);
@@ -377,21 +380,12 @@ export function predictGloopHook(scene, player, _username, request = {}) {
   if (!scene?.add || !player?.active) return request;
   const id = createRuntimeId("gloopHook");
   consumeGloopHook(scene, id);
-  perform(scene, player, null, null, null, null, true, { ...(request.aim || {}), id,
-    range: HOOK.range, speed: HOOK.speed, predicted: true });
+  perform({ scene, player, isOwner: true, aim: { ...(request.aim || {}), id,
+    range: HOOK.range, speed: HOOK.speed, predicted: true } });
   return { ...request, id };
 }
 
-export function perform(
-  scene,
-  player,
-  playersInTeam,
-  opponentPlayers,
-  username,
-  gameId,
-  isOwner = false,
-  specialData = null,
-) {
+export function perform({ scene, player, isOwner = false, aim: specialData = null }) {
   if (!scene || !player || !player.active) return;
 
   const angle = resolveAngle(player, specialData);

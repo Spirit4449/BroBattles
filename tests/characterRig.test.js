@@ -1,8 +1,6 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const babel = require('@babel/core');
 
 describe("Rig anchors and projectile origins", () => {
   const { characterDefinitions, characterFrames, characterPresentation } = require('../src/shared/characters');
@@ -117,16 +115,13 @@ describe("Rig anchors and projectile origins", () => {
 describe("Trimmed collider parity", () => {
   const Frame = require('phaser/src/textures/Frame');
   const Body = require('phaser/src/physics/arcade/Body');
-  const { characterBody } = require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
   const { spritePresentation } = require('../src/client/game/characters/shared/spritePresentation');
   const { DUCK_HEIGHT_RATIO } = require('../src/shared/physics/ducking');
   const atlas = require('../public/assets/thorg/animations.json');
 
   const api = {};
-  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/players/RemotePlayer'), 'utf8'), {
-    babelrc: false, configFile: false,
-    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-  }).code, { exports: api, require: id => id === '../../../shared/physics/ducking.js'
+  loadClientModule(require.resolve('../src/client/game/players/RemotePlayer'), { exports: api, require: id => id === '../../../shared/physics/ducking.js'
     ? { DUCK_HEIGHT_RATIO }
     : id === '../../../shared/characters/index.js' ? require('../src/shared/characters')
     : { playDuckTransitionSound() {} } });

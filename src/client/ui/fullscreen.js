@@ -1,3 +1,5 @@
+import { getPageScope } from "../lib/globals.cjs";
+
 let fullscreenWirePromise = null;
 let viewportVarsWired = false;
 const FULLSCREEN_INTENT_KEY = "bb_fullscreen_intent";
@@ -266,12 +268,14 @@ async function restoreFullscreenFromIntent() {
 function bindFullscreenButton(button) {
   if (!button || button.dataset.bbFullscreenBound === "true") return;
   button.dataset.bbFullscreenBound = "true";
-  button.addEventListener("click", async (event) => {
+  const scope = getPageScope();
+  const onClick = async (event) => {
     event.preventDefault();
     event.stopPropagation();
     try {
       if (getFullscreenElement()) {
         await exitFullscreen();
+        if (scope?.active === false) return;
         writeFullscreenIntent(false);
         setImmersiveFallbackActive(false);
       } else if (isImmersiveFallbackActive()) {
@@ -281,6 +285,7 @@ function bindFullscreenButton(button) {
         const didEnter = await requestFullscreen(
           document.documentElement || document.body,
         );
+        if (scope?.active === false) return;
         if (didEnter) {
           writeFullscreenIntent(true);
           setImmersiveFallbackActive(false);
@@ -290,7 +295,12 @@ function bindFullscreenButton(button) {
         }
       }
     } catch (_) {}
-    syncFullscreenButtons();
+    if (scope?.active !== false) syncFullscreenButtons();
+  };
+  button.addEventListener("click", onClick);
+  scope?.onDispose(() => {
+    button.removeEventListener("click", onClick);
+    delete button.dataset.bbFullscreenBound;
   });
 }
 

@@ -1,7 +1,9 @@
+import { API_PATHS } from "../../../shared/net/apiPaths.js";
+import { PARTY_NAME_MIN, PARTY_NAME_MAX } from "../../../shared/social/textRules.js";
 import { getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 // Lobby party overlays: public party discovery and owner party settings.
-import { escapeHtml, fetchLobbyJson, openOverlay, closeOverlay } from "../ui";
-import { checkIfInParty, getPartyInteractionContext } from "./party.js";
+import { escapeHtml, fetchLobbyJson, openOverlay, registerOverlay } from "../ui";
+import { checkIfInParty, getPartyInteractionContext } from "./partyState.js";
 import { sonner } from "../../ui/sonner.js";
 import { showUiConfirm } from "../../ui/uiConfirm.js";
 import { buildProfileIconAlt, buildProfileIconUrl } from "../../views/profileIconAssets.js";
@@ -22,9 +24,9 @@ let __partySettingsState = {
   isOwner: false,
   isPublic: false,
   publicName: "",
-  visibilitySupported: true,
+
   allowMemberSelection: true,
-  memberSelectionSupported: true,
+
 };
 
 export function getDiscoveryModeLabel(party) {
@@ -155,19 +157,11 @@ async function loadPartyDiscovery(query = "") {
   __partyDiscoveryState.loading = true;
   setPartyDiscoveryStatus("Loading public parties...");
   try {
-    const payload = await fetchLobbyJson("/party/discover", {
+    const payload = await fetchLobbyJson(API_PATHS.PARTY_DISCOVER, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: String(query || "").trim() }),
     });
-    if (payload?.visibilitySupported === false) {
-      setPartyDiscoveryStatus(
-        "Party discovery is unavailable until the latest DB migration is applied.",
-        true,
-      );
-      renderPartyDiscoveryList([]);
-      return;
-    }
     const parties = Array.isArray(payload?.parties) ? payload.parties : [];
     __partyDiscoveryState.lastResult = parties;
     setPartyDiscoveryStatus("", false, parties.length);
@@ -219,7 +213,7 @@ async function loadPartySettings() {
   const partyId = Number(checkIfInParty());
   if (!Number.isFinite(partyId) || partyId <= 0) return null;
 
-  const payload = await fetchLobbyJson("/party/settings", {
+  const payload = await fetchLobbyJson(API_PATHS.PARTY_SETTINGS, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ partyId }),
@@ -229,49 +223,35 @@ async function loadPartySettings() {
     isOwner: !!payload?.isOwner,
     isPublic: !!payload?.isPublic,
     publicName: String(payload?.publicName || ""),
-    visibilitySupported: payload?.visibilitySupported !== false,
+
     allowMemberSelection: payload?.allowMemberSelection !== false,
-    memberSelectionSupported: payload?.memberSelectionSupported !== false,
+
     hideEnemyBros: payload?.hideEnemyBros === true,
-    hideEnemyBrosSupported: payload?.hideEnemyBrosSupported === true,
+
   };
 
   const toggle = document.getElementById("party-public-toggle");
   const nameInput = document.getElementById("party-public-name");
+  if (nameInput) nameInput.maxLength = PARTY_NAME_MAX;
   const saveBtn = document.getElementById("party-settings-save");
   const memberToggle = document.getElementById("party-member-selection-toggle");
   if (memberToggle) {
     memberToggle.checked = __partySettingsState.allowMemberSelection;
-    memberToggle.disabled =
-      !__partySettingsState.isOwner ||
-      !__partySettingsState.memberSelectionSupported;
+    memberToggle.disabled = !__partySettingsState.isOwner;
   }
   const hideToggle = document.getElementById("party-hide-enemy-bros-toggle");
   if (hideToggle) {
     hideToggle.checked = __partySettingsState.hideEnemyBros;
-    hideToggle.disabled = !__partySettingsState.isOwner || !__partySettingsState.hideEnemyBrosSupported;
+    hideToggle.disabled = !__partySettingsState.isOwner;
   }
   if (toggle) toggle.checked = __partySettingsState.isPublic;
   if (nameInput) nameInput.value = __partySettingsState.publicName;
-  const canEdit =
-    __partySettingsState.isOwner && __partySettingsState.visibilitySupported;
+  const canEdit = __partySettingsState.isOwner;
   if (toggle) toggle.disabled = !canEdit;
   syncPublicPartyNameVisibility();
   if (saveBtn) saveBtn.disabled = !canEdit;
 
-  if (!__partySettingsState.visibilitySupported) {
-    setPartySettingsStatus(
-      "Party visibility requires the latest DB migration before this can be used.",
-      true,
-    );
-  } else if (!__partySettingsState.memberSelectionSupported) {
-    setPartySettingsStatus(
-      "Map and mode permissions require the latest party migration.",
-      true,
-    );
-  } else if (!__partySettingsState.hideEnemyBrosSupported) {
-    setPartySettingsStatus("Hidden enemy Bros requires the latest party migration.", true);
-  } else if (!__partySettingsState.isOwner) {
+  if (!__partySettingsState.isOwner) {
     setPartySettingsStatus(
       "Only the party owner can edit these settings.",
       true,
@@ -304,31 +284,24 @@ async function savePartySettings() {
   const isPublic = !!toggle?.checked;
   const publicName = String(nameInput?.value || "").trim();
 
-  if (isPublic && publicName.length < 3) {
+  if (isPublic && (publicName.length < PARTY_NAME_MIN || publicName.length > PARTY_NAME_MAX)) {
     setPartySettingsStatus(
-      "Public party names need at least 3 characters.",
+      `Public party names need ${PARTY_NAME_MIN}–${PARTY_NAME_MAX} characters.`,
       true,
     );
     return;
   }
 
   try {
-    const payload = await fetchLobbyJson("/party/settings/update", {
+    const payload = await fetchLobbyJson(API_PATHS.PARTY_SETTINGS_UPDATE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         partyId,
         isPublic,
         publicName,
-        ...(__partySettingsState.hideEnemyBrosSupported
-          ? { hideEnemyBros: !!document.getElementById("party-hide-enemy-bros-toggle")?.checked } : {}),
-        ...(__partySettingsState.memberSelectionSupported
-          ? {
-              allowMemberSelection: !!document.getElementById(
-                "party-member-selection-toggle",
-              )?.checked,
-            }
-          : {}),
+        hideEnemyBros: !!document.getElementById("party-hide-enemy-bros-toggle")?.checked,
+        allowMemberSelection: !!document.getElementById("party-member-selection-toggle")?.checked,
       }),
     });
     __partySettingsState.allowMemberSelection =
@@ -356,13 +329,11 @@ function syncPublicPartyNameVisibility() {
 }
 
 export function wirePartyOverlayControls() {
-  const discoveryClose = document.getElementById("party-discovery-close");
-  discoveryClose?.addEventListener("click", () =>
-    closeOverlay("party-discovery-overlay"),
-  );
-  document
-    .querySelector("#party-discovery-overlay .trophy-overlay-backdrop")
-    ?.addEventListener("click", () => closeOverlay("party-discovery-overlay"));
+  registerOverlay({
+    id: "party-discovery-overlay",
+    closeButtonId: "party-discovery-close",
+    backdropSelector: ".trophy-overlay-backdrop",
+  });
 
   const discoveryRefresh = document.getElementById("party-discovery-refresh");
   discoveryRefresh?.addEventListener("click", () => {
@@ -378,13 +349,11 @@ export function wirePartyOverlayControls() {
     void loadPartyDiscovery(__partyDiscoveryState.query);
   });
 
-  const settingsClose = document.getElementById("party-settings-close");
-  settingsClose?.addEventListener("click", () =>
-    closeOverlay("party-settings-overlay"),
-  );
-  document
-    .querySelector("#party-settings-overlay .trophy-overlay-backdrop")
-    ?.addEventListener("click", () => closeOverlay("party-settings-overlay"));
+  registerOverlay({
+    id: "party-settings-overlay",
+    closeButtonId: "party-settings-close",
+    backdropSelector: ".trophy-overlay-backdrop",
+  });
 
   const settingsSave = document.getElementById("party-settings-save");
   settingsSave?.addEventListener("click", () => {

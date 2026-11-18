@@ -1,10 +1,10 @@
+import { clamp01 } from "../../../shared/math.js";
 import terrainAudio from '../../../shared/physics/terrainAudio.json';
 import { playPlayerSound } from './playerAudio';
 
 // Shared mix for local and remote falling wind; retain the speed/time swell.
 export function fallingAirVolume(speedRatio, timeRatio) {
-  const clamp = value => Math.max(0, Math.min(1, Number(value) || 0));
-  return (0.06 + clamp(speedRatio) * (0.16 + clamp(timeRatio) * 0.14)) * 0.45;
+  return (0.06 + clamp01(Number(speedRatio) || 0) * (0.16 + clamp01(Number(timeRatio) || 0) * 0.14)) * 0.45;
 }
 
 export function getTerrainSteps(terrain) {
@@ -24,7 +24,7 @@ export function footstepVolume(speedRatio, directionChange, terrain) {
 
 export function terrainLandingSound(terrain, baseVolume, scene) {
   const landing = getTerrainConfig(terrain).landing;
-  const gain = scene?._bankBustMovementAudio ? 1.2 : 1;
+  const gain = scene?.movementAudioProfile === "bank-bust" ? 1.2 : 1;
   return {
     key: landing.key,
     volume: Math.min(1, Math.max(0, Number(baseVolume) || 0) * (Number(landing.volumeScale) || 1) * gain),

@@ -1,3 +1,4 @@
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 // Presence is a lease backed by an authenticated game socket or a lobby ping.
 // Match membership survives a lost lease so the lobby can offer reconnection.
 const ACTIVITY_TTL_MS = 10_000;
@@ -43,7 +44,7 @@ function createPlayerActivityService({ db, io, setPresence, getGameRoom = () => 
   }
   function emitSelf(s) {
     const payload = { status: derive(s), matchId: returnMatchId(s) };
-    for (const sid of s.lobby.keys()) io.to(sid).emit('presence:self', payload);
+    for (const sid of s.lobby.keys()) io.to(sid).emit(SOCKET_EVENTS.PRESENCE_SELF, payload);
   }
   function publish(s) {
     // Button availability must not wait on a slow/failed presence database write.
@@ -101,7 +102,7 @@ function createPlayerActivityService({ db, io, setPresence, getGameRoom = () => 
     if (!game || game.probing || !game.socket.connected || !s.matchId) return;
     game.probing = true;
     const matchId = s.matchId;
-    game.socket.timeout(4000).emit('game:presence-probe', { matchId }, (error, reply) => {
+    game.socket.timeout(4000).emit(SOCKET_EVENTS.GAME_PRESENCE_PROBE, { matchId }, (error, reply) => {
       game.probing = false;
       if (!error && reply?.matchId === matchId && s.game === game) gameActivity(game.socket, matchId);
     });
@@ -195,8 +196,13 @@ function createPlayerActivityService({ db, io, setPresence, getGameRoom = () => 
 
     } finally { ticking = false; }
   }
-  const timer = schedule ? setInterval(() => { void tick().catch(error => console.warn('[presence] tick failed:', error?.message)); }, 2000) : null;
-  timer?.unref?.();
-  return { getStatus: name => { const s = users.get(name); return s ? derive(s) : 'offline'; }, hasMatchPresence: name => { const s = users.get(name); return !!s && (s.matchId !== null || s.endedAt !== null); }, registerMatch, joinGame, gameActivity, lobbyPing, disconnect, finishMatch, tick, getStats: () => ({ users: users.size, matches: matches.size }), dispose: () => { clearInterval(timer); for (const s of users.values()) clearTimeout(s.expiryTimer); users.clear(); matches.clear(); } };
+  let timer;
+  function start() {
+    if (timer) return;
+    timer = setInterval(() => { void tick().catch(error => console.warn("[presence] tick failed:", error?.message)); }, 2000);
+    timer.unref?.();
+  }
+  if (schedule === true) start();
+  return { start, getStatus: name => { const s = users.get(name); return s ? derive(s) : 'offline'; }, hasMatchPresence: name => { const s = users.get(name); return !!s && (s.matchId !== null || s.endedAt !== null); }, registerMatch, joinGame, gameActivity, lobbyPing, disconnect, finishMatch, tick, getStats: () => ({ users: users.size, matches: matches.size }), dispose: () => { clearInterval(timer); for (const s of users.values()) clearTimeout(s.expiryTimer); users.clear(); matches.clear(); } };
 }
-module.exports = { createPlayerActivityService, ACTIVITY_TTL_MS, END_SCREEN_MS };
+module.exports = { createPlayerActivityService };

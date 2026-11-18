@@ -3,6 +3,7 @@
 //
 //   node scripts/art/sky-soil/compose-backdrop.cjs [--out <dir>] [--install]
 //
+// --install installs assets and updates the shipped map only.
 // Sources (codex-sources/): island-a.png, island-b.png and islets.png, generated
 // with Codex image_gen in BB style on flat #FF00FF (prompts in the art README).
 // Each is keyed, its own pixel grid is detected, and it is resampled one sample
@@ -347,17 +348,15 @@ async function buildSky(isles) {
 
   const dest = path.join(ROOT, 'public/assets/sky-soil');
   for (const f of fs.readdirSync(OUT)) if (f.endsWith('.webp')) fs.copyFileSync(path.join(OUT, f), path.join(dest, f));
-  for (const file of ['src/shared/maps/2.json', 'data/maps/2.json']) {
-    const full = path.join(ROOT, file), m = JSON.parse(fs.readFileSync(full, 'utf8'));
-    const layers = m.scenery.layers, byId = id => layers.find(l => l.id === id);
-    const sky = byId('sky'); sky.url = '/assets/sky-soil/sky-v4.webp'; delete sky.filter;
-    const far = byId('far-peaks'); far.url = '/assets/sky-soil/far-isles-v4.webp'; far.filter = 'nearest';
-    const near = byId('forest-ridges'); near.url = '/assets/sky-soil/near-isles-v4.webp'; near.filter = 'nearest'; near.parts = fallParts;
-    const seaLayer = { id: 'cloud-sea', url: '/assets/sky-soil/cloud-sea.webp', scroll: near.scroll, fit: near.fit, y: near.y, filter: 'nearest', parts: [seaPart] };
-    const i = layers.findIndex(l => l.id === 'cloud-sea');
-    if (i >= 0) layers[i] = seaLayer; else layers.splice(layers.indexOf(near), 0, seaLayer);
-    m.metadata.lobbyBgAsset = '/assets/sky-soil/background.webp';
-    fs.writeFileSync(full, JSON.stringify(m, null, 2) + '\n');
-  }
+  const full = path.join(ROOT, 'src/shared/maps/2.json'), m = JSON.parse(fs.readFileSync(full, 'utf8'));
+  const layers = m.scenery.layers, byId = id => layers.find(l => l.id === id);
+  const sky = byId('sky'); sky.url = '/assets/sky-soil/sky-v4.webp'; delete sky.filter;
+  const far = byId('far-peaks'); far.url = '/assets/sky-soil/far-isles-v4.webp'; far.filter = 'nearest';
+  const nearLayer = byId('forest-ridges'); nearLayer.url = '/assets/sky-soil/near-isles-v4.webp'; nearLayer.filter = 'nearest'; nearLayer.parts = fallParts;
+  const seaLayer = { id: 'cloud-sea', url: '/assets/sky-soil/cloud-sea.webp', scroll: nearLayer.scroll, fit: nearLayer.fit, y: nearLayer.y, filter: 'nearest', parts: [seaPart] };
+  const i = layers.findIndex(l => l.id === 'cloud-sea');
+  if (i >= 0) layers[i] = seaLayer; else layers.splice(layers.indexOf(nearLayer), 0, seaLayer);
+  m.metadata.lobbyBgAsset = '/assets/sky-soil/background.webp';
+  fs.writeFileSync(full, JSON.stringify(m, null, 2) + '\n');
   console.log('installed');
 })().catch(e => { console.error(e); process.exit(1); });

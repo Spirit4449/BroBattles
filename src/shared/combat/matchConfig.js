@@ -1,14 +1,11 @@
-// Server-side match tuning: timers, sudden death, powerup spawning, death
-// drops, regen, and anti-cheat tolerances. Everything here is read by
-// src/server/core/gameRoom/*. See docs/development/constants.md for where every other
-// kind of constant lives.
+// Match defaults: timers, sudden death, powerup spawning, death drops, regen,
+// and validation. The room applies the rules. Client presentation and prediction
+// read the corresponding defaults from here. See docs/development/constants.md.
 //
 // Values owned by content files are re-exported, never copied:
 //   - powerup stats  -> src/shared/catalogs/powerups.catalog.json
 //   - character stats -> src/shared/characters/<name>.json
-//   - world fallback  -> src/shared/gameConstants.js
 
-const { WORLD_MARGIN } = require("../gameConstants");
 const movementPhysics = require("../physics/movementPhysics.json");
 const { POWERUP_CATALOG, POWERUP_TYPES, POWERUP_DURATIONS_MS } = require("../powerups");
 const { getResolvedCharacterSpecialConfig } = require("../characters/characterTuning");
@@ -22,6 +19,8 @@ const { getResolvedCharacterSpecialConfig } = require("../characters/characterTu
 const GAME_DURATION_MS = 2.5 * 60 * 1000;
 // Once regular time ends, poison rises from the floor at this speed (px/s).
 const SD_RISE_SPEED = 15;
+// Park the inactive poison surface below the world before sudden death.
+const INACTIVE_POISON_BELOW_WORLD_PX = 60;
 // For the first N ms of sudden death the poison rises faster...
 const SD_RISE_FAST_PHASE_MS = 12000;
 // ...by this multiplier on SD_RISE_SPEED.
@@ -37,6 +36,25 @@ const TIMER_EMIT_INTERVAL_MS = 500;
 const ALL_DEAD_GAME_OVER_DELAY_MS = 3000;
 // If every human leaves, the room waits this long before abandoning the match.
 const ABANDON_MATCH_GRACE_MS = 15000;
+
+// ---------------------------------------------------------------------------
+// Economy
+// ---------------------------------------------------------------------------
+
+const MATCH_REWARDS = Object.freeze({
+  participationCoins: 10,
+  hitsPerCoin: 3,
+  damagePerCoin: 250,
+  coinsPerKill: 6,
+  drawCoins: 8,
+  winCoins: 16,
+  lossCoins: 6,
+  winGems: 1,
+  gemKillMilestones: Object.freeze([1, 2]),
+  gemDamageMilestones: Object.freeze([1700, 2500]),
+  coinFloor: 5,
+  coinCeiling: 150,
+});
 
 // ---------------------------------------------------------------------------
 // Passive health regen (out of combat)
@@ -137,13 +155,18 @@ const NINJA_SWARM_HIT_DAMAGE = getResolvedCharacterSpecialConfig("ninja", "swarm
 
 // Attacks rewind targets at most this far into the past (older views are clamped).
 const HIT_STALENESS_MAX_MS = 300;
+// Expiry for remembered runtime action IDs and Sparrow results. Ninja retries
+// use the count-bounded shot request cache without a time limit.
+const ATTACK_REPLAY_WINDOW_MS = 12_000;
 // Per-player position history kept for lag-compensated hit checks.
 const POSITION_HISTORY_DEPTH = 128; // max samples
 const POSITION_HISTORY_MS = 1000; // max age
 
 // Movement plausibility: fastest horizontal/vertical speed (px/s) a normal
 // client may report before dashes, wall kicks, and knockback are added on top.
-const MOVE_PLAUSIBLE_SPEED_H = 320;
+// Allow a small margin above baseline running speed for network rounding.
+const MOVE_RUN_SPEED_TOLERANCE = 1.23;
+const MOVE_PLAUSIBLE_SPEED_H = Math.ceil(movementPhysics.maxSpeed * MOVE_RUN_SPEED_TOLERANCE);
 const MOVE_PLAUSIBLE_SPEED_V = movementPhysics.maxVerticalSpeed * 1.1;
 // Extra distance (px) allowed on top of the speed budget to absorb lag.
 const MOVE_PLAUSIBLE_LAG_PAD_H = 80;
@@ -198,11 +221,12 @@ const ATTACK_MAX_DIST_MAP = {
 };
 
 module.exports = {
-  WORLD_MARGIN,
+  MATCH_REWARDS,
   BOT_PLANNING_STEP_MS,
   BOT_PLANNING_FRAME_MS,
   GAME_DURATION_MS,
   SD_RISE_SPEED,
+  INACTIVE_POISON_BELOW_WORLD_PX,
   SD_RISE_FAST_PHASE_MS,
   SD_RISE_FAST_MULT,
   SD_DAMAGE_PER_SEC,
@@ -253,6 +277,7 @@ module.exports = {
   DUPLICATE_HIT_WINDOW_MS,
   NINJA_SWARM_HIT_DAMAGE,
   HIT_STALENESS_MAX_MS,
+  ATTACK_REPLAY_WINDOW_MS,
   POSITION_HISTORY_DEPTH,
   POSITION_HISTORY_MS,
   MOVE_PLAUSIBLE_SPEED_H,

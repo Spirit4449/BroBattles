@@ -1,7 +1,8 @@
+const { SERVER_TICK_HZ } = require("../../../shared/gameConstants");
 const { isPlaced } = require('../../../shared/combat/targetable.js');
 const effects = require('../../../shared/combat/runtime/effects/effectManager.js');
 const { participantId, getParticipant } = require('../gameRoom/participants');
-const { bounds } = require('./physics');
+const { bounds } = require('../physics/bodySolver');
 const { botProfile } = require('../../../shared/combat/characterProfiles.js');
 
 function observe(room, player, now, samples) {
@@ -17,10 +18,10 @@ function observe(room, player, now, samples) {
     platformId: p.platformId, attack: p._visibleAttack && { ...p._visibleAttack },
   }));
   const projectiles = [];
-  const ninja = [...(room._ninja?.active.values() || [])].map(e => {
+  const ninja = [...(room.ninjaCombatState?.active.values() || [])].map(e => {
     const p=e.projectile; p.attackerParticipantId=e.owner; p.collisionRadius=p.cfg.collisionRadius; return p;
   });
-  for (const attack of [...ninja, ...(room._activeAttacks || []), ...(room._sparrow?.active.values() || [])]) {
+  for (const attack of [...ninja, ...(room.activeAttacks || []), ...(room.sparrowCombatState?.active.values() || [])]) {
     const owner = getParticipant(room, attack.attackerParticipantId) ||
       [...room.players.values()].find((p) => p.name === attack.attackerName);
     if (!owner || owner.team === player.team || !Number.isFinite(attack.x) || !Number.isFinite(attack.y)) continue;
@@ -75,7 +76,7 @@ function maneuverDanger(maneuver, observed, now, character) {
   for (let i = 0; i < Math.min(42, maneuver.frames.length); i += 3) {
     const frame = maneuver.frames[i], body = bounds({ ...frame, char_class: character });
     for (const attack of observed.projectiles) {
-      const point = projectilePosition(attack, age + i / 60);
+      const point = projectilePosition(attack, age + i / SERVER_TICK_HZ);
       const dx = Math.max(0, Math.abs(point.x - (frame.x + body.offsetX)) - body.halfWidth - attack.radius);
       const dy = Math.max(0, Math.abs(point.y - (frame.y + body.offsetY)) - body.halfHeight - attack.radius);
       danger += Math.max(0, 70 - Math.hypot(dx, dy));

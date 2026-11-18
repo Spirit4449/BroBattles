@@ -1,12 +1,7 @@
+const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
-const code = require('@babel/core').transformSync(
-  fs.readFileSync('src/client/game/characters/ozzy/effects.js', 'utf8'),
-  { babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]] },
-).code;
 const { POWERUP_CATALOG } = require('../src/shared/powerups');
 const stubs = {
   '../../../../shared/characters/characterTuning.js': require('../src/shared/characters/characterTuning.js'),
@@ -18,7 +13,7 @@ const stubs = {
 };
 function setup() {
   const api = {}, objects = [], tweens = [];
-  vm.runInNewContext(code, { exports: api, require: id => stubs[id] || {} });
+  loadClientModule('src/client/game/characters/ozzy/effects.js', { exports: api, require: id => stubs[id] || {} });
   function object() {
     const item = { calls: [], active: true, destroy() { this.active = false; } };
     for (const key of ['setDepth', 'setBlendMode', 'setDisplaySize', 'setOrigin', 'setAlpha', 'fillStyle', 'fillRect', 'clear', 'lineStyle', 'lineBetween', 'fillCircle', 'strokeCircle']) item[key] = (...args) => { item.calls.push({ key, args }); return item; };
@@ -48,13 +43,9 @@ test('completion and shutdown dispose beam objects and listeners', () => {
 });
 
 const rig = require('../src/client/game/characters/shared/rig.js');
-const castCode = require('@babel/core').transformSync(
-  fs.readFileSync('src/client/game/characters/ozzy/superCast.js', 'utf8'),
-  { babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]] },
-).code;
 function castSetup(sprite = {}) {
   const api = {}, layers = [];
-  vm.runInNewContext(castCode, { exports: api, require: id => stubs[id] || {} });
+  loadClientModule('src/client/game/characters/ozzy/superCast.js', { exports: api, require: id => stubs[id] || {} });
   const scene = { events: new EventEmitter(), add: { graphics() {
     const g = { rects: [], active: true, depth: 0, setDepth(d) { this.depth = d; return this; }, setBlendMode(m) { this.blend = m; return this; },
       fillStyle(color, alpha) { this.style = { color, alpha }; }, clear() { this.rects = []; },

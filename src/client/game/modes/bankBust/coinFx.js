@@ -1,3 +1,4 @@
+import { between, animateCoinLabel } from "./impactFx";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import {
   COIN_FRAME_SCALE,
@@ -14,12 +15,11 @@ const SPARKLE_FRAMES = 4;
 const DEBRIS_TEXTURE = "bank-bust-center-crate-debris";
 // Coins are dropped past this rather than slowing the match down: a vault
 // emptying under three attackers can ask for hundreds.
-const MAX_PARTICLES = 160;
+const MAX_PARTICLES = 300;
 const POP_TIME = [0.16, 0.3]; // seconds a collected coin hangs before homing
 const HOME_TIME = [0.42, 0.62];
 const BLINK_OUT_SECONDS = 0.24;
 
-const between = (min, max) => min + Math.random() * (max - min);
 
 /**
  * Every loose coin in the mode, simulated together each frame.
@@ -52,43 +52,90 @@ export function createCoinFx({ scene, Phaser, reducedMotion = false }) {
     live.pop();
   }
 
+  function throwCoin(
+    x,
+    y,
+    vx,
+    vy,
+    {
+      scale = 1,
+      depth = RENDER_LAYERS.POWERUPS + 1,
+      floors,
+      radius = 0,
+      restMs,
+      life = 1.2,
+      floorY,
+      floorLeft,
+      floorRight,
+    } = {},
+  ) {
+    if (reducedMotion) return false;
+    const sprite = acquire(COIN_TEXTURE, 0);
+    if (!sprite) return false;
+    sprite
+      .setPosition(x, y)
+      .setDepth(depth)
+      .setScale(COIN_FRAME_SCALE * scale);
+    live.push({
+      kind: "coin",
+      sprite,
+      x,
+      y,
+      vx,
+      vy,
+      floorY,
+      floorLeft,
+      floorRight,
+      floors,
+      radius,
+      restMs,
+      age: 0,
+      life: restMs == null ? life : 6,
+      spin: Math.random() * COIN_SPIN_FRAMES,
+      spinRate: between(8, 13) * (Math.random() < 0.5 ? -1 : 1),
+    });
+    return true;
+  }
+
   /** Coins thrown out of a point, landing on `floorY` if they are given one. */
-  function burst(x, y, {
-    count = 10,
-    speed = [160, 360],
-    spread = Math.PI * 1.2,
-    direction = -Math.PI / 2,
-    scale = 1,
-    life = [0.9, 1.4],
-    floorY,
-    floorLeft,
-    floorRight,
-    jitter = 6,
-    depth = RENDER_LAYERS.POWERUPS + 1,
-  } = {}) {
+  function burst(
+    x,
+    y,
+    {
+      count = 10,
+      speed = [160, 360],
+      spread = Math.PI * 1.2,
+      direction = -Math.PI / 2,
+      scale = 1,
+      life = [0.9, 1.4],
+      floorY,
+      floorLeft,
+      floorRight,
+      jitter = 6,
+      depth = RENDER_LAYERS.POWERUPS + 1,
+    } = {},
+  ) {
     if (reducedMotion) return;
     for (let i = 0; i < count; i++) {
-      const sprite = acquire(COIN_TEXTURE, 0);
-      if (!sprite) return;
       const angle = direction + (Math.random() - 0.5) * spread;
-      const v = between(speed[0], speed[1]);
-      sprite.setDepth(depth);
-      sprite.setScale(COIN_FRAME_SCALE * scale * between(0.72, 1));
-      live.push({
-        kind: "coin",
-        sprite,
-        x: x + between(-jitter, jitter),
-        y: y + between(-jitter, jitter),
-        vx: Math.cos(angle) * v,
-        vy: Math.sin(angle) * v,
-        floorY,
-        floorLeft,
-        floorRight,
-        age: 0,
-        life: between(life[0], life[1]),
-        spin: Math.random() * COIN_SPIN_FRAMES,
-        spinRate: between(8, 13) * (Math.random() < 0.5 ? -1 : 1),
-      });
+      const speedPx = between(speed[0], speed[1]);
+      if (
+        !throwCoin(
+          x + between(-jitter, jitter),
+          y + between(-jitter, jitter),
+          Math.cos(angle) * speedPx,
+          Math.sin(angle) * speedPx,
+          {
+            depth,
+            scale: scale * between(0.72, 1),
+            life: between(...life),
+            floorY,
+            floorLeft,
+            floorRight,
+          },
+        )
+      )
+        break;
     }
   }
 
@@ -97,14 +144,19 @@ export function createCoinFx({ scene, Phaser, reducedMotion = false }) {
    * target. `getTarget` is asked every frame, because the camera moves while
    * they travel and a coin bound for the HUD has to arrive at the HUD.
    */
-  function flyTo(x, y, getTarget, {
-    count = 6,
-    scale = 1,
-    popSpeed = [150, 300],
-    stagger = 0.035,
-    depth = RENDER_LAYERS.PLAYER_HUD,
-    onArrive = null,
-  } = {}) {
+  function flyTo(
+    x,
+    y,
+    getTarget,
+    {
+      count = 6,
+      scale = 1,
+      popSpeed = [150, 300],
+      stagger = 0.035,
+      depth = RENDER_LAYERS.PLAYER_HUD,
+      onArrive = null,
+    } = {},
+  ) {
     if (reducedMotion) {
       onArrive?.(0);
       return;
@@ -163,21 +215,25 @@ export function createCoinFx({ scene, Phaser, reducedMotion = false }) {
   }
 
   /** Bits of something thrown clear: a crate frame, or a tinted chip if none. */
-  function debris(x, y, {
-    frame = null,
-    tint = 0x7a4a26,
-    width = 6,
-    height = 3,
-    speed = [160, 360],
-    spread = Math.PI * 1.3,
-    direction = -Math.PI / 2,
-    count = 1,
-    life = [0.6, 1],
-    floorY,
-    floorLeft,
-    floorRight,
-    depth = RENDER_LAYERS.ATTACKS,
-  } = {}) {
+  function debris(
+    x,
+    y,
+    {
+      frame = null,
+      tint = 0x7a4a26,
+      width = 6,
+      height = 3,
+      speed = [160, 360],
+      spread = Math.PI * 1.3,
+      direction = -Math.PI / 2,
+      count = 1,
+      life = [0.6, 1],
+      floorY,
+      floorLeft,
+      floorRight,
+      depth = RENDER_LAYERS.ATTACKS,
+    } = {},
+  ) {
     if (reducedMotion) return;
     for (let i = 0; i < count; i++) {
       const hasFrame = frame !== null && scene.textures?.exists?.(DEBRIS_TEXTURE);
@@ -193,7 +249,8 @@ export function createCoinFx({ scene, Phaser, reducedMotion = false }) {
       live.push({
         kind: "debris",
         sprite,
-        x, y,
+        x,
+        y,
         vx: Math.cos(angle) * v,
         vy: Math.sin(angle) * v,
         floorY,
@@ -215,18 +272,14 @@ export function createCoinFx({ scene, Phaser, reducedMotion = false }) {
       stroke: "#1a1006",
       strokeThickness: 5,
     });
-    text.setOrigin(0.5).setDepth(RENDER_LAYERS.PLAYER_HUD + 1).setScale(0.4);
+    text
+      .setOrigin(0.5)
+      .setDepth(RENDER_LAYERS.PLAYER_HUD + 1)
+      .setScale(0.4);
     texts.push(text);
-    scene.tweens.add({
-      targets: text, scale: 1, duration: 170, ease: "Back.easeOut",
-    });
-    scene.tweens.add({
-      targets: text,
-      y: y - (reducedMotion ? 0 : 54),
-      alpha: 0,
-      duration: 620,
-      delay: 340,
-      ease: "Quad.easeIn",
+    animateCoinLabel(scene, text, {
+      y,
+      rise: reducedMotion ? 0 : 54,
       onComplete: () => {
         const index = texts.indexOf(text);
         if (index >= 0) texts.splice(index, 1);
@@ -239,6 +292,7 @@ export function createCoinFx({ scene, Phaser, reducedMotion = false }) {
     entry.age += dt;
     const struck = stepLooseCoin(entry, dt);
     if (struck) {
+      if (entry.resting && entry.restMs != null) entry.life = entry.age + entry.restMs / 1000;
       // Each bounce takes speed out of the spin as well as the fall.
       entry.spinRate *= 0.7;
       if (!entry.resting && Math.abs(entry.vy) > 120) sparkle(entry.x, entry.y + 8, { scale: 0.7 });
@@ -308,7 +362,8 @@ export function createCoinFx({ scene, Phaser, reducedMotion = false }) {
     const wasResting = entry.resting;
     stepLooseCoin(entry, dt);
     if (!entry.resting) entry.sprite.rotation += entry.tumble * dt;
-    else if (!wasResting) entry.sprite.rotation = Math.round(entry.sprite.rotation / Math.PI) * Math.PI;
+    else if (!wasResting)
+      entry.sprite.rotation = Math.round(entry.sprite.rotation / Math.PI) * Math.PI;
     entry.sprite.setPosition(entry.x, entry.y);
     const left = entry.life - entry.age;
     if (left < BLINK_OUT_SECONDS) entry.sprite.setVisible(Math.floor(left * 30) % 2 === 0);
@@ -329,7 +384,7 @@ export function createCoinFx({ scene, Phaser, reducedMotion = false }) {
     // added during the pass are picked up on the next frame.
     for (let i = live.length - 1; i >= 0; i--) {
       const entry = live[i];
-      if (UPDATERS[entry.kind](entry, dt)) release(live.indexOf(entry));
+      if (UPDATERS[entry.kind](entry, dt)) release(i);
     }
   }
 
@@ -342,5 +397,15 @@ export function createCoinFx({ scene, Phaser, reducedMotion = false }) {
     texts.length = 0;
   }
 
-  return { burst, flyTo, sparkle, debris, floatText, update, destroy };
+  return {
+    burst,
+    throwCoin,
+    flyTo,
+    sparkle,
+    debris,
+    floatText,
+    update,
+    destroy,
+    looseCoinCount: () => live.filter((entry) => entry.kind === "coin").length,
+  };
 }

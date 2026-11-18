@@ -21,7 +21,7 @@ function run() {
   const times=[];
   try {
     for(let tick=0;tick<3600;tick++) {
-      now+=STEP_MS;room._tickId=tick;room._simulationMono=now;
+      now+=STEP_MS;room.tickId=tick;room.simulationMono=now;
       const started=performance.now();
       for(const p of players) {
         advanceAmmo(p,STEP_MS);

@@ -1,3 +1,5 @@
+const { httpError } = require("../httpError");
+const { getConfig } = require("../../config");
 const fs = require('node:fs');
 const path = require('node:path');
 const manifest = require('../../../../content/manifest.json');
@@ -31,14 +33,14 @@ function extractJson(response) {
   return JSON.parse(text);
 }
 
-function createHelpSearchService({ fetchImpl = global.fetch, apiKey = process.env.GEMINI_API_KEY } = {}) {
+function createHelpSearchService({ fetchImpl = global.fetch, apiKey = getConfig().gemini.apiKey } = {}) {
   const documents = helpSearchDocuments();
   const allowedSlugs = new Set(documents.map((document) => document.slug));
   const cache = new Map();
   return async function searchHelp(query) {
     const cleanQuery = String(query || '').replace(/\s+/g, ' ').trim();
     if (cleanQuery.length < 2 || cleanQuery.length > 160) {
-      throw Object.assign(new Error('Search must be between 2 and 160 characters.'), { status: 400 });
+      throw httpError(400, 'Search must be between 2 and 160 characters.');
     }
     if (!apiKey || typeof fetchImpl !== 'function') return { available: false, matches: [] };
 
@@ -99,4 +101,4 @@ function createHelpSearchService({ fetchImpl = global.fetch, apiKey = process.en
   };
 }
 
-module.exports = { createHelpSearchService, helpSearchDocuments, plainText, MODEL };
+module.exports = { createHelpSearchService, helpSearchDocuments, MODEL };

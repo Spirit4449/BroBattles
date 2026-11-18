@@ -1,3 +1,5 @@
+const roomTransport = require('./helpers/roomTransport.js');
+const { loadClientModule } = require('./helpers/clientModule');
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -5,7 +7,8 @@ describe("Dash contact authority", () => {
   const physics = require('../src/shared/physics/movementPhysics.json');
 
   const {mapDefaults} = require('../src/shared/maps');
-  const {getDuelGeometry,characterBody} = require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
+const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
   const input = require('../src/server/core/gameRoom/inputManager');
   const {quantizeMovementPosition} = require('../src/shared/physics/movementPrecision');
   const {applyMovementCorrection} = require('../src/client/game/players/movementCorrection');
@@ -17,7 +20,7 @@ describe("Dash contact authority", () => {
    const y=face==='up'?rect.top-shape.offsetY-shape.halfHeight:face==='down'?rect.bottom-shape.offsetY+shape.halfHeight:(rect.top+rect.bottom)/2-shape.offsetY;
    const player={socketId:'p',name:'p',char_class:'ninja',isAlive:true,connected:true,x,y,lastInput:now,_dashUntil:now+160};
    // Isolate each face from world bounds, including offscreen boundary colliders.
-   const events=[];const room={players:new Map([['p',player]]),geometry:{colliders:[rect],world:{x:rect.left-200,y:rect.top-200,width:rect.right-rect.left+400,height:rect.bottom-rect.top+400}},io:{to:()=>({emit:(name,data)=>events.push(data)})}};
+   const events=[];const room={ ...roomTransport,players:new Map([['p',player]]),geometry:{colliders:[rect],world:{x:rect.left-200,y:rect.top-200,width:rect.right-rect.left+400,height:rect.bottom-rect.top+400}},io:{to:()=>({emit:(name,data)=>events.push(data)})}};
    input.resetMovementBudget(player,now);
    return {player,events,room,x,y};
   }
@@ -74,7 +77,7 @@ describe("Dash contact authority", () => {
 
 describe("Replicated knockback", () => {
   const { resolveShockwaveImpulse } = require('../src/shared/physics/shockwaveImpulse');
-  const { applyImpulse, stepBody } = require('../src/server/core/bots/physics');
+  const { applyImpulse, stepBody } = require('../src/server/core/physics/bodySolver');
 
   test('floor, wall, ceiling and corner contacts redirect blocked blast force', () => {
     const ground = resolveShockwaveImpulse(1500, 800, { down: true });
@@ -102,15 +105,8 @@ describe("Replicated knockback", () => {
   });
 
   test('local shockwave handler lifts grounded players and removes speed caps immediately', () => {
-    const fs = require('node:fs');
-    const vm = require('node:vm');
-    const babel = require('@babel/core');
     const exports = {};
-    const code = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/players/localSocketEvents'), 'utf8'), {
-      babelrc: false, configFile: false,
-      presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-    }).code;
-    vm.runInNewContext(code, { exports, require: name => name.includes('movementPhysics')
+    loadClientModule(require.resolve('../src/client/game/players/localSocketEvents'), { exports, require: name => name.includes('movementPhysics')
       ? require('../src/shared/physics/movementPhysics.json') : name.includes('shockwaveImpulse')
       ? require('../src/shared/physics/shockwaveImpulse') : {}, window: {} });
     const handlers = {};
@@ -122,7 +118,7 @@ describe("Replicated knockback", () => {
     };
     exports.bindLocalSocketEvents({
       socket: { on: (event, fn) => { handlers[event] = fn; } },
-      getPlayer: () => player, getDead: () => false,
+      getPlayer: () => player, stats: { dead: false },
     });
     handlers['player:knockback']({ cause: 'shockwave', radial: true, amountX: 2400, amountY: 700 });
     assert.equal(player.vx, 2400);
@@ -137,7 +133,7 @@ describe("Replicated knockback", () => {
   test('every participant knockback source advances the replicated trail sequence', () => {
     const { applyParticipantKnockback } = require('../src/server/core/gameRoom/participants');
     const events = [];
-    const room = { io: { to: () => ({emit: (event, data) => events.push({event, data})}) } };
+    const room = { ...roomTransport, io: { to: () => ({emit: (event, data) => events.push({event, data})}) } };
     for (const isBot of [false, true]) {
       const player = {isBot, socketId: 'fighter'};
       for (const cause of [undefined, 'stomp', 'shockwave']) {

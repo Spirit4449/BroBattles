@@ -1,15 +1,5 @@
-const { DEFAULT_CHARACTER } = require("../../../shared/characters/characterStats.js");
-function createProgressEmitter({ db, io, lastProgress }) {
-  const {
-    normalizeSelectedSkinMap,
-    resolveSelectedSkinId,
-    buildSkinAssetUrl,
-  } = require("../../services/cosmetics/skinsCatalog");
-
-  function ageSeconds(row) {
-    return Math.floor((Date.now() - new Date(row.created_at).getTime()) / 1000);
-  }
-
+const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
+function createProgressEmitter({ io, lastProgress }) {
   const { ratingWindow: mmrWindowForTicket } = require('./mmrUtils');
 
   function mmrOf(ticket) {
@@ -26,7 +16,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
     map,
     items,
     teamSize,
-    options = {},
+    { previews, roster },
   ) {
     if (!items || !items.length) return;
 
@@ -35,101 +25,15 @@ function createProgressEmitter({ db, io, lastProgress }) {
       .slice()
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-    const soloIds = sortedItems.filter((t) => t.user_id).map((t) => t.user_id);
-    let soloSockets = new Map();
-    if (soloIds.length) {
-      try {
-        const placeholders = soloIds.map(() => "?").join(",");
-        const rows = await db.runQuery(
-          `SELECT user_id, socket_id FROM users WHERE user_id IN (${placeholders})`,
-          soloIds,
-        );
-        soloSockets = new Map(rows.map((r) => [r.user_id, r.socket_id]));
-      } catch (_) {}
-    }
-
-    const partyMembersCache = new Map();
-    const soloUserCache = new Map();
-
-    async function previewPlayersForTicket(ticket) {
-      if (ticket.party_id) {
-        if (partyMembersCache.has(ticket.party_id)) {
-          return partyMembersCache.get(ticket.party_id);
-        }
-        try {
-          const members = await db.fetchPartyMembersDetailed(ticket.party_id);
-          const normalized = (members || [])
-            .filter((m) => !!m?.name)
-            .map((m) => {
-              const character = m.char_class || DEFAULT_CHARACTER;
-              const selectedSkinId = resolveSelectedSkinId({
-                character,
-                selectedSkinMap: normalizeSelectedSkinMap(
-                  m.selected_skin_id_by_char,
-                ),
-              });
-              return {
-                name: m.name,
-                char_class: character,
-                selected_skin_id: selectedSkinId,
-                selected_skin_asset_url: buildSkinAssetUrl(
-                  character,
-                  selectedSkinId,
-                ),
-                profile_icon_id: String(m.profile_icon_id || "") || null,
-              };
-            });
-          partyMembersCache.set(ticket.party_id, normalized);
-          return normalized;
-        } catch (_) {
-          partyMembersCache.set(ticket.party_id, []);
-          return [];
-        }
-      }
-
-      if (ticket.user_id) {
-        if (soloUserCache.has(ticket.user_id)) {
-          return soloUserCache.get(ticket.user_id);
-        }
-        try {
-          const rows = await db.runQuery(
-            "SELECT name, char_class, selected_profile_icon_id AS profile_icon_id, selected_skin_id_by_char FROM users WHERE user_id = ? LIMIT 1",
-            [ticket.user_id],
-          );
-          const u = rows?.[0];
-          const normalized = u?.name
-            ? [
-                {
-                  name: u.name,
-                  char_class: u.char_class || DEFAULT_CHARACTER,
-                  selected_skin_id: resolveSelectedSkinId({
-                    character: u.char_class || DEFAULT_CHARACTER,
-                    selectedSkinMap: normalizeSelectedSkinMap(
-                      u.selected_skin_id_by_char,
-                    ),
-                  }),
-                  selected_skin_asset_url: buildSkinAssetUrl(
-                    u.char_class || DEFAULT_CHARACTER,
-                    resolveSelectedSkinId({
-                      character: u.char_class || DEFAULT_CHARACTER,
-                      selectedSkinMap: normalizeSelectedSkinMap(
-                        u.selected_skin_id_by_char,
-                      ),
-                    }),
-                  ),
-                  profile_icon_id: String(u.profile_icon_id || "") || null,
-                },
-              ]
-            : [];
-          soloUserCache.set(ticket.user_id, normalized);
-          return normalized;
-        } catch (_) {
-          soloUserCache.set(ticket.user_id, []);
-          return [];
-        }
-      }
-
-      return [];
+    const visibleRosters = new Map();
+    for (const ticket of sortedItems) {
+      visibleRosters.set(ticket.ticket_id, (previews.get(ticket.ticket_id) || []).map(player => ({
+        name: player.name,
+        char_class: player.char_class,
+        selected_skin_id: player.selected_skin_id,
+        selected_skin_asset_url: player.selected_skin_asset_url,
+        profile_icon_id: player.profile_icon_id || null,
+      })));
     }
 
     for (const viewerTicket of sortedItems) {
@@ -148,7 +52,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
       const seenNames = new Set();
       for (const ticket of visibleItems) {
         if (players.length >= totalRequired) break;
-        const entries = await previewPlayersForTicket(ticket);
+        const entries = visibleRosters.get(ticket.ticket_id);
         for (const entry of entries) {
           if (!entry?.name || seenNames.has(entry.name)) continue;
           seenNames.add(entry.name);
@@ -157,7 +61,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
         }
       }
 
-      if (options.roster) { players = options.roster; foundPlayers = players.length; }
+      if (roster) { players = roster; foundPlayers = players.length; }
 
       const payload = {
         modeId,
@@ -179,12 +83,12 @@ function createProgressEmitter({ db, io, lastProgress }) {
       lastProgress.set(viewerTicket.ticket_id, signature);
 
       if (viewerTicket.party_id) {
-        io.to(`party:${viewerTicket.party_id}`).emit("match:progress", payload);
+        io.to(`party:${viewerTicket.party_id}`).emit(SOCKET_EVENTS.MATCH_PROGRESS, payload);
       } else if (viewerTicket.user_id) {
-        const sid = soloSockets.get(viewerTicket.user_id);
+        const sid = previews.get(viewerTicket.ticket_id)?.[0]?.socket_id;
         if (!sid) continue;
         const sock = io.sockets.sockets.get(sid);
-        if (sock) sock.emit("match:progress", payload);
+        if (sock) sock.emit(SOCKET_EVENTS.MATCH_PROGRESS, payload);
       }
     }
   }

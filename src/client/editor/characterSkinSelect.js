@@ -1,6 +1,6 @@
 import { createPixelSelect } from '../ui/pixelSelect.js';
 import { attachNestedDropdown } from './nestedDropdown.js';
-import catalog from '../../shared/catalogs/skinsCatalog.json';
+import catalog from '../../shared/catalogs/skinsCatalog.cjs';
 
 // Keep the character list compact and show its skins beside the hovered row.
 export function createCharacterSkinSelect({ options, value, skinId, onChange, className }) {

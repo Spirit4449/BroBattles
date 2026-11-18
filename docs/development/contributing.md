@@ -5,14 +5,20 @@ Read [Architecture](architecture.md) before changing ownership. Preserve socket/
 ## Local workflow
 
 ```bash
-npm install
+nvm use
+npm ci
 npm run dev
-npm run validate:content
-npm test
-npm run build
 ```
 
+Use the Node version in `.nvmrc`. If the development server is already running on port 3002, reuse it.
+
 Database and environment setup are in the [root README](../../README.md) and [database guide](../operations/database.md).
+
+CI runs the linter, default tests, generated constants check, content validation and production build on the Node version in `.nvmrc`. It also checks that Map Studio publications stay outside Git. The bug-catching ESLint rules report warnings while existing findings are cleaned up.
+
+Each successful production build protects its current bundles and prunes earlier versions. Development prunes after its first successful compilation and protects bundles referenced by on-disk HTML. Both keep the five newest versions of each bundle and any versions less than a day old. Use `npm run cleanbuild` for a full cleanup.
+
+The server loads webpack and its development middleware only when `NODE_ENV` is outside production. Build assets with all dependencies installed. To serve a prebuilt `dist/` with a production-only install, use `npm ci --omit=dev` and run `NODE_ENV=production node src/server/server.js`.
 
 ## Testing
 
@@ -22,12 +28,28 @@ Tests use the built-in `node --test` runner. There is no test framework to insta
 | --- | --- | --- |
 | `node --test tests/<file>.test.js` | One file | While iterating on a change |
 | `npm run test:<area>` | Focused group: `network`, `bots`, `shop`, `trophies`, `battle-log` | Changes inside that area |
-| `npm test` | `tests/*.test.js` and `tests/*.test.mjs` (about 4 seconds) | Once before finishing a change |
-| `npm run test:slow` | `tests/slow/`: exhaustive bot movement sweeps over every character and Duel map (about 7 seconds) | Changes to bot navigation, bot movement, bot physics, map geometry or spawns |
-| `npm run test:all` | Default suite plus `tests/slow/` | Before a deploy or a broad refactor |
-| `npm run test:db` | MySQL integration scripts | Schema or persistence changes, with a configured database |
+| `npm test` | Top-level `tests/*.test.{js,cjs,mjs}` | Once after completing a code change |
+| `npm run test:slow` | `tests/slow/`: exhaustive bot movement sweeps over every character and Duel map, plus Bank Bust routes | Changes to bot navigation, bot movement, bot physics, map geometry or spawns |
+| `npm run test:all` | Default suite plus `tests/slow/` | When both suites are needed under the rules above |
+| `npm run test:db` | MySQL integration scripts | Only when requested, with a configured database |
 
-Find the relevant file by name (`tests/<feature>*.test.js`) or with `grep -rl "<module name>" tests/`. Feature guides list their focused checks.
+Skip tests for docs, art and copy that no test reads. Run `npm run validate:content` after changing characters, maps, catalogs or assets. Run `npm run build` after changing client entry points, Webpack configuration or HTML.
+
+Start with the focused files below. Use `rg -l '<module name>' tests/` to find other callers and fixtures.
+
+| Code area | Focused tests under `tests/` |
+| --- | --- |
+| Character definitions, combat runtimes and showcase parity | `contentContracts.test.js`, `profileCharacters.test.js`, `attackDelivery.test.js`, `lagCompensation.test.js` and the character's combat tests |
+| Map documents, editor and scene map runtime | `mapEditor.test.js`, `mapRuntime.test.js` |
+| Room startup, Bank Bust economy and results | `gameRoomStartup.test.js`, `bankBustEconomy.test.js`, `battleLog.test.js` |
+| Powerup contacts, application and modifiers | `powerups.test.js`, `pickupTiming.test.js`, `effectMovement.test.js` |
+| Bot perception, tactics, aiming and objectives | `botBehavior.test.js`, `botAiming.test.js`, `botObjectives.test.js`, `botTeamwork.test.js` |
+| Bot navigation and worker integration | `navigation.test.js`, `navigationService.test.js`, `botDashNavigation.test.js` |
+| Socket party and presence handlers, chat and friends | `partyReadiness.test.js`, `chatRegression.test.js`, `friendPresence.test.mjs`, `friendPrivacy.test.js` |
+| Match wire format, timing and snapshots | `networkTiming.test.mjs`, `snapshotDelta.test.js`, `serverClockAndHistory.test.js` |
+| HTTP route behavior and guards | `cosmeticRoutes.test.js`, `admin.test.js`, `upgradeRateLimit.test.js`, `productionHardening.test.js` |
+| Shop catalog, presentation, fulfillment and Stripe | `shopCatalog.test.js`, `shopPresentation.test.js`, `shopCommerce.test.js`, `stripeWebhook.test.js` |
+| Navigation lifecycle, lobby readiness and built pages | `pageScope.test.mjs`, `lobbyReadyUi.test.js`, `pageRuntimeBuild.test.js` |
 
 Writing tests:
 
@@ -35,60 +57,102 @@ Writing tests:
 - Do not assert on source or CSS text (regular expressions over a file's contents), and do not pin tuning constants to literal numbers. Both break on harmless edits and were removed in the October 2026 test trim.
 - Extend the existing file for a feature instead of adding a new file for one regression. Each file is a separate process.
 - Put anything that takes more than about a second in `tests/slow/`. It is excluded from `npm test`.
-- `tests/helpers/` holds shared fixtures: `botRoom.js` builds a headless room with bots; `clientModule.js` compiles complete browser modules and resolves real relative dependencies in an isolated VM; `browserFixture.js` uses the dev dependency LinkeDOM for DOM structure/events with explicit browser boundaries; `lobbyFixture.js` loads the actual page template; `localPlayerFixture.js` initializes the real player controller and Arcade body with rendering doubles. These fixtures do not establish real browser layout, rendering or audio playback. `tests/browser/` holds Playwright harnesses described in the [client guide](client.md); they are not part of any npm test script.
+- Match a dependency's exact import specifier when a fixture intercepts `require`. Load the real dependency for behavior the test covers.
+
+### Test fixtures
+
+- `tests/helpers/botRoom.js` builds a headless room with bots.
+- `tests/helpers/clientModule.js` compiles browser modules and resolves real relative dependencies in an isolated VM.
+- `tests/helpers/browserFixture.js` supplies a LinkeDOM DOM and explicit browser boundaries. `lobbyFixture.js` loads the actual lobby template.
+- `tests/helpers/localPlayerFixture.js` initializes the player controller and Arcade body with rendering doubles.
+- Use the Playwright harnesses in `tests/browser/` for real browser layout, rendering and playback. See the [local scripts guide](../../scripts/README.md).
 
 ## Add a character
 
 1. Create `src/shared/characters/<key>.json` using an existing character as a shape reference. Include `key`, `stats` (including `tuning`), `frame`, one-based `duckFrame` cell, `basicAction`, `basicHitTypes`, `specialHitTypes`, and `attacks`. These hit-type lists control super charging; distinguish the emitted action ID from its damage hit type.
 2. Register the definition in `src/shared/characters/index.js`. Stats, frame dimensions, duck cells, attack descriptors and bot basic-action IDs are derived. Import shared helpers directly; do not create another stats/frame table.
-3. Add browser behavior in `src/client/game/characters/<key>/` and register its constructor in `src/client/game/characters/manifest.js`. Extend `CharacterEntityBase`: declare `key`, `sounds`, `attackFlow` and a `preload` built from `loadBaseAtlas`/`loadFiles`, then override only the hooks the kit needs (listed at the top of `characterEntityBase.js`). Put presentation settings in the definition's `presentation` and `aim` blocks rather than adding `character === "<key>"` checks to player, reticle or match code. Keep unique attack choreography in that character's modules.
+3. Add browser behavior in `src/client/game/characters/<key>/` and register its constructor in `src/client/game/characters/manifest.js`. Extend `CharacterEntityBase`: declare `key`, `sounds`, `attackFlow`, `performSpecial({ scene, player, isOwner, aim })` and a `preload` built from `loadBaseAtlas`/`loadFiles`, then override only the hooks the kit needs (listed at the top of `characterEntityBase.js`). Put presentation settings in the definition's `presentation` and `aim` blocks rather than adding `character === "<key>"` checks to player, reticle or match code. Keep unique attack choreography in that character's modules.
 4. Put runtime assets in `public/assets/<key>/`. The validator expects `body.webp`, `spritesheet.webp` and `animations.json`. Register weapon/audio/effect files in the character preloader; confirm their names and paths. The roster preloader loads participating characters and selected skins.
 5. Configure an existing authoritative attack runtime through the definition's `attacks`. If it needs tuning-to-runtime translation, add that mapping in `attackDescriptorResolver.js`. A genuinely new attack mechanism gets a module under `shared/combat/runtime/attackRuntimes/` and a registry entry in `characterAttackRegistry.js`.
-6. For an ordinary server special, add an ability module and register it in `abilityRuntimeManager.js`. A specialized network protocol may instead require adapters in the client `characters/networkRegistry.js` and server `shared/combat/runtime/characterCombatRegistry.js`. Preserve validation and server ownership; adapters alone do not establish trusted damage.
+6. For an ordinary server special, add a module under `src/shared/combat/runtime/abilities/` and register it in that runtime’s `abilityRuntimeManager.js`. A specialized network protocol may instead require adapters in the client `characters/networkRegistry.js` and server `shared/combat/runtime/characterCombatRegistry.js`. Preserve validation and server ownership; adapters alone do not establish trusted damage.
 7. Add a bot profile in `src/shared/combat/characterProfiles.js` (spacing, melee/buff flags, aim model, super range and `shouldUseSuper`). Content validation fails until it exists. Shared action registration does not teach bots a novel mechanic; add a profile field rather than a `char_class` comparison in bot modules.
-8. The lobby showcase is enabled automatically for every character (reduced motion keeps the portrait). Both Animations and Fight run the same `src/shared/combat/runtime/` attacks, abilities and effects as GameRoom, through `PreviewSession`; never add preview damage/timers or imitation status rules. Optional `src/client/game/characters/<key>/showcase.js` files only override art framing (`visual.height`, `visual.maxWidth`, `visual.bodyTop`) and are discovered automatically. The default fight roster is automatic; team scenarios live in `showcaseRoster` as participant data. A new dedicated projectile protocol registers its instance factory once in `characters/networkRegistry.js` so matches and previews both use it. Extend `tests/profileCharacters.test.js` with the mechanic's behavior contract and the host-parity scenario, then check Animations and Fight for clipping, missing sounds, cleanup and console errors. Content validation rejects missing basic/special combat runtimes; presentation fallback does not count as combat support.
+8. Check the server reach guard in `src/shared/combat/matchConfig.js` and its use in `combatValidation.js` for hit types the new kit submits. Add a character-specific `ATTACK_MAX_DIST_MAP` entry if the existing fallback would reject a legitimate hit or accept hits beyond the kit's intended reach.
+9. Add the default skin to `src/shared/catalogs/skinsCatalog.json` and any profile icon or purchase offer using the [cosmetic checklist](#add-a-shop-offer-or-cosmetic). Configure the unlock in the character definition. For progression rewards, update the relevant Trophy Road entry. Add a character-key alias only when migrating an existing identifier.
+10. Check the lobby showcase. The default roster and portrait fallback are automatic. Animations and Fight run the shared attacks, abilities and effects through `PreviewSession`. Define custom team scenarios as participant data in `showcaseRoster` in `src/client/lobby/profile/showcaseKit.js`. Optional `src/client/game/characters/<key>/showcase.js` files override art framing (`visual.height`, `visual.maxWidth`, `visual.bodyTop`). A dedicated projectile protocol must register its instance factory in `characters/networkRegistry.js` for matches and previews. Extend `tests/profileCharacters.test.js` for any new combat mechanic and host parity.
 
-Run content validation and attack/ability/network tests. Manually check selection, local and remote attacks, special charging, hit/death animations, skins and missing asset warnings. Use the character brief below to collect design/art inputs.
+Run content validation and focused attack, ability and network tests. In two browser clients, verify selection and skins, basic and special attack delivery, super charging, effects and hit/death animations. Check showcase Animations and Fight for clipping, missing sounds, cleanup and console errors. Use the [character brief](#character-brief) for design and art inputs.
 
 ## Add or edit a map
 
-Use [Map Studio](maps.md) or the authenticated map API. Export/clone a schema-version-1 document, give a new map a unique ID, edit metadata/assets/layout/spawns/powerups and validate every variant before saving. Saved overrides are discovered by the lobby catalog and snapshotted for new matches.
+1. In [Map Studio](maps.md) or the authenticated map API, clone or export a schema-version-1 document. Give a new map a unique ID. Select the authoring mode and arena profile, which supply the world and camera. Edit the layout and asset library, terrain, spawn formations and mode-specific objectives.
+2. Set powerup spawn positions and enable or disable pickups. If `powerups.types` is present, add only the catalog types intended for that map. An omitted list uses the shared default types. Validate every supported variant.
+3. Save through Map Studio or the API for a deployment-specific map. The environment’s published revision takes precedence over a legacy override and the shipped document. Maps live in `data/maps/` unless `BB_MAP_DIR` is set. See [map persistence](maps.md#persistence-and-deployment). The lobby derives its map picker from the catalog, and a new match snapshots the selected document.
+4. To ship a built-in map, add `src/shared/maps/<id>.json` and register it in `src/shared/maps/index.js`. Place referenced art under `public/assets/` and declare it in the document. Set `metadata.terrain` to a terrain audio profile from `src/shared/physics/terrainAudio.json` if needed. Update any deployed override separately for the built-in changes to take effect there.
 
-For a built-in map shipped with the repository, add `src/shared/maps/<id>.json` and register it in `src/shared/maps/index.js`. That registry also derives the default catalog. Saved overrides take precedence over built-ins, so update a live override through Map Studio/API rather than expecting edits to defaults to replace it.
-
-Do not add a legacy JavaScript map module, dropdown option, map-specific preload branch or powerup coordinate table. Documents own those values. Pass the owning scene into runtime map queries; do not retain map objects after scene shutdown.
-
-Test the document and asset validation, the spawn formation for the map's mode, powerup placement, boundaries, collisions, objective layout and an isolated editor playtest. `node --test tests/mapEditor*.test.js tests/mapRuntime.test.js` covers the document workflow.
+Run content validation, `node --test tests/mapEditor.test.js tests/mapRuntime.test.js`, and the slow suite after changing geometry or spawns. In an isolated playtest, check the intended team sizes, collisions, boundaries, camera, powerups and objectives.
 
 ## Add a mode
 
-1. Add its descriptor, supported variants and capabilities to `src/shared/catalogs/gameModes.catalog.json`. Keep it unimplemented/nonqueueable until the runtime works.
-2. Implement the server mode under `src/server/core/gameModes/` and register its `runtimeClass` factory in `index.js` there.
-3. If it needs client rendering or assets, add `src/client/game/modes/<mode>/` and register its factory/preloader in `src/client/game/modes/index.js`. Set `capabilities.suddenDeath` explicitly for the intended poison behavior.
-4. Add compatible map metadata and objective data, and teach bots the objective behavior when bots are supported.
+1. Add a stable mode ID, variant IDs, team sizes, default variant, artwork, lobby presentation and capabilities to `src/shared/catalogs/gameModes.catalog.json`. Keep `implemented` and `queueable` disabled until the end-to-end flow is ready. Set `capabilities.suddenDeath` for the intended poison behavior.
+2. Implement the authoritative rules under `src/server/core/gameModes/` and register the `runtimeClass` factory in `src/server/core/gameModes/index.js`. Cover initialization, scoring or survival, respawn if supported, victory, cleanup and the mode state sent to clients.
+3. Register each new map authoring variant that needs its own world and camera in `src/shared/maps/arenas.json`. Build compatible map documents, spawn formations and objectives against those profiles. Duel formations share the `duels` authoring mode and select a profile with `arenaId`.
+4. Add mode-specific rendering and asset loading under `src/client/game/modes/<mode>/` and register the factory and preloader in `src/client/game/modes/index.js`. Register a HUD factory in `modeHud.js` when mode snapshots need DOM updates before Phaser starts. Check queue selection, party readiness, preload and editor defaults for assumptions about existing modes.
+5. For bot-enabled modes, set the catalog objective and wire decisions through `src/server/core/bots/objectives.js` and `controller.js` as needed. For a mode that awards trophies or other progress, check `src/shared/catalogs/trophySystem.catalog.json` and the room reward flow. Verify labels in `src/server/services/match/battleLog.js` and add public mode presentation in `src/server/services/site/aboutPage.js` if the mode is featured.
+6. Validate content and test queueing through match completion and return to the lobby, including result labels, payout, and cleanup. Exercise bots and any new map geometry with the applicable focused and slow tests before enabling queueing.
 
-The existing map schema supports two teams with 1–3 players per team. Free-for-all, PvE and different objective layouts need schema, matchmaking, spawn, victory and HUD work. A mode catalog entry alone does not provide these capabilities.
+The current map schema supports two teams with one to three players each. Free-for-all, PvE and different objective layouts require changes across schema, matchmaking, spawning, victory and HUD.
 
 ## Add a powerup or timed effect
 
-1. Add a powerup entry in `src/shared/catalogs/powerups.catalog.json` with asset directory, color, duration, tick volume and applicable modifiers. Client/server type lists, durations and asset mappings are derived.
-2. Add its authoritative effect definition in `src/shared/combat/runtime/effects/effectDefs.js`, using the shared duration/modifiers and the existing effect-manager lifecycle. Custom callbacks belong here, not in the content JSON.
-3. Add `icon.webp`, `touch.mp3` and `tick.mp3` in `public/assets/powerups/<assetDir>/`. The loader supports alternate sound formats, but update the validator if intentionally changing the standard asset contract.
-4. Configure movement through shared `modifiers`. For ability-owned effects, derive rules in `src/shared/effectRules.js` from the character tuning. Server snapshots carry the final movement values to clients, including scaling and custom slow parameters; do not add a separate client multiplier or priority table.
-5. Add custom visual behavior to the powerup renderer or character effect hooks only when the default presentation is insufficient. Gameplay movement belongs in shared rules/local-effect control, not rendering.
+1. For a collectible, add a key to `src/shared/catalogs/powerups.catalog.json` with `assetDir`, colors, duration, modifiers and `tickVolume` when it plays a tick sound. The catalog supplies the shared types, asset mappings and defaults. Set `scalesWithPower` when its effect uses power-based scaling.
+2. Add an authoritative effect definition in `src/shared/combat/runtime/effects/effectDefs.js`. Use the shared duration/modifiers and existing effect lifecycle. Update the pickup/application dispatch only if the pickup needs behavior outside that lifecycle.
+3. Add `icon.webp` and `touch.mp3` under `public/assets/powerups/<assetDir>/`. Include `tick.mp3` if `tickVolume` is set. Check sound loading and playback.
+4. Add the key to explicit `powerups.types` allowlists on built-in maps and saved overrides where it should spawn. Verify editor selection and room spawning. Review pickup scoring in `src/server/core/bots/tactics.js` if bots need special incentives or avoidance.
+5. Use catalog modifiers or shared rules in `src/shared/effectRules.js` for movement and other gameplay changes. Check the snapshot and local-effect paths for any new movement field. Server snapshots carry the authoritative movement values.
+6. Configure bubble order/strength, tint priority and particle settings in the catalog's `visual` object. Register custom auras in `src/client/game/powerups/powerupVisuals.js`. Check `src/client/game/scene/statusIconStack.js` for any new icon behavior. Keep character-inflicted artwork with the character.
 
-An ability-only effect needs an effect definition and its snapshot/presentation integration; it does not need a collectible powerup catalog entry. Check application, stacking, expiry, death/respawn cleanup and local/remote visibility.
+An ability-only timed effect starts at the effect definition and shared rules, then needs snapshot and presentation integration for its visible state. Validate content and check contact or ability application, stacking, expiry, death/respawn cleanup and local/remote visibility.
 
-## Add items, skins, animation or other assets
+## Add a shop offer or cosmetic
 
-- Offers, skins, profile icons and player cards use their existing shared catalogs. Set cosmetic prices only on offers in `shopCatalog.json`; cosmetic catalogs hold identity/assets, not duplicate prices. Character unlock prices belong in the character definition and upgrade costs in `characterStats.js`. Add content there and reuse commerce services; do not duplicate purchase routes or currency mutation logic. A new reward type needs an explicit server fulfillment implementation and transaction tests.
-- Animation frame selection/sorting uses `src/client/game/characters/shared/animationBuilder.js`. Keep timing, repeats and deliberate pose order in each character's `anim.js`. Check any new animation against the actual atlas, including skin variants.
-- Map artwork is declared in the map document's asset library. Terrain audio is declared in `src/shared/physics/terrainAudio.json`, selected by `metadata.terrain`.
-- Runtime assets belong under `public/assets/` in the owning content folder. Keep source artwork, intermediate exports and licensing information clearly named; avoid moving an asset until its runtime/catalog references are checked.
+1. Define a skin, profile icon, player card or title in the matching `src/shared/catalogs/{skins,profileIcons,playerCards,titles}Catalog.json` file. Use a stable ID, existing unlock method and valid runtime asset URLs. A skin supplies its portrait, game spritesheet and animation JSON as appropriate. Verify skin poses against the actual atlas and the character's animation definitions.
+2. For an item sold in the shop, add an offer in `src/shared/catalogs/shopCatalog.json` with its section, stable offer ID, grants, price and applicable availability, eligibility or purchase limits. Check the rotation inputs if it should appear in a rotating section or daily reward. The offer owns the cosmetic price. Character unlock prices and upgrade costs remain in the character definition and `characterStats.js` respectively.
+3. Reuse the shop service and cosmetic ownership services for existing grant types. For a new type, update catalog validation, eligibility and the appropriate redemption or order-fulfillment path under `src/server/services/shop/`. Cover transaction and duplicate-delivery behavior. Money offers currently support unlimited currency packs. Verify Stripe configuration, checkout and webhook fulfillment using [Payments](../operations/payments.md). See [Progression](progression.md) for grant and offer rules.
+4. Run content validation and `npm run test:shop`. Check `tests/cosmeticRoutes.test.js` when ownership/equip behavior changes. In the lobby, verify offer appearance, purchase or claim, owned-state updates, and equipping in the relevant picker. Check equipped assets in the match if the cosmetic appears there.
+
+Animation selection/sorting belongs in `src/client/game/characters/shared/animationBuilder.js`. Keep timing and deliberate pose order in the character's `anim.js`. Keep editable artwork, exports and licensing information clearly named and check asset references before moving files.
+
+## Add an HTTP route or service
+
+1. Define the shared URL in `src/shared/net/apiPaths.js` and add the handler to the owning module under `src/server/routes/modules/`. Register a new module in `src/server/routes/routes.js` before the not-found and error handlers. Follow the owning module's URL, method and status conventions.
+2. Use the appropriate auth function from the registration context and enforce resource ownership or admin permissions before performing mutations. Validate request fields and follow the route helpers in `src/server/routes/http.js`. Apply relevant rate limits through `src/server/middleware/abuseHttpMiddleware.js` or the domain's existing abuse guard.
+3. Put domain logic in `src/server/services/<domain>/`. Pass dependencies through the existing registration, use parameterized queries through `src/server/core/sql.js`, and use `withTransaction` for multi-write operations that must succeed together. Use the [migration checklist](#add-a-database-migration) when changing persistence.
+4. Update the calling client and extend the owning route or service test. Cover successful behavior, invalid input, missing authentication, permissions and limits where applicable.
+
+## Add a socket event
+
+1. Define its name in `src/shared/net/socketEvents.js` and use that constant in client emitters/listeners and server handlers. For compact gameplay payloads, update the matching encode/decode functions in `src/shared/networkWire.js` and review the match protocol compatibility check in `src/server/core/socketEvents/clientCompatibility.js`.
+2. Register a lobby event in the owning module under `src/server/core/socketEvents/`, wired by `src/server/core/socket.js`. Match-scoped events registered per room/player belong in the appropriate GameRoom transport or combat adapter. Use the established acknowledgement and error shape. `defineSocketHandler` handles acknowledgements, auth, guards and errors on lobby handlers that use it.
+3. Validate membership, action eligibility and payload fields against server state. Broadcast to the appropriate socket or room. Register client listeners in the owning page/controller or match transport and dispose them on exit.
+4. Extend the owning socket test, using `tests/helpers/fakeIo.js` for socket boundaries where appropriate. Verify request/ack, rejection, intended recipients and cleanup on disconnect or navigation. For match wire changes, test real encoders/decoders across the client/server boundary and check reconnect or resync behavior. See [Networking](networking.md).
+
+## Add a client page or lobby panel
+
+1. For a separate page, add its entry module under `src/client/pages/`, its template under `public/`, its named Webpack entry in `webpack.config.js` and the matching bundle reference in the HTML. Serve it through `src/server/routes/modules/pageRoutes.js` or the owning route module with the intended auth policy.
+2. For a panel within the lobby, add the DOM in `public/index.html` and the feature controller under `src/client/lobby/`. Wire it from `src/client/pages/lobby.js`, following existing lazy initialization for panels such as the shop. Keep panel CSS with the owning feature.
+3. Use the existing navigation/page scope for listeners, requests, timers and observers. Tear down any resources outside that scope on page exit. Check access both by direct URL and through in-app navigation.
+4. Run `npm run build` for entry points, Webpack or HTML changes. Extend the relevant lifecycle or DOM tests. Open, leave and reopen the page or panel in a browser to check controls, layout, assets and duplicate handlers. See [Client](client.md).
+
+## Add a bot behavior
+
+1. Start at `src/server/core/bots/controller.js` and put the logic in the existing owner. Use `perception.js` for observed state, `tactics.js` and `objectives.js` for decisions, `combat.js` and `supers.js` for attack decisions, and `travel.js` and `navigation.js` for movement and route execution.
+2. Express kit-specific behavior in `src/shared/combat/characterProfiles.js`. Check difficulty parameters in `src/server/services/match/bots/config.js`. For an objective, start with the mode's catalog objective and keep decisions based on the room's authoritative state.
+3. Route actions through the existing GameRoom input/combat and physics paths. Reuse the navigation service and movement solver for reachable destinations, hazards and timing.
+4. Extend the closest test with the headless `botRoom.js` fixture when needed. Assert the resulting decision or action with time/seed control where relevant. Run the slow suite if navigation, movement, physics, geometry or spawns change. See [Gameplay](gameplay.md#bots-and-matchmaking).
 
 ## Add a database migration
 
-Add `migrations/<date>_<feature>.sql` with additive DDL and explicit existence checks compatible with the target MySQL version (see existing conditional `information_schema` checks) and document the schema in `docs/operations/database.md`. When the change needs checks or backfills, add a named step to `scripts/db/apply-migration.cjs` (run with `npm run migrate:apply -- <name>`), using the `scripts/db/db.cjs` helpers (`readMigration`, `hasColumn`, `hasIndex`, `hasTable`). `npm run migrate:status` reads the database (no writes) and lists migrations whose tables, columns or indexes are missing; it is derived from the SQL files, so changes made only in an apply step are not checked.
+Add `migrations/<date>_<feature>.sql` with additive DDL and explicit existence checks compatible with MySQL. Register it in `BOOTSTRAP_ORDER` in `scripts/db/apply-migration.cjs` and keep `src/server/core/schemaRequirements.js` current. Add a named step when the migration needs checks or backfills, using the helpers in `scripts/db/db.cjs`. Verify the bootstrap against an empty disposable database and use `npm run migrate:status` to check an existing schema with metadata queries. Document the upgrade and any one-time backfill in [Database setup](../operations/database.md#upgrade-an-existing-database).
 
 ## Module boundaries
 

@@ -1,29 +1,22 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const { loadClientModule } = require('./helpers/clientModule');
+const test=require('node:test'), assert=require('node:assert/strict');
 const {EventEmitter}=require('node:events');
 const loadServerClock=require('./helpers/serverClockModule');
 const loadShotPrediction=require('./helpers/shotPredictionModule');
 const loadProjectileReplication=require('./helpers/projectileReplicationModule');
-const babel=require('@babel/core');
 const model=require('../src/shared/characters/sparrowProjectile');
 const replication=require('../src/shared/characters/sparrowReplication');
 const {resolveAttackAimContext}=require('../src/client/game/characters/shared/attackAim');
 const tuning=require("../src/shared/characters/characterTuning.js");
 const {makeRoom}=require('./helpers/botRoom');
 const combat=require('../src/shared/combat/runtime/sparrowCombat.js');
-const attackCode=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/sparrow/attack.js'),'utf8'),{
-  babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
-}).code;
 const attackApi={};
 const playerAudio={};
 const flipLock={};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/flipLock.js'),'utf8'),{
-  babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
-}).code,{exports:flipLock});
+loadClientModule(require.resolve('../src/client/game/characters/shared/flipLock.js'), {exports:flipLock});
 const playedAnimations=[];
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/playerAudio.js'),'utf8'),{
-  babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
-}).code,{exports:playerAudio});
-vm.runInNewContext(attackCode,{exports:attackApi,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):
+loadClientModule(require.resolve('../src/client/game/audio/playerAudio.js'), {exports:playerAudio});
+loadClientModule(require.resolve('../src/client/game/characters/sparrow/attack.js'), {exports:attackApi,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):
   name.includes('characterTuning')?tuning:name.includes('sparrowProjectile')?model:
   name.includes('playerAudio')?playerAudio:
   name.includes('runtimeId')?{createRuntimeId:()=> 'aim'}:
@@ -31,16 +24,13 @@ vm.runInNewContext(attackCode,{exports:attackApi,require:name=>name.includes('pr
   name.includes('aimPoses')?require('../src/client/game/characters/sparrow/aimPoses'):
   name.includes('animationState')?{playSpriteAnimation:(options)=>playedAnimations.push(options)}:{},
   Phaser:{Physics:{Arcade:{Image:class{}}}}});
-const code=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/sparrow/network.js'),'utf8'),{
-  babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
-}).code;
 function setup(colliders=[],networkOptions=null){
   const api={},created=[],sounds=[];let now=0;
   const socket={connected:false};
   const serverClock=loadServerClock({performance:{now:()=>now}});
   const shots=loadShotPrediction({serverClock});
   const replicationHelpers=loadProjectileReplication({performance:{now:()=>now}});
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectileReplication')?replicationHelpers:name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('sparrowProjectile')?model:name.includes('sparrowReplication')?replication:
+  loadClientModule(require.resolve('../src/client/game/characters/sparrow/network.js'), {exports:api,require:name=>name.includes('projectileReplication')?replicationHelpers:name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('sparrowProjectile')?model:name.includes('sparrowReplication')?replication:
     name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):
     name.includes('playerAudio')?playerAudio:
     name.includes('runtimeId')?{createRuntimeId:()=> 'generated'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:10}}:socket,
@@ -142,10 +132,10 @@ test('real steep attack payload reaches the reticle on the server and retains fu
     const p=f.players[0];
     Object.assign(p,{x:owner.x,y:owner.y,isBot:false,connected:true});
 
-    f.room._tickId=0;f.room._simulationMono=0;
+    f.room.tickId=0;f.room.simulationMono=0;
     f.room.geometry={...f.room.geometry,colliders:[]};f.players[1].loaded=false;
     assert.equal(f.room.handlePlayerAction(p.participantId,request),true);
-    for(let i=0;i<6;i++) {f.room._tickId++;f.room._simulationMono+=model.STEP_MS;combat.tick(f.room);}
+    for(let i=0;i<6;i++) {f.room.tickId++;f.room.simulationMono+=model.STEP_MS;combat.tick(f.room);}
     const release=f.events.find(e=>e.type==='game:action'&&e.payload.action.type==='sparrow-projectiles').payload.action;
     const arrow=release.projectiles[1];
     const expectedSpeed=model.attackConfig().speed*aim.speedScale;

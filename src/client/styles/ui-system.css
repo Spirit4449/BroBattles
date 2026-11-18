@@ -1,0 +1,305 @@
+/*
+ * Bro Battles UI system
+ *
+ * Design tokens, font faces, box sizing, and base form controls.
+ */
+
+@font-face {
+  font-family: "Press Start 2P";
+  src: url("/assets/PressStart2P.woff2") format("woff2");
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  --bb-font-display: "Press Start 2P", ui-monospace, monospace;
+  --bb-font-body: "Lato", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --bb-bg-deep: #050914;
+  --bb-bg: #080f1e;
+  --bb-surface-1: #0b1629;
+  --bb-surface-2: #111f37;
+  --bb-surface-3: #182942;
+  --bb-surface-raised: #20314a;
+  --bb-border: #385478;
+  --bb-border-soft: #263b59;
+  --bb-border-highlight: #7aa9e5;
+  --bb-ink: #03060b;
+
+  --bb-text: #f7f9ff;
+  --bb-text-soft: #c9d6e8;
+  --bb-text-muted: #91a5c2;
+  --bb-blue: #3d91eb;
+  --bb-blue-deep: #2867c4;
+  --bb-purple: #6a43bd;
+  --bb-gold: #efc86e;
+  --bb-green: #14b981;
+  --bb-green-deep: #07885f;
+  --bb-red: #d64a4a;
+  --bb-red-deep: #a92833;
+  --bb-orange: #e6923b;
+
+  /* Fixed-size mosaic cells stay square on wide and compact popup headers. */
+  --bb-chroma-mosaic: url("/assets/chromas/chroma-mosaic.svg") top left / 576px 96px repeat;
+  --bb-chroma-header-veil: linear-gradient(90deg, transparent, #2856be 34%, #3045b9 66%, transparent);
+  --bb-header-gradient: var(--bb-chroma-header-veil), var(--bb-chroma-mosaic), linear-gradient(100deg, #159dc9 0%, #2865c5 30%, #304bc4 62%, #3926a4 100%);
+  --bb-chroma-button-corners:
+    url("/assets/chromas/chroma-corner-light.svg") left top / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat,
+    url("/assets/chromas/chroma-corner-shade.svg") right bottom / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat;
+  --bb-chroma-button-trail:
+    linear-gradient(rgba(255,255,255,.20), rgba(255,255,255,.20)) left 12% top 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(255,255,255,.15), rgba(255,255,255,.15)) left 20% top var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(255,255,255,.10), rgba(255,255,255,.10)) left 28% top 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(255,255,255,.06), rgba(255,255,255,.06)) left 35% top var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.20), rgba(8,16,32,.20)) right 12% bottom 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.15), rgba(8,16,32,.15)) right 20% bottom var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.10), rgba(8,16,32,.10)) right 28% bottom 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.06), rgba(8,16,32,.06)) right 35% bottom var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat;
+  --bb-surface-gradient: linear-gradient(180deg, var(--bb-surface-2), var(--bb-surface-1));
+  --bb-card-gradient: linear-gradient(180deg, #14243c, #0b172a);
+  --bb-success-gradient: linear-gradient(180deg, #19c890, #079063);
+  --bb-danger-gradient: linear-gradient(180deg, var(--bb-red), var(--bb-red-deep));
+  --bb-primary-gradient: linear-gradient(180deg, #438feb, #285fc0);
+
+  /* Every frame is square: windows, cards, media, controls, and tags. */
+  --bb-radius-window: 0px;
+  --bb-radius-media: 0px;
+  --bb-radius-card: 0px;
+  --bb-radius-control: 0px;
+  --bb-radius-tag: 0px;
+  --bb-radius-pill: 0px;
+
+  --bb-border-width: 3px;
+  --bb-frame-shadow:
+    0 0 0 5px var(--bb-ink),
+    0 8px 0 var(--bb-ink),
+    0 24px 56px rgba(0, 0, 0, 0.58),
+    inset 0 3px rgba(255, 255, 255, 0.09);
+  --bb-card-shadow:
+    0 0 0 4px var(--bb-ink),
+    0 6px 0 var(--bb-ink),
+    inset 0 2px rgba(255, 255, 255, 0.07);
+  --bb-control-shadow:
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
+    0 10px rgba(0, 0, 0, 0.3),
+    inset 0 4px rgba(255, 255, 255, 0.16);
+  --bb-control-shadow-pressed:
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
+    inset 0 4px rgba(0, 0, 0, 0.24);
+  --bb-inset-shadow:
+    inset 0 2px rgba(255, 255, 255, 0.06),
+    inset 0 -3px rgba(0, 0, 0, 0.3);
+
+  --bb-field-focus: #6799d4;
+  --bb-field-focus-shadow:
+    0 0 0 2px rgba(73, 126, 191, 0.2),
+    inset 0 2px rgba(255, 255, 255, 0.06),
+    inset 0 -3px rgba(0, 0, 0, 0.34);
+  --bb-title-shadow: 3px 4px 0 rgba(2, 5, 12, 0.72);
+  --bb-overlay: rgba(3, 8, 16, 0.72);
+  --bb-overlay-blur: 5px;
+  --bb-popup-backdrop:
+    radial-gradient(circle at 14% 16%, rgba(255, 201, 85, 0.18), transparent 44%),
+    radial-gradient(circle at 85% 18%, rgba(81, 170, 255, 0.18), transparent 48%),
+    rgba(5, 10, 22, 0.74);
+
+  --bb-text-xs: 9px;
+  --bb-text-sm: 11px;
+  --bb-text-md: 13px;
+  --bb-text-lg: 16px;
+  --bb-title-sm: clamp(14px, 1.6vw, 19px);
+  --bb-title-lg: clamp(20px, 2.5vw, 34px);
+
+  --bb-space-1: 4px;
+  --bb-space-2: 8px;
+  --bb-space-3: 12px;
+  --bb-space-4: 16px;
+  --bb-space-5: 20px;
+  --bb-space-6: 24px;
+  --bb-space-8: 32px;
+
+  --bb-motion-fast: 130ms;
+  --bb-motion-standard: 180ms;
+  --bb-ease: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --bb-popup-motion: 150ms;
+  --bb-popup-shift: 12px;
+
+  /* ---- Semantic component tokens. Components consume these, never raw hex. ---- */
+
+  /* Popups and modals: one window surface for every dialog in lobby and battle. */
+  /* Flat on purpose: a gradient reads as a different color on every window height. */
+  --bb-popup-surface: #0c182c;
+  --bb-popup-bg: var(--bb-popup-surface);
+  --bb-popup-border-color: var(--bb-border);
+  --bb-popup-border-width: var(--bb-border-width);
+  --bb-popup-shadow: var(--bb-frame-shadow);
+  --bb-popup-pad: var(--bb-space-5);
+  --bb-popup-divider: 2px solid rgba(255, 255, 255, 0.14);
+
+  /* Inset panels inside a popup (settings rows, profile sections). */
+  --bb-panel-bg: rgba(8, 18, 36, 0.76);
+  --bb-panel-border: 2px solid var(--bb-border-soft);
+  --bb-panel-shadow: var(--bb-inset-shadow);
+
+  /* Cards: benchmarked on the profile icon picker tile. */
+  --bb-card-bg: var(--bb-card-gradient);
+  --bb-card-bg-hover: linear-gradient(180deg, #1a2e4b, #0f1d33);
+  --bb-card-border-width: 2px;
+  --bb-card-border-color: var(--bb-border);
+  --bb-card-border-hover: var(--bb-border-highlight);
+  --bb-card-border-selected: var(--bb-green);
+  --bb-card-border-current: var(--bb-gold);
+  --bb-card-shadow-pressed:
+    0 0 0 4px var(--bb-ink),
+    0 2px 0 var(--bb-ink),
+    inset 0 2px rgba(0, 0, 0, 0.24);
+  --bb-card-locked-bg: linear-gradient(180deg, #161d2a, #0c111b);
+  --bb-card-locked-border: #2c374a;
+  --bb-card-pad: var(--bb-space-3);
+  --bb-card-gap: var(--bb-space-2);
+  --bb-card-grid-gap: var(--bb-space-5);
+  --bb-card-title-size: 10px;
+
+  /* In-battle HUD chrome, benchmarked on the match clock. */
+  --bb-hud-frame:
+    0 4px var(--bb-ink),
+    0 -4px var(--bb-ink),
+    4px 0 var(--bb-ink),
+    -4px 0 var(--bb-ink),
+    0 8px rgba(0, 0, 0, 0.33),
+    4px 4px rgba(0, 0, 0, 0.33),
+    -4px 4px rgba(0, 0, 0, 0.33),
+    inset 0 3px rgba(255, 255, 255, 0.19);
+  --bb-hud-fill: #102744;
+  --bb-hud-fill-danger: #4a1a26;
+  --bb-hud-mosaic: url("/assets/chromas/lobby-chroma-mosaic.svg") 0 0 / 288px 48px;
+  /* The same mosaic at half size, laid over progress-bar fills. */
+  --bb-bar-chroma: url("/assets/chromas/lobby-chroma-mosaic.svg") 0 0 / 144px 24px;
+  --bb-hud-bg: linear-gradient(90deg, #10274430, #102744dd 45%, #10274460), var(--bb-hud-mosaic), var(--bb-hud-fill);
+  --bb-hud-bg-danger: linear-gradient(90deg, #4a1a2630, #4a1a26e6 45%, #4a1a2660), var(--bb-hud-mosaic), var(--bb-hud-fill-danger);
+  --bb-hud-label: var(--bb-border-highlight);
+
+  /* Currency: one chip and one palette everywhere coins, gems, or trophies show. */
+  --bb-coin: #ffd36a;
+  --bb-gem: #8fe6ff;
+  --bb-trophy: var(--bb-coin);
+  --bb-currency-chip-bg: linear-gradient(180deg, #0d1a2e, #081221);
+  --bb-currency-chip-border: 2px solid var(--bb-border-soft);
+  --bb-currency-chip-shadow: 0 3px 0 var(--bb-ink), inset 0 2px rgba(255, 255, 255, 0.07);
+  --bb-currency-icon: 20px;
+
+  /* Rhythm for button rows and stacked actions. */
+  --bb-stack-gap: var(--bb-space-3);
+  --bb-action-gap: var(--bb-space-4);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:is(
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="search"],
+  input[type="number"],
+  input[type="url"],
+  textarea,
+  select
+) {
+  border: 2px solid var(--bb-border);
+  border-radius: var(--bb-radius-control);
+  color: var(--bb-text);
+  background: rgba(5, 12, 25, 0.9);
+  box-shadow: var(--bb-inset-shadow);
+  transition:
+    border-color var(--bb-motion-fast) ease,
+    background-color var(--bb-motion-fast) ease,
+    box-shadow var(--bb-motion-fast) ease;
+}
+
+:is(
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="search"],
+  input[type="number"],
+  input[type="url"],
+  textarea
+)::placeholder {
+  color: var(--bb-text-muted);
+  opacity: 0.78;
+}
+
+button,
+[role="button"],
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:where(button, a[href], [role="button"]):focus-visible {
+  outline: 2px solid rgba(154, 203, 255, 0.92);
+  outline-offset: 3px;
+}
+
+:is(
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="search"],
+  input[type="number"],
+  input[type="url"],
+  textarea,
+  select
+):focus,
+:is(
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="search"],
+  input[type="number"],
+  input[type="url"],
+  textarea,
+  select
+):focus-visible {
+  outline: none;
+  border-color: var(--bb-field-focus);
+  background: rgba(4, 10, 22, 0.98);
+  box-shadow: var(--bb-field-focus-shadow);
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover {
+  -webkit-text-fill-color: var(--bb-text);
+  caret-color: var(--bb-text);
+  box-shadow: 0 0 0 1000px #050c19 inset;
+}
+
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--bb-text);
+  caret-color: var(--bb-text);
+  box-shadow:
+    0 0 0 1000px #040a16 inset,
+    0 0 0 2px rgba(73, 126, 191, 0.2);
+}
+
+::selection {
+  color: #fff;
+  background: rgba(80, 115, 218, 0.78);
+}

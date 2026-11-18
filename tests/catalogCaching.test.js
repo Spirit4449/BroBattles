@@ -68,15 +68,17 @@ test("cosmetic and shop catalogs load once, index by id, and reload after invali
 function fakeSkinDb(userRow) {
   const owned = new Set();
   const writes = [];
-  return {
+  const db = {
     writes,
     owned,
+    withTransaction: fn => fn(null, db.runQuery),
     runQuery: async (sql, params) => {
+      if (sql.startsWith("SELECT * FROM users")) return [userRow];
       if (sql.startsWith("SELECT skin_id")) return [...owned].map((skin_id) => ({ skin_id }));
       if (sql.startsWith("INSERT IGNORE INTO user_skins")) {
         writes.push("insert");
-        for (let i = 1; i < params.length; i += 2) owned.add(params[i]);
-        return { affectedRows: params.length / 2 };
+        for (let i = 1; i < params.length; i += 3) owned.add(params[i]);
+        return { affectedRows: params.length / 3 };
       }
       if (sql.startsWith("UPDATE users SET selected_skin_id_by_char")) {
         writes.push("update");
@@ -86,6 +88,7 @@ function fakeSkinDb(userRow) {
       throw new Error(`unexpected query ${sql}`);
     },
   };
+  return db;
 }
 
 test("skin ownership sync writes only when unlocks or selections change", async () => {

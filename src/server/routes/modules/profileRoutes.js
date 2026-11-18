@@ -1,370 +1,143 @@
-const { getFavoriteCharacter } = require("../../services/match/favoriteCharacter");
-const bcrypt = require("bcrypt");
-const NAME_CHANGE_COST = 50;
-const { getAllCharacters, resolveCharacterKey, canonicalCharacterKey, parseCharacterLevels } = require("../../../shared/characters/characterStats.js");
-const {
-  syncProfileIconOwnershipForUser,
-} = require("../../services/cosmetics/profileIconOwnership");
-const {
-  syncPlayerCardOwnershipForUser,
-} = require("../../services/cosmetics/playerCardOwnership");
-const { getBattleLogForUser, getCurrentWinStreak } = require("../../services/match/battleLog");
+const { API_PATHS } = require("../../../shared/net/apiPaths.js");
+const { authedRoute } = require("../http");
+const { httpError } = require("../../services/httpError");
 
-const { USERNAME_RE, MIN_PW, MAX_PW } = require("../../services/auth/authAccountService");
+function mapRenameError(error) {
+  if (error?.code === "ER_DUP_ENTRY" || error?.errno === 1062) {
+    return httpError(409, "Username is already taken.");
+  }
+  return error;
+}
+
+const { getConfig } = require("../../config");
+
+const bcrypt = require("bcrypt");
+const { NAME_CHANGE_COST, changeUsername } = require("../../services/auth/accountNameService");
+const { getProfileBattles, buildProfileViewForUser, findProfileIdByName, findProfileByName } = require("../../services/profile/profileViewService");
+
+const { USERNAME_RE, MIN_PW, MAX_PW, verifiedPasswordHash } = require("../../services/auth/authAccountService");
 const { isReservedAdminName } = require("../../services/auth/auth");
 
 function registerProfileRoutes({ app, db, requireCurrentUser }) {
-  require("./emailRoutes").registerEmailRoutes({ app, db, requireCurrentUser });
-  async function buildProfileViewForUser(userRow) {
-    const profileIconState = await syncProfileIconOwnershipForUser(db, userRow);
-    const cardState = await syncPlayerCardOwnershipForUser(db, userRow);
-    const titleState = await require("../../services/cosmetics/titleOwnership").getTitleOwnership(db, userRow);
-    const matchesRows = await db.runQuery(
-      "SELECT COUNT(*) AS total FROM match_participants WHERE user_id = ?",
-      [userRow.user_id],
-    );
+  app.get(API_PATHS.PROFILE_DATA, authedRoute(requireCurrentUser, "[profile] /profile/data", async (req, res, user) => {
+    const profile = await buildProfileViewForUser(db, user);
 
-    let wins = 0;
-    try {
-      const winsRows = await db.runQuery(
-        `SELECT COUNT(*) AS total
-           FROM match_participants mp
-           JOIN matches m ON m.match_id = mp.match_id
-          WHERE mp.user_id = ?
-            AND m.status = 'completed'
-            AND m.winner_team = mp.team`,
-        [userRow.user_id],
-      );
-      wins = Number(winsRows?.[0]?.total) || 0;
-    } catch (_) {
-      wins = 0;
-    }
+    return res.json({
+      success: true,
+      profile,
+    });
+  }));
 
-    let charLevels = parseCharacterLevels(userRow.char_levels);
-
-    if (charLevels && typeof charLevels === "object") {
-      const normalizedCharLevels = {};
-      const validChars = new Set(getAllCharacters());
-      for (const [key, val] of Object.entries(charLevels)) {
-        const normalizedKey = canonicalCharacterKey(key);
-        if (!validChars.has(normalizedKey)) continue;
-        const levelNum = Number(val) || 0;
-        normalizedCharLevels[normalizedKey] = Math.max(
-          normalizedCharLevels[normalizedKey] || 0,
-          levelNum,
-        );
-      }
-      charLevels = normalizedCharLevels;
-    }
-
-    const charClass = resolveCharacterKey(userRow.char_class);
-
-    const levelValues = Object.values(charLevels)
-      .map((n) => Number(n) || 0)
-      .filter((n) => n > 0);
-    const avgLevel =
-      levelValues.length > 0
-        ? Math.round(
-            (levelValues.reduce((a, b) => a + b, 0) / levelValues.length) * 100,
-          ) / 100
-        : 1;
-
-    let battles = [];
-    try {
-      battles = await getBattleLogForUser(db, userRow.user_id, 10);
-    } catch (err) {
-      console.error("[profile] getBattleLogForUser error", err);
-      battles = [];
-    }
-
-    return {
-      userId: userRow.user_id,
-      username: userRow.name,
-      guest: !!userRow.expires_at,
-      coins: Number(userRow.coins) || 0,
-      gems: Number(userRow.gems) || 0,
-      nameChangeCost: NAME_CHANGE_COST,
-      nextNameChangeAt: userRow.next_name_change_at || null,
-      trophies: Number(userRow.trophies) || 0,
-      charClass,
-      favoriteCharacter: await getFavoriteCharacter(db, userRow.user_id),
-      profileIconId: profileIconState.selectedProfileIconId || null,
-      charLevels,
-      avgCharLevel: avgLevel,
-      totalMatches: Number(matchesRows?.[0]?.total) || 0,
-      wins,
-      winStreak: await getCurrentWinStreak(db, userRow.user_id),
-      highestWinStreak: Number(userRow.highest_win_streak) || 0,
-      selectedTitleId: titleState.selectedTitleId,
-      ownedTitleIds: titleState.ownedTitleIds,
-      selectedCardId: cardState.selectedCardId || null,
-      ownedCardIds: cardState.ownedCardIds || [],
-      selectedProfileIconId: profileIconState.selectedProfileIconId || null,
-      ownedProfileIconIds: profileIconState.ownedIconIds || [],
-      battles,
-    };
-  }
-
-  app.get("/profile/data", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Not authenticated" });
-      }
-
-      const profile = await buildProfileViewForUser(user);
-
-      return res.json({
-        success: true,
-        profile,
-      });
-    } catch (error) {
-      console.error("[profile] /profile/data error", error);
+  app.get(API_PATHS.PROFILE_VIEW, authedRoute(requireCurrentUser, "[profile] /profile/view", async (req, res) => {
+    const username = String(req.query?.username || "").trim();
+    if (!username) {
       return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
+        .status(400)
+        .json({ success: false, error: "Username is required." });
     }
-  });
+    const target = await findProfileByName(db, username);
+    if (!target) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Player not found." });
+    }
+    const profile = await buildProfileViewForUser(db, target, { publicView: true });
+    return res.json({ success: true, profile });
+  }));
 
-  app.get("/profile/view", async (req, res) => {
-    try {
-      const viewer = await requireCurrentUser(req, res);
-      if (!viewer) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Not authenticated" });
-      }
-      const username = String(req.query?.username || "").trim();
-      if (!username) {
-        return res
-          .status(400)
-          .json({ success: false, error: "Username is required." });
-      }
-      const rows = await db.runQuery(
-        "SELECT * FROM users WHERE name = ? LIMIT 1",
-        [username],
-      );
-      const target = rows?.[0];
-      if (!target) {
+  app.get(API_PATHS.PROFILE_BATTLES, authedRoute(requireCurrentUser, "[profile] /profile/battles", async (req, res, viewer) => {
+    let targetUserId = viewer.user_id;
+    const username = String(req.query?.username || "").trim();
+    if (username) {
+      targetUserId = await findProfileIdByName(db, username);
+      if (!targetUserId) {
         return res
           .status(404)
           .json({ success: false, error: "Player not found." });
       }
-      const profile = await buildProfileViewForUser(target);
-      return res.json({
-        success: true,
-        profile: {
-          userId: profile.userId,
-          username: profile.username,
-          coins: profile.coins,
-          gems: profile.gems,
-          trophies: profile.trophies,
-          charClass: profile.charClass,
-          favoriteCharacter: profile.favoriteCharacter,
-          profileIconId: profile.profileIconId,
-          selectedTitleId: profile.selectedTitleId,
-          selectedCardId: profile.selectedCardId || null,
-          charLevels: profile.charLevels,
-          avgCharLevel: profile.avgCharLevel,
-          totalMatches: profile.totalMatches,
-          wins: profile.wins,
-          winStreak: profile.winStreak,
-          highestWinStreak: profile.highestWinStreak,
-          battles: profile.battles || [],
-        },
+    }
+
+    const limit = Math.min(20, Math.max(1, Number(req.query?.limit) || 10));
+    const battles = await getProfileBattles(db, targetUserId, limit);
+
+    return res.json({
+      success: true,
+      battles,
+    });
+  }));
+
+  app.post(API_PATHS.PROFILE_CHANGE_USERNAME, authedRoute(requireCurrentUser, "[profile] /profile/change-username", async (req, res, user) => {
+    if (user.expires_at) {
+      return res.status(403).json({
+        success: false,
+        error: "Sign up or log in to change your name.",
       });
-    } catch (error) {
-      console.error("[profile] /profile/view error", error);
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
     }
-  });
 
-  app.get("/profile/battles", async (req, res) => {
-    try {
-      const viewer = await requireCurrentUser(req, res);
-      if (!viewer) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Not authenticated" });
-      }
-
-      let targetUserId = viewer.user_id;
-      const username = String(req.query?.username || "").trim();
-      if (username) {
-        const rows = await db.runQuery(
-          "SELECT user_id FROM users WHERE name = ? LIMIT 1",
-          [username],
-        );
-        if (!rows?.[0]) {
-          return res
-            .status(404)
-            .json({ success: false, error: "Player not found." });
-        }
-        targetUserId = rows[0].user_id;
-      }
-
-      const limit = Math.min(20, Math.max(1, Number(req.query?.limit) || 10));
-      const battles = await getBattleLogForUser(db, targetUserId, limit);
-
-      return res.json({
-        success: true,
-        battles,
+    const next = String(req.body?.username || "").trim();
+    if (!USERNAME_RE.test(next)) {
+      return res.status(400).json({
+        success: false,
+        error: "Username must be 3-14 chars: letters, numbers, _ . - only.",
       });
-    } catch (error) {
-      console.error("[profile] /profile/battles error", error);
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
     }
-  });
+    if (isReservedAdminName(next)) {
+      return res
+        .status(409)
+        .json({ success: false, error: "Username is already taken." });
+    }
 
-  app.post("/profile/change-username", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Not authenticated" });
-      }
+    const result = await changeUsername(db, user.user_id, next);
+    if (result.error) {
+      const { status, ...payload } = result;
+      return res.status(status).json({ success: false, ...payload });
+    }
 
-      if (user.expires_at) {
-        return res.status(403).json({
-          success: false,
-          error: "Sign up or log in to change your name.",
-        });
-      }
+    res.cookie(
+      "display_name",
+      next,
+      req.app.locals?.DISPLAY_COOKIE_OPTS || {},
+    );
+    return res.json(result);
+  }, { mapError: mapRenameError }));
 
-      const next = String(req.body?.username || "").trim();
-      if (!USERNAME_RE.test(next)) {
-        return res.status(400).json({
-          success: false,
-          error: "Username must be 3-14 chars: letters, numbers, _ . - only.",
-        });
-      }
-      if (isReservedAdminName(next)) {
-        return res
-          .status(409)
-          .json({ success: false, error: "Username is already taken." });
-      }
-
-      const result = await db.withTransaction(async (_conn, q) => {
-        // Lock the account before checking either balance or cooldown. Concurrent
-        // renames and other wallet writes must see the committed account state.
-        const [current] = await q(
-          `SELECT name, gems, next_name_change_at,
-                  next_name_change_at > NOW(3) AS cooldown_active
-             FROM users WHERE user_id = ? FOR UPDATE`,
-          [user.user_id],
-        );
-        if (!current) return { status: 401, error: "Not authenticated" };
-        if (next === current.name) {
-          return { success: true, username: current.name, gems: Number(current.gems) || 0,
-            nextNameChangeAt: current.next_name_change_at || null };
-        }
-        if (current.cooldown_active) {
-          return { status: 429, error: "You can only change your name once per month.",
-            nextNameChangeAt: current.next_name_change_at };
-        }
-        if ((Number(current.gems) || 0) < NAME_CHANGE_COST) {
-          return { status: 400, error: `You need ${NAME_CHANGE_COST} gems to change your name.` };
-        }
-        await q(
-          `UPDATE users SET name = ?, gems = gems - ?,
-                  next_name_change_at = DATE_ADD(NOW(3), INTERVAL 1 MONTH)
-            WHERE user_id = ?`,
-          [next, NAME_CHANGE_COST, user.user_id],
-        );
-        await q("UPDATE party_members SET name = ? WHERE name = ?", [next, current.name]);
-        const [updated] = await q(
-          "SELECT gems, next_name_change_at FROM users WHERE user_id = ?",
-          [user.user_id],
-        );
-        return { success: true, username: next, gems: Number(updated.gems) || 0,
-          nextNameChangeAt: updated.next_name_change_at };
+  app.post(API_PATHS.PROFILE_CHANGE_PASSWORD, authedRoute(requireCurrentUser, "[profile] /profile/change-password", async (req, res, user) => {
+    if (user.expires_at) {
+      return res.status(403).json({
+        success: false,
+        error: "Sign up or log in to change your password.",
       });
-      if (result.error) {
-        const { status, ...payload } = result;
-        return res.status(status).json({ success: false, ...payload });
-      }
-
-      res.cookie(
-        "display_name",
-        next,
-        req.app.locals?.DISPLAY_COOKIE_OPTS || {},
-      );
-      return res.json(result);
-    } catch (error) {
-      if (error && (error.code === "ER_DUP_ENTRY" || error.errno === 1062)) {
-        return res
-          .status(409)
-          .json({ success: false, error: "Username is already taken." });
-      }
-      console.error("[profile] /profile/change-username error", error);
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
     }
-  });
 
-  app.post("/profile/change-password", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Not authenticated" });
-      }
-      if (user.expires_at) {
-        return res.status(403).json({
-          success: false,
-          error: "Sign up or log in to change your password.",
-        });
-      }
+    const currentPassword = String(req.body?.currentPassword || "");
+    const newPassword = String(req.body?.newPassword || "");
 
-      const currentPassword = String(req.body?.currentPassword || "");
-      const newPassword = String(req.body?.newPassword || "");
-
-      if (!currentPassword || !newPassword) {
-        return res
-          .status(400)
-          .json({ success: false, error: "Both passwords are required." });
-      }
-      if (newPassword.length < MIN_PW || newPassword.length > MAX_PW) {
-        return res.status(400).json({
-          success: false,
-          error: `Password must be ${MIN_PW}-${MAX_PW} characters.`,
-        });
-      }
-
-      const rows = await db.runQuery(
-        "SELECT password FROM users WHERE user_id = ? LIMIT 1",
-        [user.user_id],
-      );
-      const existingHash = rows[0]?.password || "";
-      const ok = await bcrypt.compare(currentPassword, existingHash);
-      if (!ok) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Current password is incorrect." });
-      }
-
-      const rounds = Number(process.env.BCRYPT_ROUNDS) || 12;
-      const nextHash = await bcrypt.hash(newPassword, rounds);
-      await app.locals.authSessions.changePassword(user.user_id, existingHash, nextHash);
-      await app.locals.authSessions.create({ ...user, password: nextHash }, res);
-
-      return res.json({ success: true });
-    } catch (error) {
-      console.error("[profile] /profile/change-password error", error);
+    if (!currentPassword || !newPassword) {
       return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
+        .status(400)
+        .json({ success: false, error: "Both passwords are required." });
     }
-  });
+    if (newPassword.length < MIN_PW || newPassword.length > MAX_PW) {
+      return res.status(400).json({
+        success: false,
+        error: `Password must be ${MIN_PW}-${MAX_PW} characters.`,
+      });
+    }
+
+    const existingHash = await verifiedPasswordHash(db, user.user_id, currentPassword);
+    if (!existingHash) {
+      return res
+        .status(401)
+        .json({ success: false, error: "Current password is incorrect." });
+    }
+
+    const rounds = getConfig().bcryptRounds;
+    const nextHash = await bcrypt.hash(newPassword, rounds);
+    await app.locals.authSessions.changePassword(user.user_id, existingHash, nextHash);
+    await app.locals.authSessions.create({ ...user, password: nextHash }, res);
+
+    return res.json({ success: true });
+  }));
 }
 
 module.exports = { registerProfileRoutes, NAME_CHANGE_COST };

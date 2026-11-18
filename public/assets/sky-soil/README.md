@@ -32,8 +32,8 @@ Built-in image generation prompts:
   hard staircase contours and stepped pixel colors.
 
 The strips are cropped into separate full-canvas layers and extended below
-frame to avoid exposed bottom edges. Installer: `scripts/art/sky-soil/install-layers.cjs`
-(requires the original generated files recorded there). The game-rendered full
+frame to avoid exposed bottom edges. Installer: `scripts/art/archive/sky-soil/install-layers.cjs`
+(pass the directory containing the original generated PNGs as its argument). The game-rendered full
 preview is a still composition; live atmosphere is verified separately.
 
 ## Livelier sky and integrated island revision
@@ -62,12 +62,12 @@ Built-in image generation prompts, referencing the respective installed assets:
   with three broad uneven lobes. No repeated pointed teeth, grey stalactites,
   straight join or attached lower band. Transparent background, side-on pixel art.
 
-Artwork generated with the built-in image generation tool. The source paths
-are recorded in `scripts/art/sky-soil/refine-art.cjs`.
+Artwork generated with the built-in image generation tool. The original source filenames
+are recorded in `scripts/art/archive/sky-soil/refine-art.cjs`.
 
 ## Current: unified pixel finish
 
-Run `node scripts/art/sky-soil/pixel-finish.cjs` for the current installed finish.
+The historical coarse finish can be reproduced with `node scripts/art/sky-soil/pixel-finish.cjs`, which writes artwork and updates the shipped base document.
 Its project-local source masters are in `scripts/art/sky-soil/pixel-sources/`.
 This deterministic finishing pass uses area sampling, small per-asset palettes,
 hard transparency, nearest-neighbor expansion and lossless WebP. Grid spacing

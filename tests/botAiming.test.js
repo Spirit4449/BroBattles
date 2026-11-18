@@ -128,12 +128,12 @@ test('ninja can shoot a ducking human without mistaking their floor for cover', 
   assert.equal(requestBasic(floorRoom, ninja, duckingHuman, profile, () => 0.5, 1000), true);
   assert.equal(ninja.ammoState.charges, 0);
   assert.equal(actions.length, 1);
-  const { characterBody } = require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
   assert.equal(actions[0].target.y, duckingHuman.y + characterBody('ninja').offsetY);
 });
 
 test('ninja aims into Gloop and Sparrow bodies rather than their elevated sprite origins', () => {
-  const { characterBody } = require('../src/shared/physics/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/characterBody');
   const model = require('../src/shared/characters/ninjaProjectile');
   const { sweep } = require('../src/shared/characters/sparrowProjectile');
   const floor = 600;

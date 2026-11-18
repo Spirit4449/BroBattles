@@ -84,7 +84,7 @@ try {
     const h = makeRoom({ map, seed, trophies, characters });
     navBuilds.length = 0;
     try {
-      if (suddenDeath) h.room._loopStartWallTime = clock - h.room.gameMode.getMatchDurationMs() - Math.max(0, Number(args['sudden-death']) || 0) * 1000;
+      if (suddenDeath) h.room.loopStartWallTime = clock - h.room.gameMode.getMatchDurationMs() - Math.max(0, Number(args['sudden-death']) || 0) * 1000;
       h.room._powerupRandom = createRandom(seed);
       h.room._lastPowerupSpawnAt = clock;
       for (let i = 0; i < 3; i++) h.room._spawnPowerup();

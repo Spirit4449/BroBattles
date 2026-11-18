@@ -1,3 +1,5 @@
+import { formatBadgeCount } from "./badges.mjs";
+
 export function createChatScrollController(messages, composer, button) {
   let pending = 0;
   let following = true;
@@ -7,7 +9,7 @@ export function createChatScrollController(messages, composer, button) {
     if (!below) pending = 0;
     composer.classList.toggle('has-messages-below', below);
     button.hidden = !below;
-    button.textContent = pending ? `${pending > 99 ? '99+' : pending} new` : '';
+    button.textContent = pending ? `${formatBadgeCount(pending)} new` : '';
     button.setAttribute('aria-label', pending ? `${pending} new messages. Jump to latest` : 'Jump to latest messages');
   }
   function capture() {

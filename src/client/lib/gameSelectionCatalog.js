@@ -29,7 +29,7 @@ export function setSelectionProgressionUser(getUser) { getProgressionUser = getU
 export function getModeProgressionBlockReason(modeId) { return getModeUnlockReason(modeId, getProgressionUser()); }
 
 // Built-in maps until the lobby registers the backend catalog.
-const MAPS = Array.isArray(mapsCatalog?.maps) ? mapsCatalog.maps : [];
+const MAPS = mapsCatalog.maps.slice();
 
 const catalog = createSelectionCatalog(() => MAPS);
 export const {

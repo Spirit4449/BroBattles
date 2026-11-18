@@ -1,3 +1,4 @@
+// CommonJS keeps these mechanics directly loadable by the Node test suite.
 // Shared atlas mechanics; character modules retain their frame order and timing.
 function createAnimationBuilder(scene, textureKey) {
   const texture = scene.textures.get(textureKey);

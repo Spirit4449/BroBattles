@@ -78,7 +78,7 @@ export function createLevelBadge(level, options = {}) {
   return renderLevelBadge(document.createElement("div"), level, options);
 }
 
-export function clearLevelBadge(root) {
+function clearLevelBadge(root) {
   root.replaceChildren();
   root.classList.remove("level-badge");
   delete root.dataset.level;

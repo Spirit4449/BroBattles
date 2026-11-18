@@ -8,8 +8,7 @@
 //
 // The level is authored here so the two halves stay exact mirrors and every
 // climb can be checked against the shared movement physics. It writes
-// src/shared/maps/4.json (the shipped default), data/maps/4.json (the runtime
-// override that wins at match time) and the shape list the art bake reads.
+// src/shared/maps/4.json (the shipped default) and the shape list the art bake reads.
 //
 // ---------------------------------------------------------------------------
 // The shape of the level
@@ -685,9 +684,8 @@ if (require.main === module) {
     process.exit(1);
   }
   const json = JSON.stringify(document, null, 2) + "\n";
-  for (const rel of ["src/shared/maps/4.json", "data/maps/4.json"]) {
-    fs.writeFileSync(path.join(ROOT, rel), json);
-    console.log("wrote", rel);
-  }
+  const rel = "src/shared/maps/4.json";
+  fs.writeFileSync(path.join(ROOT, rel), json);
+  console.log("wrote", rel);
   console.log(`Iron Junction: ${platforms.length} platforms, ${hitboxes.length} hitboxes, ${WIDTH}x${BOTTOM - TOP}.`);
 }
