@@ -1,3 +1,5 @@
+import { createModalFocus } from "../../ui/modalFocus.js";
+import { dismissLobbyLoading } from "../lobbyReveal.js";
 import { BROWSER_EVENTS } from "../../lib/browserEvents.js";
 import { API_PATHS } from "../../../shared/net/apiPaths.js";
 import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
@@ -8,6 +10,9 @@ import { PARTY_JOIN_REQUEST_TIMEOUT_MS } from '../../../shared/gameConstants';
 // Owns the requester/owner overlays, pending requests and their expiry timers.
 export function createJoinRequestController({ socket, checkIfInParty, getActivePartyId }) {
   let __joinRequestProfilePopup = null;
+  let requesterFocus = null;
+  let ownerFocus = null;
+  let requesterPresentation = 0;
   let __joinRequestRequesterState = {
     partyId: null,
     payload: null,
@@ -80,6 +85,10 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     if (!requesterOverlay) return;
     requesterOverlay.classList.toggle("hidden", !visible);
     requesterOverlay.setAttribute("aria-hidden", visible ? "false" : "true");
+    if (visible) {
+      requesterFocus ||= createModalFocus(requesterOverlay.querySelector('[role="dialog"]'));
+      requesterFocus.activate();
+    } else requesterFocus?.deactivate();
     updateJoinRequestChatVisibility();
   }
 
@@ -88,6 +97,10 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     if (!ownerOverlay) return;
     ownerOverlay.classList.toggle("hidden", !visible);
     ownerOverlay.setAttribute("aria-hidden", visible ? "false" : "true");
+    if (visible) {
+      ownerFocus ||= createModalFocus(ownerOverlay.querySelector('[role="dialog"]'));
+      ownerFocus.activate();
+    } else ownerFocus?.deactivate();
     updateJoinRequestChatVisibility();
   }
 
@@ -518,11 +531,21 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
           checkIfInParty(),
       ) || null;
     __joinRequestRequesterState.payload = payload || null;
-    renderRequesterJoinRequestScreen(payload || {});
-    document.dispatchEvent(new Event(BROWSER_EVENTS.LOBBY_JOIN_REQUEST));
+    const presentation = ++requesterPresentation;
+    const exit = dismissLobbyLoading(() => {
+      if (presentation === requesterPresentation) renderRequesterJoinRequestScreen(payload || {});
+    });
+    const announceReady = () => {
+      if (presentation === requesterPresentation && __joinRequestRequesterState.visible) {
+        document.dispatchEvent(new Event(BROWSER_EVENTS.LOBBY_JOIN_REQUEST));
+      }
+    };
+    if (exit) return exit.then(announceReady);
+    announceReady();
   }
 
   function hidePartyJoinRequestScreen() {
+    ++requesterPresentation;
     clearRequesterAutoJoinTimer();
     clearRequesterPendingTimer();
     __joinRequestRequesterState.visible = false;

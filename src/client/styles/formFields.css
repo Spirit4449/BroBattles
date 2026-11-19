@@ -1,0 +1,77 @@
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--bb-text-soft);
+  font: 10px/1.5 var(--bb-font-display, "Press Start 2P", monospace);
+  letter-spacing: 0.02em;
+}
+
+.form-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid var(--bb-border);
+  border-radius: var(--bb-radius-control, 0);
+  color: var(--bb-text);
+  background: rgba(5, 12, 25, 0.88);
+  box-shadow: var(--bb-inset-shadow);
+  font: 10px/1.6 var(--bb-font-display, "Press Start 2P", monospace);
+  letter-spacing: normal;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  transition:
+    border-color var(--bb-motion-fast, 130ms) ease,
+    background-color var(--bb-motion-fast, 130ms) ease;
+}
+
+.form-input:hover {
+  border-color: #50739f;
+}
+
+.form-input:focus {
+  border-color: var(--bb-border-highlight);
+  background: rgba(4, 10, 22, 0.98);
+}
+
+.form-input::placeholder {
+  color: #7285a1;
+  opacity: 1;
+}
+
+.username-input-wrap {
+  position: relative;
+}
+
+.username-input-wrap .form-input {
+  padding-right: 48px;
+}
+
+.username-status {
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  font-size: 0;
+  pointer-events: none;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  image-rendering: pixelated;
+}
+
+.username-status[data-state="checking"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 7' shape-rendering='crispEdges'%3E%3Cpath fill='%239eb7d6' d='M0 3h1v1H0zm3 0h1v1H3zm3 0h1v1H6z'/%3E%3C/svg%3E");
+}
+
+.username-status[data-state="available"] {
+  background-color: #69e2a7;
+  mask: url("/assets/ui/pixel-check.webp") center / contain no-repeat;
+}
+
+.username-status:is([data-state="taken"], [data-state="invalid"], [data-state="error"]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 7' shape-rendering='crispEdges'%3E%3Cpath fill='%23ff9fa8' d='M0 0h2v1h1v1h1V1h1V0h2v2H6v1H5v1h1v1h1v2H5V6H4V5H3v1H2v1H0V5h1V4h1V3H1V2H0z'/%3E%3C/svg%3E");
+}

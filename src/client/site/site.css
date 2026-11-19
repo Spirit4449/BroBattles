@@ -166,7 +166,6 @@ to{opacity:1;transform:translateY(0)}
 .site-battle-settings.fullscreen-toggle{top:calc(8px + env(safe-area-inset-top));right:calc(50px + env(safe-area-inset-right));bottom:auto;width:32px;min-width:32px;height:32px;min-height:32px;padding:0;z-index:10005}
 .site-battle-settings.fullscreen-toggle img{width:14px;height:14px}
 #battle-keybind-hud .controls-popover{max-height:calc(100dvh - 120px);overflow-y:auto;box-sizing:border-box}
-#profile-sign-out{margin-top:22px;background:linear-gradient(#cf5050,#9c2929);color:#fff}
 @media(max-width:480px){.site-battle-settings.fullscreen-toggle{width:30px;min-width:30px;height:30px;min-height:30px}
 }
 /* Shared popup contract, including legal consent and the in-game side panel. */.site-dialog.bb-popup{border:var(--bb-border-width) solid var(--bb-border);border-radius:var(--bb-radius-window);background:var(--bb-surface-gradient);box-shadow:var(--bb-frame-shadow)}

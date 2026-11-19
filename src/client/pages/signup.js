@@ -8,6 +8,7 @@ import { getDisplayName } from "../lib/cookies.js";
 import { getJson, postJson, requestJson } from "../lib/http.js";
 import { wireFullscreenToggles } from "../ui/fullscreen.js";
 import "../styles/accounts.css";
+import "../styles/formFields.css";
 import "../styles/emailControls.css";
 import { codeInputMarkup, createCooldown, safeReturnPath, wireCodeInputs } from '../account/emailVerificationUI';
 import "../styles/ui-components.css";

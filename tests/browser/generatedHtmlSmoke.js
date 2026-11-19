@@ -6,6 +6,7 @@ import playerCards from "../../src/shared/catalogs/playerCardsCatalog.json";
 import trophyCatalog from "../../src/shared/catalogs/trophySystem.catalog.json";
 import { renderCharacterStatus } from "../../src/client/lobby/profile/characterStatusView.js";
 import { initializeCharacterSelect, openCharacterSelect, refreshCharacterRewards } from "../../src/client/lobby/profile/characterSelectController.js";
+import { registerOverlay, openOverlay, closeOverlay } from "../../src/client/lobby/ui.js";
 import { createModalFocus } from "../../src/client/ui/modalFocus.js";
 import { getSharedSelectionPopupShell } from "../../src/client/ui/selectionPopupShell.js";
 import { createViewersPopup } from "../../src/client/chat/viewersPopup.js";
@@ -246,6 +247,28 @@ window.htmlSmoke = {
     } finally { presentation.closeReveal(); host.remove(); }
     return ['real player-card reveal size and centering after entrance animations'];
   },
+  async runOverlayFocus() {
+    const trigger = document.getElementById("trigger");
+    const overlay = document.createElement("div");
+    overlay.id = "test-lobby-overlay";
+    overlay.className = "hidden";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.innerHTML = '<section role="dialog" aria-modal="true"><button id="test-overlay-close">Close</button><button id="test-overlay-last">Last</button></section>';
+    document.body.append(overlay);
+    registerOverlay({ id: overlay.id, closeButtonId: "test-overlay-close" });
+    trigger.focus();
+    openOverlay(overlay.id);
+    check(document.activeElement.id === "test-overlay-close", "lobby overlay did not take focus");
+    key("Tab", true);
+    check(document.activeElement.id === "test-overlay-last", "lobby overlay reverse Tab escaped");
+    key("Tab");
+    check(document.activeElement.id === "test-overlay-close", "lobby overlay Tab escaped");
+    key("Escape");
+    check(overlay.classList.contains("hidden") && document.activeElement === trigger, "lobby overlay did not close and restore focus");
+    closeOverlay(overlay.id);
+    overlay.remove();
+    return ["lobby overlay keyboard and focus behavior"];
+  },
   async run() {
     const results = [...await this.runRewardLayout(), ...await this.runPreviewLayout()];
     const malicious = '<img src=x onerror="window.injected=true"> & "quoted"';
@@ -462,6 +485,9 @@ window.htmlSmoke = {
     key("Escape");
     check(document.activeElement === trigger, "picker did not restore trigger");
     results.push("nested modal keyboard and focus behavior");
+
+    results.push(...await this.runOverlayFocus());
+
 
     shell.show();
     const replacement = document.createElement("div");

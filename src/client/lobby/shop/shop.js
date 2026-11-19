@@ -8,7 +8,8 @@ import { sonner } from "../../ui/sonner.js";
 import { currencyRewardImage } from "../../views/rewardPresentation.js";
 import { playSound } from "../../ui/uiSounds.js";
 import { createModalFocus } from "../../ui/modalFocus.js";
-import { NEW_TAG, SHOP_ICON, currencyIcon, getActionState, isBigPurchase, isFree, patchChildren, priceMarkup, sectionTree, tabMarkup } from "./shopMarkup.js";
+import { warmPopupImages } from "../../ui/popupImages.js";
+import { NEW_TAG, SHOP_ICON, currencyIcon, getActionState, grantArtSource, isBigPurchase, isFree, patchChildren, priceMarkup, sectionTree, shopSectionArt, tabMarkup } from "./shopMarkup.js";
 import { purchaseDialog, purchaseReviewMarkup } from "./purchaseDialog.js";
 import { createRewardPresentation } from "./rewardPresentation.js";
 import { fetchShopJson, postShopJson, idempotencyKey } from "./shopRequests.js";
@@ -214,6 +215,8 @@ export function initializeShop({ userData, guest, onWalletChange, onProfileInval
       if (button) jumpTo(button.dataset.shopJump);
     });
     state.scroll.addEventListener("click", handleScrollClick);
+    state.scroll.addEventListener("pointerover", warmOfferPreview);
+    state.scroll.addEventListener("focusin", warmOfferPreview);
     state.scroll.addEventListener("scroll", handleScroll, { passive: true });
     // Any direct user scroll takes over from a tab jump right away.
     for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
@@ -225,6 +228,13 @@ export function initializeShop({ userData, guest, onWalletChange, onProfileInval
       else if (state.overlay.querySelector(".shop-checkout")?.getAttribute("aria-hidden") === "false") closeCheckout();
       else close();
     });
+  }
+
+  function warmOfferPreview(event) {
+    const button = event.target.closest("[data-shop-preview], [data-shop-action]");
+    if (!button || button.contains(event.relatedTarget)) return;
+    const item = findItem(button.dataset.shopPreview || button.dataset.itemId);
+    warmPopupImages(item?.grants?.map(grant => grantArtSource(grant)) || []);
   }
 
   function handleScrollClick(event) {
@@ -431,7 +441,9 @@ export function initializeShop({ userData, guest, onWalletChange, onProfileInval
   /* ---------- Open / close. ---------- */
 
   function open(section = "sales", offerId = null) {
+    const firstOpen = !state.overlay;
     ensureShell();
+    if (firstOpen && state.data) render();
     const trigger = document.activeElement;
     state.open = true;
     void state.overlay.offsetWidth;
@@ -445,7 +457,10 @@ export function initializeShop({ userData, guest, onWalletChange, onProfileInval
     if (!state.timer) state.timer = window.setInterval(updateCountdowns, 1000);
     const position = () => (offerId ? spotlightOffer(offerId) : jumpTo(section, { instant: true }));
     // Content from the previous visit is placed right away and patched in place.
-    if (state.data) position();
+    if (state.data) {
+      position();
+      if (firstOpen) trackViewedContent();
+    }
     return Promise.resolve(state.savingViews)
       .then(() => refresh())
       .then(() => { if (state.open) position(); })
@@ -642,7 +657,13 @@ export function initializeShop({ userData, guest, onWalletChange, onProfileInval
   // Refresh account state in the lobby too, including changes made on another device.
   function refreshNotifications() {
     if (state.open || document.visibilityState !== "visible") return;
-    return refresh().catch(error => console.warn("[shop] Notification refresh failed", error));
+    return refresh().then(() => {
+      if (state.open) return;
+      const sources = sectionMeta()
+        .filter(meta => meta.id === "sales" || meta.id === "currency")
+        .flatMap(meta => shopSectionArt(meta, state.data.sections?.[meta.id] || []));
+      warmPopupImages(sources, { background: true });
+    }).catch(error => console.warn("[shop] Notification refresh failed", error));
   }
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {

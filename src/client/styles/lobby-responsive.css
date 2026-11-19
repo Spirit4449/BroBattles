@@ -199,6 +199,10 @@
   .button-spawn-fx { display: none; }
 }
 
+#navbar-right[data-account-loading] { visibility: hidden; }
+#navbar :is(#sign-out, #login)[hidden] { display: none; }
+#trophy-count { min-width: 5ch; text-align: right; font-variant-numeric: tabular-nums; }
+
 .lobby-ready :is(#navbar button, #navbar .account, #navbar a,
   .lobby-party-actions .party-button, .lobby-quick-actions .party-button,
   #bottom-bar :is(.mode-picker, .map-picker), #lobby-area .switch-character) {
@@ -297,7 +301,7 @@
 /* The shared wallet needs its own row before account controls begin shrinking. */
 @media (max-width: 760px) {
   :root { --lobby-toolbar-top: 162px; }
-  #navbar { height: 148px; min-height: 148px; display: grid; grid-template-columns: 1fr; gap: 10px; padding: 8px 12px; }
+  #navbar { height: 148px; min-height: 148px; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 36px minmax(0, 1fr); gap: 10px; padding: 8px 12px; }
   #navbar > .flex:first-child { justify-content: center; }
   #navbar .lobby-wordmark { display: block; width: 112px; }
   #navbar-right { width: 100%; justify-content: center; flex-wrap: wrap; gap: 8px 12px; }

@@ -126,23 +126,39 @@
 .bb-loading-retry:disabled { opacity: 0.55; cursor: wait; }
 .bb-loading-retry:focus-visible { outline: 3px solid var(--bb-gold); outline-offset: 8px; }
 .bb-loading-retry[hidden], .bb-loading-rune[hidden] { display: none; }
-#lobby-area[data-loading] > * { visibility: hidden; }
-#lobby-loading { display: none; }
-#lobby-area[data-loading] > #lobby-loading {
-  visibility: visible;
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  position: absolute;
-  inset: 0;
-  padding: 24px;
-  text-align: center;
-  animation: lobby-loading-appear 180ms 500ms both;
+#lobby-loading .lobby-loading-art[data-decoded] {
+  opacity: 1;
+  animation: lobby-loading-art-in 480ms cubic-bezier(.2,.7,.2,1) backwards;
 }
-.lobby-loading-label { max-width: 30ch; margin-top: 14px; }
-@keyframes lobby-loading-appear { from { opacity: 0; } to { opacity: 1; } }
+#lobby-loading .bb-loading-panel {
+  position: relative;
+  animation: lobby-loading-panel-in 370ms cubic-bezier(.18,.8,.25,1) backwards;
+  transition: transform 320ms ease;
+}
+#lobby-loading .bb-loading-panel::before {
+  content: "";
+  position: absolute;
+  inset: -3px 6px auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #8dc8fc 35%, #ffd487 65%, transparent);
+  animation: lobby-loading-edge-in 460ms ease-out backwards;
+}
+#lobby-loading[data-leaving] .bb-loading-panel { transform: translateY(-12px) scale(.98); }
+@keyframes lobby-loading-art-in {
+  from { opacity: 0; transform: scale(1.04); }
+}
+@keyframes lobby-loading-panel-in {
+  from { opacity: 0; transform: translateY(18px) scale(.96); }
+}
+@keyframes lobby-loading-edge-in {
+  from { opacity: 0; transform: scaleX(.2); }
+}
+.lobby-loading-label { margin: 14px 0 0; }
+.bb-loading-rune[hidden] + .lobby-loading-label { margin-top: 0; }
 @media (prefers-reduced-motion: reduce) {
-  #lobby-area[data-loading] > #lobby-loading { animation: none; }
+  #lobby-loading :is(.lobby-loading-art[data-decoded], .bb-loading-panel),
+  #lobby-loading .bb-loading-panel::before { animation: none; }
+  #lobby-loading .bb-loading-panel { transition: none; }
   .loading-fill { transition: none; }
   .bb-loading-retry:active { transform: none; }
 }

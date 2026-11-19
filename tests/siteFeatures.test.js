@@ -653,7 +653,7 @@ describe("Public site and account workflows", () => {
       },
       require: request => {
         if (request.includes('nameChangeDialog')) return { wireNameChangeDialog: (target, config) => { wiredButton = target; options = config; } };
-        if (request.includes('accountSettings')) return { wireAccountSettings: () => ({ close() {} }) };
+        if (request.includes('accountSettings')) return { wirePasswordChangeDialog: () => () => {} };
         if (request.includes('wallet')) return { subscribeWallet() {} };
         if (request.endsWith('/ui')) return { registerOverlay() {} };
         return {};
@@ -679,7 +679,7 @@ describe("Public site and account workflows", () => {
     const message = element(), availability = element(), cancel = element(), validation = element(), validationReason = element();
     const dialog = Object.assign(element(), {
       querySelector: selector => ({ form, input, '[type="submit"]': submit,
-        '.name-change-message': message, '.name-change-availability': availability, '.name-change-validation': validation, '.name-change-validation-reason': validationReason })[selector],
+        '[role="alert"]': message, '.name-change-availability': availability, '.username-status': validation, '#name-change-validation-reason': validationReason })[selector],
       querySelectorAll: selector => selector === '[data-close]' ? [cancel] : [],
       showModal() { this.open = true; },
       close() { this.open = false; this.handlers.close?.(); },
@@ -698,7 +698,8 @@ describe("Public site and account workflows", () => {
       },
       require: request => request.includes('popupMotion') ? { dismissPopup: (_dialog, done) => done() }
         : request.includes('nativeDialog') ? nativeDialog.exports
-        : request.endsWith('/social/textRules.js') ? require('../src/shared/social/textRules') : {},
+        : request.endsWith('/social/textRules.js') ? require('../src/shared/social/textRules')
+        : request.endsWith('/net/apiPaths.js') ? require('../src/shared/net/apiPaths.js') : {},
     };
     dialog.ownerDocument = { defaultView: context.window };
     const nativeDialog = { exports: {}, require: () => ({ wireBackdropDismiss() {} }) };
@@ -743,9 +744,12 @@ describe("Public site and account workflows", () => {
     }
     const profile = { guest: false, gems: 100, username: 'Original' };
     const response = { username: 'NewName', gems: 50, nextNameChangeAt: '2099-01-01T00:00:00Z' };
-    const h = nameDialogHarness(profile, async () => response);
+    const h = nameDialogHarness(profile, async url => url.includes('username-availability') ? { available: true } : response);
     h.open();
+    assert.equal(h.submit.disabled, true, 'the current name requires no purchase');
     h.input.value = 'NewName';
+    h.input.handlers.input();
+    await h.check();
     await h.save();
     assert.equal(h.changed(), response);
     assert.equal(profile.username, response.username);
@@ -766,6 +770,7 @@ describe("Public site and account workflows", () => {
     h.input.handlers.input();
     assert.equal(h.validation.textContent, '×');
     assert.match(h.validationReason.textContent, /3–14/);
+    assert.equal(h.validationReason.hidden, false);
     assert.equal(h.submit.disabled, true);
     assert.equal(requests.length, 0);
     h.input.value = 'TakenName';
@@ -779,7 +784,7 @@ describe("Public site and account workflows", () => {
     h.input.handlers.input();
     await h.check();
     assert.equal(h.validation.textContent, '✓');
-    assert.equal(h.validationReason.textContent, '');
+    assert.equal(h.validationReason.hidden, true);
     assert.equal(h.submit.disabled, false);
     assert.match(requests[1], /username-availability\?username=FreeName/);
   });

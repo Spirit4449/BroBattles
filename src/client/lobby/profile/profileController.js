@@ -14,7 +14,7 @@ import {
 } from "../../views/profileIconAssets.js";
 import {
   renderAccountAccess,
-  wireAccountSettings,
+  wirePasswordChangeDialog,
 } from "../../account/accountSettings.js";
 import { renderBattleLog } from "../../views/battleLogView.js";
 import { renderCharacterLevelGrid } from "../../views/profileCharacterLevelsView.js";
@@ -477,11 +477,6 @@ export function createProfileController({ getUserData = getUser, onProfileRender
 
   function initProfilePopup() {
     const overlay = document.getElementById("profile-overlay");
-    const passwordForm = document.getElementById("profile-password-form");
-    const currentPasswordInput = document.getElementById(
-      "profile-current-password",
-    );
-    const newPasswordInput = document.getElementById("profile-new-password");
     const avatarTrigger = document.getElementById("profile-hero-avatar-trigger");
     const cardTrigger = document.getElementById("profile-hero-card-trigger");
     const loadoutOverlay = document.getElementById("profile-loadout-overlay");
@@ -490,8 +485,13 @@ export function createProfileController({ getUserData = getUser, onProfileRender
     const cardsPanel = document.getElementById("profile-cards-panel");
 
     if (!overlay) return;
-    const accountSettings = wireAccountSettings(
-      document.getElementById("profile-account-panel"),
+    const closePasswordDialog = wirePasswordChangeDialog(
+      document.getElementById("profile-change-password"),
+      {
+        canChange: () => lobbyProfileState.viewingSelf && lobbyProfileState.profile?.guest === false,
+        fetchJson: profileFetchJson,
+        onUpdated: () => setProfilePopupMessage("Password updated."),
+      },
     );
 
     const openLoadoutModal = (mode = "icons") => {
@@ -516,7 +516,7 @@ export function createProfileController({ getUserData = getUser, onProfileRender
       backdropSelector: ".profile-overlay-backdrop",
       onClose() {
         playSound("cancel", 0.4);
-        accountSettings.close();
+        closePasswordDialog();
         closeOverlay("profile-loadout-overlay");
         setProfilePopupMessage("");
       },
@@ -529,7 +529,8 @@ export function createProfileController({ getUserData = getUser, onProfileRender
     const close = () => closeOverlay("profile-overlay");
 
     const open = async (options = {}) => {
-      accountSettings.close();
+      const trigger = document.activeElement;
+      closePasswordDialog();
       lobbyProfileState.source = options.source || null;
       const reportButton = document.getElementById('profile-report-btn');
       if (reportButton) reportButton.hidden = true;
@@ -540,8 +541,7 @@ export function createProfileController({ getUserData = getUser, onProfileRender
         ? String(getUserData()?.name || "")
         : targetUsername;
       playSound("cursor4", 0.4);
-      overlay.classList.add("hidden");
-      overlay.setAttribute("aria-hidden", "true");
+      closeOverlay("profile-overlay");
       closeOverlay("profile-loadout-overlay");
       setProfilePopupMessage("Loading profile...");
       try {
@@ -549,10 +549,10 @@ export function createProfileController({ getUserData = getUser, onProfileRender
         // Each profile opening starts its animation anew, even when the hero
         // reuses the same equipped card and already-loaded video element.
         restartPlayerCardMedia(document.getElementById("profile-hero-card-frame")?.querySelector("video"));
-        openOverlay("profile-overlay");
+        openOverlay("profile-overlay", trigger);
         setProfilePopupMessage("");
       } catch (err) {
-        openOverlay("profile-overlay");
+        openOverlay("profile-overlay", trigger);
         setProfilePopupMessage(err.message || "Failed to load profile.", true);
       }
     };
@@ -560,7 +560,6 @@ export function createProfileController({ getUserData = getUser, onProfileRender
     wireNameChangeDialog(document.getElementById("profile-change-name"), {
       getProfile: () => lobbyProfileState.viewingSelf ? lobbyProfileState.profile : null,
       fetchJson: profileFetchJson,
-      beforeOpen: () => accountSettings.close(),
       onChanged: (data, profile) => {
         if (getUserData()) {
           updateUser({ name: profile.username });
@@ -571,31 +570,6 @@ export function createProfileController({ getUserData = getUser, onProfileRender
         renderProfilePopupStats();
         setProfilePopupMessage("Username updated.");
       },
-    });
-
-    passwordForm?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (
-        !lobbyProfileState.viewingSelf ||
-        lobbyProfileState.profile?.guest !== false
-      )
-        return;
-      const currentPassword = String(currentPasswordInput?.value || "");
-      const newPassword = String(newPasswordInput?.value || "");
-      if (!newPassword) return;
-      try {
-        await profileFetchJson(API_PATHS.PROFILE_CHANGE_PASSWORD, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ currentPassword, newPassword }),
-        });
-        if (currentPasswordInput) currentPasswordInput.value = "";
-        if (newPasswordInput) newPasswordInput.value = "";
-        setProfilePopupMessage("Password updated.");
-        accountSettings.close("profile-password-form");
-      } catch (err) {
-        setProfilePopupMessage(err.message || "Unable to update password.", true);
-      }
     });
 
     document.getElementById("profile-title-edit")?.addEventListener("click", () => openLoadoutModal("titles"));

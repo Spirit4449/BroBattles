@@ -15,6 +15,8 @@ import { getSharedSelectionPopupShell } from "../../ui/selectionPopupShell.js";
 import { getMapSelectPreviewAsset, getMapFullPreviewAsset } from "../../game/maps/manifest";
 import { openMapPreviewLightbox } from "./mapPreviewLightbox.js";
 import { openModeInfoDialog } from "./modeInfoDialog.js";
+import { deferLobbySetup } from "../deferredSetup.js";
+import { warmPopupImages } from "../../ui/popupImages.js";
 import {
   SOLO_MAP_STORAGE_KEY,
   SOLO_MODE_ID_STORAGE_KEY,
@@ -41,6 +43,11 @@ export function createSelectionPickers({ syncReadyAvailability }) {
   let mapPopupUi = null;
 
   let modePopupUi = null;
+  let scheduledArtWarm = false;
+
+  const compatibleMapArt = () => getCompatibleMapsForSelection(getCurrentSelection())
+    .map(map => getMapSelectPreviewAsset(map.id));
+  const modeArt = () => getAllGameModes().map(mode => getModeArtAsset(mode.id));
 
   function canChangePartySelection() {
     if (!checkIfInParty()) return true;
@@ -272,9 +279,17 @@ export function createSelectionPickers({ syncReadyAvailability }) {
           expand.setAttribute('aria-label', `Expand ${opt.textContent || 'map'} preview`);
           expand.title = 'View full map';
           expand.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#ffffff" d="M0 0h1v1h-1zM0 1h1v1h-1zM0 2h1v1h-1zM0 3h1v1h-1zM0 7h1v1h-1zM0 8h1v1h-1zM0 9h1v1h-1zM0 10h1v1h-1zM1 0h1v1h-1zM1 10h1v1h-1zM2 0h1v1h-1zM2 10h1v1h-1zM3 0h1v1h-1zM3 10h1v1h-1zM7 0h1v1h-1zM7 10h1v1h-1zM8 0h1v1h-1zM8 10h1v1h-1zM9 0h1v1h-1zM9 10h1v1h-1zM10 0h1v1h-1zM10 1h1v1h-1zM10 2h1v1h-1zM10 3h1v1h-1zM10 7h1v1h-1zM10 8h1v1h-1zM10 9h1v1h-1zM10 10h1v1h-1z"/><path fill="#cfe8ff" d="M1 1h1v1h-1zM1 9h1v1h-1zM2 2h1v1h-1zM2 8h1v1h-1zM3 3h1v1h-1zM3 7h1v1h-1zM7 3h1v1h-1zM7 7h1v1h-1zM8 2h1v1h-1zM8 8h1v1h-1zM9 1h1v1h-1zM9 9h1v1h-1z"/><path fill="#0b1a33" d="M1 2h1v1h-1zM1 3h1v1h-1zM1 4h1v1h-1zM1 8h1v1h-1zM1 11h1v1h-1zM2 1h1v1h-1zM2 11h1v1h-1zM3 1h1v1h-1zM3 9h1v1h-1zM3 11h1v1h-1zM4 1h1v1h-1zM4 4h1v1h-1zM4 8h1v1h-1zM4 11h1v1h-1zM8 1h1v1h-1zM8 4h1v1h-1zM8 11h1v1h-1zM9 3h1v1h-1zM9 11h1v1h-1zM10 11h1v1h-1zM11 1h1v1h-1zM11 2h1v1h-1zM11 3h1v1h-1zM11 4h1v1h-1zM11 8h1v1h-1zM11 9h1v1h-1zM11 10h1v1h-1zM11 11h1v1h-1z"/></svg>';
+          const fullPreview = getMapFullPreviewAsset(value);
+          const warmPreview = () => warmPopupImages([fullPreview]);
+          expand.addEventListener("pointerenter", warmPreview);
+          expand.addEventListener("focus", warmPreview);
           expand.addEventListener('click', (event) => {
             event.stopPropagation();
-            openMapPreviewLightbox({ src: getMapFullPreviewAsset(value), title: opt.textContent || 'Map' });
+            openMapPreviewLightbox({
+              src: fullPreview,
+              title: opt.textContent || 'Map',
+              canOpen: () => expand.isConnected && !popupShell.overlay.classList.contains("is-hidden"),
+            });
           });
           const choice = document.createElement('div');
           choice.className = 'map-choice';
@@ -294,19 +309,20 @@ export function createSelectionPickers({ syncReadyAvailability }) {
 
       content.replaceChildren(grid);
 
-      popupShell
-        .mount({
-          titleText: "Choose Map",
-          onClose: closePopup,
-          zIndex: 12020,
-          contentNode: content,
-          backgroundNode: null,
-        })
-        .show();
+      void popupShell.showWhenReady({
+        titleText: "Choose Map",
+        onClose: closePopup,
+        zIndex: 12020,
+        contentNode: content,
+        backgroundNode: null,
+      });
     };
 
     if (openBtn.dataset.bound !== "1") {
       openBtn.dataset.bound = "1";
+      const warm = () => warmPopupImages(compatibleMapArt());
+      openBtn.addEventListener("pointerenter", warm);
+      openBtn.addEventListener("focus", warm);
       openBtn.addEventListener("click", openMapPopup);
     }
 
@@ -381,8 +397,7 @@ export function createSelectionPickers({ syncReadyAvailability }) {
         card.className = `map-select-card mode-select-card pixel-menu-button${
           selection.modeId === mode.id ? " active" : ""
         }${mode.queueable ? "" : " is-disabled"}${hasVariants ? " has-variants" : ""}`;
-        const artAsset =
-          mode.artAsset || mode.fallbackArtAsset || "/assets/fightImage.webp";
+        const artAsset = getModeArtAsset(mode.id);
         const unlockReason = getModeProgressionBlockReason(mode.id);
         const teamSizes = (Array.isArray(mode.variants) ? mode.variants : [])
           .map((variant) => variant.label).filter(Boolean).join(" \u00b7 ");
@@ -396,9 +411,9 @@ export function createSelectionPickers({ syncReadyAvailability }) {
           <div class="mode-select-meta">${unlockReason && mode.unlockTrophies ? `<span>Unlock at</span><span class="mode-select-trophy-cost"><img src="/assets/icons/trophy.webp" alt="Trophies" /><span>${mode.unlockTrophies.toLocaleString()}</span></span>` : ""}</div>
         `;
         card.querySelector("img")?.addEventListener("error", (event) => {
-          event.currentTarget.src =
-            mode.fallbackArtAsset || "/assets/fightImage.webp";
-        });
+          const fallback = getModeFallbackArtAsset(mode.id);
+          if (event.currentTarget.getAttribute("src") !== fallback) event.currentTarget.src = fallback;
+        }, { once: true });
 
         // Cards can be <button>s, so the info trigger is a span with button role.
         const infoBtn = document.createElement("span");
@@ -467,19 +482,20 @@ export function createSelectionPickers({ syncReadyAvailability }) {
 
       content.replaceChildren(grid);
       bindModeCardOutsidePress();
-      popupShell
-        .mount({
-          titleText: "Choose Mode",
-          onClose: closePopup,
-          zIndex: 12020,
-          contentNode: content,
-          backgroundNode: null,
-        })
-        .show();
+      void popupShell.showWhenReady({
+        titleText: "Choose Mode",
+        onClose: closePopup,
+        zIndex: 12020,
+        contentNode: content,
+        backgroundNode: null,
+      });
     };
 
     if (openBtn.dataset.bound !== "1") {
       openBtn.dataset.bound = "1";
+      const warm = () => warmPopupImages(modeArt());
+      openBtn.addEventListener("pointerenter", warm);
+      openBtn.addEventListener("focus", warm);
       openBtn.addEventListener("click", openModeGrid);
     }
     syncModePickerUi();
@@ -588,6 +604,10 @@ export function createSelectionPickers({ syncReadyAvailability }) {
 
     setupModePickerControls(handleModeSelection);
     setupMapPickerControls();
+    if (!scheduledArtWarm) {
+      scheduledArtWarm = true;
+      deferLobbySetup([() => warmPopupImages([...modeArt(), ...compatibleMapArt()], { background: true })]);
+    }
 
     if (mapDropdown.dataset.bound !== "1") {
       mapDropdown.dataset.bound = "1";

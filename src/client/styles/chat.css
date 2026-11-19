@@ -851,10 +851,10 @@
   border: 2px solid var(--bb-border);
   background: var(--bb-bg-deep);
   color: var(--bb-text);
-  padding: 7px 10px;
-  font-family: "Lato", sans-serif;
-  font-size: 14px;
-  line-height: 1.35;
+  padding: 9px 10px;
+  font-family: var(--bb-font-display);
+  font-size: 10px;
+  line-height: 1.6;
   overflow-y: auto;
   box-shadow: var(--bb-inset-shadow);
 }
@@ -1099,7 +1099,7 @@
   height: 32px;
   min-height: 32px;
   max-height: 52px;
-  padding: 9px 9px 7px;
+  padding: 8px 9px;
   font-family: var(--bb-font-display);
   font-size: 8px;
   line-height: 1.6;
@@ -1317,7 +1317,7 @@
   }
 
   .bb-chat-lobby-panel .bb-chat-textarea {
-    font-size: 16px;
+    font-size: 10px;
   }
 
   .bb-lobby-chat-bubble {

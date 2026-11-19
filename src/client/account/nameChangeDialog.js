@@ -2,20 +2,21 @@ import { API_PATHS } from "../../shared/net/apiPaths.js";
 import { USERNAME_PATTERN, USERNAME_MIN, USERNAME_MAX } from "../../shared/social/textRules.js";
 import { openModalDialog } from '../ui/nativeDialog.js';
 import { dismissPopup } from '../ui/popupMotion.js';
+import '../styles/accountDialog.css';
+import '../styles/formFields.css';
 import '../styles/nameChangeDialog.css';
 
 // Both profile surfaces use this dialog, including the in-game lobby profile.
-export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen, onChanged }) {
+export function wireNameChangeDialog(button, { getProfile, fetchJson, onChanged }) {
   let activeDialog = null;
   let saving = false;
   button?.addEventListener('click', () => {
     const profile = getProfile();
     if (!profile || profile.guest !== false || activeDialog || saving) return;
-    beforeOpen?.();
     const dialog = document.createElement('dialog');
     activeDialog = dialog;
     dialog.id = 'name-change-dialog';
-    dialog.className = 'name-change-dialog bb-popup';
+    dialog.className = 'account-dialog bb-popup';
     dialog.setAttribute('aria-labelledby', 'name-change-title');
     dialog.setAttribute('aria-describedby', 'name-change-policy');
     dialog.innerHTML = `
@@ -23,43 +24,43 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
         <h2 id="name-change-title" class="bb-popup-title">Change Name</h2>
         <button class="bb-close pixel-menu-button" type="button" data-close aria-label="Close name change"><span aria-hidden="true">×</span></button>
       </header>
-      <form class="name-change-form">
-        <div id="name-change-policy" class="name-change-policy">
-          <p>You can change your name <strong>once per month</strong>.</p>
-        </div>
-        <p id="name-change-validation-reason" class="name-change-validation-reason" role="status" aria-live="polite"></p>
+      <form class="account-dialog-form">
+        <p id="name-change-policy" class="account-dialog-hint">You can change your name <strong>once per month</strong>.</p>
         <div class="name-change-field">
-        <label for="new-username">New name</label>
-        <div class="name-change-input-wrap">
-        <input id="new-username" name="username" type="text" minlength="${USERNAME_MIN}" maxlength="${USERNAME_MAX}" required autocomplete="off" aria-describedby="name-change-policy name-change-availability name-change-validation-reason" />
-        <span id="name-change-validation" class="name-change-validation" aria-hidden="true"></span>
+          <label class="form-label" for="new-username">New name</label>
+          <div class="username-input-wrap">
+            <input id="new-username" class="form-input" name="username" type="text" minlength="${USERNAME_MIN}" maxlength="${USERNAME_MAX}" required autocomplete="off" spellcheck="false" autocapitalize="none" aria-describedby="name-change-validation-reason" />
+            <span class="username-status" aria-hidden="true"></span>
+          </div>
+          <p id="name-change-validation-reason" class="account-dialog-error" role="status" hidden></p>
         </div>
-        </div>
-        <p class="name-change-availability" id="name-change-availability" aria-live="polite"></p>
-        <p class="name-change-message" role="alert" hidden></p>
-        <div class="name-change-actions">
-          <button type="button" class="bb-button name-change-cancel" data-close>Cancel</button>
-          <button type="submit" class="bb-button name-change-submit"><span>Change Name</span><span class="name-change-price"><img src="/assets/icons/gem.webp" alt="" /><span data-cost>50 gems</span></span></button>
+        <p class="name-change-availability" aria-live="polite" hidden></p>
+        <p class="account-dialog-error" role="alert" hidden></p>
+        <div class="account-dialog-actions">
+          <button type="button" class="bb-button" data-close>Cancel</button>
+          <button type="submit" class="bb-button">
+            <span>Change Name</span>
+            <span class="name-change-price"><img src="/assets/icons/gem.webp" alt="" /><span data-cost></span><span class="bb-visually-hidden"> gems</span></span>
+          </button>
         </div>
       </form>`;
     const form = dialog.querySelector('form');
     const input = dialog.querySelector('input');
     const submit = dialog.querySelector('[type="submit"]');
-    const message = dialog.querySelector('.name-change-message');
+    const message = dialog.querySelector('[role="alert"]');
     const availability = dialog.querySelector('.name-change-availability');
     const cost = profile.nameChangeCost ?? 50;
-    dialog.querySelectorAll('[data-cost]').forEach(label => { label.textContent = `${cost} gems`; });
+    dialog.querySelectorAll('[data-cost]').forEach(label => { label.textContent = String(cost); });
     input.value = profile.username || '';
-    const validation = dialog.querySelector('.name-change-validation');
-    const validationReason = dialog.querySelector('.name-change-validation-reason');
-    let validationState = 'available';
+    const validation = dialog.querySelector('.username-status');
+    const validationReason = dialog.querySelector('#name-change-validation-reason');
+    let validationState;
     let validationTimer, validationRequest;
     let validationVersion = 0;
     const render = () => {
       const next = profile.nextNameChangeAt ? new Date(profile.nextNameChangeAt) : null;
       const coolingDown = next && next.getTime() > Date.now();
       const gems = Number(profile.gems) || 0;
-      availability.setAttribute('data-state', coolingDown ? 'cooldown' : gems < cost ? 'insufficient' : 'ready');
       availability.textContent = coolingDown
         ? `Available again ${next.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} at ${next.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}.`
         : gems < cost ? `You need ${cost} gems to change your name.` : '';
@@ -72,9 +73,9 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
       validationState = state;
       validation.setAttribute('data-state', state);
       validation.textContent = ({ available: '✓', invalid: '×', taken: '×', checking: '…', error: '?' })[state] || '';
-      validation.setAttribute('aria-label', text);
       validation.title = text;
       validationReason.textContent = state === 'invalid' || state === 'taken' || state === 'error' ? text : '';
+      validationReason.hidden = !validationReason.textContent;
       input.setAttribute('aria-invalid', String(state === 'invalid' || state === 'taken'));
       render();
     };
@@ -82,12 +83,13 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
       clearTimeout(validationTimer);
       validationRequest?.abort();
       const version = ++validationVersion;
+      message.hidden = true;
       const name = input.value.trim();
       if (!name) return setValidation('', 'Enter a new name');
       if (!USERNAME_PATTERN.test(name)) {
         return setValidation('invalid', `Use ${USERNAME_MIN}–${USERNAME_MAX} letters, numbers, dots, dashes or underscores.`);
       }
-      if (name === profile.username) return setValidation('available', 'Your current name');
+      if (name === profile.username) return setValidation('', '');
       setValidation('checking', 'Checking availability');
       validationTimer = setTimeout(async () => {
         validationRequest = new AbortController();
@@ -103,7 +105,7 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
       }, 300);
     };
     input.addEventListener('input', validate);
-    setValidation('available', 'Your current name');
+    setValidation('', '');
     let closing = false;
     const close = () => {
       if (closing || !dialog.open) return;
@@ -120,7 +122,7 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
     };
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      if (submit.disabled || saving) return;
+      if (submit.disabled || closing) return;
       const username = input.value.trim();
       if (!username) return;
       saving = true;
@@ -145,7 +147,6 @@ export function wireNameChangeDialog(button, { getProfile, fetchJson, beforeOpen
         render();
       }
     });
-    render();
     document.body.append(dialog);
     openModalDialog(dialog, { escape: true, dismiss: close, onClose: cleanup, trigger: button });
     input.focus();

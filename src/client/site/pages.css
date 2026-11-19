@@ -356,7 +356,7 @@ a.site-tile:active { translate: 0 1px; box-shadow: var(--bb-card-shadow-pressed)
   box-shadow: 0 4px 0 var(--bb-ink), inset 0 3px rgba(0, 0, 0, 0.4) !important;
   font-size: 17px;
 }
-.site-search input:focus { border-color: var(--bb-field-focus) !important; box-shadow: 0 4px 0 var(--bb-ink), var(--bb-field-focus-shadow) !important; }
+.site-search input:focus { border-color: var(--bb-ink) !important; background: #1b304a !important; box-shadow: 0 4px 0 var(--bb-ink), inset 0 3px rgba(0, 0, 0, 0.4) !important; }
 .site-search input.is-placeholder-changing::placeholder { opacity: 0; }
 .site-search-icon {
   position: absolute;
@@ -496,7 +496,7 @@ a.site-tile:active { translate: 0 1px; box-shadow: var(--bb-card-shadow-pressed)
 .site-inbox-chat .bb-chat-body-text { font-size: 10px; line-height: 2; }
 .site-inbox-waiting { align-self: center; max-width: 360px; padding: 12px 16px; border: 2px dashed var(--bb-border-soft); color: var(--bb-text-muted) !important; font: 8px/2 var(--bb-font-display); text-align: center; }
 .site-inbox-chat .bb-chat-composer { padding: 14px 20px 18px; }
-.site-inbox-chat .bb-chat-textarea { height: 44px; min-height: 44px; max-height: 140px; }
+.site-inbox-chat .bb-chat-textarea { height: 44px; min-height: 44px; max-height: 140px; padding-top: 12px; padding-bottom: 12px; }
 .site-inbox-chat .bb-chat-composer .bb-chat-send { min-height: 44px; min-width: 84px; }
 .site-inbox-closed { margin: 0 0 6px !important; color: var(--bb-text-muted) !important; font: 8px/1.8 var(--bb-font-display); }
 .site-request-skeletons { display: grid; gap: 8px; }

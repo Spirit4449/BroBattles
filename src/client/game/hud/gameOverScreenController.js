@@ -1,3 +1,4 @@
+import { createModalFocus } from "../../ui/modalFocus.js";
 import { getNavigation } from "../../lib/globals.cjs";
 import { prefersReducedMotion } from "../../ui/domMotion";
 import { API_PATHS } from "../../../shared/net/apiPaths.js";
@@ -550,6 +551,8 @@ export function createGameOverScreenController({
       </div>`;
 
     document.body.appendChild(div);
+    const focus = createModalFocus(div.querySelector('[role="dialog"]'));
+    focus.activate();
     getNavigation()?.warmLobby?.();
     void (async () => {
       const streakBadge = div.querySelector('.bb-game-over-streak');
@@ -581,6 +584,7 @@ export function createGameOverScreenController({
     const goToLobby = async () => {
       if (leaving) return;
       leaving = true;
+      focus.deactivate({ restoreFocus: false });
       window.removeEventListener("keydown", onExitKey, true);
       try {
         sessionStorage.removeItem(MATCH_ID_KEY);
