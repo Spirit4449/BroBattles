@@ -657,7 +657,6 @@ button.bb-chat-close.bb-chat-close:active:not(:disabled) {
 :is(
   .party-discovery-input,
   .party-public-name-input,
-  .profile-form input,
   .form-input,
   body.admin-page input,
   body.admin-page select,
@@ -1267,7 +1266,6 @@ body :is(
   .game-notice-actions,
   .party-settings-actions,
   .party-request-actions-row,
-  .profile-account-actions,
   .profile-guest-actions,
   .profile-loadout-head-actions,
   .mm-actions,
@@ -1292,7 +1290,6 @@ body .game-notice-card .game-notice-title {
    pixel face. Sentences and paragraphs stay in the readable body face. ---- */
 body :is(
   .profile-panel h3,
-  .profile-form label,
   .party-public-name-label,
   .party-request-summary-card span,
   .party-request-summary-card strong,
@@ -1314,7 +1311,7 @@ body .profile-panel h3 {
 }
 
 /* Small caps-style labels above a value or field. */
-body :is(.profile-form label, .party-public-name-label, .party-request-summary-card span) {
+body :is(.party-public-name-label, .party-request-summary-card span) {
   color: var(--bb-text-muted);
   font-size: 8px;
   text-transform: uppercase;
@@ -1597,4 +1594,44 @@ body .character-details-inline-skin .character-details-skin-rarity {
   font-size: 6px;
   border-width: 1px;
   box-shadow: 0 2px 0 var(--bb-ink, #080e17);
+}
+
+/* Text fields share the same recessed pixel frame across game screens. */
+:is(body, #admin, #studio, #dialog, #grantDialog) :is(
+  input:not([type]),
+  input:is([type="text"], [type="password"], [type="email"], [type="search"], [type="number"], [type="url"], [type="tel"], [type="datetime-local"]),
+  textarea
+):not(#recipientSearch) {
+  border: 2px solid #496b91;
+  border-radius: 0;
+  color: var(--bb-text);
+  background: linear-gradient(180deg, #091526, #101f34);
+  box-shadow: 0 3px 0 var(--bb-ink), inset 0 3px 0 rgba(0, 0, 0, 0.35), inset 2px 0 0 rgba(0, 0, 0, 0.18);
+  caret-color: #a9ddff;
+  transition: background var(--bb-motion-fast) ease, box-shadow var(--bb-motion-fast) ease;
+}
+
+:is(body, #admin, #studio, #dialog, #grantDialog) :is(
+  input:not([type]),
+  input:is([type="text"], [type="password"], [type="email"], [type="search"], [type="number"], [type="url"], [type="tel"], [type="datetime-local"]),
+  textarea
+):not(#recipientSearch):focus {
+  outline: none;
+  border-color: #496b91;
+  background: #1b304a;
+  box-shadow: 0 3px 0 var(--bb-ink), inset 0 3px 0 rgba(0, 0, 0, 0.35), inset 2px 0 0 rgba(0, 0, 0, 0.18);
+}
+
+/* Cover the browser's autofill background without losing the field frame. */
+:is(body, #admin, #studio, #dialog, #grantDialog) input:not(#recipientSearch):-webkit-autofill,
+:is(body, #admin, #studio, #dialog, #grantDialog) input:not(#recipientSearch):-webkit-autofill:hover {
+  -webkit-text-fill-color: var(--bb-text);
+  caret-color: #a9ddff;
+  box-shadow: 0 0 0 1000px #101f34 inset, 0 3px 0 var(--bb-ink);
+}
+
+:is(body, #admin, #studio, #dialog, #grantDialog) input:not(#recipientSearch):-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--bb-text);
+  caret-color: #a9ddff;
+  box-shadow: 0 0 0 1000px #1b304a inset, 0 3px 0 var(--bb-ink);
 }

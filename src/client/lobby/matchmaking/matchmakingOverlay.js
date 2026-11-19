@@ -4,6 +4,7 @@ import { getLobbyBgAsset, getLobbyPlatformAsset } from "../../game/maps/manifest
 import { bodyDisplayUrl, buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { DEFAULT_CHARACTER, getCharacterDisplayName } from "../../../shared/characters/characterStats.js";
 import { nameKey } from "../../../shared/social/textRules.js";
+import { createModalFocus } from "../../ui/modalFocus.js";
 import { refreshPlatformGrounding } from "../party/platformGrounding.mjs";
 
 const MATCHMAKING_EXIT_MS = 190;
@@ -36,6 +37,7 @@ function describeRoster(players, yourTeam) {
 }
 
 export function createMatchmakingOverlay() {
+  let focus = null;
   let hideTimer = null;
   let coverTimer = null;
   let countTimer = null;
@@ -182,6 +184,7 @@ export function createMatchmakingOverlay() {
       window.clearTimeout(hideTimer);
       hideTimer = null;
     }
+    const trigger = document.activeElement;
     ensureParticles();
     if (element.classList.contains("hidden")) resetSession(seatedPlayers);
     document.body.classList.remove("matchmaking-exiting");
@@ -192,6 +195,8 @@ export function createMatchmakingOverlay() {
     void element.offsetWidth;
     element.classList.add("is-visible");
     element.setAttribute("aria-hidden", "false");
+    focus ||= createModalFocus(element.querySelector('[role="dialog"]'));
+    focus.activate(trigger);
     if (!document.body.classList.contains("matchmaking-covered") && !coverTimer) setLobbyCovered(true);
   }
 
@@ -199,6 +204,8 @@ export function createMatchmakingOverlay() {
     const element = overlay();
     if (!element) return;
     setLobbyCovered(false);
+    setLobbyChromeInert(false);
+    focus?.deactivate();
     if (immediate) {
       if (hideTimer) {
         window.clearTimeout(hideTimer);

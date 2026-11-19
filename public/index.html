@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <link rel="preload" as="image" href="/assets/loadingscreen.webp" fetchpriority="high" />
+    <link rel="preload" as="font" type="font/woff2" href="/assets/PressStart2P.woff2" crossorigin />
     <script src="/bundles/navigation.bundle.js"></script>
     <meta charset="UTF-8" />
     <meta
@@ -20,14 +21,46 @@
     <meta name="twitter:card" content="summary" />
     <link rel="stylesheet" href="/styles/lato.css" />
 
-    <!-- Keep the authoritative roster hidden even before external CSS arrives. -->
+    <!-- Paint the loading cover before lobbyPaint restores the map backdrop. -->
     <style>
       #lobby-area[data-loading] > * { visibility: hidden; }
-      #lobby-loading { display: none; }
+      #lobby-loading {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483646;
+        display: grid;
+        place-items: center;
+        box-sizing: border-box;
+        padding: 24px;
+        overflow: hidden;
+        isolation: isolate;
+        background: #111b2b;
+      }
+      #lobby-loading .lobby-loading-art {
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0;
+      }
+      #lobby-loading[hidden] { display: none; }
+      body:has(> #lobby-loading:not([hidden], [data-leaving])) > :not(#lobby-loading, #bb-route-transition) {
+        visibility: hidden;
+      }
     </style>
     <link rel="stylesheet" href="/bundles/index.css" />
   </head>
   <body data-bb-screen="lobby">
+    <div id="lobby-loading" role="status">
+      <img class="lobby-loading-art" src="/assets/loadingscreen.webp" alt="" fetchpriority="high" />
+      <div class="bb-loading-panel">
+        <span class="bb-loading-rune bb-battle-loader" aria-hidden="true"></span>
+        <p class="lobby-loading-label">Loading lobby…</p>
+        <button class="bb-loading-retry" type="button" onclick="window.location.reload()" hidden>Try again</button>
+      </div>
+    </div>
     <script src="/bundles/lobbyPaint.bundle.js"></script>
     <div id="navbar">
       <div class="flex">
@@ -41,7 +74,7 @@
           />
         </h1>
       </div>
-      <div class="flex" id="navbar-right">
+      <div class="flex" id="navbar-right" data-account-loading>
         <div class="lobby-wallet-home" data-wallet-home>
           <div class="bb-wallet" id="lobby-wallet" role="group" aria-label="Your wallet">
             <button
@@ -51,7 +84,7 @@
               type="button"
               aria-label="Open coin shop"
             >
-              <img src="/assets/icons/coin.webp" width="20px" alt="coins" />
+              <img src="/assets/icons/coin.webp" width="24" height="24" alt="coins" />
               <p id="coin-count" data-shop-wallet="coins"></p>
             </button>
 
@@ -62,7 +95,7 @@
               type="button"
               aria-label="Open gem shop"
             >
-              <img src="/assets/icons/gem.webp" width="20px" alt="gems" />
+              <img src="/assets/icons/gem.webp" width="24" height="24" alt="gems" />
               <p id="gem-count" data-shop-wallet="gems"></p>
             </button>
           </div>
@@ -72,7 +105,7 @@
           class="flex resources trophy-resource pixel-menu-button"
           type="button"
         >
-          <img src="/assets/icons/trophy.webp" width="20px" alt="trophies" />
+          <img src="/assets/icons/trophy.webp" width="20" height="20" alt="trophies" />
           <p id="trophy-count"></p>
           <span id="trophy-claim-badge" class="trophy-claim-badge hidden"
             >0</span
@@ -84,8 +117,8 @@
         >
           <span id="username-text"></span>
         </button>
-        <div class="flex account pixel-menu-button" id="sign-out">Sign Up</div>
-        <div class="flex account pixel-menu-button" id="login">Log in</div>
+        <div class="flex account pixel-menu-button" id="sign-out" hidden>Sign Up</div>
+        <div class="flex account pixel-menu-button" id="login" hidden>Log in</div>
         <button
           id="fullscreen-toggle"
           class="account fullscreen-toggle pixel-menu-button"
@@ -156,11 +189,6 @@
     </div>
 
     <div id="lobby-area" class="mode-1" data-loading aria-busy="true">
-      <div id="lobby-loading" role="status" aria-label="Loading lobby">
-        <span class="bb-loading-rune bb-battle-loader" aria-hidden="true"></span>
-        <span class="lobby-loading-label" hidden>Loading lobby…</span>
-        <button class="bb-loading-retry" type="button" onclick="window.location.reload()" hidden>Try again</button>
-      </div>
       <div class="platform your-team-1" data-team="your-team" data-slot="1">
         <div class="character-slot empty" id="your-slot-1">
           <div class="slot-level-badge" aria-hidden="true"></div>
@@ -438,36 +466,14 @@
               </div>
             </section>
             <div data-account-member hidden>
-            <h3>Account Settings</h3>
-            <p id="email-status" class="account-message" aria-live="polite"></p>
-            <div class="profile-account-actions">
-              <button id="email-toggle" class="profile-action-btn pixel-menu-button" type="button">Add Email Address</button>
-              <button id="profile-change-name" class="profile-action-btn pixel-menu-button" type="button" aria-haspopup="dialog">Change Name</button>
-              <button class="profile-action-btn pixel-menu-button" type="button" data-account-toggle aria-controls="profile-password-form" aria-expanded="false">Change Password</button>
-            </div>
-            <form id="profile-password-form" class="profile-form" hidden>
-              <label for="profile-current-password">Current Password</label>
-              <input
-                id="profile-current-password"
-                type="password"
-                minlength="6"
-              />
-              <label for="profile-new-password">New Password</label>
-              <input
-                id="profile-new-password"
-                type="password"
-                minlength="6"
-                required
-              />
-              <button
-                class="profile-action-btn pixel-menu-button"
-                type="submit"
-              >
-                Update Password
-              </button>
-              <button class="profile-action-btn pixel-menu-button" type="button" data-account-cancel>Cancel</button>
-            </form>
-            <button id="profile-sign-out" class="profile-action-btn pixel-menu-button" type="button">Sign Out</button>
+              <h3>Account Settings</h3>
+              <p id="email-status" class="account-message" aria-live="polite"></p>
+              <div class="profile-account-actions">
+                <button id="email-toggle" class="profile-action-btn pixel-menu-button" type="button" aria-haspopup="dialog">Add Email Address</button>
+                <button id="profile-change-name" class="profile-action-btn pixel-menu-button" type="button" aria-haspopup="dialog">Change Name</button>
+                <button id="profile-change-password" class="profile-action-btn pixel-menu-button" type="button" aria-haspopup="dialog">Change Password</button>
+                <button id="profile-sign-out" class="profile-action-btn pixel-menu-button" type="button">Sign Out</button>
+              </div>
             </div>
             <p
               id="profile-message"

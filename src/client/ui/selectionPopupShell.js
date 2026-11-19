@@ -1,5 +1,7 @@
 import { createModalFocus } from "./modalFocus.js";
 import { mountWallet, releaseWallet } from "../lobby/walletView.js";
+import { getPageScope } from "../lib/globals.cjs";
+import { waitForPopupImages } from "./popupImages.js";
 
 const TITLE_SEQUENCE = Symbol.for("bro-battles.selection-title-sequence");
 let __sharedShell = null;
@@ -43,6 +45,7 @@ export function getSharedSelectionPopupShell() {
     closeAttrKeys: [],
     showWallet: false,
   };
+  let pendingOpen;
 
   const doClose = () => {
     if (typeof state.onClose === "function") {
@@ -78,6 +81,7 @@ export function getSharedSelectionPopupShell() {
     backgroundNode,
     showWallet = false,
   } = {}) => {
+    pendingOpen = null;
     state.onClose = typeof onClose === "function" ? onClose : null;
     state.showWallet = showWallet;
     walletSlot.hidden = !showWallet;
@@ -150,11 +154,34 @@ export function getSharedSelectionPopupShell() {
   };
 
   const hide = () => {
+    pendingOpen = null;
     overlay.classList.add("is-hidden");
     overlay.setAttribute("aria-hidden", "true");
     releaseWallet(walletSlot);
     focus.deactivate();
     return api;
+  };
+
+  const showWhenReady = async (options) => {
+    const token = pendingOpen = {};
+    const url = location.href;
+    const scope = getPageScope();
+    const trigger = document.activeElement;
+    const cancel = (event) => {
+      if (event.key === "Escape" && pendingOpen === token) pendingOpen = null;
+    };
+    document.addEventListener("keydown", cancel, true);
+    try {
+      const pending = waitForPopupImages(options.contentNode);
+      if (pending) await pending;
+      if (pendingOpen === token && scope?.active !== false && location.href === url &&
+          (!trigger || document.activeElement === trigger)) {
+        mount(options).show();
+      }
+    } finally {
+      document.removeEventListener("keydown", cancel, true);
+      if (pendingOpen === token) pendingOpen = null;
+    }
   };
 
   const api = {
@@ -165,6 +192,7 @@ export function getSharedSelectionPopupShell() {
     closeButton,
     mount,
     show,
+    showWhenReady,
     hide,
     close: doClose,
   };

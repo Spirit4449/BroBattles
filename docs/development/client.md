@@ -26,6 +26,13 @@ there when adding fields or controllers. Use the route's AbortSignal and
 current-route check before applying late results. Keep user state in
 `src/client/lobby/session.mjs` and party context in `partyState.js`.
 Feature controllers can use `src/client/lib/http.js` for JSON requests.
+
+The navbar reserves its rows from the first paint and reveals account controls
+after status has populated the balances, username, and guest actions. Mode and
+map artwork warms after lobby reveal and on picker hover or focus. Pickers
+give their images a short decoding window before opening. The character picker
+warms equipped detail portraits, and the shop warms the first Sales and
+Currency offers after its background refresh.
 Party socket handlers, roster rendering and readiness live in `partySocket.js`,
 `partyRoster.js` and `readyController.js`.
 
@@ -160,6 +167,11 @@ remote font styles cannot delay every transition. Font preloads are copied and
 Phaser startup explicitly waits for both canvas HUD fonts to decode. The route
 loading bar stays above the game template until `game:ready`, keeping its position
 stable while the game reports progress. Errors expose retry.
+
+Lobby overlays, selection dialogs, matchmaking and match results use the shared
+`ui/modalFocus.js` stack to keep keyboard focus inside the topmost popup. Closing
+a popup restores its opener when available; native modal dialogs retain browser
+focus management. Register new custom modal surfaces with the same stack.
 
 ### Page scope and cleanup
 
@@ -400,6 +412,12 @@ an estimate. Compare cold and warm runs and inspect `/status` and `/partydata`
 in the network panel when checking a deployment.
 
 ## Rendering and loading
+
+A direct lobby load paints an opaque cover before the cached map art can
+appear. The panel enters over the cover and the artwork fades in once decoded.
+The cover holds for at least 500 ms and until the roster or join request is
+ready, then fades out over 320 ms. Reduced motion keeps the hold and skips
+the animation. The cover presents a retry button on timeout.
 
 Respawns use `src/client/game/scene/respawnEffect.js` for local and remote
 fighters (including snapshot recovery): a cyan arrival beam, two expanding
@@ -806,12 +824,11 @@ outcomes use `/assets/game-sounds/draw.mp3`, a short original suspended-fifth
 chime; result playback pauses map music and respects the existing SFX settings
 and audio-unlock handling.
 
-The lobby profile opens `src/client/account/nameChangeDialog.js` for name changes. The
-native dialog uses the shared popup frame, chroma header and close button. The dialog
-states the 50-gem cost and once-per-month limit, shows the next eligible date or current
-balance, and keeps validation errors inside the dialog. Its blue Change Name action
-includes the gem icon and price. Escape, Cancel and backdrop dismissal restore focus to
-the opener.
+The lobby profile opens native dialogs for name and password changes. The name dialog
+uses signup's username field and availability indicators, shows the gem cost on the
+submit button, and displays the next eligible date or an insufficient-gems message.
+The password dialog keeps update errors beside the form and clears both fields when it
+closes. Escape, Cancel and backdrop dismissal restore focus to the opener.
 
 Projectile damage uses one fading red screen pulse. While its tween is active,
 the poison-water renderer leaves opacity to the tween and pauses the looping

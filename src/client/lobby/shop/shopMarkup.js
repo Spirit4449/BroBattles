@@ -61,11 +61,16 @@ export function grantLabel(grant, { signed = false } = {}) {
   return `${signed ? "+" : ""}${formatCount(grant.amount)} ${grant.name}`;
 }
 
+export function grantArtSource(grant, { reveal = false } = {}) {
+  if (grant.kind === "currency") return currencyRewardImage(grant.currency, grant.amount);
+  if (reveal && grant.kind === "card") return playerCardImage(grant.id, { animate: false });
+  return (reveal ? grant.image : grant.shopImage || grant.image) || "";
+}
+
 export function grantArtMarkup(grant, { reveal = false } = {}) {
   if (grant.kind === "title") return `<span class="title-presentation-box">${titleMarkup(grant.id)}</span>`;
-  if (grant.kind === "currency") return `<img src="${escapeHtml(currencyRewardImage(grant.currency, grant.amount))}" alt="${reveal ? escapeHtml(grant.name) : ""}" />`;
-  if (reveal && grant.kind === "card") return `<img data-animated-card-id="${escapeHtml(grant.id)}" src="${escapeHtml(playerCardImage(grant.id, { animate: false }))}" alt="${escapeHtml(grant.name)}" />`;
-  return `<img src="${escapeHtml((reveal ? grant.image : grant.shopImage || grant.image) || "")}" alt="${reveal ? escapeHtml(grant.name) : ""}" />`;
+  const animatedCard = reveal && grant.kind === "card" ? ` data-animated-card-id="${escapeHtml(grant.id)}"` : "";
+  return `<img${animatedCard} src="${escapeHtml(grantArtSource(grant, { reveal }))}" alt="${reveal ? escapeHtml(grant.name) : ""}" />`;
 }
 
 export function getActionState(item) {
@@ -104,11 +109,19 @@ const INFO_ICON = '<svg class="shop-info-icon" viewBox="0 0 16 16" aria-hidden="
 
 export const NEW_TAG = '<span class="shop-new-tag" data-shop-new>NEW</span>';
 
+function offerArt(item) {
+  const grants = Array.isArray(item.grants) ? item.grants : [];
+  return [
+    item.banner || "/assets/lushy/lobbyBg.webp",
+    grants.length === 1 && grants[0].kind === "card" ? grants[0].shopImage : null,
+  ];
+}
+
 function offerVisualMarkup(item, grants, { showRarity, rarity }) {
   const primary = grants[0] || {};
-  const cardArt = grants.length === 1 && primary.kind === "card" ? primary.shopImage : null;
+  const [banner, cardArt] = offerArt(item);
   return `<div class="shop-offer-visual">
-      <img class="shop-banner-art" src="${escapeHtml(item.banner || "/assets/lushy/lobbyBg.webp")}" alt="" loading="lazy" />
+      <img class="shop-banner-art" src="${escapeHtml(banner)}" alt="" loading="lazy" />
       <span class="shop-banner-scrim" aria-hidden="true"></span>
       <span class="shop-banner-light" aria-hidden="true"></span>
       ${primary.kind === "title" ? `<div class="shop-title-preview">${titleMarkup(primary.id)}</div>` : ""}
@@ -178,6 +191,10 @@ function visibleOffers(meta, items) {
       .sort((a, b) => rarityRank(a.rarity) - rarityRank(b.rarity) || String(a.name).localeCompare(String(b.name)));
   }
   return shown;
+}
+
+export function shopSectionArt(meta, items) {
+  return visibleOffers(meta, items).slice(0, 4).flatMap(offerArt);
 }
 
 function emptyStateMarkup(meta, items) {

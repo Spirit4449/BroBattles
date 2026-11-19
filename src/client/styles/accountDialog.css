@@ -1,0 +1,82 @@
+dialog.account-dialog {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: var(--bb-popup-border-width) solid var(--bb-popup-border-color);
+  border-radius: var(--bb-radius-window);
+  background: var(--bb-popup-bg);
+  box-shadow: var(--bb-popup-shadow);
+  color: var(--bb-text);
+  font-family: var(--bb-font-body);
+  overflow: auto;
+}
+
+.account-dialog[open] {
+  animation: bb-popup-panel-in var(--bb-popup-motion) var(--bb-ease) both;
+}
+
+.account-dialog::backdrop {
+  background: var(--bb-popup-backdrop);
+  backdrop-filter: blur(var(--bb-overlay-blur));
+}
+
+.account-dialog .bb-popup-title {
+  font-size: var(--bb-title-sm);
+  line-height: 1.4;
+}
+
+.account-dialog-form {
+  display: grid;
+  gap: var(--bb-space-4);
+  margin: 0;
+  padding: var(--bb-space-4) var(--bb-space-5) var(--bb-space-6);
+}
+
+.account-dialog-form .form-label {
+  text-transform: uppercase;
+}
+
+.account-dialog-hint,
+.account-dialog-error {
+  margin: 0;
+  font-size: var(--bb-text-md);
+  line-height: 1.5;
+}
+
+.account-dialog-hint {
+  color: var(--bb-text-soft);
+}
+
+.form-input + .account-dialog-hint {
+  margin-top: var(--bb-space-2);
+}
+
+.account-dialog-error {
+  color: var(--bb-red);
+}
+
+.account-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--bb-action-gap);
+  padding-top: var(--bb-space-1);
+}
+
+.account-dialog .account-dialog-actions .bb-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bb-space-2);
+  min-height: 34px;
+  max-width: 100%;
+  padding: 7px var(--bb-space-3);
+  background: var(--bb-surface-raised);
+  font-size: var(--bb-text-xs);
+}
+
+.account-dialog .account-dialog-actions button[type="submit"] {
+  background: var(--bb-primary-gradient);
+}

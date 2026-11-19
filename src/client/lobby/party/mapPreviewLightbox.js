@@ -17,9 +17,10 @@ function loadImage(src) {
 }
 
 /** Opens the full-arena preview for one map. */
-export async function openMapPreviewLightbox({ src, title }) {
+export async function openMapPreviewLightbox({ src, title, canOpen }) {
   const token = {};
   active = token;
+  const trigger = document.activeElement;
   let image;
   try {
     image = await loadImage(src);
@@ -27,7 +28,7 @@ export async function openMapPreviewLightbox({ src, title }) {
   } catch {
     return null;
   }
-  if (active !== token) return null; // A newer open replaced this one.
+  if (active !== token || canOpen?.() === false) return null;
 
   const label = title || 'Map';
   const dialog = document.createElement('dialog');
@@ -62,7 +63,6 @@ export async function openMapPreviewLightbox({ src, title }) {
     dismissPopup(dialog, () => dialog.close());
   };
   close.addEventListener('click', requestClose);
-  const trigger = document.activeElement;
   const cleanup = () => {
     if (active === token) active = null;
     dialog.remove();

@@ -4,6 +4,7 @@ import { API_PATHS } from "../../shared/net/apiPaths.js";
 import { initSiteShell } from "../site/shell.js";
 // login.js
 import "../styles/accounts.css";
+import "../styles/formFields.css";
 import { wireFullscreenToggles } from "../ui/fullscreen.js";
 import { HttpError, postJson } from "../lib/http.js";
 import "../styles/ui-components.css";

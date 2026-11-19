@@ -71,8 +71,10 @@ test('NEW tags survive the visit; closing saves fully viewed sections but not a 
   await f.shop.refreshNotifications();
   assert.ok(tag());
   assert.equal(views().length, 0);
-  await f.shop.open();
+  const opening = f.shop.open();
   const card = f.document.querySelector('[data-shop-item-id="custom-bundle"]');
+  assert.ok(card, 'the background snapshot is visible on the first frame of the first open');
+  await opening;
   f.intersect(card); f.intersect(card, false);
   await f.runTimers(1000);
   assert.equal(views().length, 0);

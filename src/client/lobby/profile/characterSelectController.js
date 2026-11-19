@@ -20,6 +20,7 @@ import {
   upgradePrice,
 } from "../../../shared/characters/characterStats.js";
 import { getSharedSelectionPopupShell } from "../../ui/selectionPopupShell.js";
+import { warmPopupImages } from "../../ui/popupImages.js";
 import socket from "../../lib/socket.js";
 import { warmBattleSelection } from '../preloadBattle';
 import { playSound } from "../../ui/uiSounds.js";
@@ -237,6 +238,9 @@ export function initializeCharacterSelect(userData) {
     // Sync classes (selected/locked/maxed/pricing) whenever chooser opens.
     refreshUpgradeButtonAffordability();
     popupShell.show();
+    warmPopupImages(characters.map(character =>
+      resolveCharacterPreviewAsset(character, getSelectedSkin(character).id),
+    ), { background: true });
     emitCharacterMenuStatus(true);
     return true;
   }
@@ -280,6 +284,7 @@ function createCharacterCard(character, userData) {
   const profileIcon = document.createElement("img");
   profileIcon.className = "character-profile-icon";
   profileIcon.src = profileIconUrl;
+  profileIcon.decode?.().catch(() => {});
   profileIcon.alt = character;
   imageWrap.appendChild(profileIcon);
 
@@ -337,6 +342,11 @@ function createCharacterCard(character, userData) {
   card.appendChild(imageWrap);
   card.appendChild(info);
 
+  const warmDetails = () => warmPopupImages([
+    resolveCharacterPreviewAsset(character, getSelectedSkin(character).id),
+  ]);
+  card.addEventListener("pointerenter", warmDetails);
+  card.addEventListener("focus", warmDetails);
   card.addEventListener("click", () => {
     playSound("cursor5", 0.3);
     openCharacterDetails(character);

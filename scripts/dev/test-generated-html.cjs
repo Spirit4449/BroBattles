@@ -85,6 +85,8 @@ async function main() {
         await page.setViewportSize(viewport);
         result.push(...await page.evaluate(() => window.htmlSmoke.runBattleMedia()));
       }
+    } else if (process.argv.includes('--overlay-focus')) {
+      result = await page.evaluate(() => window.htmlSmoke.runOverlayFocus());
     } else if (process.argv.includes('--card-cleanup')) {
       result = await page.evaluate(() => window.htmlSmoke.runCardCleanup());
     } else if (process.argv.includes('--battle-layout')) {

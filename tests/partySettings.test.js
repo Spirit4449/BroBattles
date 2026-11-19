@@ -276,7 +276,11 @@ test('join request overlay ignores mismatched responses and cancels pending work
   f.window.location.reload = () => reloads++;
   controller.initialize();
   controller.registerEvents();
-  controller.showPartyJoinRequestScreen({ partyId: 7, ownerName: 'Host', requestState: { status: 'pending' } });
+  const opening = controller.showPartyJoinRequestScreen({ partyId: 7, ownerName: 'Host', requestState: { status: 'pending' } });
+  await f.advance(500);
+  await opening;
+  assert.equal(f.document.getElementById('lobby-loading').hidden, true);
+  assert.equal(f.document.getElementById('lobby-area').hasAttribute('data-loading'), true);
   assert.equal(submit.disabled, true);
   f.socket.emit('party:join-request:status', { partyId: 8, requesterName: 'Owner', status: 'accepted' });
   f.socket.emit('party:join-request:status', { partyId: 7, requesterName: 'Someone Else', status: 'accepted' });

@@ -187,6 +187,30 @@ describe("Lobby return lifecycle", () => {
   });
 });
 
+test('the initial lobby loading cover holds on a fast load and offers a retry on timeout', async () => {
+  const f = createLobbyFixture();
+  const { watchLobbyLoading, revealLobby } = f.load('src/client/lobby/lobbyReveal.js');
+  const loading = f.document.getElementById('lobby-loading');
+  const roster = f.document.getElementById('lobby-area');
+  const retry = loading.querySelector('button');
+  watchLobbyLoading();
+  assert.equal(loading.hidden, false);
+  assert.equal(retry.hidden, true);
+  await f.runTimers(12_000);
+  assert.equal(loading.hidden, false);
+  assert.equal(retry.hidden, false);
+  assert.equal(roster.getAttribute('aria-busy'), 'true');
+  const reveal = revealLobby();
+  await f.settle();
+  await f.advance(499);
+  assert.equal(loading.hidden, false);
+  assert.equal(roster.getAttribute('aria-busy'), 'true');
+  await f.advance(1);
+  await reveal;
+  assert.equal(loading.hidden, true);
+  assert.equal(roster.getAttribute('aria-busy'), 'false');
+});
+
 test('lobby menus work before deferred setup and later setup reuses them, preserving deep links and wallet updates', async () => {
   const calls = [];
   let shopOptions;
@@ -217,6 +241,8 @@ test('lobby menus work before deferred setup and later setup reuses them, preser
   f.document.getElementById('shop-button').click();
   f.document.getElementById('username-button').click();
   assert.deepEqual(calls, ['shop-init', 'shop-open:sales', 'profile-init', 'profile-open']);
+  await f.advance(500);
+  await f.settle();
   await f.advance(500);
   await f.settle();
   assert.equal(calls.filter(call => call === 'shop-init').length, 1);
@@ -253,14 +279,23 @@ test('Escape closes the foremost viewers popup before dismissing the underlying 
   assert.equal(panel.classList.contains('is-open'), false);
 });
 
-test('profile Escape and close button both clear the password editor and status message', async () => {
+test('the profile password dialog handles failed and successful saves and clears its fields on dismissal', async () => {
   const userData = { name: 'Owner', char_class: 'ninja', coins: 10, gems: 20, guest: false };
+  const passwordRequests = [];
   const f = createLobbyFixture({ globals: {
-    fetch: async url => ({ ok: true, json: async () => {
-      if (url === '/status') return { userData, guest: false };
-      if (url === '/profile/data') return { profile: { username: 'Owner', guest: false } };
-      return { success: true, friends: [], messages: [], members: [] };
-    } }),
+    fetch: async (url, options) => {
+      if (url === '/profile/change-password') {
+        passwordRequests.push(JSON.parse(options.body));
+        if (passwordRequests.length === 1) {
+          return { ok: false, status: 400, json: async () => ({ error: 'Incorrect current password.' }) };
+        }
+      }
+      return { ok: true, json: async () => {
+        if (url === '/status') return { userData, guest: false };
+        if (url === '/profile/data') return { profile: { username: 'Owner', guest: false } };
+        return { success: true, friends: [], messages: [], members: [] };
+      } };
+    },
   } });
   f.load('src/client/pages/lobby.js');
   await f.settle();
@@ -268,28 +303,47 @@ test('profile Escape and close button both clear the password editor and status 
   await f.settle();
   const id = value => f.document.getElementById(value);
   const overlay = id('profile-overlay');
-  const passwordForm = id('profile-password-form');
-  const toggle = f.document.querySelector('[aria-controls="profile-password-form"]');
-  for (const dismiss of [
-    () => f.event(f.document, 'keydown', { key: 'Escape' }),
-    () => id('profile-close').click(),
-  ]) {
-    id('username-button').click();
-    await f.settle();
-    assert.equal(overlay.getAttribute('aria-hidden'), 'false');
-    toggle.click();
-    assert.equal(passwordForm.hidden, false);
-    id('profile-current-password').value = 'temporary current password';
-    id('profile-new-password').value = 'temporary new password';
-    id('profile-message').textContent = 'Unable to update password';
-    dismiss();
-    assert.equal(overlay.getAttribute('aria-hidden'), 'true');
-    assert.equal(passwordForm.hidden, true);
-    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
-    assert.equal(id('profile-current-password').value, '');
-    assert.equal(id('profile-new-password').value, '');
-    assert.equal(id('profile-message').textContent, '');
-  }
+  const toggle = id('profile-change-password');
+  id('username-button').click();
+  await f.settle();
+
+  toggle.click();
+  const dialog = id('password-change-dialog');
+  const form = id('profile-password-form');
+  const current = id('profile-current-password');
+  const next = id('profile-new-password');
+  assert.equal(dialog.hasAttribute('open'), true);
+  current.value = 'temporary current password';
+  next.value = 'temporary new password';
+  f.event(form, 'submit');
+  f.event(form, 'submit');
+  await f.settle();
+  assert.deepEqual(passwordRequests, [{
+    currentPassword: 'temporary current password', newPassword: 'temporary new password',
+  }]);
+  assert.equal(dialog.hasAttribute('open'), true);
+  assert.equal(dialog.querySelector('[role="alert"]').textContent, 'Incorrect current password.');
+
+  f.event(dialog, 'cancel');
+  assert.equal(overlay.getAttribute('aria-hidden'), 'false');
+  assert.equal(id('password-change-dialog'), null);
+  assert.equal(current.value, '');
+  assert.equal(next.value, '');
+  assert.equal(id('profile-message').textContent, '');
+
+  toggle.click();
+  assert.equal(id('profile-current-password').value || '', '');
+  assert.equal(id('profile-new-password').value || '', '');
+  id('profile-current-password').value = 'correct current password';
+  id('profile-new-password').value = 'temporary new password';
+  f.event(id('profile-password-form'), 'submit');
+  await f.settle();
+  assert.equal(passwordRequests.length, 2);
+  assert.equal(id('password-change-dialog'), null);
+  assert.equal(id('profile-message').textContent, 'Password updated.');
+  id('profile-close').click();
+  assert.equal(overlay.getAttribute('aria-hidden'), 'true');
+  assert.equal(id('profile-message').textContent, '');
 });
 
 test('retiring a screen closes its native dialog and removes its Escape capture immediately', () => {

@@ -34,4 +34,17 @@ function restoreBackground() {
   }
 }
 
+const loading = document.getElementById("lobby-loading");
+if (loading && !document.getElementById("bb-route-transition")) {
+  requestAnimationFrame(() => {
+    loading.dataset.shownAt = String(performance.now());
+  });
+  const artwork = loading.querySelector(".lobby-loading-art");
+  artwork?.decode?.().then(() => {
+    if (!loading.hidden && !loading.hasAttribute("data-leaving")) {
+      artwork.dataset.decoded = "";
+    }
+  }).catch(() => {});
+}
+
 restoreBackground();

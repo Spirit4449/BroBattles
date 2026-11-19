@@ -316,8 +316,7 @@ async function bootstrapPartyData(partyId, signal) {
   } catch (error) {
     if (signal?.aborted) return;
     if (error.status === 403 && error.payload?.requestRequired) {
-      showPartyJoinRequestScreen(error.payload);
-      return;
+      return showPartyJoinRequestScreen(error.payload);
     }
     if (error.status === 409 && error.payload?.redirect) {
       window.location.href = error.payload.redirect;
@@ -449,6 +448,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch {}
   renderWalletBalances(userData);
   trophyCount.textContent = userData.trophies || 0;
+  document.getElementById("navbar-right")?.removeAttribute("data-account-loading");
   animatePostMatchRewardsIfPresent(
     coinCount,
     gemCount,
@@ -706,8 +706,8 @@ function signUpOut(guest) {
   if (guest) {
     signOut.addEventListener("click", () => (window.location.href = API_PATHS.SIGNUP));
     login.addEventListener("click", () => (window.location.href = API_PATHS.LOGIN));
+    signOut.hidden = login.hidden = false;
   } else {
-    signOut.style.display = "none";
     const profileSignOut = document.getElementById('profile-sign-out');
     profileSignOut?.addEventListener('click', async () => {
       profileSignOut.disabled = true;
@@ -719,7 +719,6 @@ function signUpOut(guest) {
         profileSignOut.textContent = 'Retry sign out';
       }
     });
-    login.style.display = "none";
   }
 }
 
