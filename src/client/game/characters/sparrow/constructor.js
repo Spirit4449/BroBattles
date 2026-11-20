@@ -1,7 +1,5 @@
 import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { perform as performSpecial } from "./special";
-import { SOCKET_EVENTS } from "../../../../shared/net/socketEvents.js";
-import socket from "../../../lib/socket";
 import { predictSparrowShot } from './network';
 import { animations } from "./anim";
 import { performSparrowArrowSpread } from "./attack";
@@ -9,7 +7,6 @@ import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { applyScaleLockedRageFx } from "../shared/powerupFx";
 import { playPlayerSound } from "../../audio/playerAudio";
-import { withShotView } from "../shared/shotPrediction";
 import { sparrowAimVariant } from "./aimPoses";
 
 const { key: NAME } = characterDefinitions.sparrow;
@@ -92,7 +89,7 @@ class Sparrow extends CharacterEntityBase {
 
   // Shots are predicted locally before the server confirms them.
   emitAttackAction(payload) {
-    socket.emit(SOCKET_EVENTS.GAME_ACTION, withShotView(predictSparrowShot(this.scene, this.player, this.username, payload)));
+    super.emitAttackAction(predictSparrowShot(this.scene, this.player, this.username, payload));
   }
 
   static basicAttack = performSparrowArrowSpread;

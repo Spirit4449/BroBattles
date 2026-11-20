@@ -14,7 +14,7 @@ import {
   spawnWallSlideBurst,
   spawnWallSlideTrail,
 } from "../scene/effects";
-import { shouldPlayLandingSound, terrainLandingSound } from "../audio/movementAudio";
+import { canPlayTerrainCue, movementTerrainAt, shouldPlayLandingSound, terrainLandingSound } from "../audio/movementAudio";
 
 // Same semantics as Phaser.Math.Clamp (NaN passes through, so NaN-driven
 // comparisons below stay false exactly as before extraction).
@@ -81,7 +81,7 @@ export function createLocalMovementFx({ audio, noteEvent }) {
         { previousDirection: lastGroundInputDirection, speedRatio },
       );
       noteEvent("turn", { direction: lastGroundInputDirection });
-      audio.playStep(scene, Math.max(0.62, speedRatio), true);
+      audio.playStep(scene, player, Math.max(0.62, speedRatio), true);
       lastDirectionChangeAt = Date.now();
     }
     if (inputDirection !== 0) lastGroundInputDirection = inputDirection;
@@ -91,13 +91,13 @@ export function createLocalMovementFx({ audio, noteEvent }) {
       // Play on the first grounded movement frame so a quick key tap is audible.
       // The cooldown continues to space footsteps during sustained movement.
       if (!wasGroundWalking) {
-        audio.playStep(scene, speedRatio, false);
+        audio.playStep(scene, player, speedRatio, false);
         walkStepElapsed = 0;
       }
       walkStepElapsed += scene.game.loop.delta;
       if (walkStepElapsed >= lerp(285, 150, speedRatio)) {
         walkStepElapsed = 0;
-        audio.playStep(scene, speedRatio, false);
+        audio.playStep(scene, player, speedRatio, false);
       }
     } else {
       walkStepElapsed = 0;
@@ -168,9 +168,12 @@ export function createLocalMovementFx({ audio, noteEvent }) {
       const heightRatio = clamp01(fallDistance / (MOVEMENT_VFX_CONFIG.landingShockwaveMinFallPx * 2));
       const strength = velocityRatio * 0.65 + heightRatio * 0.35;
       const shaped = strength * strength;
-      const landingAudio = terrainLandingSound(scene._terrainType, 0.28 + shaped * 0.5, scene);
       if (playSound) {
-        scene.sound.play(movementSoundKey(scene, landingAudio.key), { volume: landingAudio.volume, rate: 0.93 - shaped * 0.02 });
+        const terrain = movementTerrainAt(scene, player);
+        const { key, volume } = terrainLandingSound(terrain, 0.28 + shaped * 0.5, scene);
+        if (canPlayTerrainCue(scene, terrain, { volume, landingStrength: shaped })) {
+          scene.sound.play(movementSoundKey(scene, key), { volume, rate: 0.93 - shaped * 0.02 });
+        }
       }
       // A downward air dash that lands is a stomp. Show it now instead of
       // when the server confirms it a round trip later.

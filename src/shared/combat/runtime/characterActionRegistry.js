@@ -1,3 +1,4 @@
+const { characterDefinitions } = require('../../characters');
 const { SOCKET_EVENTS } = require("../../net/socketEvents.js");
 const { combatNow } = require("./clock");
 const { slimeLaunch } = require("../../characters/gloopProjectile");
@@ -184,6 +185,9 @@ function handleCharacterAction(
   const flowKind = String(descriptor?.actionFlow?.kind || "").toLowerCase();
   if (!claimActionInstance(room, playerData, actionData, actionNow)) {
     return { handled: true };
+  }
+  if (characterDefinitions[actualCharacter]?.basicAction === actionData.type) {
+    room.gameMode?.onAttackAccepted?.(playerData, actionData);
   }
   if (flowKind === "windup-release") {
     return scheduleWindupRelease(

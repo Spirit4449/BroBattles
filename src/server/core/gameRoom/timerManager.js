@@ -65,7 +65,7 @@ function decideSuddenDeathWinner(room) {
 }
 
 function tickTimerAndSuddenDeath(room) {
-  if (room.status !== "active") return;
+  if (room.status !== "active" || room.gameMode?.usesModeClock) return;
   const now = Date.now();
   const elapsed = now - room.loopStartWallTime;
   const totalDurationMs = matchDurationMs(room);

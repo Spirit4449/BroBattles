@@ -1,6 +1,8 @@
 import { clamp01 } from "../../../shared/math.js";
 import terrainAudio from '../../../shared/physics/terrainAudio.json';
-import { playPlayerSound } from './playerAudio';
+import { playerSoundVolume, playPlayerSound } from './playerAudio';
+
+const terrainCueTimes = new WeakMap();
 
 // Shared mix for local and remote falling wind; retain the speed/time swell.
 export function fallingAirVolume(speedRatio, timeRatio) {
@@ -16,6 +18,10 @@ export function getTerrainConfig(terrain) {
   return terrainAudio.terrains[terrain] || terrainAudio.terrains[terrainAudio.defaultTerrain];
 }
 
+export function movementTerrainAt(scene, fighter, position) {
+  return scene._movementTerrainAt?.(scene, fighter, position) ?? scene._terrainType;
+}
+
 export function footstepVolume(speedRatio, directionChange, terrain) {
   const speed = Math.max(0, Math.min(1, Number(speedRatio) || 0));
   const terrainGain = Math.max(0, Number(getTerrainConfig(terrain).volumeScale) || 1);
@@ -29,6 +35,28 @@ export function terrainLandingSound(terrain, baseVolume, scene) {
     key: landing.key,
     volume: Math.min(1, Math.max(0, Number(baseVolume) || 0) * (Number(landing.volumeScale) || 1) * gain),
   };
+}
+
+// Share resonant surface cooldowns between local and remote fighters. A deck
+// landing gets space to decay without footsteps stacking over its tail.
+export function canPlayTerrainCue(scene, terrain, { volume, source, landingStrength }) {
+  const cadence = getTerrainConfig(terrain).cadence;
+  if (!cadence) return true;
+  if (scene.sound?.locked || (source && playerSoundVolume(scene, source, volume) < 0.02)) return false;
+  let surfaceTimes = terrainCueTimes.get(scene);
+  if (!surfaceTimes) terrainCueTimes.set(scene, surfaceTimes = new Map());
+  let times = surfaceTimes.get(terrain);
+  if (!times) surfaceTimes.set(terrain, times = { stepAt: -Infinity, landAt: -Infinity });
+  const now = scene.time.now;
+  if (landingStrength !== undefined) {
+    if (landingStrength < cadence.minLandingStrength || now < times.landAt) return false;
+    times.landAt = now + cadence.landingGapMs;
+    times.stepAt = now + cadence.landingTailMs;
+  } else {
+    if (now < times.stepAt) return false;
+    times.stepAt = now + cadence.stepGapMs;
+  }
+  return true;
 }
 
 // Keep startup settling and delayed landing events silent until the fighter

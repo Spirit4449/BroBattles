@@ -13,6 +13,7 @@ function requestSpecial(room, id, payload = {}) {
     p.superCharge = 0; p.lastCombatAt = now;
     const aimPayload = payload?.aim || null;
     activateSpecial(room, p, now, aimPayload, { id: payload?.id, viewRewindMs: payload?.viewRewindMs });
+    room.gameMode?.onAttackAccepted?.(p, payload, true);
     room.broadcast(SOCKET_EVENTS.SUPER_UPDATE, { username: p.name, charge: 0, maxCharge: p.maxSuperCharge });
     if (p.char_class !== 'gloop') room.broadcast(SOCKET_EVENTS.PLAYER_SPECIAL, {
       username: p.name, character: p.char_class, origin: { x: p.x, y: p.y }, flip: !!p.flip, aim: aimPayload,

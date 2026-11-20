@@ -1,0 +1,113 @@
+{
+  "sky": {
+    "file": "sunset-gradient.webp",
+    "width": 1300,
+    "height": 640
+  },
+  "far": {
+    "file": "far.webp",
+    "width": 600,
+    "height": 200,
+    "grid": 4,
+    "rim": 450,
+    "towers": [
+      {
+        "x": 300,
+        "y": 133
+      },
+      {
+        "x": 900,
+        "y": 133
+      },
+      {
+        "x": 1500,
+        "y": 133
+      },
+      {
+        "x": 2100,
+        "y": 133
+      }
+    ]
+  },
+  "stands": {
+    "file": "stands.webp",
+    "width": 702,
+    "height": 234,
+    "grid": 3,
+    "sourceWidth": 2172,
+    "ledges": [
+      182,
+      339,
+      497,
+      650
+    ]
+  },
+  "canopy": {
+    "file": "canopy.webp",
+    "width": 900,
+    "height": 32,
+    "grid": 3,
+    "valance": 93
+  },
+  "pitch": {
+    "file": "pitch.webp",
+    "width": 900,
+    "height": 140,
+    "grid": 3,
+    "walk": 13,
+    "halfway": 1350
+  },
+  "platform": {
+    "file": "platform.webp",
+    "width": 89,
+    "height": 223,
+    "grid": 3,
+    "walk": 643,
+    "span": [
+      3,
+      263
+    ]
+  },
+  "wall": {
+    "team1": {
+      "file": "wall-team1.webp",
+      "width": 169,
+      "height": 253
+    },
+    "team2": {
+      "file": "wall-team2.webp",
+      "width": 169,
+      "height": 253
+    },
+    "grid": 3,
+    "mouth": {
+      "top": 444,
+      "bottom": 644,
+      "back": 284,
+      "face": 506
+    },
+    "torch": {
+      "x": 435,
+      "y": 232
+    }
+  },
+  "roof": {
+    "file": "stadium-roof.webp",
+    "width": 900,
+    "height": 61,
+    "grid": 3,
+    "underside": 171
+  },
+  "wallLog": {
+    "file": "wall-log.webp",
+    "width": 50,
+    "height": 8,
+    "grid": 3
+  },
+  "peaks": {
+    "file": "sunset-peaks.webp",
+    "width": 800,
+    "height": 320,
+    "grid": 4
+  }
+}

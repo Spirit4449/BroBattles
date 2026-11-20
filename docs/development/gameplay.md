@@ -1,5 +1,28 @@
 # Gameplay
 
+## Bro Ball
+
+Sunset Bowl (map 6) is the Bro Ball arena: an open-air stadium at golden hour. Each goal is a timber cage on a raised stone step. A rolling ball bounces off the step and has to be lifted in, and players can walk into the cage. The roof beam over each mouth can be stood on, and a ball resting on it rolls back toward the pitch. Two raised one-way platforms flank the open midfield. A rising ball must clear the deck with its bottom edge to land on it. After scoring, the ball keeps its momentum and disappears when it stops or the pitch resets. The back net catches shots that reach it. Players and the ball pass up through them and land on top. Each rally starts with the ball dropping freely from high over the centre with a little sideways drift. Map validation checks that each goal's floor, step, roof beam and back wall line up.
+
+Ways to play the ball, all tuned in `ballRules` in `src/shared/broBall.js`:
+
+- **Body contact** deflects the ball and pops a grounded ball up. A slow ball on a player's head gets a small sideways nudge so it falls. A centered brush picks up some of the player's run speed, and a ball already moving quickly across the head keeps its sideways momentum. Standing from a crouch pops an overhead ball into a short arc. A ball squeezed against the ground or a wall keeps its existing momentum along the surface. Sustained pressure can hold it still until the player moves away or kicks it. Kicks stretch the ball along its flight direction. Surface hits flatten it against the surface, and the silhouette eases back to round.
+- **A tap attack** within reach kicks the ball away from you and lifts it. The attack still fires.
+- **Aiming** (holding a drag-aimed attack or super) and touching the ball takes possession. The ball rides on your aim as you move. Releasing strikes it along the aim with no attack. A held super strikes harder and spends the charge on release. Releasing near a loose ball strikes it the same way. The ball comes loose if you are hit, cancel the aim, carry it past `holdMaxMs`, or an opponent dashes through it. The client sends `bro-ball-hold` while aiming and draws your carried ball on your own aim, ahead of the server.
+- **A dash** through the ball is a power shot. A downward dash smashes it upfield.
+
+Attacks, supers and dashes add any speed the ball already has along the new shot direction, up to the ball's speed cap.
+
+Fast downward landings rebound more strongly off the pitch and platform tops. Player impacts flash a pair of pixel arcs on the side of the ball where contact occurred. The arcs follow the ball as they fade.
+
+In Bro Ball, dash takes two seconds to recharge after the burst. The mode sets `_dashCooldownMs` on its players, which the shared dash rule and the client dash HUD both read.
+
+Bots use `src/server/core/bots/broBall.js`. The deeper teammate keeps goal and the other strikes; human teammates count when roles are chosen. Bots predict the ball's flight with the server physics. They take aimed shots that the physics says go in, carry the ball upfield when there is no clear shot, lob over defenders, and clear from their own end. They take dash shots only on a scoring line, dash through an opponent carrying the ball, jump to play high balls and balls resting on platforms, and attack opponents who contest the ball.
+
+Map Studio playtests run as a solo drill (the clock stops and the pitch resets after each goal) or with bots. Public matchmaking unlocks at 1,500 trophies and uses the 2v2 format on Sunset Bowl. Bots can fill empty slots.
+
+The sky and grandstand are Codex generations in `scripts/art/bro-ball-originals/`. `node scripts/art/install-bro-ball-art.cjs` pixelates them onto the arena's pixel grid (most common palette colour per cell, as in [code-pixel-art.md](../art/code-pixel-art.md)) and installs them. The goals, platforms, canopy, pitch, crowd, ball and hit effects are drawn in code by `src/client/game/modes/broBall/`, so they line up with the colliders and can react to play.
+
 ## Wall movement
 
 Wall jumps use the shared movement tuning in `src/shared/physics/movementPhysics.json`.
@@ -29,7 +52,7 @@ Reduced-motion preferences suppress the pulses.
 
 Press Space with WASD or arrow keys to dash in any of eight directions. With no net directional input, dash horizontally in the direction the character faces. Opposing keys cancel on each axis. Diagonals are normalized. W / Up still jump outside a dash; Space no longer jumps.
 
-Shared movement tuning is in `src/shared/physics/movementPhysics.json`; [Game constants](constants.md) documents ownership and override precedence. Dash applies 590 px/s to the normalized horizontal component and 600 px/s to the normalized vertical component (840 px/s straight down), independent of incoming speed, for a 160 ms burst.
+Shared movement tuning is in `src/shared/physics/movementPhysics.json`. [Game constants](constants.md) lists the current launch speeds and duration. Dash applies the configured speeds to the normalized direction components regardless of incoming speed, with a faster launch for a straight-down dash.
 
 Held movement keys steer grounded bursts at 6500 px/s².
 Once airborne, steering is disabled for the rest of that burst.
@@ -39,11 +62,11 @@ Dash clears old wall-jump control locks, and normal movement resumes as soon as 
 
 Cooldown lasts 5000 ms from the end of the 160 ms burst and is shared across ground and air. Landing does not refresh it.
 
-Gravity pauses during the burst and resumes afterward without replacing the resulting velocity. Excess horizontal speed coasts down with drag (900 px/s² in air, 600 on the ground), while opposite input brakes it sooner.
+Gravity pauses during the burst and resumes afterward without replacing the resulting velocity. Excess horizontal speed coasts down faster on the ground than in the air. Opposite input brakes the slide sooner.
 
 Wall contact cancels only the blocked velocity component. The blocked component stays cancelled for the rest of the burst; only motion along the surface continues.
 
-Ground/ceiling friction slows tangential motion by 600 px/s² during the burst.
+Ground/ceiling friction uses `dashSurfaceDrag` during the burst.
 Walls use proportional vertical drag (rate 1.2/s), which cannot cancel gravity into a stationary hover; wall impact also restores gravity during the burst; normal ground drag continues during the slowdown.
 Vertical air resistance scales smoothly with speed squared (coefficient 0.0015), weakens near the apex, and fades out throughout coasting.
 There is no hard velocity threshold or forced stop.
@@ -105,8 +128,8 @@ Manual playtesting should tune distance and timing and check diagonal wall/corne
 
 ### Downward stomp
 
-Straight-down dash launches at 840 px/s (40% faster than the 600 px/s upward launch).
-An airborne straight-down dash arms one stomp until the end of its 850 ms coast.
+Straight-down dash launches 40% faster than a straight-up dash.
+An airborne dash aimed straight down or diagonally down arms one stomp on landing.
 The server resolves the landing against map geometry. `STOMP_RADIUS` and `STOMP_INTERRUPT_MS` in `src/shared/combat/matchConfig.js` control reach and interruption. It pushes opponents within
 110 px of the impact away and upward without damage. Allies are unaffected.
 The stomp interrupts attached attacks, unreleased casts, and pending barrage shots,

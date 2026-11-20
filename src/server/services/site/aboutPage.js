@@ -41,6 +41,11 @@ const MODE_COPY = {
     line: "Guard your vault and raid theirs. Empty it, or have more coins when time runs out.",
     guide: "bank-bust",
   },
+  soccer: {
+    tags: ["2v2", "Respawns"],
+    line: "Kick, lob, or dash the ball into the opposing goal on Sunset Bowl.",
+    guide: "bro-ball",
+  },
 };
 const name = (key) => key[0].toUpperCase() + key.slice(1);
 const json = (value) => JSON.stringify(value).replace(/</g, "\\u003c");

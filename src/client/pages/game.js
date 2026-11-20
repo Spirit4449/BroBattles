@@ -308,6 +308,7 @@ const hud = createGameHudController({
   getMapBgAsset: mapId => getMapBgAsset(mapId, gameScene),
   getScene: () => gameScene,
   onCountdownFight: () => {
+    gameScene?._modeRuntime?.onCountdownFight?.();
     getNavigation()?.lobbyAudio?.handoff();
     try {
       if (gameScene) gameScene._bgmIntensity = 1;
@@ -491,7 +492,9 @@ matchCoordinator = createMatchCoordinator({
   onStartSuddenDeathMusic: () => startSuddenDeathMusic(gameScene),
   onStopSuddenDeathMusic: () => stopSuddenDeathMusic(gameScene),
   onPlayMatchEndSound: (winnerTeam) =>
-    playMatchEndSound(gameScene, winnerTeam, gameData?.yourTeam),
+    playMatchEndSound(gameScene, winnerTeam, gameData?.yourTeam, {
+      skipSting: winnerTeam === gameData?.yourTeam && gameScene?._modeRuntime?.playedWinningGoal === true,
+    }),
   onShowGameOverScreen: showGameOverScreen,
   isPresentationSuppressed: () => document.hidden,
 });
@@ -1086,6 +1089,7 @@ class GameScene extends Phaser.Scene {
         Phaser,
         getGameData: () => gameData,
         getModeState: () => latestModeState,
+        onGoal: discardCharacterPresentation,
         getMapObjects: () => mapObjects,
         getLocalPlayer: () => player,
       });
@@ -1196,6 +1200,7 @@ class GameScene extends Phaser.Scene {
       // work took, which made remote fighters step unevenly.
       now: Number.isFinite(this.game?.loop?.now) ? this.game.loop.now : performance.now(),
       applyFrame: (frame) => {
+        this._modeRuntime?.sample?.(frame);
         // Shots report this render time so the server aims at what was drawn.
         noteRemoteView(frame.targetMono, frame.interpDelayMs);
         this.interpolatePlayerStates(

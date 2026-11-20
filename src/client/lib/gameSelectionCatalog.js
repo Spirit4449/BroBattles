@@ -73,7 +73,7 @@ export function selectionToLegacyMode(selection) {
     selection?.modeId,
     selection?.modeVariantId,
   );
-  if (!mode || String(mode.id) !== "duels") return 1;
+  if (!mode || !["duels", "soccer"].includes(mode.id)) return 1;
   return Math.max(1, Math.min(3, Number(variant?.playersPerTeam) || 1));
 }
 

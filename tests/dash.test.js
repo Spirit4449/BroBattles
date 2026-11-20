@@ -2,11 +2,12 @@ const { loadClientModule } = require('./helpers/clientModule');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const physics = require('../src/shared/physics/movementPhysics.json');
-const { dashDirection, acceptDash } = require('../src/shared/physics/dash');
+const dashPhysics = require('../src/shared/physics/dash');
+const { dashDirection, acceptDash } = dashPhysics;
 const playerAudio = {};
 loadClientModule(require.resolve('../src/client/game/audio/playerAudio.js'), {exports: playerAudio});
 const exported = {};
-loadClientModule(require.resolve('../src/client/game/scene/dash.js'), { exports: exported, require: path => path.endsWith('.json') ? physics : path.includes('sweptCollision') ? require('../src/shared/physics/sweptCollision') : path.includes('playerAudio') ? playerAudio : {dashDirection}, Date });
+loadClientModule(require.resolve('../src/client/game/scene/dash.js'), { exports: exported, require: path => path.endsWith('.json') ? physics : path.includes('sweptCollision') ? require('../src/shared/physics/sweptCollision') : path.includes('playerAudio') ? playerAudio : dashPhysics, Date });
 const scene = { textures:{exists:()=>false} };
 function player() {
   return { visible:true, flipX:false, body:{allowGravity:true, velocity:{x:0,y:-100}, blocked:{}},
@@ -146,11 +147,11 @@ test('dash starts at fixed speed regardless of incoming momentum and preserves e
  p.setAccelerationX=x=>acceleration=x;p.setDragX=x=>drag=x;p.setMaxVelocity=x=>limit=x;
  p.body.touching={down:false};
  exported.applyDashCoast(p,1,260,1160);
- assert.equal(acceleration,0);assert.equal(drag,900);assert.equal(limit,physics.dashHorizontalSpeed);
+ assert.equal(acceleration,0);assert.equal(drag,physics.dashCoastDrag);assert.equal(limit,physics.dashHorizontalSpeed);
  p.body.touching.down=true;
  exported.applyDashCoast(p,1,260,1160);
- assert.equal(drag,physics.dashSurfaceDrag);
- assert.ok(drag<physics.dashCoastDrag);
+ assert.equal(drag,physics.dashGroundCoastDrag);
+ assert.ok(drag>physics.dashCoastDrag);
  p.body.touching.down=false;
  p.body.velocity={x:900,y:900};p._dashReadyAt=0;
  exported.updateDash(scene,p,{pressed:true,right:true,up:true,now:4000});

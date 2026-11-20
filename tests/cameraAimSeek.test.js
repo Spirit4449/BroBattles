@@ -7,6 +7,7 @@ loadClientModule(require.resolve('../src/client/game/scene/cameraDynamics.js'), 
 const { updateDynamicCamera, restingCameraFrame, triggerWallJumpCameraKick } = exportsObject;
 
 const { arenaFor, arenaIds } = require('../src/shared/maps/arenas');
+const { BRO_BALL_VARIANT } = require('../src/shared/broBall');
 
 // Use Phaser's actual follow, dead-zone, bounds, and matrix pipeline here.
 const Camera = require('phaser/src/cameras/2d/Camera');
@@ -129,6 +130,22 @@ test('landing carry follows elapsed time and clears on reset, spectate, shutdown
     }
     assert.equal(scene._landingCameraOffsetY, 0);
     assert.equal(scene._landingCameraCarry, null);
+  }
+});
+
+test('Sunset Bowl shows more of the arena through the climb while other profiles share a scale', () => {
+  const profiles = [...arenaIds(), 'duels-1v1', 'duels-2v2']
+    .filter(id => id !== BRO_BALL_VARIANT)
+    .map(id => arenaFor(id).camera);
+  const broBall = arenaFor(BRO_BALL_VARIANT).camera;
+  for (const fraction of [0, 0.5, 1]) {
+    const zoomAtHeight = camera => {
+      const [top, floor] = camera.climbY;
+      return restingCameraFrame(top + (floor - top) * fraction, camera).zoom;
+    };
+    const zooms = profiles.map(zoomAtHeight);
+    assert.ok(zooms.every(zoom => zoom === zooms[0]));
+    assert.ok(zoomAtHeight(broBall) < zooms[0]);
   }
 });
 

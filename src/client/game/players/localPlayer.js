@@ -667,7 +667,7 @@ export function finalizeLocalSpawnPresentation() {
 }
 
 function fireBasicAttack(direction, context = null) {
-  if (dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
+  if (player?.scene?._modeRuntime?.goalPaused || dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
   try {
     if (player?.scene) {
       player.scene._localAttackPrecisionUntil = performance.now() + 420;
@@ -683,7 +683,7 @@ function fireBasicAttack(direction, context = null) {
 }
 
 function fireSpecialAttack(context = null) {
-  if (dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
+  if (player?.scene?._modeRuntime?.goalPaused || dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
   if (localStats.superCharge < localStats.maxSuperCharge) {
     triggerSpecialNotReadyFeedback();
     return;
@@ -712,10 +712,12 @@ function fireSpecialAttack(context = null) {
     }
   } catch (_) {}
   noteClientActionSent("special", { type: "special" });
-  const specialRequest = { aim: serializeAimContext(context) };
-  socket.emit(SOCKET_EVENTS.GAME_SPECIAL, withShotView(predictCharacterSpecial(
-    currentCharacter, player?.scene, player, username, specialRequest,
-  )));
+  const specialRequest = predictCharacterSpecial(
+    currentCharacter, player?.scene, player, username, { aim: serializeAimContext(context) },
+  );
+  const rally = player?.scene?._modeRuntime?.rally;
+  if (rally != null) specialRequest.broBallRally = rally;
+  socket.emit(SOCKET_EVENTS.GAME_SPECIAL, withShotView(specialRequest));
 }
 
 function triggerSpecialNotReadyFeedback() {
@@ -839,6 +841,7 @@ function isLocalInputInactive(scene) {
 }
 
 function isControlLocked(now = Date.now()) {
+  if (player?.scene?._modeRuntime?.goalPaused) return true;
   return Math.max(
     Number(player?._movementLockedUntil || 0),
     Number(player?._externalControlLockUntil || 0),

@@ -251,7 +251,7 @@ export function bindLocalSocketEvents({
       // Animation frames can change the display origin; refresh the body before
       // drawing UI anchored to its top edge.
       player.body?.updateFromGameObject?.();
-      spawnRespawnEffect(scene, player);
+      spawnRespawnEffect(scene, player, { silent: payload.kickoff === true });
     } catch (_) {}
 
     try {

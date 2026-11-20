@@ -229,6 +229,8 @@ function broadcastSnapshot(room, extraTiming = null) {
     snapshotEpoch: snapshotEpoch(room),
     snapshotKind: extraTiming ? "periodic" : "event",
   };
+  const ball = room.gameMode?.buildMovementState?.();
+  if (ball) snapshot.ball = ball;
   const players = {};
   // The wall-clock instant this snapshot's simulation time stands for.
   const wallAt = Number.isFinite(tMono) ? wall - (sentMono - tMono) : wall;

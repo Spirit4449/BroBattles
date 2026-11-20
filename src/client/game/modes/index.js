@@ -3,6 +3,8 @@ import { supportsSuddenDeath } from '../../../shared/modeCapabilities';
 const loadedModes = new Map();
 const pendingModes = new Map();
 const modeLoaders = {
+  soccer: () => import(/* webpackChunkName: "mode-bro-ball" */ "./broBall/runtime")
+    .then((runtime) => ({ create: runtime.createBroBallRuntime, preload: runtime.preloadBroBallAssets })),
   'bank-bust': () =>
     Promise.all([
       import(/* webpackChunkName: "mode-bank-bust" */ './bankBust/runtime'),

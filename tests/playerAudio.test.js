@@ -191,3 +191,135 @@ describe("Replicated movement cues", () => {
   });
 
 });
+
+describe('Bro Ball audio', () => {
+  const { EventEmitter } = require('node:events');
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const map = require('../src/shared/maps/6.json');
+  const { ballRules } = require('../src/shared/broBall');
+  const document = { hidden: false };
+  const graph = createClientModuleGraph({ globals: { document } });
+  const { broBallMovementTerrain, createBroBallAudio } = graph.load('src/client/game/modes/broBall/audio.js');
+  const { canPlayTerrainCue, movementTerrainAt } = graph.load('src/client/game/audio/movementAudio.js');
+  const objects = map.layout.hitboxes.map(({ id, x, y, width, height, collision }) => ({
+    _mapObjectId: id,
+    body: { enable: true, left: x - width / 2, right: x + width / 2, top: y - height / 2, checkCollision: collision },
+  }));
+  const getSurface = id => objects.find(o => o._mapObjectId === id).body;
+
+  test('movement uses the supporting material for local and replicated landings', () => {
+    const scene = { _mapObjects: objects, _terrainType: 'grass', _movementTerrainAt: broBallMovementTerrain };
+    const deck = getSurface('platform-left');
+    const goal = getSurface('left-goal-base');
+    const fighter = {
+      body: { left: deck.left + 10, right: deck.left + 50, bottom: deck.top, width: 40, height: 80, offset: { x: 0, y: 0 } },
+      scaleX: 1, scaleY: 1, displayOriginX: 20, displayOriginY: 40,
+    };
+    assert.equal(movementTerrainAt(scene, fighter), 'wood');
+    fighter.body.bottom -= 120;
+    assert.equal(movementTerrainAt(scene, fighter, { x: deck.left + 30, y: deck.top - 40 }), 'wood');
+    assert.equal(movementTerrainAt(scene, fighter, { x: goal.left + 30, y: goal.top - 40 }), 'hard');
+    assert.equal(movementTerrainAt(scene, fighter, { x: deck.left + 30, y: getSurface('pitch-floor').top - 40 }), 'grass');
+  });
+
+  test('a deck creak needs a strong landing and reserves time to decay across fighters', () => {
+    const { cadence } = require('../src/shared/physics/terrainAudio.json').terrains.wood;
+    const local = { x: 620, y: 730 };
+    const teammate = { x: 635, y: 730 };
+    const scene = { time: { now: 100 }, _localPlayerAudioSprite: local };
+    const step = { volume: 0.1 };
+    const softLanding = { volume: 0.2, landingStrength: cadence.minLandingStrength / 2 };
+    const hardLanding = { volume: 0.3, landingStrength: 1 };
+    assert.equal(canPlayTerrainCue(scene, 'wood', softLanding), false);
+    assert.equal(canPlayTerrainCue(scene, 'wood', step), true);
+    assert.equal(canPlayTerrainCue(scene, 'wood', { ...step, source: teammate }), false);
+    scene.time.now += cadence.stepGapMs;
+    assert.equal(canPlayTerrainCue(scene, 'wood', { ...hardLanding, source: teammate }), true);
+    assert.equal(canPlayTerrainCue(scene, 'wood', step), false);
+    assert.equal(canPlayTerrainCue(scene, 'wood', hardLanding), false);
+    assert.equal(canPlayTerrainCue(scene, 'grass', step), true);
+    scene.time.now += cadence.landingTailMs;
+    assert.equal(canPlayTerrainCue(scene, 'wood', step), true);
+    assert.equal(canPlayTerrainCue(scene, 'wood', hardLanding), false);
+    scene.time.now += cadence.landingGapMs;
+    assert.equal(canPlayTerrainCue(scene, 'wood', hardLanding), true);
+  });
+
+  test('off-camera ball impacts stay audible and powerful shots get a single launch swish', () => {
+    const calls = [], fades = [], loops = new Map();
+    const scene = {
+      events: new EventEmitter(), game: { events: new EventEmitter() }, time: { now: 8000 },
+      cache: { audio: { exists: () => true } },
+      _mapObjects: objects, _localPlayerAudioSprite: { x: 1000, y: 850 },
+      cameras: { main: { worldView: { x: 850, y: 680, width: 400, height: 270 } } },
+      _bgmEnvelope: { fade: intensity => fades.push(intensity) },
+      sound: {
+        play(key, options) {
+          calls.push({ key, ...options });
+          return true;
+        },
+        add(key) {
+          const sound = {
+            play(options) { this.isPlaying = true; Object.assign(this, options); },
+            stop() { this.isPlaying = false; },
+            setVolume(volume) { this.volume = volume; },
+            setRate() {},
+            destroy() { this.destroyed = true; },
+          };
+          loops.set(key, sound);
+          return sound;
+        },
+      },
+    };
+    const audio = createBroBallAudio(scene);
+    const ball = { x: 300, y: getSurface('pitch-floor').top - ballRules.radius, vx: ballRules.kickSpeed, vy: 0 };
+    audio.kickoff(true);
+    calls.length = 0;
+    const airborne = { ...ball, y: ball.y - 120, vx: ballRules.dashSpeed, vy: -150 };
+    audio.update(airborne, 0.016, false);
+    const crowd = loops.get('bro-ball-stands-crowd');
+    assert.ok(crowd.isPlaying);
+    assert.equal(loops.size, 1, 'open air has no ball loop');
+    assert.equal(calls.length, 0);
+    audio.update({ ...ball, y: ball.y - 4, vy: ballRules.settleSpeed / 2 }, 0.016, false);
+    assert.ok(loops.get('bro-ball-roll').isPlaying);
+    audio.impact({ ...ball, kind: 'body', seq: 1, strength: ballRules.settleSpeed }, false);
+    assert.equal(calls[0].key, 'bro-ball-touch');
+    assert.ok(calls[0].volume > 0 && calls[0].pan < 0, 'off-camera taps keep their direction and remain audible');
+    audio.impact({ ...ball, kind: 'kick', seq: 2, strength: ballRules.kickSpeed }, false);
+    audio.impact({ ...ball, kind: 'super', seq: 3, strength: ballRules.superKickSpeed }, false);
+    audio.update(airborne, 0.016, false);
+    assert.deepEqual(calls.slice(1).map(call => call.key), ['bro-ball-kick', 'bro-ball-kick-2', 'bro-ball-shot-swish']);
+    calls.length = 0;
+    audio.impact({ ...ball, kind: 'post', seq: 4, strength: ballRules.kickSpeed }, false);
+    assert.deepEqual(calls.map(call => call.key), ['bro-ball-rebound']);
+    calls.length = 0;
+    audio.impact({ ...ball, kind: 'goal', seq: 5, strength: ballRules.kickSpeed }, false);
+    assert.deepEqual(calls.map(call => call.key), ['bro-ball-rebound', 'bro-ball-goal-celebration']);
+    assert.ok(calls[1].volume > calls[0].volume, 'the stadium celebration leads the rebound');
+    const previousCrowdVolume = crowd.volume;
+    audio.update(airborne, 0.016, true);
+    assert.ok(crowd.volume > previousCrowdVolume, 'the live stadium bed swells during the goal');
+    audio.kickoff();
+    assert.equal(loops.get('bro-ball-roll').isPlaying, false);
+    assert.equal(loops.get('bro-ball-stands-crowd'), crowd);
+    assert.ok(crowd.isPlaying, 'the stadium crowd keeps playing through a goal and kickoff');
+    assert.equal(calls.at(-1).key, 'bro-ball-kickoff-whistle');
+    assert.ok(fades[0] < fades[1]);
+    const winningImpact = { ...ball, kind: 'goal', seq: 6, winner: 'team1', strength: ballRules.kickSpeed };
+    audio.impact(winningImpact, false, 'team2');
+    assert.deepEqual(calls.slice(-3).map(call => call.key),
+      ['bro-ball-rebound', 'bro-ball-goal-celebration', 'bro-ball-final-whistle']);
+    assert.equal(audio.playedWinningGoal, false);
+    audio.impact(winningImpact, false, 'team1');
+    assert.deepEqual(calls.slice(-3).map(call => call.key),
+      ['bro-ball-rebound', 'bro-ball-goal-victory', 'bro-ball-final-whistle']);
+    assert.equal(audio.playedWinningGoal, true);
+    scene._battleEnded = true;
+    audio.update(ball, 0.016, false);
+    assert.equal(crowd.isPlaying, false);
+    audio.destroy();
+    assert.ok([...loops.values()].every(sound => sound.destroyed));
+    assert.equal(scene.game.events.listenerCount('blur'), 0);
+  });
+});

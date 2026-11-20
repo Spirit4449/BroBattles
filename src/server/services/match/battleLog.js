@@ -22,6 +22,7 @@ function formatModeLabel(modeId, modeVariantId) {
     return "Bank Bust 3v3";
   }
   const { mode, variant } = getVariantDescriptor(modeId, modeVariantId);
+  if (mId === "soccer") return [mode.label, variant?.label].filter(Boolean).join(" ");
   if (variant?.name && mode?.name) {
     return `${variant.name} ${mode.name}`;
   }

@@ -1,6 +1,8 @@
 import { createVaultHud } from "./bankBust/vaultHud";
 
-const factories = new Map([["bank-bust", createVaultHud]]);
+import { createBroBallHud } from "./broBall/hud";
+
+const factories = new Map([["bank-bust", createVaultHud], ["soccer", createBroBallHud]]);
 
 // HUDs can receive a snapshot before the Phaser scene finishes loading.
 export function createModeHud(type, isIntroBlocking) {

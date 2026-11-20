@@ -3,7 +3,10 @@ const { DuelsGameMode } = require("./DuelsGameMode");
 const { BankBustGameMode } = require("./bankBust/BankBustGameMode.js");
 const { UnimplementedGameMode } = require("./UnimplementedGameMode");
 
-const MODE_RUNTIMES = { duels: DuelsGameMode, 'bank-bust': BankBustGameMode };
+const { BroBallGameMode } = require('./broBall/BroBallGameMode');
+const { BRO_BALL_MODE } = require('../../../shared/broBall');
+
+const MODE_RUNTIMES = { duels: DuelsGameMode, 'bank-bust': BankBustGameMode, [BRO_BALL_MODE]: BroBallGameMode };
 
 const MODE_BY_ID = new Map(
   (Array.isArray(gameModesCatalog?.modes) ? gameModesCatalog.modes : []).map(

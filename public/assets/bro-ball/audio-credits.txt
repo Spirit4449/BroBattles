@@ -1,0 +1,47 @@
+Bro Ball audio credits
+
+Sunset Bowl music
+“Go Cart - Loop Mix” by Kevin MacLeod (incompetech.com)
+https://www.incompetech.com/music/royalty-free/index.html?isrc=USUAN1300008
+Creative Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/
+The published game loop was re-encoded to 112 kbps MP3.
+
+Wimbledon Stadium crowd recordings by Dan_AudioFile
+“Football-match_Chanting-crowd_Ambience .stereo.wav”
+https://freesound.org/s/654084/
+“Football-match_Crowd_Cheer_Ambience .stereo.wav”
+https://freesound.org/s/654083/
+Creative Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/
+Excerpted, equalized, and crossfaded with the CC0 recordings below into
+the continuous Sunset Bowl crowd loop. The goal celebration layers the Wimbledon
+cheer, Eightmate's nearer crowd recording, and cognito perceptu's applause.
+
+Sound recordings (CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/)
+- Soccer Kick.wav by musita182 (kick)
+  https://freesound.org/s/261267/
+- Soccer Ball Kick Dribble in Grass by amsaenz03 (alternate kick)
+  https://freesound.org/s/788268/
+- Soccer Ball Bouncing and Rolling on Ground.wav by jpkweli (touch, bounces, rolling)
+  https://freesound.org/s/154786/
+- 10-2 Kicking a ball by 16GPanskaKomarkova_Marina (wall rebound and goal frame)
+  https://freesound.org/s/496736/
+- Soccer net by Luisa_Sanchez (goal net)
+  https://freesound.org/s/813410/
+- Referee whistle sound.wav by Rosa-Orenes256 (kickoff and three-part final whistle)
+  https://freesound.org/s/538422/
+- Local Football Crowd Cheering by Eightmate (stadium ambience and goal reaction)
+  https://freesound.org/s/752672/
+- applause.wav by cognito perceptu (stands applause)
+  https://freesound.org/s/57587/
+- wood creak.WAV by myfreesoundaccount1998 (wood steps, goal frame, and truss landing)
+  https://freesound.org/s/543241/
+- Wood Creak Single V3 by Rudmer_Rotteveel (truss landing)
+  https://freesound.org/s/502511/
+- hit - metallic - metal pipe 02.wav by Anthousai (truss landing)
+  https://freesound.org/s/406555/
+
+Recordings were excerpted, filtered, and level-matched. The rolling and crowd
+loops were crossfaded. The rolling loop also layers a synthesized rubber brush.
+The short shot swish and the goal and victory celebrations' percussion and
+confetti bursts are synthesized for Bro Ball. The victory mix layers the
+same crowd and applause recordings with a longer second swell.

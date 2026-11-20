@@ -2,14 +2,14 @@ import { RENDER_LAYERS } from './renderLayers';
 import { playPlayerSound } from '../audio/playerAudio';
 
 // World-space arrival cue: never tween the fighter or delay their controls.
-export function spawnRespawnEffect(scene, sprite) {
+export function spawnRespawnEffect(scene, sprite, { silent = false } = {}) {
   if (!scene?.add || !scene?.tweens || !sprite || sprite.active === false) return;
   const body = sprite.body;
   const x = body?.center?.x ?? sprite.x;
   const bottom = body?.bottom ?? sprite.y;
   if (!Number.isFinite(x) || !Number.isFinite(bottom)) return;
   // Optional audio can still be loading when a player first respawns.
-  if (scene.cache?.audio?.exists('sfx-respawn')) {
+  if (!silent && scene.cache?.audio?.exists('sfx-respawn')) {
     playPlayerSound(scene, sprite, 'sfx-respawn', { volume: 0.5 });
   }
   const width = Math.max(36, Number(body?.width) || 48);

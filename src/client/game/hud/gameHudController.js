@@ -1018,7 +1018,9 @@ export function createGameHudController({
       return;
     }
     preloadSound("beep");
-    preloadSound("start");
+    const isBroBall = _gameData()?.modeId === "soccer";
+    const startCue = isBroBall ? "kickoffWhistle" : "start";
+    preloadSound(startCue);
 
     try {
       if (typeof onCountdownStart === "function") onCountdownStart();
@@ -1066,8 +1068,8 @@ export function createGameHudController({
     }
     at(totalMs, () => {
       countdownEl.textContent = "FIGHT!";
-      playSound("start", 0.8);
-      playFightBoom();
+      playSound(startCue, 0.8);
+      if (!isBroBall) playFightBoom();
       overlay?.classList?.add("is-fight");
       if (fightBurst) {
         fightBurst.classList.remove("hidden");

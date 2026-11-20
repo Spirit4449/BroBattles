@@ -260,27 +260,26 @@
     },
     {
       "id": "soccer",
-      "label": "Soccer",
-      "description": "Score more goals than the other side.",
+      "label": "Bro Ball",
+      "description": "Kick the loose ball into the other team’s goal.",
       "details": [
-        "Hit the ball into the other team's goal to score.",
-        "Your attacks push the ball, so aim your hits. Keep a teammate back to defend your goal.",
-        "The team with the most goals at the end wins."
+        "Body contact deflects the ball. Time your attack for a kick, or aim and release to place your shot.",
+        "Dash into the ball for a Super Kick. Use your normal attacks to keep the other team away from the ball.",
+        "First to five goals wins. Tied matches go to golden goal."
       ],
       "artAsset": "/assets/map-banners/soccer.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
-      "queueable": false,
-      "implemented": false,
+      "queueable": true,
+      "implemented": true,
       "topology": "team-vs-team",
-      "runtimeClass": "unimplemented",
+      "runtimeClass": "soccer",
       "botObjective": {
         "kind": "score-goals",
         "label": "Score against the opposing team"
       },
-      "queueDisabledReason": "Soccer is not playable yet.",
       "lobbyPresentation": {
         "selectionStyle": "direct",
-        "subtitle": "Coming soon"
+        "subtitle": "2v2 ball combat"
       },
       "capabilities": {
         "respawns": true,
@@ -289,10 +288,22 @@
         "verticalScrolling": false,
         "aiBots": true,
         "economy": false,
-        "modeState": true
+        "modeState": true,
+        "suddenDeath": false
       },
-      "variants": [],
-      "unlockTrophies": 1500
+      "variants": [
+        {
+          "id": "soccer-2v2",
+          "label": "2v2",
+          "subtitle": "Score on the other team.",
+          "teamCount": 2,
+          "playersPerTeam": 2,
+          "maxPlayers": 4,
+          "lobbyLayout": "mirrored-teams"
+        }
+      ],
+      "unlockTrophies": 1500,
+      "defaultVariantId": "soccer-2v2"
     },
     {
       "id": "bedwars",

@@ -526,6 +526,9 @@ export function createGameOverScreenController({
       )
       .join("");
 
+    const score = payload?.meta?.broBallScore;
+    const scoreLine = Number.isSafeInteger(score?.team1) && Number.isSafeInteger(score?.team2)
+      ? `<p>Bro Ball · ${score.team1}–${score.team2}</p>` : "";
     div.innerHTML = `
       <div class="bb-game-over-backdrop">
         <aside class="bb-game-over-wallet" aria-label="Updated balances" aria-hidden="true">
@@ -540,6 +543,7 @@ export function createGameOverScreenController({
           <header class="bb-game-over-hero">
             <h1 class="bb-game-over-title ${resultTone}">${heading}</h1>
             <p>${escapeHtml(resultMessage)}</p>
+            ${scoreLine}
           </header>
           <div class="bb-game-over-content">
             ${personalSummaryHtml}

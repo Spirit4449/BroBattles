@@ -1,3 +1,4 @@
+const { BRO_BALL_MODE } = require("../../../shared/broBall");
 const { getConfig } = require("../../config");
 const { logIgnored } = require("../../lib/logIgnored");
 function createQueueTicketManager({
@@ -66,14 +67,14 @@ function createQueueTicketManager({
 
     await require("../../services/trophies/trophyModeAccess").assertModeAccess(db, selection.modeId, { partyId, userId });
     const S = teamSizeForSelection(selection);
+    const normalizedBots = partyId && selection.modeId !== BRO_BALL_MODE ? normalizeBotSlots(botSlots, S) : [];
     let counts = { t1: 0, t2: 0 };
     let size = 0;
     let mmr = 0;
 
     if (partyId) {
       counts = await getPartyTeamCounts(db, partyId);
-      const selectedBots = normalizeBotSlots(botSlots, S);
-      for (const bot of selectedBots) {
+      for (const bot of normalizedBots) {
         if (bot.team === "team1") counts.t1++;
         else counts.t2++;
       }
@@ -117,7 +118,6 @@ function createQueueTicketManager({
       ],
     );
     const key = partyId ? `p:${Number(partyId)}` : `u:${Number(userId)}`;
-    const normalizedBots = partyId ? normalizeBotSlots(botSlots, S) : [];
     if (normalizedBots.length) reservedBotSlots.set(key, normalizedBots);
     else reservedBotSlots.delete(key);
 

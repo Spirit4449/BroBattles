@@ -171,12 +171,12 @@
         ]
       },
       "1500": {
-        "title": "Soccer Unlocked",
+        "title": "Bro Ball Unlocked",
         "rewards": [
           {
             "kind": "mode",
             "itemId": "soccer",
-            "name": "Soccer",
+            "name": "Bro Ball",
             "image": "/assets/map-banners/soccer.webp",
             "rarity": "rare"
           }

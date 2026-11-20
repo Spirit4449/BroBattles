@@ -678,7 +678,9 @@ export function createMatchCoordinator(config) {
       ? getPlayer()
       : playerLookup.sprite(payload.username);
     if (!presentationSuppressed()) {
-      spawnDeathTombstone(getGameScene(), payload, dyingPlayer);
+      const scene = getGameScene();
+      spawnDeathTombstone(scene, payload, dyingPlayer);
+      scene?._modeRuntime?.onPlayerDeath?.(payload);
     }
     hud.setTeamHudPlayerAlive(payload.username, false);
     if (payload.username === getUsername() && !getGameEnded()) {

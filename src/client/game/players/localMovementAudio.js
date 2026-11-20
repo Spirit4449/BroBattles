@@ -4,7 +4,7 @@ import { movementSoundKey } from "../../../shared/physics/movementSounds";
 // wall-slide scrape and falling-air rush. One instance per player module; the
 // loops are (re)created per scene through attach().
 import { MOVEMENT_VFX_CONFIG } from "../scene/effects";
-import { getTerrainSteps, footstepVolume, fallingAirVolume } from "../audio/movementAudio";
+import { canPlayTerrainCue, getTerrainSteps, footstepVolume, fallingAirVolume, movementTerrainAt } from "../audio/movementAudio";
 
 
 export function createLocalMovementAudio() {
@@ -71,14 +71,17 @@ export function createLocalMovementAudio() {
     ensureLoops();
   }
 
-  function playStep(scene, speedRatio, isDirectionChange) {
+  function playStep(scene, fighter, speedRatio, isDirectionChange) {
     const speed = clamp01(Number(speedRatio) || 0);
-    const steps = getTerrainSteps(scene._terrainType);
+    const terrain = movementTerrainAt(scene, fighter);
+    const volume = footstepVolume(speed, isDirectionChange, terrain);
+    if (!canPlayTerrainCue(scene, terrain, { volume })) return;
+    const steps = getTerrainSteps(terrain);
     footstepCursor =
       (footstepCursor + (steps.length > 1 ? Phaser.Math.Between(1, steps.length - 1) : 1)) % steps.length;
     try {
       scene.sound.play(movementSoundKey(scene, steps[footstepCursor].key), {
-        volume: footstepVolume(speed, isDirectionChange, scene._terrainType),
+        volume,
         rate: (isDirectionChange ? 0.88 : 0.94) + speed * 0.14,
       });
     } catch (_) {}

@@ -118,8 +118,7 @@ export const FOLLOW_SCREEN_OFFSET = Object.freeze({ floor: 130, top: 180 });
 
 // Where the follow camera settles for a player standing at playerY: zoomed out
 // as the player climbs (more vertical context) and framed lower in the view as
-// they climb. The arena camera (arenas.json) sets the zoom range and the
-// heights it spans: maxZoom at or below climbY[1], minZoom at or above climbY[0].
+// they climb. Each arena maps the shared zoom range onto its climb heights: maxZoom at or below climbY[1], minZoom at or above climbY[0].
 // `followOffsetY` is in world pixels, as Phaser's follow offset expects.
 export function restingCameraFrame(playerY, camera) {
   const [high, low] = camera.climbY;

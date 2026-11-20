@@ -20,6 +20,7 @@ function request(room,p,data={},special=false){
   const reason=!id||!Number.isFinite(angle)?'invalid-request':unavailableReason(room,p,now)||(!isCharged(p,special)?'not-ready':null);
   if(!reason){
     spendShot(room,p,special,now);
+    room.gameMode?.onAttackAccepted?.(p, data, special);
     p._visibleAttack={at:now,startupMs:0,angle};
     if(special)room.broadcast(SOCKET_EVENTS.PLAYER_SPECIAL,{username:p.name,character:'ninja',aim:{angle}});
     const count=special?model.swarmConfig().count:1;

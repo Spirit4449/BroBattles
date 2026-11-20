@@ -49,6 +49,7 @@ const soundFiles = {
   notification: "notification",
   beep: "/assets/game-sounds/beep.mp3",
   start: "/assets/game-sounds/start.mp3",
+  kickoffWhistle: "/assets/bro-ball/kickoff-whistle.mp3",
   playerJoin: "/assets/player-join.mp3",
   upgrade: "/assets/upgrade.mp3",
   unlock: "/assets/unlock.mp3",

@@ -86,41 +86,46 @@ describe("HUD preparation and match cues", () => {
     assert.deepEqual(paused.slice(-2), [[opponentCard.id, false], [selfCard.id, false]]);
   });
 
-  test("final countdown cue plays once alongside FIGHT and enabling input", () => {
-    const exported = {}, calls = [], preloaded = [], timers = [], risers = [];
-    const { COUNTDOWN_MS, COUNTDOWN_RISER_MS } = require('../src/shared/matchIntroTiming');
-    const countdown = { style: {}, textContent: '' };
-    let now = 0, fights = 0, enabled = 0;
-    loadClientModule(path.join(root, "src/client/game/hud/gameHudController.js"), {
-      exports: exported,
-      require: name => name.includes('uiSounds') ? {
-        playSound: key => calls.push({ key, time: now, display: countdown.textContent }),
-        preloadSound: key => preloaded.push(key),
-      } : name.includes('countdownSfx') ? {
-        playCountdownThump() {},
-        playCountdownRiser: duration => risers.push({ duration, time: now }),
-        playFightBoom() {},
-      } : {},
-      window: { addEventListener() {} },
-      document: { getElementById: id => id === 'countdown-display' ? countdown : null },
-      setTimeout: (fn, ms) => timers.push({ fn, time: now + ms }),
-      clearTimeout() {},
+  for (const [modeId, cue] of [['duels', 'start'], ['soccer', 'kickoffWhistle']]) {
+    test(`${modeId} plays its opening cue once at FIGHT and enables input`, () => {
+      const exported = {}, calls = [], preloaded = [], timers = [], risers = [];
+      const { COUNTDOWN_MS, COUNTDOWN_RISER_MS } = require('../src/shared/matchIntroTiming');
+      const countdown = { style: {}, textContent: '' };
+      let now = 0, fights = 0, enabled = 0, booms = 0;
+      loadClientModule(path.join(root, "src/client/game/hud/gameHudController.js"), {
+        exports: exported,
+        require: name => name.includes('uiSounds') ? {
+          playSound: key => calls.push({ key, time: now, display: countdown.textContent }),
+          preloadSound: key => preloaded.push(key),
+        } : name.includes('countdownSfx') ? {
+          playCountdownThump() {},
+          playCountdownRiser: duration => risers.push({ duration, time: now }),
+          playFightBoom() { booms++; },
+        } : {},
+        window: { addEventListener() {} },
+        document: { getElementById: id => id === 'countdown-display' ? countdown : null },
+        setTimeout: (fn, ms) => timers.push({ fn, time: now + ms }),
+        clearTimeout() {},
+      });
+      const hud = exported.createGameHudController({
+        getGameData: () => ({ modeId }),
+        onCountdownFight: () => fights++, onEnableInput: () => enabled++,
+      });
+      hud.startCountdown(); hud.startCountdown();
+      assert.deepEqual(preloaded, ['beep', cue]);
+      while (timers.length) {
+        timers.sort((a, b) => a.time - b.time);
+        const timer = timers.shift(); now = timer.time; timer.fn();
+      }
+      assert.deepEqual(calls.map(call => call.key), ['beep', 'beep', 'beep', 'beep', 'beep', cue]);
+      assert.equal(calls.at(-1).time, COUNTDOWN_MS);
+      assert.equal(calls.at(-1).display, 'FIGHT!');
+      assert.deepEqual(risers, [{ duration: COUNTDOWN_RISER_MS, time: COUNTDOWN_MS - COUNTDOWN_RISER_MS }]);
+      assert.equal(fights, 1);
+      assert.equal(enabled, 1);
+      assert.equal(booms, modeId === 'soccer' ? 0 : 1);
     });
-    const hud = exported.createGameHudController({
-      onCountdownFight: () => fights++, onEnableInput: () => enabled++,
-    });
-    hud.startCountdown(); hud.startCountdown();
-    assert.deepEqual(preloaded, ['beep', 'start']);
-    while (timers.length) {
-      timers.sort((a, b) => a.time - b.time);
-      const timer = timers.shift(); now = timer.time; timer.fn();
-    }
-    assert.deepEqual(calls.map(call => call.key), ['beep', 'beep', 'beep', 'beep', 'beep', 'start']);
-    assert.equal(calls.at(-1).display, 'FIGHT!');
-    assert.deepEqual(risers, [{ duration: COUNTDOWN_RISER_MS, time: COUNTDOWN_MS - COUNTDOWN_RISER_MS }]);
-    assert.equal(fights, 1);
-    assert.equal(enabled, 1);
-  });
+  }
 
 });
 

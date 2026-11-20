@@ -1,5 +1,6 @@
 const { normalizeDuelVariant } = require("../../shared/maps/duelVariants.js");
 const { clone, geometryFromMap, constrainPoint, upgradeDuelMap } = require('../../shared/maps/mapDocument');
+const { BRO_BALL_MODE } = require("../../shared/broBall");
 const { arenaFor } = require('../../shared/maps/arenas');
 function allRows(map) {
   const rows = [...map.layout.platforms.map(value=>({kind:'platform',value})), ...map.layout.hitboxes.map(value=>({kind:'hitbox',value}))];
@@ -122,7 +123,16 @@ function retargetMap(document, modeVariantId) {
     copy.spawns.players[team]=Array.from({length:arena.playersPerTeam},(_,i)=>clone(slots[Math.min(i,slots.length-1)]));
   }
   if(arena.modeId==='bank-bust'&&!copy.objectiveLayout?.bankBust)throw Error(`${arena.label} needs vaults and objectives. Start from a ${arena.label} map.`);
-  if(arena.modeId!=='bank-bust')delete copy.objectiveLayout;
+  if (arena.modeId === BRO_BALL_MODE && !copy.objectiveLayout?.broBall) {
+    throw Error(`${arena.label} needs a kickoff and goals. Start from a Bro Ball map.`);
+  }
+  if (arena.modeId === BRO_BALL_MODE) {
+    copy.objectiveLayout = { broBall: copy.objectiveLayout.broBall };
+  } else if (arena.modeId === 'bank-bust') {
+    copy.objectiveLayout = { bankBust: copy.objectiveLayout.bankBust };
+  } else {
+    delete copy.objectiveLayout;
+  }
   return copy;
 }
 module.exports.retargetMap=retargetMap;

@@ -1,0 +1,566 @@
+{
+  "schemaVersion": 2,
+  "id": 6,
+  "label": "Sunset Bowl",
+  "modeVariantId": "soccer-2v2",
+  "metadata": {
+    "key": "sunset-bowl",
+    "terrain": "grass",
+    "musicAsset": "/assets/bro-ball/sunset-bowl-music.mp3",
+    "musicVolume": 0.13,
+    "mapSelectPreviewAsset": "/assets/map-banners/soccer.webp"
+  },
+  "assets": {
+    "bro-ball-pitch": {
+      "type": "image",
+      "url": "/assets/bro-ball/pitch.webp"
+    },
+    "bro-ball-wall-team1": {
+      "type": "image",
+      "url": "/assets/bro-ball/wall-team1.webp"
+    },
+    "bro-ball-wall-team2": {
+      "type": "image",
+      "url": "/assets/bro-ball/wall-team2.webp"
+    },
+    "bro-ball-platform": {
+      "type": "image",
+      "url": "/assets/bro-ball/platform.webp"
+    },
+    "bro-ball-roof": {
+      "type": "image",
+      "url": "/assets/bro-ball/stadium-roof.webp"
+    },
+    "bro-ball-wall-log": {
+      "type": "image",
+      "url": "/assets/bro-ball/wall-log.webp"
+    }
+  },
+  "textureSizes": {
+    "bro-ball-pitch": {
+      "width": 900,
+      "height": 140
+    },
+    "bro-ball-wall-team1": {
+      "width": 169,
+      "height": 253
+    },
+    "bro-ball-wall-team2": {
+      "width": 169,
+      "height": 253
+    },
+    "bro-ball-platform": {
+      "width": 89,
+      "height": 223
+    },
+    "bro-ball-roof": {
+      "width": 900,
+      "height": 61
+    },
+    "bro-ball-wall-log": {
+      "width": 50,
+      "height": 8
+    }
+  },
+  "layout": {
+    "platforms": [
+      {
+        "textureKey": "bro-ball-pitch",
+        "id": "pitch-art",
+        "x": 1020,
+        "y": 1097,
+        "scaleX": 3,
+        "scaleY": 3,
+        "flipX": false,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "depth": 1
+      },
+      {
+        "textureKey": "bro-ball-wall-team1",
+        "id": "wall-left-art",
+        "x": -12.5,
+        "y": 520.5,
+        "scaleX": 3,
+        "scaleY": 3,
+        "flipX": false,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "depth": 2
+      },
+      {
+        "textureKey": "bro-ball-wall-team2",
+        "id": "wall-right-art",
+        "x": 2052.5,
+        "y": 520.5,
+        "scaleX": 3,
+        "scaleY": 3,
+        "flipX": true,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "depth": 2
+      },
+      {
+        "textureKey": "bro-ball-platform",
+        "id": "platform-left-art",
+        "x": 670.5,
+        "y": 466.5,
+        "scaleX": 3,
+        "scaleY": 3,
+        "flipX": false,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "depth": 1.5
+      },
+      {
+        "textureKey": "bro-ball-platform",
+        "id": "platform-right-art",
+        "x": 1370.5,
+        "y": 466.5,
+        "scaleX": 3,
+        "scaleY": 3,
+        "flipX": false,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "depth": 1.5
+      },
+      {
+        "textureKey": "bro-ball-roof",
+        "id": "canopy-art",
+        "x": 1020,
+        "y": 52.5,
+        "scaleX": 3,
+        "scaleY": 3,
+        "flipX": false,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "depth": 33.5
+      },
+      {
+        "textureKey": "bro-ball-wall-log",
+        "id": "wall-log-left-art",
+        "x": 312,
+        "y": 423,
+        "scaleX": 3,
+        "scaleY": 3,
+        "flipX": false,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "depth": 1.5
+      },
+      {
+        "textureKey": "bro-ball-wall-log",
+        "id": "wall-log-right-art",
+        "x": 1728,
+        "y": 423,
+        "scaleX": 3,
+        "scaleY": 3,
+        "flipX": true,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "depth": 1.5
+      }
+    ],
+    "hitboxes": [
+      {
+        "id": "pitch-floor",
+        "x": 1020,
+        "y": 950,
+        "width": 2240,
+        "height": 100
+      },
+      {
+        "id": "ceiling",
+        "x": 1020,
+        "y": 102,
+        "width": 2240,
+        "height": 60
+      },
+      {
+        "id": "left-net-wall",
+        "x": -7,
+        "y": 516,
+        "width": 50,
+        "height": 768
+      },
+      {
+        "id": "right-net-wall",
+        "x": 2047,
+        "y": 516,
+        "width": 50,
+        "height": 768
+      },
+      {
+        "id": "left-crossbar",
+        "x": 129,
+        "y": 358.5,
+        "width": 222,
+        "height": 453
+      },
+      {
+        "id": "right-crossbar",
+        "x": 1911,
+        "y": 358.5,
+        "width": 222,
+        "height": 453
+      },
+      {
+        "id": "left-goal-base",
+        "x": 129,
+        "y": 842.5,
+        "width": 222,
+        "height": 115
+      },
+      {
+        "id": "right-goal-base",
+        "x": 1911,
+        "y": 842.5,
+        "width": 222,
+        "height": 115
+      },
+      {
+        "id": "platform-left",
+        "x": 670,
+        "y": 785,
+        "width": 260,
+        "height": 20,
+        "collision": {
+          "up": true,
+          "down": false,
+          "left": false,
+          "right": false
+        }
+      },
+      {
+        "id": "platform-right",
+        "x": 1370,
+        "y": 785,
+        "width": 260,
+        "height": 20,
+        "collision": {
+          "up": true,
+          "down": false,
+          "left": false,
+          "right": false
+        }
+      },
+      {
+        "id": "wall-log-left",
+        "x": 313.5,
+        "y": 423,
+        "width": 147,
+        "height": 24,
+        "collision": {
+          "up": true,
+          "down": false,
+          "left": false,
+          "right": false
+        }
+      },
+      {
+        "id": "wall-log-right",
+        "x": 1726.5,
+        "y": 423,
+        "width": 147,
+        "height": 24,
+        "collision": {
+          "up": true,
+          "down": false,
+          "left": false,
+          "right": false
+        }
+      }
+    ]
+  },
+  "spawns": {
+    "players": {
+      "team1": [
+        {
+          "anchorId": "pitch-floor",
+          "dx": -170
+        },
+        {
+          "anchorId": "pitch-floor",
+          "dx": -550
+        }
+      ],
+      "team2": [
+        {
+          "anchorId": "pitch-floor",
+          "dx": 170
+        },
+        {
+          "anchorId": "pitch-floor",
+          "dx": 550
+        }
+      ]
+    },
+    "powerups": []
+  },
+  "anchors": {},
+  "objectiveLayout": {
+    "broBall": {
+      "kickoff": {
+        "x": 1020,
+        "y": 330
+      },
+      "goals": {
+        "team1": {
+          "x": 240,
+          "top": 585,
+          "bottom": 785,
+          "backX": 18
+        },
+        "team2": {
+          "x": 1800,
+          "top": 585,
+          "bottom": 785,
+          "backX": 2022
+        }
+      }
+    }
+  },
+  "scenery": {
+    "layers": [
+      {
+        "id": "sky",
+        "url": "/assets/bro-ball/sunset-gradient.webp",
+        "fit": "cover",
+        "scroll": 0.1,
+        "filter": "linear"
+      },
+      {
+        "id": "peaks",
+        "url": "/assets/bro-ball/sunset-peaks.webp",
+        "fit": "cover-x",
+        "scroll": 0.52,
+        "filter": "nearest",
+        "fog": 0.15,
+        "x": 0,
+        "y": -26,
+        "scale": 4
+      },
+      {
+        "id": "stands",
+        "url": "/assets/bro-ball/stands.webp",
+        "fit": "none",
+        "scroll": 1,
+        "filter": "nearest",
+        "fog": 0.31,
+        "x": 0,
+        "y": 37,
+        "scale": 3
+      }
+    ],
+    "clouds": {
+      "enabled": true,
+      "items": [
+        {
+          "id": "west-cloud",
+          "type": "cloud-6",
+          "x": 95,
+          "y": 247,
+          "speed": 6,
+          "scale": 0.56,
+          "alpha": 0.52,
+          "direction": "right",
+          "after": "sky"
+        },
+        {
+          "id": "upper-west-cloud",
+          "type": "cloud-1",
+          "x": 525,
+          "y": 199,
+          "speed": 5,
+          "scale": 0.54,
+          "alpha": 0.46,
+          "direction": "right",
+          "after": "sky"
+        },
+        {
+          "id": "midfield-cloud",
+          "type": "cloud-12",
+          "x": 940,
+          "y": 318,
+          "speed": 8,
+          "scale": 0.62,
+          "alpha": 0.52,
+          "direction": "right",
+          "after": "sky"
+        },
+        {
+          "id": "upper-east-cloud",
+          "type": "cloud-10",
+          "x": 1435,
+          "y": 222,
+          "speed": 6,
+          "scale": 0.53,
+          "alpha": 0.48,
+          "direction": "right",
+          "after": "sky"
+        },
+        {
+          "id": "east-cloud",
+          "type": "cloud-6",
+          "x": 1880,
+          "y": 257,
+          "speed": 7,
+          "scale": 0.63,
+          "alpha": 0.5,
+          "flipX": true,
+          "direction": "right",
+          "after": "sky"
+        }
+      ]
+    },
+    "atmosphere": {
+      "fogColor": "#f2b88f",
+      "glows": [
+        {
+          "after": "sky",
+          "x": -260,
+          "y": -600,
+          "scroll": 0.1,
+          "radius": 900,
+          "color": "#ffd49a",
+          "alpha": [
+            0.12,
+            0.22
+          ],
+          "periodMs": 9000
+        }
+      ],
+      "rays": [
+        {
+          "after": "peaks",
+          "x": -760,
+          "y": -780,
+          "scroll": 0.25,
+          "count": 5,
+          "angle": -24,
+          "spread": 20,
+          "length": 1900,
+          "width": [
+            90,
+            220
+          ],
+          "color": "#ffe2b0",
+          "alpha": [
+            0.03,
+            0.07
+          ],
+          "periodMs": [
+            6000,
+            11000
+          ]
+        }
+      ],
+      "mist": [
+        {
+          "after": "peaks",
+          "color": "#eeb3a9",
+          "alpha": 0.16,
+          "scroll": 0.52,
+          "y": 145,
+          "height": 300,
+          "speed": 5
+        }
+      ],
+      "dust": [
+        {
+          "after": "peaks",
+          "color": "#ffe7b0",
+          "count": 7,
+          "superHighCount": 10,
+          "scroll": 0.7,
+          "size": [
+            2,
+            5
+          ],
+          "alpha": 0.32
+        }
+      ],
+      "lamps": [
+        {
+          "x": 169,
+          "y": 359,
+          "length": 140,
+          "width": 180,
+          "color": "#ffb060",
+          "alpha": [
+            0.16,
+            0.26
+          ],
+          "periodMs": 1800,
+          "flicker": 0.5
+        },
+        {
+          "x": 1871,
+          "y": 359,
+          "length": 140,
+          "width": 180,
+          "color": "#ffb060",
+          "alpha": [
+            0.16,
+            0.26
+          ],
+          "periodMs": 1800,
+          "flicker": 0.5
+        }
+      ],
+      "vignette": {
+        "color": "#2a1838",
+        "alpha": 0.16
+      }
+    }
+  },
+  "powerups": {
+    "types": [],
+    "maxActive": 0,
+    "spawnIntervalMs": 25000,
+    "despawnMs": 10000,
+    "pickupRadius": 34,
+    "omenMs": 2000,
+    "spawnLift": 22
+  }
+}

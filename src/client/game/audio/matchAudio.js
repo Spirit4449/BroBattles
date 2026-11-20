@@ -35,7 +35,7 @@ export function stopSuddenDeathMusic(gameScene) {
   } catch (_) {}
 }
 
-export function playMatchEndSound(gameScene, winnerTeam, yourTeam) {
+export function playMatchEndSound(gameScene, winnerTeam, yourTeam, { skipSting = false } = {}) {
   if (document.hidden || !gameScene || !gameScene.sound) return;
   const key =
     winnerTeam == null || winnerTeam === "draw"
@@ -47,6 +47,7 @@ export function playMatchEndSound(gameScene, winnerTeam, yourTeam) {
     try {
       gameScene._bgmEl?.pause();
     } catch (_) {}
+    if (skipSting) return;
     try {
       gameScene.sound.play(key, {
         volume: key === "win" ? 0.55 : 0.48,

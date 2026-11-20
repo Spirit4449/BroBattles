@@ -8,6 +8,7 @@ export const RENDER_LAYERS = Object.freeze({
   // Foreground scenery, front light rays and dust: over fighters, under their HUD.
   SCENERY_FRONT: 33,
   PLAYER_HUD: 40,
+  BRO_BALL: 45,
   RETICLES: 50,
   ATTACKS: 60,
   POISON: 70,

@@ -28,7 +28,7 @@ Ordinary rewards alternate coins and gems, with amounts increasing through troph
 | Airdrop | 750 |
 | Numeric player icon | 1,000 |
 | Arena Spark player icon | 1,250 |
-| Soccer | 1,500 |
+| Bro Ball | 1,500 |
 | Slime Circuit player card | 1,750 |
 | Gloop | 2,000 |
 | Bedwars | 2,500 |

@@ -3,13 +3,9 @@ const { DUEL_DEFAULT_VARIANT, isDuelFormation } = require("./duelVariants.js");
 // authored world and camera profile independently of the match formation.
 // Legacy variant arenas remain readable for existing documents and snapshots.
 //
-// camera: the follow camera's bounds; `zoom` is the reference zoom scenery is
-// composed at; it eases between `maxZoom` with the player at or below
-// climbY[1] and `minZoom` at or above climbY[0] (cameraDynamics.js). Where the
-// player sits in the view is shared by every arena, in screen pixels
-// (FOLLOW_SCREEN_OFFSET in cameraDynamics.js), so it is not set here. Maps on
-// one arena keep their main floor at the same height (duels-1v1: y 580) so the
-// climb zoom and sudden-death poison behave alike on each.
+// Arenas share a default gameplay zoom range. A map profile can override
+// it to fit its layout, as Sunset Bowl does.
+const FOLLOW_ZOOM = Object.freeze({ minZoom: 1.4, maxZoom: 1.5 });
 const ARENAS = require('./arenas.json');
 const { modes } = require('../catalogs/gameModes.catalog.cjs');
 
@@ -20,10 +16,11 @@ for (const id of Object.keys(ARENAS)) {
 
 const resolved = new Map(Object.entries(ARENAS).map(([id, arena]) => {
   const { mode, variant } = variants.get(id);
+  const camera = { ...FOLLOW_ZOOM, ...arena.camera };
   return [id, Object.freeze({
     modeId: mode.id, modeVariantId: id, label: `${mode.label} ${variant.label}`,
     teamCount: variant.teamCount || 2, playersPerTeam: variant.playersPerTeam || 1,
-    world: Object.freeze({ ...arena.world }), camera: Object.freeze({ ...arena.camera }),
+    world: Object.freeze({ ...arena.world }), camera: Object.freeze({ ...camera, zoom: camera.minZoom }),
   })];
 }));
 

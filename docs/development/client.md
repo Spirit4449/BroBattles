@@ -18,6 +18,12 @@ client CSS lives in `src/client/styles/`, public-site CSS in `src/client/site/`,
 and feature-specific CSS can stay with its controller, as in `src/client/editor/mapEditor.css`.
 `public/styles/` contains directly served styles such as the local Lato font sheet.
 
+The dash’s cyan-and-white comet bow appears on the ball when its speed exceeds a quarter of the way from dash speed to smash speed. It follows the ball’s velocity, reaches full brightness at smash speed and respects reduced motion.
+
+In Bro Ball, the grandstand in `game/modes/broBall/crowd.js` follows the rendered ball for goalmouth anticipation and checks impact height and distance before triggering goalmouth reactions. Each fan has a preferred gesture, attention range, celebration delay and bounce rhythm. Ambient gestures and stadium waves pause during slow or stopped play. Reduced motion keeps the expressive poses with spectators seated in place.
+
+The Bro Ball scoreboard shows one chip per goal required to win. Each goal fills the next chip and triggers a team-colored glow and a confetti shower from the scoring panel. The goal banner pairs three pixel-text layouts with four animation styles, varying letter order, entrance and exit for each goal. Light and pixel confetti burst behind the letters in screen space, while the goal impact drives the light and confetti at the goalmouth and midfield. With reduced motion, the HUD displays the chips and full word immediately and suppresses the flares and particles.
+
 ### Lobby module state and slots
 
 `resetLobbyRoute` in `src/client/lobby/party/party.js` runs while retaining the
@@ -424,6 +430,7 @@ fighters (including snapshot recovery): a cyan arrival beam, two expanding
 foot rings, and rising pixel sparks clear within a second. The effect stays at
 the arrival position without changing the fighter's alpha, physics, or input.
 Scene shutdown and sprite destruction cancel its tweens and remove its objects.
+Bro Ball also plays the arrival beam at the opening kickoff and whenever fighters return to their spawn positions after a goal.
 Initial match arrivals retain the separate spawn burst; the existing respawn
 shield still indicates protection after the arrival cue ends. Fupicat's CC0
 Teleport cue (`game-sounds/respawn.mp3`) plays with the arrival effect through
@@ -681,6 +688,24 @@ Bank Bust vault damage reuses the shared coin-pickup sound, with randomized
 pitch and volume that scales with damage. Rapid hits are throttled, including
 when reduced motion is enabled.
 
+Sunset Bowl streams its own match music beneath a continuous loop of soccer fans
+cheering, chanting and clapping. The crowd swells after goals and big plays and
+continues through kickoff resets. Goals and goal-frame hits reuse the ball's wall
+rebound sound. Goals also play a stereo celebration cue with a percussion hit,
+confetti burst, applause, and a swelling crowd roar. The music drops sharply at
+the goal and comes back up at the next kickoff. One referee whistle cues the
+opening countdown's end and each restart after a goal. The opening whistle is
+warmed with the countdown sounds. A match-winning goal triggers three referee
+blasts for both teams. The winning side hears a five-second celebration that
+continues over the results overlay in place of the usual victory sting.
+Real fighter respawns keep
+their usual cue. Ball impact gain and pitch follow hit strength. Rolling has a
+speed-based loop, and powerful shots have a short swish at launch. The effects
+that come from the ball share a gain setting in
+[`broBall/audio.js`](../../src/client/game/modes/broBall/audio.js). They pan
+and attenuate with distance while staying audible outside the camera view. See the
+[Bro Ball audio credits](../../public/assets/bro-ball/audio-credits.txt).
+
 `public/assets/music/lobby-aligned.mp3` is the supplied 決戦の鐘 lobby render.
 `matchmaking-aligned.mp3` is the supplied lower-pitched 決戦の鐘 (0.76x) render. They stream
 through two persistent HTML audio elements owned by navigation; party changes preserve
@@ -768,7 +793,12 @@ retains shared samples. `src/shared/physics/movementSounds.js` owns the isolated
 mapping. Source and processing details live in
 `public/assets/bank-bust/movement/README.md`.
 
-This is a map-wide material, not automatic texture detection. Missing or unknown materials safely fall back to `hard`.
+The map material is the default. In Bro Ball, the supporting collider picks
+wood footsteps and a truss creak for the suspended decks and wall logs, and
+hard impacts for the goal structures. Wood cues share a cooldown across fighters.
+Only stronger landings trigger the creak, and footsteps wait for its tail. The
+pitch uses the map's grass sounds.
+Missing or unknown materials fall back to `hard`.
 
 To add another material, add a named entry to `src/shared/physics/terrainAudio.json`
 with a label, `volumeScale`, `landing`, and a nonempty `steps` array. Sound entries need

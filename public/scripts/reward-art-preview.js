@@ -38,7 +38,7 @@ const milestones = [
   [500, "500 trophies"],
   [750, "Airdrop"],
   [1000, "1,000 trophies"],
-  [1500, "Soccer"],
+  [1500, "Bro Ball"],
   [2500, "Bedwars"],
   [5000, "5,000 trophies"],
   [7500, "7,500 trophies"],

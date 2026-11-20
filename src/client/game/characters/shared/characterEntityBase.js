@@ -201,6 +201,8 @@ export default class CharacterEntityBase {
   static attackFlow = {};
 
   emitAttackAction(payload) {
+    const mode = this.scene?._modeRuntime;
+    if (mode?.rally != null) payload = { ...payload, broBallRally: mode.rally };
     socket.emit(SOCKET_EVENTS.GAME_ACTION, withShotView(payload));
   }
 

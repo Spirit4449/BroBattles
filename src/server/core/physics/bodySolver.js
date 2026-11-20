@@ -95,7 +95,7 @@ function stepDash(p, intent, geometry, dtMs, now, modifiers) {
   if (!bursting) {
     const maxSpeed = tuning.maxSpeed * (modifiers.speedMult ?? 1);
     const coasting = Math.abs(p.vx) > maxSpeed && (!direction || direction === Math.sign(p.vx));
-    const drag = p.grounded ? tuning.dashSurfaceDrag : tuning.dashCoastDrag;
+    const drag = p.grounded ? tuning.dashGroundCoastDrag : tuning.dashCoastDrag;
     p.vx = approach(p.vx, coasting ? 0 : direction * maxSpeed,
       (coasting ? drag : direction ? tuning.airAccel : p.grounded ? tuning.dragGround : tuning.dragAir) * dt);
   }

@@ -44,7 +44,7 @@ export function preloadScenery(scene, data) {
 // Layers in the arena stack sit above everything placed `after: "arena"`.
 const ARENA_LAYER_DEPTH = RENDER_LAYERS.WORLD + 5;
 
-function layerDepths(layers) {
+export function layerDepths(layers) {
   const depths = {};
   let back = 0, arena = 0, front = 0;
   for (const layer of layers) {
@@ -91,7 +91,7 @@ export function buildScenery(scene, data, { still = false } = {}) {
     scenery,
     center: { x: camera.x + camera.width / 2, y: camera.y + camera.height / 2 },
     bounds: { width: camera.width, height: camera.height },
-    referenceZoom: camera.zoom,
+    referenceZoom: camera.sceneryZoom,
     // The follow camera's zoom range (cameraDynamics.js).
     zoomLimits: [camera.minZoom, camera.maxZoom],
     depths: layerDepths(scenery.layers),

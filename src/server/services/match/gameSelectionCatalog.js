@@ -21,7 +21,7 @@ const {
 
 function selectionToLegacyMode(modeId, modeVariantId = null) {
   const { mode, variant } = getVariantDescriptor(modeId, modeVariantId);
-  if (!mode || String(mode.id) !== "duels") return 1;
+  if (!mode || !["duels", "soccer"].includes(mode.id)) return 1;
   const playersPerTeam = Math.max(1, Number(variant?.playersPerTeam) || 1);
   return Math.max(1, Math.min(3, playersPerTeam));
 }

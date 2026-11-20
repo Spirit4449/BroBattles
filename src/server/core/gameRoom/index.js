@@ -180,6 +180,7 @@ class GameRoom {
   }
 
   requestSpecial(id, payload = {}) {
+    if (this.gameMode?.acceptsCombatInput?.(payload, getParticipant(this, id)) === false) return false;
     return requestSpecial(this, id, payload);
   }
 
@@ -326,6 +327,7 @@ class GameRoom {
    */
   handlePlayerAction(socketId, actionData) {
     const playerData = getParticipant(this, socketId);
+    if (this.gameMode?.acceptsCombatInput?.(actionData, playerData) === false) return false;
     if (characterCombat.ownsAction(this, playerData, actionData)) {
       return characterCombat.requestAction(this, playerData, actionData);
     }

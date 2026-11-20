@@ -4,6 +4,7 @@ const dodge = require("./dodge");
 const combat = require("./combat");
 
 const { tryBankInteraction, bankCombatEnemies } = require('./bankBust');
+const { broBallThinkSteps, steerBroBall } = require('./broBall');
 const { createRandom } = require('./random');
 const { difficultyForTrophies, recoveryThreshold } = require('./config');
 const { bounds, stepBody, movementGeometry } = require('../physics/bodySolver');
@@ -127,6 +128,7 @@ class BotController {
       this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
     }
     this.executeTravel(now, mods);
+    if (this.objective?.behavior === 'bro-ball') steerBroBall(this);
     if (p.ducking) {
       this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
     }
@@ -237,6 +239,10 @@ class BotController {
       navigation: context,
     });
     this.poisonY = context.poisonY;
+    if (this.objective.behavior === 'bro-ball') {
+      yield* broBallThinkSteps(this, now);
+      return;
+    }
     const suddenDeathStarted = this.room.suddenDeathActive && !this.suddenDeathActive;
     this.suddenDeathActive = !!this.room.suddenDeathActive;
     const saturationChanged = context.gasSaturated !== !!this.gasSaturated;

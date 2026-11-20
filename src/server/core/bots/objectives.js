@@ -1,3 +1,5 @@
+const { BRO_BALL_MODE } = require('../../../shared/broBall');
+
 const BOT_OBJECTIVE_SCHEMA_VERSION = 1;
 const DEFAULT_OBJECTIVE_KIND = "eliminate-opponents";
 
@@ -18,8 +20,10 @@ function normalizeTarget(target) {
   };
 }
 
+const BEHAVIORS = { 'bank-bust': 'bank-objectives', [BRO_BALL_MODE]: 'bro-ball' };
+
 function botBehaviorFor(room) {
-  return room?.gameMode?.modeId === 'bank-bust' ? 'bank-objectives' : 'standard-combat';
+  return BEHAVIORS[room?.gameMode?.modeId] || 'standard-combat';
 }
 
 function normalizeBotObjective(room, player, objective = {}) {
@@ -35,7 +39,7 @@ function normalizeBotObjective(room, player, objective = {}) {
     interaction:
       objective?.interaction == null ? null : String(objective.interaction),
 
-    // Bank Bust has a dedicated planner; other modes retain combat tactics.
+    // Bank Bust and Bro Ball have dedicated planners; other modes retain combat tactics.
     behavior: botBehaviorFor(room),
   };
 }

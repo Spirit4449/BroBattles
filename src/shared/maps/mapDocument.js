@@ -7,6 +7,7 @@ const SCHEMA_VERSION = 2;
 const { POWERUP_TYPES } = require('../powerups');
 const { validateScenery } = require('./scenery');
 const { mapArena } = require('./arenas');
+const { BRO_BALL_MODE, ballRules } = require('../broBall');
 const { validateMotion, motionPeakSpeed } = require('./platformMotion');
 const clone = value => JSON.parse(JSON.stringify(value));
 function upgradeDuelMap(document) {
@@ -134,6 +135,54 @@ function validateMapUnsafe(data) {
   }
   if (!Array.isArray(data.spawns?.powerups) || data.spawns.powerups.length > 200) fail('spawns.powerups', 'requires an array of at most 200 points');
   else data.spawns.powerups.forEach((p,i) => { id(p.id, `spawns.powerups[${i}].id`); if(p.anchorId) validatePoint(p, `spawns.powerups[${i}]`, { width: 32, height: 40 }); else {num(p.x, `spawns.powerups[${i}].x`);num(p.y, `spawns.powerups[${i}].y`);} if (p.type && !POWERUP_TYPES.includes(p.type)) fail(`spawns.powerups[${i}].type`, 'unknown powerup'); });
+  if (arena.modeId === BRO_BALL_MODE) {
+    const field = data.objectiveLayout?.broBall;
+    const { world, anchors } = geometry;
+    const prefix = 'objectiveLayout.broBall';
+    const px = (x, path) => num(x, path, world.x, world.x + world.width);
+    const py = (y, path) => num(y, path, world.y, world.y + world.height);
+    px(field?.kickoff?.x, `${prefix}.kickoff.x`);
+    py(field?.kickoff?.y, `${prefix}.kickoff.y`);
+    const radius = ballRules.radius;
+    const floor = anchors['pitch-floor'];
+    const ceiling = anchors.ceiling;
+    for (const team of ['team1', 'team2']) {
+      const goal = field?.goals?.[team];
+      const path = `${prefix}.goals.${team}`;
+      px(goal?.x, `${path}.x`);
+      px(goal?.backX, `${path}.backX`);
+      py(goal?.top, `${path}.top`);
+      py(goal?.bottom, `${path}.bottom`);
+      if (!goal) continue;
+      const left = team === 'team1';
+      const end = left ? 'left' : 'right';
+      // The wall over the mouth, down from the ceiling: the goal is set into it.
+      const bar = anchors[`${end}-crossbar`];
+      const back = anchors[`${end}-net-wall`];
+      // The mouth is raised on a step, so a rolling ball cannot trickle in.
+      const base = anchors[`${end}-goal-base`];
+      const face = rect => left ? rect.right : rect.left;
+      const depth = left ? goal.x - goal.backX : goal.backX - goal.x;
+      if (goal.bottom - goal.top <= radius * 2 || depth <= radius * 2) {
+        fail(path, 'the mouth and net must have room for the whole ball');
+      }
+      if (!floor?.enabled || !ceiling?.enabled || !bar?.enabled || !back?.enabled || !base?.enabled ||
+          goal.bottom !== base.top || base.bottom < floor.top || goal.bottom > floor.top ||
+          goal.top !== bar.bottom || goal.x !== face(bar) || goal.x !== face(base) ||
+          goal.backX !== face(back) || face(back) !== (left ? bar.left : bar.right) ||
+          bar.top > ceiling.bottom || back.top > goal.top || back.bottom < floor.top) {
+        fail(path, 'the goal must line up with the pitch floor, goal step, wall above and back wall');
+      }
+    }
+    const { kickoff, goals } = field || {};
+    if (kickoff && goals?.team1 && goals?.team2 && floor && ceiling &&
+        (kickoff.x - radius <= goals.team1.x || kickoff.x + radius >= goals.team2.x ||
+         kickoff.y - radius <= ceiling.bottom || kickoff.y + radius >= floor.top ||
+         geometry.colliders.some(rect => Math.hypot(
+           Math.max(rect.left - kickoff.x, kickoff.x - rect.right, 0),
+           Math.max(rect.top - kickoff.y, kickoff.y - rect.bottom, 0),
+         ) < radius))) fail(`${prefix}.kickoff`, 'must leave room for the ball inside the pitch');
+  }
   const bank = data.objectiveLayout?.bankBust;
   if (arena.modeId === 'bank-bust' && !bank) fail('objectiveLayout.bankBust', `is required for ${arena.label}`);
   if (bank) {

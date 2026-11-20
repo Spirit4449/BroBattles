@@ -1,6 +1,6 @@
 import { prefersReducedMotion } from "../../ui/domMotion";
 import physics from '../../../shared/physics/movementPhysics.json';
-import { dashDirection } from '../../../shared/physics/dash';
+import { dashDirection, canArmStomp } from '../../../shared/physics/dash';
 
 import { sweepMovement } from '../../../shared/physics/sweptCollision';
 import { playPlayerSound } from '../audio/playerAudio';
@@ -67,30 +67,18 @@ function spawnDashClouds(scene, sprite, origin, ux, uy) {
   });
 }
 
-export function spawnDashEffect(scene, sprite, x, y) {
-  if (!sprite?.visible || !scene.add?.graphics || !scene.time) return;
-  let previous = bodyCenter(sprite);
-  let stopped = false;
-  const length = Math.hypot(x, y);
-  const ux = Number.isFinite(length) && length > 0 ? x / length : (sprite.flipX ? -1 : 1);
-  const uy = Number.isFinite(length) && length > 0 ? y / length : 0;
-  const fade = (target, duration, extra = {}) => scene.tweens.add({
-    targets: target, alpha: 0, duration, ...extra, onComplete: () => target.destroy(),
-  });
+const COMET_TAIL_LENGTH = 76;
+
+export function createCometBow(scene, depth, nose, radius) {
   // A white-hot bow wraps the leading edge, with thinner cyan shoulders
   // sweeping back beside the character, like air flowing around a meteor.
-  const burst = scene.add.graphics().setDepth(sprite.depth + 0.1);
-  const halfWidth = (sprite.body?.width || 32) / 2;
-  const halfHeight = (sprite.body?.height || 48) / 2;
-  const nose = Math.abs(ux) * halfWidth + Math.abs(uy) * halfHeight + 14;
-  const radius = Math.abs(uy) * halfWidth + Math.abs(ux) * halfHeight + 16;
-  const tailLength = 76;
+  const burst = scene.add.graphics().setDepth(depth);
   // Cubic shoulders round the nose, wrap around the body, then converge
   // onto the two rear trail rails instead of flaring away from them.
   const contour = (t, side) => {
     const u = 1 - t;
     return {
-      x: u * u * u * nose + 3 * u * u * t * nose - 3 * u * t * t * 24 - t * t * t * tailLength,
+      x: u * u * u * nose + 3 * u * u * t * nose - 3 * u * t * t * 24 - t * t * t * COMET_TAIL_LENGTH,
       y: side * (3 * u * u * t * radius + 3 * u * t * t * radius * 1.35 + t * t * t * 10),
     };
   };
@@ -105,6 +93,24 @@ export function spawnDashEffect(scene, sprite, x, y) {
       }
     }
   }
+  return burst;
+}
+
+export function spawnDashEffect(scene, sprite, x, y) {
+  if (!sprite?.visible || !scene.add?.graphics || !scene.time) return;
+  let previous = bodyCenter(sprite);
+  let stopped = false;
+  const length = Math.hypot(x, y);
+  const ux = Number.isFinite(length) && length > 0 ? x / length : (sprite.flipX ? -1 : 1);
+  const uy = Number.isFinite(length) && length > 0 ? y / length : 0;
+  const fade = (target, duration, extra = {}) => scene.tweens.add({
+    targets: target, alpha: 0, duration, ...extra, onComplete: () => target.destroy(),
+  });
+  const halfWidth = (sprite.body?.width || 32) / 2;
+  const halfHeight = (sprite.body?.height || 48) / 2;
+  const nose = Math.abs(ux) * halfWidth + Math.abs(uy) * halfHeight + 14;
+  const radius = Math.abs(uy) * halfWidth + Math.abs(ux) * halfHeight + 16;
+  const burst = createCometBow(scene, sprite.depth + 0.1, nose, radius);
   let heading = Math.atan2(uy, ux);
   let lastHead = previous;
   const followHead = () => {
@@ -138,7 +144,7 @@ export function spawnDashEffect(scene, sprite, x, y) {
     for (let i = -1; i <= 1; i++) {
       const offset = i * 10;
       trail.lineStyle(i ? 3 : 9, 0x39caff, i ? 0.65 : 0.4);
-      const rear = i ? tailLength : 0;
+      const rear = i ? COMET_TAIL_LENGTH : 0;
       trail.lineBetween(previous.x - tx * rear - ty * offset, previous.y - ty * rear + tx * offset,
         current.x - tx * rear - ty * offset, current.y - ty * rear + tx * offset);
       if (i) {
@@ -337,7 +343,7 @@ export function applyDashCoast(player, inputDirection, maxSpeed, now = Date.now(
   player.setMaxVelocity(Math.max(maxSpeed, Math.abs(vx)), Math.max(physics.maxVerticalSpeed, Math.abs(player.body.velocity.y)));
   if (!inputDirection || Math.sign(vx) === inputDirection) {
     player.setAccelerationX(0);
-    player.setDragX((player.body.touching.down || player.body.blocked?.down) ? physics.dashSurfaceDrag : physics.dashCoastDrag);
+    player.setDragX((player.body.touching.down || player.body.blocked?.down) ? physics.dashGroundCoastDrag : physics.dashCoastDrag);
   }
 }
 
@@ -357,12 +363,11 @@ export function updateDash(scene, player, { pressed, left, right, up, down, bloc
     dash = player._dash = { ...direction, vx, vy, steeredAt: now, until: now + physics.dashDurationMs,
       allowGravity: player.body.allowGravity,
       airborne: !(player.body.touching?.down || player.body.blocked?.down) || vy !== 0 };
-    player._dashReadyAt = now + physics.dashDurationMs + physics.dashCooldownMs;
+    player._dashReadyAt = now + physics.dashDurationMs + (player._dashCooldownMs ?? physics.dashCooldownMs);
     player._dashSeq = (player._dashSeq || 0) + 1;
     // Same arming rule as the server (shared/physics/dash acceptDash), so the
     // local landing can show the stomp without waiting for the round trip.
-    player._stompArmedUntil = direction.x === 0 && direction.y === 1 &&
-      !(player.body.touching?.down || player.body.blocked?.down)
+    player._stompArmedUntil = canArmStomp(direction.y, player.body.touching?.down || player.body.blocked?.down)
       ? Number.MAX_SAFE_INTEGER
       : 0;
     player._stompStartBottom = player._stompArmedUntil ? player.body.bottom : null;
@@ -444,7 +449,8 @@ export function drawDashCooldown(scene, player, hidden = false) {
   hud.root.hidden = hidden;
   if (hidden) return;
   const now = Date.now();
-  const remaining = Math.min(physics.dashCooldownMs, Math.max(0, (player._dashReadyAt || 0) - now));
+  const cooldownMs = player._dashCooldownMs ?? physics.dashCooldownMs;
+  const remaining = Math.min(cooldownMs, Math.max(0, (player._dashReadyAt || 0) - now));
   if (remaining || player._dash) hud.readySince = null;
   else if (hud.readySince == null) hud.readySince = now;
   hud.root.dataset.idle = String(hud.readySince != null && now - hud.readySince >= 6000);
@@ -463,7 +469,7 @@ export function drawDashCooldown(scene, player, hidden = false) {
   const dashing = !!player._dash;
   const progress = dashing
     ? Math.max(0, Math.min(1, (player._dash.until - now) / physics.dashDurationMs))
-    : 1 - remaining / physics.dashCooldownMs;
+    : 1 - remaining / cooldownMs;
   const label = dashing ? 'Dash!' : remaining ? `${(Math.ceil(remaining / 100) / 10).toFixed(1)}s` : 'Ready';
   if (hud.status.textContent !== label) hud.status.textContent = label;
   hud.root.dataset.ready = String(!dashing && remaining === 0);

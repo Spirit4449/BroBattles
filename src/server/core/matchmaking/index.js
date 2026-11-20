@@ -2,7 +2,8 @@ const matchLifecycle = require('../../services/match/matchLifecycleService');
 const { logIgnored } = require("../../lib/logIgnored");
 const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { PARTY_STATUS, teamSizeForSelection } = require("../../services/party/partyRules");
-const { normalizeSelection } = require("../../services/match/gameSelectionCatalog");
+const { BRO_BALL_MODE } = require("../../../shared/broBall");
+const { normalizeSelection, isSelectionQueueable } = require("../../services/match/gameSelectionCatalog");
 const {
   loadMatchData,
 } = require("../../services/match/matchRosterService");
@@ -216,6 +217,7 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
           mapId: items[0].map,
         });
         const { modeId, modeVariantId, mapId } = selection;
+        if (modeId === BRO_BALL_MODE && !isSelectionQueueable(selection)) continue;
         const teamSize = teamSizeForSelection(selection);
         let picks;
         while ((picks = pickCompositeGroup(items, teamSize))) {

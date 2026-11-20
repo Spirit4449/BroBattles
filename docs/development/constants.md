@@ -106,8 +106,8 @@ The local player, the server's movement validation, and the bot physics all read
 | `dashHorizontalSpeed` | Horizontal dash launch speed and horizontal burst cap (px/s); `dashSpeed` still sets the vertical component. |
 | `dashMaxSpeed` | Vertical burst cap; straight-down vertical motion uses `dashDownSpeed` instead. Coast/normal movement restore their own limits. |
 | `dashSteerAccel` | Grounded burst steering acceleration (px/s²). Steering stops once that burst becomes airborne. |
-| `dashCoastMs` / `dashCoastDrag` | Maximum coast window (ms) / airborne horizontal deceleration (px/s²). Ground coast uses `dashSurfaceDrag`; interruption can end coasting sooner. |
-| `dashSurfaceDrag` | Drag while dashing along the ground or a ceiling. |
+| `dashCoastMs` / `dashCoastDrag` / `dashGroundCoastDrag` | Maximum coast window (ms) and horizontal deceleration (px/s²) while coasting in the air or on the ground. Interruption can end coasting sooner. |
+| `dashSurfaceDrag` | Drag while the dash burst runs along the ground or a ceiling. |
 | `dashWallDragRate` | Vertical damping while dashing into a wall. |
 | `dashVerticalResistance` | Speed-dependent vertical resistance coefficient; its contribution fades during coasting. |
 
@@ -182,7 +182,7 @@ Run `node scripts/dev/print-constants.cjs --write` to refresh the table after tu
 | Powerup spawns | 25 s interval, 2 first spawns after 5 s, 3 active cap, 34 px pickup radius, 10 s despawn, 2 s omen, 22 px anchored spawn lift |
 | Death drops | 12 s lifetime, 3 s blinking, 110 px pickup radius, 2–4 coins, 0–1 gems |
 | Hit checks | 300 ms rewind cap, 1 s / 128 history samples, 80 ms duplicate-hit window, 12 s runtime action-ID and Sparrow result retention, 110 px stomp radius and 300 ms interruption |
-| Movement | 260 px/s run speed, 3000/3300 px/s² ground/air acceleration, 990 px/s² gravity, 490 px/s jump speed parameter, 590/600 px/s horizontal/vertical dash launch components (840 px/s straight down), 160 ms burst, 5 s cooldown, up to 850 ms coast |
+| Movement | 260 px/s run speed, 3000/3300 px/s² ground/air acceleration, 990 px/s² gravity, 506 px/s jump speed parameter, 660/670 px/s horizontal/vertical dash launch components (938 px/s straight down), 160 ms burst, 5 s cooldown, up to 850 ms coast with 1600/900 px/s² ground/air drag |
 | Ducking | Body height ×0.55, movement ×0.25, 50 ms minimum hold, 100 ms reentry delay |
 | Character upgrades | Level cap 10. Next-level coin costs from level 1 in order: 150, 300, 550, 900, 1400, 2100, 3000, 4200, 5800 |
 | Bank Bust mode | 20000 starting vault coins, 25 vault coins per banked death-drop coin, 1500 purchase floor, 25% low vault warning, 210 s match, 3.5 s respawn, 3 s respawn shield, 250 peak trophies to unlock, 1.8 s vault bust finish delay |

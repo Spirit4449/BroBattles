@@ -44,6 +44,7 @@ function request(room, p, data, special = false) {
   const accepted = !reason;
   if (accepted) {
     spendShot(room, p, special, now);
+    room.gameMode?.onAttackAccepted?.(p, data, special);
     if (special) room.broadcast(SOCKET_EVENTS.PLAYER_SPECIAL, { username: p.name, character: 'sparrow', aim: data.aim });
     const startup = model.attackConfig(special).castDelayMs || 0;
     state.pending.push({ ownerId: participantId(p), id, shot, dueTick: room.tickId + Math.ceil(startup / model.STEP_MS),

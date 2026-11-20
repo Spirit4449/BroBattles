@@ -14,6 +14,14 @@ A coin crate is announced and drops on the middle platform every 50 seconds. Eit
 
 You can select Bank Bust after reaching 250 peak trophies. You can also play it in a party whose owner has unlocked it; that doesn't permanently unlock it for you.
 
+## Bro Ball
+
+Bro Ball is a 2v2 match on Sunset Bowl. Kick the ball into the other team’s goal. The first team to five goals wins, or the team with more goals when time expires. A tie goes to 45 seconds of golden-goal overtime. If neither team scores, the match ends in a draw.
+
+Run into the ball to deflect it, tap attack to kick, or aim and release to place a shot. Dash into the ball for a power shot. Lift your shot over the raised goal step and keep a teammate back to defend.
+
+Bro Ball unlocks at 1,500 peak trophies. You can also play in a party whose owner has unlocked it.
+
 ## Other modes and maps
 
 Modes marked **Coming Soon** can be previewed but cannot be played, even after reaching their trophy milestone. When learning a map, look for ways to change height, places to dodge, and a safe route back to your teammate or objective.

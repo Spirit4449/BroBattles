@@ -645,7 +645,7 @@ export default class RemotePlayer {
       );
       this.opponent._ducking = false;
       this.resizeBodyForDuck(false);
-      spawnRespawnEffect(this.scene, this.opponent);
+      spawnRespawnEffect(this.scene, this.opponent, { silent: meta.kickoff === true });
     } catch (_) {}
     if (!this.effects) {
       const EffectsCls = getEffectsClass(this.character);

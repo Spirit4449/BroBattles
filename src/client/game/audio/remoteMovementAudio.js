@@ -1,7 +1,7 @@
 import { clamp01 as clamp } from "../../../shared/math.js";
 import { movementSoundKey } from "../../../shared/physics/movementSounds";
 import { playPlayerSound, playerSoundVolume } from './playerAudio';
-import { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound, fallingAirVolume } from './movementAudio';
+import { canPlayTerrainCue, getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound, fallingAirVolume, movementTerrainAt } from './movementAudio';
 import { MOVEMENT_VFX_CONFIG } from '../scene/effects';
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
 
@@ -18,11 +18,13 @@ export function createRemoteMovementAudio(scene, sprite) {
     if (scene.sound?.locked) return;
     try { playPlayerSound(scene, sprite, movementSoundKey(scene, key), options); } catch (_) {}
   };
-  function step(speed, turning, time) {
-    const steps = getTerrainSteps(scene._terrainType);
+  function step(speed, turning, time, terrain) {
+    const volume = footstepVolume(speed, turning, terrain);
+    if (!canPlayTerrainCue(scene, terrain, { volume, source: sprite })) return;
+    const steps = getTerrainSteps(terrain);
     variant = (variant + 1 + Math.floor(Math.random() * Math.max(1, steps.length - 1))) % steps.length;
     play(steps[variant].key, {
-      volume: footstepVolume(speed, turning, scene._terrainType),
+      volume,
       rate: (turning ? 0.88 : 0.94) + speed * 0.14,
     });
     lastStep = time;
@@ -86,6 +88,7 @@ export function createRemoteMovementAudio(scene, sprite) {
     const dash = /^(dash|dashing)$/.test(animation);
     const wall = !grounded && (typeof state.wallSliding === 'boolean' ? state.wallSliding : animation.includes('wallslid'));
     const speed = clamp(Math.abs(vx) / MOVEMENT_VFX_CONFIG.runSpeedReference);
+    const terrain = grounded ? movementTerrainAt(scene, sprite, state) : scene._terrainType;
     const walking = grounded && Math.abs(vx) > 35 && !dash && !/throw|attack|special|dying/.test(animation);
     const y = Number(sprite.body?.bottom) || sprite.y;
     const peak = grounded ? y : Math.min(previous?.grounded === false ? previous.peak : y, y);
@@ -108,11 +111,13 @@ export function createRemoteMovementAudio(scene, sprite) {
       const distance = Number(state.movementFxFallDistance) || Math.max(0, y - previous.peak);
       const strength = (clamp(impact / MOVEMENT_VFX_CONFIG.landingMaxVelocity) * 0.65 +
         clamp(distance / (MOVEMENT_VFX_CONFIG.landingShockwaveMinFallPx * 2)) * 0.35) ** 2;
-      const sound = terrainLandingSound(scene._terrainType, 0.28 + strength * 0.5, scene);
-      play(sound.key, { volume: sound.volume, rate: 0.93 - strength * 0.02 });
+      const { key, volume } = terrainLandingSound(terrain, 0.28 + strength * 0.5, scene);
+      if (canPlayTerrainCue(scene, terrain, { volume, source: sprite, landingStrength: strength })) {
+        play(key, { volume, rate: 0.93 - strength * 0.02 });
+      }
     }
     if (walking && (event === 'turn' || !previous?.walking || time - lastStep >= 285 - 135 * speed)) {
-      step(speed, event === 'turn', time);
+      step(speed, event === 'turn', time, terrain);
     }
     motion = { grounded, wall, dash, vy };
     previous = { grounded, wall, walking, vx, vy, peak };

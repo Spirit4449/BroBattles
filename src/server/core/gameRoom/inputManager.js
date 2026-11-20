@@ -86,8 +86,8 @@ function movementStats(player) {
 function correctPosition(room, player, sequence, detail = {}) {
   if (!player.socketId) return;
   const stats = movementStats(player);
-  const reason = detail.reason === "collision" || detail.reason === "idle" ? detail.reason : "budget";
-  stats[reason] += 1;
+  const reason = ["collision", "idle", "kickoff"].includes(detail.reason) ? detail.reason : "budget";
+  if (reason !== "kickoff") stats[reason] += 1;
   const errorPx = Number(detail.errorPx) || 0;
   if (errorPx > stats.maxErrorPx) stats.maxErrorPx = errorPx;
   player._correctionId = (Number(player._correctionId) || 0) + 1;
@@ -486,6 +486,7 @@ function recordBotHistory(playerData, now = Date.now()) {
 }
 
 module.exports = {
+  correctPosition,
   CORRECTION_ACK_TIMEOUT_MS,
   movementStats,
   updateBodyGeometry,

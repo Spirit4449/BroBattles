@@ -67,7 +67,7 @@ const rows = [
     `${movement.gravity} px/s² gravity, ${movement.jumpSpeed} px/s jump speed parameter, ` +
     `${movement.dashHorizontalSpeed}/${movement.dashSpeed} px/s horizontal/vertical dash launch components (${movement.dashDownSpeed} px/s straight down), ` +
     `${movement.dashDurationMs} ms burst, ${seconds(movement.dashCooldownMs)} cooldown, ` +
-    `up to ${movement.dashCoastMs} ms coast`,
+    `up to ${movement.dashCoastMs} ms coast with ${movement.dashGroundCoastDrag}/${movement.dashCoastDrag} px/s² ground/air drag`,
   ],
   ['Ducking',
     `Body height ×${duck.DUCK_HEIGHT_RATIO}, movement ×${duck.DUCK_SPEED_RATIO}, ` +

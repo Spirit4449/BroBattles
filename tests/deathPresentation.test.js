@@ -94,7 +94,7 @@ describe("Local respawn", () => {
     loadClientModule(require.resolve('../src/client/game/audio/playerAudio.js'), { exports: audioExports });
     loadClientModule(require.resolve('../src/client/game/scene/respawnEffect.js'), { exports, require: id => id.includes('playerAudio')
       ? audioExports : { RENDER_LAYERS: { PLAYER: 30 } } });
-    for (const end of ['complete', 'shutdown', 'destroy']) {
+    for (const end of ['complete', 'shutdown', 'destroy', 'kickoff']) {
       const objects = [];
       const tweens = new Map();
       const shape = (x, y) => {
@@ -115,8 +115,8 @@ describe("Local respawn", () => {
         body: { center: { x: 0 }, bottom: 0, width: 40, height: 80 },
       });
       scene._localPlayerAudioSprite = end === 'shutdown' ? { x: 0, y: 0 } : sprite;
-      const cleanup = exports.spawnRespawnEffect(scene, sprite);
-      assert.equal(sounds.length, end === 'destroy' ? 0 : 1, 'missing audio must not block visuals');
+      const cleanup = exports.spawnRespawnEffect(scene, sprite, { silent: end === 'kickoff' });
+      assert.equal(sounds.length, ['destroy', 'kickoff'].includes(end) ? 0 : 1);
       if (sounds.length) {
         assert.equal(sounds[0].key, 'sfx-respawn');
         const baseVolume = audioExports.playerSoundVolume(scene, sprite, 1);
@@ -188,6 +188,9 @@ describe("Local respawn", () => {
     timers[0].callback();
     assert.equal(player.visible, true);
     assert.equal(dead, false);
+    order.length = 0;
+    handlers['player:respawn']({ username: 'self', x: 30, y: 20, health: 100, kickoff: true });
+    assert.deepEqual(order, ['animation', 'body', 'respawn-effect', 'hud'], 'a kickoff also shows the beam on a living fighter');
     die();
     timers[0].callback();
     assert.equal(player.visible, true, 'an older death must not hide the next life');

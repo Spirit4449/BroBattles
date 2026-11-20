@@ -2,7 +2,8 @@ const roomTransport = require('./helpers/roomTransport.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadClientModule } = require('./helpers/clientModule');
-const { acceptDash } = require('../src/shared/physics/dash');
+const dashPhysics = require('../src/shared/physics/dash');
+const { acceptDash, dashDirection } = dashPhysics;
 const { resolveStomp } = require('../src/server/core/gameRoom/stomp');
 const { characterBody } = require('../src/shared/physics/characterBody');
 const input = require('../src/server/core/gameRoom/inputManager');
@@ -18,11 +19,32 @@ function fixture() {
     io:{to:to=>({emit:(event,data)=>events.push({to,event,data})})}};
   return {room,source,left,right,ally,far,dead,events};
 }
-test('only an airborne straight-down accepted dash arms one stomp', () => {
-  for (const [x,y,grounded,armed] of [[0,1,false,true],[0,1,true,false],[1,0,false,false],[0,-1,false,false],[Math.SQRT1_2,Math.SQRT1_2,false,false]]) {
-    const p={isAlive:true,grounded};
-    assert.ok(acceptDash(p,{dashSeq:1,dashX:x,dashY:y},1000));
-    assert.equal(p._stompPendingUntil>1000,armed);
+test('only airborne downward dashes arm a stomp on the client and server', () => {
+  const { updateDash } = loadClientModule('src/client/game/scene/dash.js', {
+    require: path => path.endsWith('movementPhysics.json') ? require('../src/shared/physics/movementPhysics.json') : dashPhysics,
+  });
+  for (const [keys, grounded, armed] of [
+    [{ down: true }, false, true],
+    [{ left: true, down: true }, false, true],
+    [{ right: true, down: true }, false, true],
+    [{ down: true }, true, false],
+    [{ right: true, down: true }, true, false],
+    [{ right: true }, false, false],
+    [{ up: true }, false, false],
+    [{ left: true, up: true }, false, false],
+  ]) {
+    const { x, y } = dashDirection(keys.left, keys.right, keys.up, keys.down);
+    const serverPlayer = { isAlive: true, grounded };
+    assert.ok(acceptDash(serverPlayer, { dashSeq: 1, dashX: x, dashY: y }, 1000));
+    assert.equal(serverPlayer._stompPendingUntil > 1000, armed);
+
+    const localPlayer = {
+      body: { touching: { down: grounded }, velocity: { x: 0, y: 0 } },
+      setVelocity(vx, vy) { this.body.velocity = { x: vx, y: vy }; },
+      setFlipX() {}, setAcceleration() {}, setDrag() {}, setMaxVelocity() {},
+    };
+    assert.ok(updateDash({}, localPlayer, { ...keys, pressed: true, showEffect: false, now: 1000 }));
+    assert.equal(localPlayer._stompArmedUntil > 1000, armed);
   }
 });
 test('landing pushes enemies outward, cancels swings and pending casts, keeps allies and released projectiles', () => {
@@ -59,16 +81,17 @@ test('expiration, death, knockback and jumping cancel the armed stomp', () => {
     assert.equal(source._stompPendingUntil,0); assert.equal(events.length,0);
   }
 });
-test('position packets require map support and trigger only once on landing', () => {
+test('a diagonal stomp requires map support and triggers only once on landing', () => {
   const {room,source,events}=fixture(); const body=characterBody('ninja');
   const floor=source.y+body.offsetY+body.halfHeight+40;
   room.geometry={world:{x:0,y:0,width:1000,height:1000},colliders:[{
     left:0,right:1000,top:floor,bottom:floor+30,collision:{up:true}}]};
   input.resetMovementBudget(source,Date.now()-100);
-  const packet={x:source.x,y:source.y,grounded:true,loaded:true,vx:0,vy:560,dashSeq:1,dashX:0,dashY:1};
+  const packet={x:source.x,y:source.y,grounded:true,loaded:true,vx:400,vy:400,dashSeq:1,
+    dashX:Math.SQRT1_2,dashY:Math.SQRT1_2};
   input.handlePlayerInput(room,'source',packet);
   assert.equal(events.some(e=>e.event==='player:stomp'),false,'fake grounded flag cannot trigger impact');
-  input.handlePlayerInput(room,'source',{...packet,y:source.y+40,vy:0});
+  input.handlePlayerInput(room,'source',{...packet,x:source.x+40,y:source.y+40,vy:0});
   input.handlePlayerInput(room,'source',{...packet,y:source.y,vy:0});
   assert.equal(events.filter(e=>e.event==='player:stomp').length,1);
 });
@@ -124,7 +147,8 @@ test('a local downward air dash shows its stomp on landing, and the server echo 
     spawnLandingImpact: () => shown.push('landing'), spawnStompImpact: () => shown.push('stomp') };
   const fx = loadClientModule('src/client/game/players/localMovementFx.js', { Date, require: (path) =>
     path.includes('scene/effects') ? effectsStub :
-    path.includes('movementAudio') ? { shouldPlayLandingSound: () => false, terrainLandingSound: () => ({}) } :
+    path.includes('movementAudio') ? { shouldPlayLandingSound: () => false,
+      movementTerrainAt: () => 'hard', terrainLandingSound: () => ({}) } :
     path.includes('movementSounds') ? { movementSoundKey: (_s, key) => key } : {} });
   const movement = fx.createLocalMovementFx({ audio: {}, noteEvent() {} });
   const scene = { sound: { play: (key) => sounds.push(key) } };

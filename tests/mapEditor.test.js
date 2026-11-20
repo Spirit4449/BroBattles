@@ -377,7 +377,7 @@ describe('Map Studio nested dropdowns', () => {
     const trigger = picker.element.querySelector('button');
     trigger.dispatchEvent(Object.assign(new window.Event('click'), { detail: 0 }));
     const list = picker.element.querySelector('[role=listbox]');
-    assert.deepEqual([...list.children].map(row => row.textContent), ['Duels', 'Bank Bust']);
+    assert.deepEqual([...list.children].map(row => row.textContent), ['Duels', 'Bank Bust', 'Bro Ball']);
     const bank = list.querySelector('[data-value="bank-bust"]');
     bank.click();
     assert.equal(trigger.getAttribute('aria-expanded'), 'true');

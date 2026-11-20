@@ -7,6 +7,7 @@ const mapDefaults = deepFreeze([
   require('./3.json'),
   require('./4.json'),
   require('./5.json'),
+  require('./6.json'),
 ]);
 const mapsCatalog = deepFreeze({
   defaultMapId: 1,

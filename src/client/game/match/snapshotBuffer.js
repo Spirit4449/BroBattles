@@ -371,6 +371,7 @@ export function createSnapshotBuffer(options = {}) {
       snapshotSeq: sequence,
       snapshotEpoch: incomingEpoch,
       players: snapshot?.players || {},
+      ...(snapshot.ball ? { ball: snapshot.ball } : {}),
     });
 
     if (stateBuffer.length > maxStateBuffer) {

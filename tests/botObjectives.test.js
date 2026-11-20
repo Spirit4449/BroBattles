@@ -8,14 +8,19 @@ const {
   resolveBotObjective,
 } = require("../src/server/core/bots/objectives");
 
+const MAP_FOR_MODE = { "bank-bust": 4, soccer: 6 };
+const BEHAVIOR_FOR_MODE = { "bank-bust": "bank-objectives", soccer: "bro-ball" };
+
 function roomFor(mode) {
+  const map = MAP_FOR_MODE[mode.id] || 1;
   const room = {
     matchData: {
       modeId: mode.id,
       modeVariantId: mode.defaultVariantId || null,
-      map: mode.id === "bank-bust" ? 4 : 1,
+      map,
       players: [],
     },
+    mapSnapshot: { map: require(`../src/shared/maps/${map}.json`) },
     players: new Map(),
     modeState: null,
   };
@@ -39,8 +44,18 @@ test("every game mode advertises bot support and an objective directive", () => 
     assert.equal(objective.schemaVersion, BOT_OBJECTIVE_SCHEMA_VERSION);
     assert.equal(objective.modeId, mode.id);
     assert.equal(objective.kind, mode.botObjective.kind);
-    assert.equal(objective.behavior, mode.id === "bank-bust" ? "bank-objectives" : "standard-combat");
+    assert.equal(objective.behavior, BEHAVIOR_FOR_MODE[mode.id] || "standard-combat");
   }
+});
+
+test("Bro Ball points bots at the ball and the other team's goal", () => {
+  const mode = catalog.modes.find((entry) => entry.id === "soccer");
+  const room = roomFor(mode);
+  const objective = resolveBotObjective(room, { participantId: "bot:test", isBot: true, team: "team2" });
+  assert.equal(objective.kind, "score-goals");
+  assert.equal(objective.targetTeam, "team1");
+  assert.equal(objective.target.type, "ball");
+  assert.equal(objective.target.x, room.gameMode.getModeState().ball.x);
 });
 
 test("Bank Bust exposes a team-specific vault target with objective AI", () => {

@@ -47,7 +47,9 @@ test('hurt bots dash away, replay the preview, and retain the shared cooldown an
 });
 
 test('bots close on low-health enemies outside their preferred range but save dash in ordinary fights', () => {
-  const h = setup(); h.enemy.x = h.p.x + preferredRange(h.brain, h.enemy) + 190;
+  const h = setup();
+  const approach = previewDash(h.p, { x: 1, y: 0 }, geometry, {}, now);
+  h.enemy.x = approach.end.x + preferredRange(h.brain, h.enemy);
   assert.equal(h.attempt(), false);
   h.enemy.health = 25;
   assert.equal(h.attempt(), true);
