@@ -3,7 +3,8 @@
 //
 //   node scripts/art/render-map-full-previews.cjs [mapId ...]
 //
-// Publishes metadata.mapFullPreviewAsset through the configured map repository.
+// Publishes metadata.mapFullPreviewAsset and compact map cards through the
+// configured map repository.
 // The generated images are stored by content hash in its asset directory.
 // Needs Playwright's Chromium (npx playwright-core install chromium) or
 // CHROME_EXECUTABLE pointing at an installed Chrome.
@@ -40,6 +41,33 @@ function bundle() {
   }));
 }
 
+async function capture(browser, address, label, width, height) {
+  const page = await browser.newPage({ viewport: { width, height } });
+  try {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('response', response => {
+      if (response.status() >= 400 && new URL(response.url()).pathname.startsWith('/assets/')) {
+        errors.push(`${response.status()} ${response.url()}`);
+      }
+    });
+    await page.goto(address);
+    await page.waitForFunction(() => window.__snapshotReady, null, { timeout: 30000 }).catch(() => {
+      throw new Error(`${label} did not render: ${errors.join('; ') || 'timed out'}`);
+    });
+    if (errors.length) throw new Error(`${label}: ${errors.join('; ')}`);
+    const dataUrl = await page.evaluate(() => document.querySelector('canvas').toDataURL('image/webp', 0.86));
+    const prefix = 'data:image/webp;base64,';
+    if (!dataUrl.startsWith(prefix)) throw new Error(`${label} did not produce a WebP preview`);
+    const bytes = Buffer.from(dataUrl.slice(prefix.length), 'base64');
+    const url = storeImmutableAsset(bytes, '.webp', mapRepository.directory);
+    console.log(`${label}: ${url} (${width}x${height})`);
+    return url;
+  } finally {
+    await page.close();
+  }
+}
+
 async function main() {
   let browser;
   let server;
@@ -65,28 +93,20 @@ async function main() {
     for (const id of ids) {
       const { document, revision } = mapRepository.get(id);
       current = document;
-      const { camera } = mapArena(document);
+      const { camera, modeId } = mapArena(document);
       const height = Math.round(OUTPUT_WIDTH * camera.height / camera.width);
-      const page = await browser.newPage({ viewport: { width: OUTPUT_WIDTH, height } });
-      try {
-        const errors = [];
-        page.on('pageerror', error => errors.push(error.message));
-        await page.goto(`http://127.0.0.1:${port}/`);
-        await page.waitForFunction(() => window.__snapshotReady, null, { timeout: 30000 }).catch(() => {
-          throw new Error(`Map ${id} did not render: ${errors.join('; ') || 'timed out'}`);
-        });
-        const dataUrl = await page.evaluate(() => document.querySelector('canvas').toDataURL('image/webp', 0.86));
-        const prefix = 'data:image/webp;base64,';
-        if (!dataUrl.startsWith(prefix)) throw new Error(`Map ${id} did not produce a WebP preview`);
-        const bytes = Buffer.from(dataUrl.slice(prefix.length), 'base64');
-        const url = storeImmutableAsset(bytes, '.webp', mapRepository.directory);
-        if (document.metadata.mapFullPreviewAsset !== url) {
-          document.metadata.mapFullPreviewAsset = url;
-          mapRepository.save(document, revision);
-        }
-        console.log(`${document.label}: ${url} (${OUTPUT_WIDTH}x${height})`);
-      } finally {
-        await page.close();
+      const address = `http://127.0.0.1:${port}/`;
+      const previews = { mapFullPreviewAsset: await capture(browser, address, document.label, OUTPUT_WIDTH, height) };
+      if (modeId === 'bank-bust') {
+        previews.mapSelectPreviewAsset = await capture(browser, address + '?card', `${document.label} map card`, 1000, 479);
+      } else if (String(id) === '2' || modeId === 'soccer') {
+        const cardWidth = 768;
+        const cardHeight = Math.round(cardWidth * camera.height / camera.width);
+        previews.mapSelectPreviewAsset = await capture(browser, address, `${document.label} map card`, cardWidth, cardHeight);
+      }
+      if (Object.entries(previews).some(([key, value]) => document.metadata[key] !== value)) {
+        Object.assign(document.metadata, previews);
+        mapRepository.save(document, revision);
       }
     }
   } finally {

@@ -3,20 +3,22 @@
 //
 //   node scripts/art/sky-soil/compose-backdrop.cjs [--out <dir>] [--install]
 //
-// --install installs assets and updates the shipped map only.
+// --install installs the art and updates the shipped and effective map.
 // Sources (codex-sources/): island-a.png, island-b.png and islets.png, generated
 // with Codex image_gen in BB style on flat #FF00FF (prompts in the art README).
 // Each is keyed, its own pixel grid is detected, and it is resampled one sample
 // per art pixel, so every pixel lands on a true grid. Layers, back to front:
 //   sky-v4.webp         smooth gradient sky, sun glow and blurred distant islands
 //   far-isles-v4.webp   hazed, half-size islands over a far cloud sea
-//   cloud-sea.webp      the arena's cloud sea + an animated billowing strip
-//   near-isles-v4.webp  framing islands, drifting islets + animated waterfalls
+//   cloud-sea.webp      back banks of the arena's cloud sea + animated strip
+//   near-isles-v4.webp  hazed framing islands, islets + animated waterfalls
+//   cloud-front.webp    front banks + animated strip; the falls pour into them
 // Clouds in the sky come only from the scenery clouds feature.
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('../../../spritesheet-generator/node_modules/sharp');
 const kit = require('./pixel-kit.cjs');
+const { updateSkySoil } = require('./map-install.cjs');
 const { Canvas, hex, mix, hazed, cloudSea, puff, CLOUD, WIN, FULL_W, FULL_H } = kit;
 
 const ROOT = path.resolve(__dirname, '../../..');
@@ -25,7 +27,17 @@ const OUT = path.resolve(argv.includes('--out') ? argv[argv.indexOf('--out') + 1
 const INSTALL = argv.includes('--install');
 const SRC = path.join(__dirname, 'codex-sources');
 const NEAR_PX = 3, SEA_PX = 2, FAR_PX = 2;
-const SEA_FRAMES = 12, SEA_FPS = 5, FALL_FRAMES = 8, FALL_FPS = 14;
+const SEA_FRAMES = 24, SEA_FPS = 3, FALL_FRAMES = 8, FALL_FPS = 14;
+// Cloud sea: four banks. Banks 0-1 sit behind the near islands; banks 2-3 are
+// a front layer, so the waterfalls pour into them rather than stopping on top.
+const SEA = { puffMin: 8, puffMax: 20, amp: 23, rows: 4, rowGap: 35, breathe: 0.5, sway: 1, wander: 2.5, bob: 1 };
+const SEA_SPLIT = 2;
+const seaTop = () => Math.round((WIN.near.y0 + (WIN.near.y1 - WIN.near.y0) * 0.66) / SEA_PX);
+// Drifting clouds: library clouds only, slow, above every cloud-sea bank.
+const SKY_SOIL_CLOUDS = [
+  ['cloud-2', 300, -40, 'right', 3, 0.6], ['cloud-9', 1250, 20, 'right', 2.5, 0.55], ['cloud-6', 1900, -80, 'right', 3.5, 0.6],
+  ['cloud-4', 800, 170, 'left', 5, 0.7], ['cloud-11', 1650, 300, 'left', 6, 0.65], ['cloud-7', 100, 330, 'right', 4.5, 0.6],
+].map(([type, x, y, direction, speed, scale], i) => ({ id: `sky-soil-cloud-${i + 1}`, type, x, y, direction, speed, scale, alpha: 1, after: 'cloud-front' }));
 
 // ------------------------------------------------------------ pixelation
 const isKey = (r, g, b) => r > 150 && b > 150 && g < 120 && Math.abs(r - b) < 90;
@@ -86,7 +98,7 @@ function trim(cv) {
 }
 
 // Separate connected pieces (for the islets sheet), largest first, left to right.
-function pieces(cv) {
+function pieces(cv, keep = Infinity) {
   const seen = new Uint8Array(cv.w * cv.h), list = [];
   for (let s = 0; s < seen.length; s++) {
     if (seen[s] || !cv.d[s * 4 + 3]) continue;
@@ -100,11 +112,13 @@ function pieces(cv) {
     }
     if (q.length > 40) list.push(q);
   }
-  return list.map(q => {
-    const c = new Canvas(cv.w, cv.h);
-    for (const v of q) for (let k = 0; k < 4; k++) c.d[v * 4 + k] = cv.d[v * 4 + k];
-    return trim(c);
-  }).sort((a, b) => a.minX - b.minX);
+  return list.sort((a, b) => b.length - a.length).slice(0, keep)
+    .map(q => ({ q, x: Math.min(...q.map(v => v % cv.w)) })).sort((a, b) => a.x - b.x)
+    .map(({ q }) => {
+      const c = new Canvas(cv.w, cv.h);
+      for (const v of q) for (let k = 0; k < 4; k++) c.d[v * 4 + k] = cv.d[v * 4 + k];
+      return trim(c);
+    });
 }
 
 function blit(dst, src, x0, y0, { flip = false, tint = null, t = 0 } = {}) {
@@ -136,6 +150,16 @@ function half(src) {
   return out;
 }
 
+// Double size: each art pixel becomes 2x2.
+function up2(src) {
+  const out = new Canvas(src.w * 2, src.h * 2);
+  for (let y = 0; y < out.h; y++) for (let x = 0; x < out.w; x++) {
+    const i = ((y >> 1) * src.w + (x >> 1)) * 4;
+    if (src.d[i + 3]) out.set(x, y, [src.d[i], src.d[i + 1], src.d[i + 2]]);
+  }
+  return out;
+}
+
 // Grass top of a placed island: first opaque row per column.
 function surface(cv, x0, x1) {
   const tops = [];
@@ -144,7 +168,8 @@ function surface(cv, x0, x1) {
 }
 
 // ------------------------------------------------------------ waterfall
-const WATER = [hex('#ffffff'), hex('#d4f6fb'), hex('#9be3f0'), hex('#5cc6df'), hex('#3aa6c8')];
+// Hazed like the islands they pour from.
+const WATER = ['#ffffff', '#d4f6fb', '#9be3f0', '#5cc6df', '#3aa6c8'].map(c => mix(hex(c), hex('#cfeee6'), 0.3));
 // Looping frames of a falling stream with a churning foam cap at the bottom.
 function waterfallFrames(w, h) {
   const frames = [];
@@ -183,18 +208,19 @@ async function buildNear(isles) {
   const cv = new Canvas(FULL_W / NEAR_PX, Math.ceil(FULL_H / NEAR_PX));
   const u = f => Math.round((WIN.near.x0 + (WIN.near.x1 - WIN.near.x0) * f) / NEAR_PX);
   const v = f => Math.round((WIN.near.y0 + (WIN.near.y1 - WIN.near.y0) * f) / NEAR_PX);
-  const dim = hex('#cdeee0');
-  // Drifting islets between the arena and the framing islands, slightly hazed.
+  // Atmospheric haze so the scenery islands read as distant, not as ground the
+  // fighters could stand on.
+  const dim = hex('#cfeee6');
   const [small1, small2, small3] = isles.islets;
-  blit(cv, small1, u(0.19) - small1.w / 2, v(0.24), { tint: dim, t: 0.18 });
-  blit(cv, small3, u(0.84) - small3.w / 2, v(0.18), { tint: dim, t: 0.18, flip: true });
-  blit(cv, small2, u(0.13) - small2.w / 2, v(0.6), { tint: dim, t: 0.25 });
+  blit(cv, small1, u(0.19) - small1.w / 2, v(0.24), { tint: dim, t: 0.5 });
+  blit(cv, small3, u(0.84) - small3.w / 2, v(0.18), { tint: dim, t: 0.5, flip: true });
+  blit(cv, small2, u(0.13) - small2.w / 2, v(0.6), { tint: dim, t: 0.52 });
   // Framing islands, flush with the window edges.
   const A = isles.a, B = isles.b;
   const ax = u(0.17) - A.w, ay = v(0.36);
   const bx = u(0.83), by = v(0.4);
-  blit(cv, A, ax, ay);
-  blit(cv, B, bx, by, { flip: true });
+  blit(cv, A, ax, ay, { tint: dim, t: 0.45 });
+  blit(cv, B, bx, by, { flip: true, tint: dim, t: 0.45 });
   // Waterfalls pour off each island's inner grass lip down into the cloud sea.
   // The lip is found on the island sprite itself: the first column in from the
   // inner edge whose topmost lime-grass pixel sits on the soil (not a tree).
@@ -214,7 +240,8 @@ async function buildNear(isles) {
     }
     return null;
   };
-  const falls = [], seaY = v(0.73);
+  // Falls end well inside the front cloud banks, which hide their feet.
+  const falls = [], seaY = Math.round((seaTop() + SEA_SPLIT * SEA.rowGap) * SEA_PX / NEAR_PX);
   const la = lip(A, true), lb = lip(B, true); // B is drawn flipped, so its right side faces in
   if (la) falls.push({ x: ax + la.x - 8, y: ay + la.y + 1, w: 7 });
   if (lb) falls.push({ x: bx + (B.w - 1 - lb.x) + 2, y: by + lb.y + 1, w: 6 });
@@ -229,23 +256,24 @@ async function buildFar(isles) {
   const haze = hex('#bfe6e0');
   const farMist = hazed(CLOUD, '#bfe7de', 0.22);
   cloudSea(cv, 49, v(0.6), farMist, { puffMin: 7, puffMax: 16, amp: 16, rows: 3, rowGap: 20 });
-  const a = isles.a, b = isles.b, [s1, , s3] = isles.islets;
-  blit(cv, b, u(0.08) - b.w / 2, v(0.3), { tint: haze, t: 0.45 });
-  blit(cv, a, u(0.95) - a.w / 2, v(0.26), { tint: haze, t: 0.45, flip: true });
-  blit(cv, s3, u(0.3) - s3.w / 2, v(0.47), { tint: haze, t: 0.5 });
-  blit(cv, s1, u(0.72) - s1.w / 2, v(0.44), { tint: haze, t: 0.5, flip: true });
+  // The distinct distant silhouettes (spire, arch, inverted peak, giant tree),
+  // drawn at double size and hazed.
+  const [spire, arch, peak, tree] = isles.distant.map(up2);
+  blit(cv, tree, u(0.07) - tree.w / 2, v(0.5) - tree.h * 0.7, { tint: haze, t: 0.48 });
+  blit(cv, peak, u(0.94) - peak.w / 2, v(0.42) - peak.h * 0.55, { tint: haze, t: 0.48, flip: true });
+  blit(cv, arch, u(0.29) - arch.w / 2, v(0.55) - arch.h * 0.6, { tint: haze, t: 0.56 });
+  blit(cv, spire, u(0.71) - spire.w / 2, v(0.55) - spire.h * 0.65, { tint: haze, t: 0.56 });
   return cv;
 }
 
 // The cloud sea the arena floats in. The static image holds frame 0 plus the
 // solid body below; an animated part plays the billowing strip on top.
-function buildSea() {
+function buildSea(fromRow, toRow) {
   const W = FULL_W / SEA_PX, H = FULL_H / SEA_PX;
-  const y = Math.round((WIN.near.y0 + (WIN.near.y1 - WIN.near.y0) * 0.66) / SEA_PX);
   const frames = [];
   for (let f = 0; f < SEA_FRAMES; f++) {
     const cv = new Canvas(W, H);
-    cloudSea(cv, 75, y, CLOUD, { puffMin: 8, puffMax: 20, amp: 23, rows: 4, rowGap: 35, phase: f / SEA_FRAMES, breathe: 1, sway: 1 });
+    cloudSea(cv, 75, seaTop(), CLOUD, { ...SEA, phase: f / SEA_FRAMES, fromRow, toRow });
     frames.push(cv);
   }
   // Rows that ever differ between frames form the animated strip.
@@ -284,20 +312,25 @@ async function buildSky(isles) {
     }
   }
   // Distant figures: blurred, sky-tinted islands and soft cloud banks.
-  const ghost = hex('#8fcfdc');
+  // A green-teal haze keeps their foliage reading as green at a distance.
+  const ghost = hex('#9fd8cc');
   const shapes = [];
   const sil = async (src, w, x, y, t, blur, flip = false) => {
     const scaled = await sharp(Buffer.from(src.d.buffer), { raw: { width: src.w, height: src.h, channels: 4 } })
       .resize(Math.round(w), Math.round(w * src.h / src.w), { kernel: 'nearest' }).flop(flip).raw().toBuffer({ resolveWithObject: true });
     const d = scaled.data;
     for (let i = 0; i < d.length; i += 4) { const c = mix([d[i], d[i + 1], d[i + 2]], ghost, t); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = Math.round(d[i + 3] * 0.85); }
-    shapes.push({ input: await sharp(d, { raw: scaled.info }).blur(blur).png().toBuffer(), left: Math.round(x), top: Math.round(y) });
+    // Pad before blurring so the soft edge is not clipped at the sprite's box.
+    const pad = Math.ceil(blur * 3);
+    const padded = await sharp(d, { raw: scaled.info }).extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+    shapes.push({ input: await sharp(padded).blur(blur).png().toBuffer(), left: Math.round(x) - pad, top: Math.round(y) - pad });
   };
   const yy = f => yTop + (yBot - yTop) * f;
-  await sil(isles.b, 330, 160, yy(0.4), 0.72, 5);
-  await sil(isles.a, 280, 1000, yy(0.47), 0.75, 6, true);
-  await sil(isles.islets[0], 90, 590, yy(0.36), 0.8, 3);
-  await sil(isles.islets[2], 120, 860, yy(0.3), 0.8, 3, true);
+  // Large, lush islands (dense forest; stacked terraces), softly blurred.
+  const [forest, terraces] = isles.lush;
+  await sil(forest, 300, 560, yy(0.34), 0.7, 6, true);     // smallest, farthest, in the middle gap
+  await sil(forest, 600, 20, yy(0.36), 0.52, 5);
+  await sil(terraces, 500, 990, yy(0.27), 0.52, 5);
   // Soft cloud banks along the horizon.
   const bank = new Canvas(W / 4, 90);
   for (let k = 0; k < 26; k++) puff(bank, Math.round(k * 15.5 + (k % 3) * 4), 60 + (k % 2) * 8, 16 + (k * 7) % 11, { rim: hex('#ffffff'), light: hex('#f6fbf0'), mid: hex('#e4f4ec'), shade: hex('#cdeae6'), deep: hex('#c0e4e2') });
@@ -313,6 +346,11 @@ async function buildSky(isles) {
   const isles = { a: trim(a.cv), b: trim(b.cv), islets: pieces(s.cv) };
   isles.islets.sort((p, q) => p.w - q.w);
   isles.islets = [isles.islets[1], isles.islets[0], isles.islets[2]]; // pine islet, bare rock, blossom islet
+  // Four distinct distant silhouettes, left to right: spire, arch, inverted peak, giant tree.
+  const d = await pixelate(path.join(SRC, 'distant.png'));
+  isles.distant = pieces(d.cv, 4);
+  // Two large lush islands for the blurred sky: a forest island and a terraced one.
+  isles.lush = pieces((await pixelate(path.join(SRC, 'lush.png'))).cv, 2);
 
   const save = (cv, px, file, h) => sharp(Buffer.from(cv.d.buffer), { raw: { width: cv.w, height: cv.h, channels: 4 } })
     .resize(cv.w * px, cv.h * px, { kernel: 'nearest' }).raw().toBuffer({ resolveWithObject: true })
@@ -322,11 +360,17 @@ async function buildSky(isles) {
   await save(await buildFar(isles), FAR_PX, 'far-isles-v4.webp', FULL_H);
   const near = await buildNear(isles);
   await save(near.cv, NEAR_PX, 'near-isles-v4.webp', FULL_H);
-  const sea = buildSea();
-  // The sea layer image is stored at native size; the runtime's cover fit then
-  // scales it exactly 2x, matching the near layer, and the part frames stay small.
-  await sharp(Buffer.from(sea.base.d.buffer), { raw: { width: sea.base.w, height: sea.base.h, channels: 4 } }).webp({ lossless: true, effort: 6 }).toFile(path.join(OUT, 'cloud-sea.webp'));
-  const seaSheet = await sheet(sea.strips, 1, path.join(OUT, 'cloud-sea-anim.webp'));
+  // Sea layers are stored at native size; the runtime's cover fit then scales
+  // them exactly 2x, matching the near layer, and the part frames stay small.
+  const seaParts = {};
+  for (const [name, from, to] of [['cloud-sea', 0, SEA_SPLIT], ['cloud-front', SEA_SPLIT, SEA.rows]]) {
+    const sea = buildSea(from, to);
+    await sharp(Buffer.from(sea.base.d.buffer), { raw: { width: sea.base.w, height: sea.base.h, channels: 4 } }).webp({ lossless: true, effort: 6 }).toFile(path.join(OUT, `${name}.webp`));
+    const meta = await sheet(sea.strips, 1, path.join(OUT, `${name}-anim.webp`));
+    if (meta.frameHeight * SEA_FRAMES > 4096) throw new Error(`${name} sheet exceeds 4096 px`);
+    seaParts[name] = { url: `/assets/sky-soil/${name}-anim.webp`, ...meta, frameRate: SEA_FPS, frames: sea.strips.map((_, i) => i),
+      x: sea.base.w / 2, y: sea.y0 + sea.strips[0].h / 2 };
+  }
   const fallParts = [];
   for (const [k, f] of near.falls.entries()) {
     const frames = waterfallFrames(f.w, f.h);
@@ -334,29 +378,31 @@ async function buildSky(isles) {
     fallParts.push({ url: `/assets/sky-soil/waterfall-${k + 1}.webp`, ...meta, frameRate: FALL_FPS, frames: frames.map((_, i) => i),
       x: (f.x - 4 + frames[0].w / 2) * NEAR_PX, y: (f.y + frames[0].h / 2) * NEAR_PX });
   }
-  const seaPart = { url: '/assets/sky-soil/cloud-sea-anim.webp', ...seaSheet, frameRate: SEA_FPS, frames: sea.strips.map((_, i) => i),
-    x: sea.base.w / 2, y: sea.y0 + sea.strips[0].h / 2 };
   // Lobby background: flattened still of every layer.
   await sharp(path.join(OUT, 'sky-v4.webp')).composite([
     { input: path.join(OUT, 'far-isles-v4.webp') },
     { input: await sharp(path.join(OUT, 'cloud-sea.webp')).resize(FULL_W, FULL_H, { kernel: 'nearest' }).png().toBuffer() },
     { input: path.join(OUT, 'near-isles-v4.webp') },
+    { input: await sharp(path.join(OUT, 'cloud-front.webp')).resize(FULL_W, FULL_H, { kernel: 'nearest' }).png().toBuffer() },
   ]).webp({ quality: 90 }).toFile(path.join(OUT, 'background.webp'));
-  fs.writeFileSync(path.join(OUT, 'parts.json'), JSON.stringify({ seaPart, fallParts }, null, 2));
+  fs.writeFileSync(path.join(OUT, 'parts.json'), JSON.stringify({ seaParts, fallParts }, null, 2));
   console.log('wrote', OUT);
   if (!INSTALL) return;
 
   const dest = path.join(ROOT, 'public/assets/sky-soil');
   for (const f of fs.readdirSync(OUT)) if (f.endsWith('.webp')) fs.copyFileSync(path.join(OUT, f), path.join(dest, f));
-  const full = path.join(ROOT, 'src/shared/maps/2.json'), m = JSON.parse(fs.readFileSync(full, 'utf8'));
-  const layers = m.scenery.layers, byId = id => layers.find(l => l.id === id);
-  const sky = byId('sky'); sky.url = '/assets/sky-soil/sky-v4.webp'; delete sky.filter;
-  const far = byId('far-peaks'); far.url = '/assets/sky-soil/far-isles-v4.webp'; far.filter = 'nearest';
-  const nearLayer = byId('forest-ridges'); nearLayer.url = '/assets/sky-soil/near-isles-v4.webp'; nearLayer.filter = 'nearest'; nearLayer.parts = fallParts;
-  const seaLayer = { id: 'cloud-sea', url: '/assets/sky-soil/cloud-sea.webp', scroll: nearLayer.scroll, fit: nearLayer.fit, y: nearLayer.y, filter: 'nearest', parts: [seaPart] };
-  const i = layers.findIndex(l => l.id === 'cloud-sea');
-  if (i >= 0) layers[i] = seaLayer; else layers.splice(layers.indexOf(nearLayer), 0, seaLayer);
-  m.metadata.lobbyBgAsset = '/assets/sky-soil/background.webp';
-  fs.writeFileSync(full, JSON.stringify(m, null, 2) + '\n');
+  updateSkySoil(m => {
+    const layers = m.scenery.layers, byId = id => layers.find(l => l.id === id);
+    const sky = byId('sky'); sky.url = '/assets/sky-soil/sky-v4.webp'; delete sky.filter;
+    const far = byId('far-peaks'); far.url = '/assets/sky-soil/far-isles-v4.webp'; far.filter = 'nearest';
+    const near = byId('forest-ridges'); near.url = '/assets/sky-soil/near-isles-v4.webp'; near.filter = 'nearest'; near.parts = fallParts;
+    near.fog = Math.max(near.fog || 0, 0.12);
+    const seaLayer = id => ({ id, url: `/assets/sky-soil/${id}.webp`, scroll: near.scroll, fit: near.fit, y: near.y, filter: 'nearest', parts: [seaParts[id]] });
+    for (const l of layers.filter(l => l.id === 'cloud-sea' || l.id === 'cloud-front')) layers.splice(layers.indexOf(l), 1);
+    layers.splice(layers.indexOf(near), 0, seaLayer('cloud-sea'));
+    layers.splice(layers.indexOf(near) + 1, 0, seaLayer('cloud-front'));
+    m.scenery.clouds = { enabled: true, items: SKY_SOIL_CLOUDS };
+    m.metadata.lobbyBgAsset = '/assets/sky-soil/background.webp';
+  });
   console.log('installed');
 })().catch(e => { console.error(e); process.exit(1); });

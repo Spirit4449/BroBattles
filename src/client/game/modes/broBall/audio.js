@@ -4,6 +4,15 @@ import { playerAudioListener } from '../../audio/playerAudio';
 
 const BALL_SOUND_GAIN = 1.15;
 
+// Bring alternate samples to the same level before applying impact strength
+// and distance. Leave the goal sting ahead of the crowd and rebound layers.
+const impactSampleGain = {
+  touch: 0.32,
+  bounce: 0.24, 'bounce-2': 0.30,
+  rebound: 0.37,
+  kick: 0.60, 'kick-2': 0.32,
+};
+
 const impacts = {
   body: { clips: ['touch'], gain: 0.72 },
   turf: { clips: ['bounce', 'bounce-2'], gain: 0.86 },
@@ -116,16 +125,17 @@ export function createBroBallAudio(scene) {
       const { clips, gain } = impacts[soundKind] || impacts.body;
       const strength = clamp01(event.strength / (kind === 'body' ? rules.kickSpeed : rules.dashSpeed));
       const rate = 1.08 - 0.22 * strength + (event.seq % 3 - 1) * 0.04;
-      const volume = clamp01(gain * ballGain * (0.40 + 0.60 * Math.sqrt(strength)));
-      scene.sound?.play(key(clips[event.seq % clips.length]), {
+      const clip = clips[event.seq % clips.length];
+      const volume = clamp01(gain * ballGain * (0.40 + 0.60 * Math.sqrt(strength))) * impactSampleGain[clip];
+      scene.sound?.play(key(clip), {
         // Keep the spatial rebound under the celebration's opening hit.
         volume: kind === 'goal' ? volume * 0.38 : volume, rate, pan,
       });
       if (kind === 'goal') {
         stopRoll();
-        playedWinningGoal = !!event.winner && event.winner === yourTeam && play('goal-victory', 0.97) === true;
-        if (!playedWinningGoal) play('goal-celebration', 0.97);
-        if (event.winner) play('final-whistle', 0.72);
+        playedWinningGoal = !!event.winner && event.winner === yourTeam && play('goal-victory', 0.24) === true;
+        if (!playedWinningGoal) play('goal-celebration', 0.25);
+        if (event.winner) play('final-whistle', 0.14);
         lastApplause = time;
         excitedUntil = time + 4100;
         scene._bgmEnvelope?.fade(0.15, 75);
@@ -133,12 +143,12 @@ export function createBroBallAudio(scene) {
       }
       const powered = kind === 'super' || kind === 'smash';
       if (powered || (kind === 'kick' && event.strength >= rules.superKickSpeed)) {
-        scene.sound?.play(key('shot-swish'), { volume: 0.25 * ballGain, rate, pan });
+        scene.sound?.play(key('shot-swish'), { volume: 0.19 * ballGain, rate, pan });
       }
       if (powered || kind === 'post') {
         excitedUntil = Math.max(excitedUntil, time + 1900);
         if (time - lastApplause > 8500) {
-          play('stands-applause', kind === 'post' ? 0.14 : 0.21);
+          play('stands-applause', kind === 'post' ? 0.10 : 0.15);
           lastApplause = time;
         }
       }
@@ -147,11 +157,11 @@ export function createBroBallAudio(scene) {
     kickoff(opening = false) {
       stopRoll();
       if (opening) {
-        play('stands-applause', 0.31);
+        play('stands-applause', 0.19);
         lastApplause = scene.time.now;
         excitedUntil = lastApplause + 2200;
       } else {
-        play('kickoff-whistle', 0.44, 1.04);
+        play('kickoff-whistle', 0.19, 1.04);
         scene._bgmEnvelope?.fade(1, 850);
       }
     },
@@ -162,7 +172,7 @@ export function createBroBallAudio(scene) {
         return;
       }
       const excitement = clamp01((excitedUntil - scene.time.now) / 1900);
-      const crowdTarget = 0.46 + excitement * 0.13 + (goalPaused ? 0.08 : 0);
+      const crowdTarget = 0.052 + excitement * 0.021 + (goalPaused ? 0.012 : 0);
       crowdGain += (crowdTarget - crowdGain) * (1 - Math.exp(-dt * 7));
       crowd = updateLoop(crowd, 'stands-crowd', crowdGain);
       if (goalPaused || ball.destroyed) {
@@ -174,7 +184,7 @@ export function createBroBallAudio(scene) {
         surfaceAt(scene, ball.x - 2, ball.x + 2, ball.y + rules.radius, 7);
       const rollingPace = supported ? clamp01(Math.abs(ball.vx) / rules.kickSpeed) : 0;
       const { gain, pan } = ballMix(scene, ball);
-      const rollTarget = gain * 0.70 * Math.sqrt(rollingPace);
+      const rollTarget = gain * 0.075 * Math.sqrt(rollingPace);
       rollGain += (rollTarget - rollGain) * (1 - Math.exp(-dt * 20));
       roll = updateLoop(roll, 'roll', rollGain, 0.67 + rollingPace * 0.70, pan);
     },

@@ -83,6 +83,20 @@ test('replacing the local fighter releases the previous movement and HUD listene
   assert.equal(f.scene.events.listenerCount('postupdate'), 0);
 });
 
+test('local fighter teardown completes after Arcade Physics clears the world', () => {
+  const { createLocalPlayerFixture } = require('./helpers/localPlayerFixture');
+  const f = createLocalPlayerFixture();
+  const world = f.scene.physics.world;
+  f.scene.physics.world = null;
+
+  f.destroy();
+
+  assert.equal(world.listenerCount('worldstep'), 0);
+  assert.equal(f.scene.events.listenerCount('postupdate'), 0);
+  assert.equal(f.scene._localPlayerAudioSprite, null);
+  assert.equal(f.api.player, null);
+});
+
 test('a replacement fighter starts fresh and ignores callbacks from the retired fighter', t => {
   const { EventEmitter } = require('node:events');
   const { createLocalPlayerFixture } = require('./helpers/localPlayerFixture');
@@ -372,7 +386,9 @@ test('remote dash survives skipped snapshots and ignores duplicate, missing and 
     exported.presentRemoteDash(f.scene,f.sprite,state,tracker,hidden);
   present({dashSeq:4});assert.equal(f.sounds.length,0,'historical join baseline');
   present({dashSeq:6,dashX:1,dashY:0});assert.equal(f.sounds.length,1);
-  assert.ok(Math.abs(f.sounds[0][1].volume-0.63)<1e-12);
+  const localSounds=[];
+  exported.playDashSound({sound:{play:(key,options)=>localSounds.push([key,options])}});
+  assert.ok(Math.abs(f.sounds[0][1].volume-localSounds[0][1].volume*0.9)<1e-12);
   present({});present({dashSeq:2});present({dashSeq:6});present({dashSeq:NaN});
   assert.equal(f.sounds.length,1);
   present({dashSeq:7,dashX:0,dashY:-1},true);present({dashSeq:7});
@@ -380,7 +396,7 @@ test('remote dash survives skipped snapshots and ignores duplicate, missing and 
   f.scene._localPlayerAudioSprite.x=1000;
   present({dashSeq:8,dashX:0,dashY:-1});
   assert.equal(f.sounds.length,2);
-  assert.ok(f.sounds[1][1].volume<0.3);
+  assert.ok(f.sounds[1][1].volume<f.sounds[0][1].volume);
 });
 
 test('joining during an active dash plays once and sprite destruction stops trail',()=>{

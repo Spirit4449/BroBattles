@@ -2,13 +2,13 @@
 
 ## Bro Ball
 
-Sunset Bowl (map 6) is the Bro Ball arena: an open-air stadium at golden hour. Each goal is a timber cage on a raised stone step. A rolling ball bounces off the step and has to be lifted in, and players can walk into the cage. The roof beam over each mouth can be stood on, and a ball resting on it rolls back toward the pitch. Two raised one-way platforms flank the open midfield. A rising ball must clear the deck with its bottom edge to land on it. After scoring, the ball keeps its momentum and disappears when it stops or the pitch resets. The back net catches shots that reach it. Players and the ball pass up through them and land on top. Each rally starts with the ball dropping freely from high over the centre with a little sideways drift. Map validation checks that each goal's floor, step, roof beam and back wall line up.
+Rumble Stadium (map 6) is the Bro Ball arena: an open-air stadium at golden hour. Each goal is a timber cage on a raised stone step. A rolling ball bounces off the step and has to be lifted in, and players can walk into the cage. The roof beam over each mouth can be stood on, and a ball resting on it rolls back toward the pitch. Two raised one-way platforms flank the open midfield. A rising ball must clear the deck with its bottom edge to land on it. Goals are credited to the scoring team’s most recent player to touch the ball; an own goal or a goal without a known touch has no individual scorer. Player goal counts appear beside their team HUD portraits. After scoring, the ball keeps its momentum and disappears when it stops or the pitch resets. The back net catches shots that reach it. Players and the ball pass up through them and land on top. Each rally starts with the ball dropping freely from high over the centre with a little sideways drift. Map validation checks that each goal's floor, step, roof beam and back wall line up.
 
 Ways to play the ball, all tuned in `ballRules` in `src/shared/broBall.js`:
 
-- **Body contact** deflects the ball and pops a grounded ball up. A slow ball on a player's head gets a small sideways nudge so it falls. A centered brush picks up some of the player's run speed, and a ball already moving quickly across the head keeps its sideways momentum. Standing from a crouch pops an overhead ball into a short arc. A ball squeezed against the ground or a wall keeps its existing momentum along the surface. Sustained pressure can hold it still until the player moves away or kicks it. Kicks stretch the ball along its flight direction. Surface hits flatten it against the surface, and the silhouette eases back to round.
-- **A tap attack** within reach kicks the ball away from you and lifts it. The attack still fires.
-- **Aiming** (holding a drag-aimed attack or super) and touching the ball takes possession. The ball rides on your aim as you move. Releasing strikes it along the aim with no attack. A held super strikes harder and spends the charge on release. Releasing near a loose ball strikes it the same way. The ball comes loose if you are hit, cancel the aim, carry it past `holdMaxMs`, or an opponent dashes through it. The client sends `bro-ball-hold` while aiming and draws your carried ball on your own aim, ahead of the server.
+- **Body contact** deflects the ball and pops a grounded ball up. A slow ball on a player's head gets a small sideways nudge so it falls. A centered brush picks up some of the player's run speed, and a ball already moving quickly across the head keeps its sideways momentum. Standing from a crouch pops an overhead ball into a short arc. A ball squeezed against the ground or a wall tries to escape along an open path. Sustained pressure produces one squeeze per encounter. Kicks stretch the ball along its flight direction. Surface hits flatten it against the surface, and the silhouette eases back to round.
+- **An attack or super** can kick the ball once when you come within reach. The window covers the swing or firing period, with a short grace period for delayed releases. Inferno counts from casting through the opening burst and its grace period. Side-on kicks travel forward with a small upward arc. Supers strike harder, and the attack or super still fires.
+- **Landing on the ball** flattens it under the player's feet before it visibly springs away. Centered landings on a grounded ball send it toward the player's facing when that side is open. If that side is blocked, the ball tries the other side.
 - **A dash** through the ball is a power shot. A downward dash smashes it upfield.
 
 Attacks, supers and dashes add any speed the ball already has along the new shot direction, up to the ball's speed cap.
@@ -17,9 +17,9 @@ Fast downward landings rebound more strongly off the pitch and platform tops. Pl
 
 In Bro Ball, dash takes two seconds to recharge after the burst. The mode sets `_dashCooldownMs` on its players, which the shared dash rule and the client dash HUD both read.
 
-Bots use `src/server/core/bots/broBall.js`. The deeper teammate keeps goal and the other strikes; human teammates count when roles are chosen. Bots predict the ball's flight with the server physics. They take aimed shots that the physics says go in, carry the ball upfield when there is no clear shot, lob over defenders, and clear from their own end. They take dash shots only on a scoring line, dash through an opponent carrying the ball, jump to play high balls and balls resting on platforms, and attack opponents who contest the ball.
+Bro Ball bots share a forecast of the loose ball from the server's ball physics. One teammate chases while the other can cover goal, pressure an opponent or move upfield for a pass. Human teammates count in both chaser and receiver selection. The chaser routes to elevated balls using the arena navigation graph and times running jumps against moving balls. Within striking distance it checks regular kicks and dash power shots for a clear goal or a reachable teammate. A bot receiving a planned pass moves to the predicted contact and can jump before the ball arrives. See `src/server/core/bots/broBall.js`.
 
-Map Studio playtests run as a solo drill (the clock stops and the pitch resets after each goal) or with bots. Public matchmaking unlocks at 1,500 trophies and uses the 2v2 format on Sunset Bowl. Bots can fill empty slots.
+Map Studio playtests run as a solo drill (the clock stops and the pitch resets after each goal) or with bots. Public matchmaking unlocks at 1,500 trophies and uses the 2v2 format on Rumble Stadium. Bots can fill empty slots.
 
 The sky and grandstand are Codex generations in `scripts/art/bro-ball-originals/`. `node scripts/art/install-bro-ball-art.cjs` pixelates them onto the arena's pixel grid (most common palette colour per cell, as in [code-pixel-art.md](../art/code-pixel-art.md)) and installs them. The goals, platforms, canopy, pitch, crowd, ball and hit effects are drawn in code by `src/client/game/modes/broBall/`, so they line up with the colliders and can react to play.
 
@@ -148,6 +148,8 @@ projectile danger. Each opportunity has a 40% roll spaced 600–1000 ms apart;
 normal dash cooldown and hesitation still apply. Committed dash routes are kept.
 Successful decisions are counted in the `dashStomps` bot metric.
 
+Death clears the fallen fighter’s status effects, attached attacks and unreleased casts. Released projectiles can still hit during the respawn wait. Respawning ends any remaining super projectiles from the previous life. Bro Ball pauses combat during a goal celebration and clears both teams’ effects and projectiles when the fighters teleport to kickoff.
+
 ## Draven's Inferno
 
 Draven takes 60% less incoming damage while channeling Inferno. A translucent,
@@ -155,6 +157,41 @@ circular shield with the same shaded shell and reflections as spawn protection
 surrounds him for the channel and disappears when it ends or is interrupted. The incoming damage multiplier lives in
 `stats.tuning.special.inferno.damageTakenMult` in his shared character definition
 and stacks multiplicatively with other damage modifiers.
+
+## Sparrow's Seraph
+
+Sparrow's super is a tap. It spends the charge and starts a ten-second aim phase
+(`stats.tuning.special.seraph` in `sparrow.json`); it fires nothing by itself.
+She rises on angel wings and hovers with her bow drawn inside a shield that
+takes `damageTakenMult` off incoming damage (the shield powerup's 30%). She cannot
+move, attack or dash, but knockback, pulls and stuns still apply: her client
+flies the hover and reports positions as usual, and a bot's hover is flown by
+`sparrowSeraphAbility.js`. The super bar drains over the aim phase.
+
+The light from her bow follows mouse movement as soon as the aim phase starts.
+Either mouse button releases the bolt after a click, and either mobile aim stick
+steers the beam and fires on release. The keyboard attack and super keys fire
+along the current aim. If time runs out, the server fires along her last
+reported pose after `releaseGraceMs`, which also accepts a release still in
+flight. The bolt (`sparrowCombat.js`, `sparrowLightBolt.js`) flies straight
+at `lightBolt.speed` for `lightBolt.range` (about half of Iron Junction's
+width), passes through terrain and walls,
+and strikes every enemy, vault and crate on its path once for her level-scaled
+special damage (800 at level 1). Targets are tested where she saw them, like
+her arrows. After the release the shield drops and she falls normally.
+
+Gold streaks pulse in and out from Sparrow's center, and expanding shield rings
+come faster as the charge builds.
+The aim cue uses the rising hum from `angelaim-halo-hum.m4a`, stretched
+at its original pitch to 10.5 seconds so the rise continues through the
+server release grace period. The release cue starts
+at 5.615 seconds in the source recording and plays when the bolt fires, including
+on an early shot. Both clips live in `public/assets/sparrow/`.
+Art: `scripts/art/sparrow-pixel/seraph.cjs` (rise and 13 aim directions with
+wing flutter and a glowing bow, packed by `sheet.cjs`) and `seraph-fx.cjs`
+(shield, aim light, woven bolt trail, release flash, impact bursts and feathers).
+Gold and blue strands weave behind the bolt. The aim guide and shot taper at
+maximum range. The trail begins to fade outward from the bow shortly after release.
 
 ## Bank Bust: coins in the vault
 
@@ -281,6 +318,8 @@ Shared map documents supply geometry.
 Navigation simulates movement and verifies stable landings, including jump/dash routes; actual takeoff state is revalidated.
 Difficulty scales through trophy anchors up to 4,000, retaining reaction delay, aim error and missed opportunities.
 Invisible opponents are not tracked by reading their live positions.
+
+All fighters use the map’s movement graph to compare exposure to observed streams of straight projectiles. Route costs cover the walk to takeoff, the flight, the landing and the final walk to the goal. Combat positioning also checks platform edges and positions beside the stream for a firing angle.
 
 Sudden-death routing treats poison exposure as a cost, preserving necessary submerged routes. Ordinary combat positioning continues away from danger; near full coverage, bots stop treating gas as a routing constraint. Headless tests do not establish production balance or browser smoothness.
 

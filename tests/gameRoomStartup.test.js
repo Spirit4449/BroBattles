@@ -56,7 +56,7 @@ async function setup(t, teamSize = 1, { humans = 1, friendLevel = 3 } = {}) {
   }
   async function join(client) {
     let ack;
-    await client.receive('game:join', { matchId: 1341, ninjaCombatVersion: 1, sparrowCombatVersion: 2, networkWireVersion: 1 }, (value) => { ack = value; });
+    await client.receive('game:join', { matchId: 1341, ninjaCombatVersion: require('../src/shared/characters/ninjaProjectile').VERSION, sparrowCombatVersion: require('../src/shared/characters/sparrowProjectile').VERSION, networkWireVersion: 1 }, (value) => { ack = value; });
     return ack;
   }
   async function ready(client) {

@@ -1,7 +1,6 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="preload" as="image" href="/assets/loadingscreen.webp" fetchpriority="high" />
     <script src="/bundles/navigation.bundle.js"></script>
     <meta charset="UTF-8" />
     <meta
@@ -13,9 +12,7 @@
     <title>Battle · Bro Battles</title>
     <meta name="robots" content="noindex, follow" />
     <link rel="shortcut icon" href="/assets/logos/logo-small.webp" type="image/webp" />
-    <!-- The boot script below runs these in order; preloading lets a direct
-         page load download both at once instead of one after the other. -->
-    <link rel="preload" href="/bundles/phaser-arcade-physics.min.js" as="script" />
+    <!-- Fetch the game bundle while the boot script loads Phaser if needed. -->
     <link rel="preload" href="/bundles/game.bundle.js" as="script" />
     <link rel="stylesheet" href="/styles/lato.css" />
     <link rel="stylesheet" href="/bundles/game.css" />
@@ -29,6 +26,7 @@
         src="/assets/loadingscreen.webp"
         class="background-image"
         alt="loading"
+        fetchpriority="high"
       />
     </div>
 

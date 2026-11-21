@@ -322,7 +322,7 @@ function decorate(cv, isle, o) {
 // Cloud sea: stacked banks, back to front. Each bank shows only a scalloped,
 // lit upper edge over a flat body, and casts a thin shade onto the bank behind
 // it, so the sea reads as a few big rolling shelves rather than a bubble field.
-function cloudSea(cv, seed, y, baseTones, { puffMin = 6, puffMax = 14, amp = 10, rows = 3, rowGap, haze = '#9fdcdc', phase = 0, breathe = 0, sway = 0 } = {}) {
+function cloudSea(cv, seed, y, baseTones, { puffMin = 6, puffMax = 14, amp = 10, rows = 3, rowGap, haze = '#9fdcdc', phase = 0, breathe = 0, sway = 0, wander = 0, bob = 0, fromRow = 0, toRow = Infinity } = {}) {
   const r = rng(seed), gap = rowGap ?? Math.round(puffMax * 0.9);
   for (let row = 0; row < rows; row++) {
     // Back banks recede toward the sky colour.
@@ -333,13 +333,19 @@ function cloudSea(cv, seed, y, baseTones, { puffMin = 6, puffMax = 14, amp = 10,
     for (let x = -puffMax * 2; x < cv.w + puffMax * 2;) {
       const lift = Math.max(-0.2, mound(x)) * amp * (1 - row * 0.15);
       const rad = (puffMin + (puffMax - puffMin) * (0.5 + 0.5 * size(x))) * grow;
-      // Looping motion: each lobe swells on its own phase, each bank sways.
-      const ph = (Math.sin(puffs.length * 12.9898 + row * 78.233) * 43758.5453) % 1;
-      const wave = Math.sin(2 * Math.PI * (phase + ph));
-      const dx = sway * Math.sin(2 * Math.PI * (phase + row * 0.27));
-      puffs.push({ x: Math.round(x + dx), y: Math.round(baseY - lift - breathe * 0.5 * wave), r: rad + breathe * wave });
+      // Looping motion (phase 0..1): each lobe drifts left and right, bobs and
+      // swells on its own phases, and each bank sways as a whole.
+      const hash = k => { const v = Math.sin(puffs.length * 12.9898 + row * 78.233 + k * 39.425) * 43758.5453; return v - Math.floor(v); };
+      const wave = Math.sin(2 * Math.PI * (phase + hash(0)));
+      const reach = wander * (0.6 + 0.8 * hash(3)) * (hash(4) < 0.5 ? -1 : 1);
+      const dx = sway * Math.sin(2 * Math.PI * (phase + row * 0.27)) + reach * Math.sin(2 * Math.PI * (phase + hash(1)));
+      const dy = bob * Math.sin(2 * Math.PI * (phase + hash(2)));
+      puffs.push({ x: Math.round(x + dx), y: Math.round(baseY - lift - breathe * 0.5 * wave + dy), r: rad + breathe * wave });
       x += rad * (1.05 + r() * 0.5);
     }
+    // Layout is computed for every bank so a split sea (back banks on one
+    // layer, front banks on another) lines up exactly; only the range draws.
+    if (row < fromRow || row >= toRow) continue;
     const body = row === rows - 1 ? tones.light : tones.mid;
     // Cast shade on the bank behind.
     if (row > 0) for (const p of puffs) {
@@ -358,12 +364,8 @@ function cloudSea(cv, seed, y, baseTones, { puffMin = 6, puffMax = 14, amp = 10,
       const a = puffs[prev], b = puffs[Math.min(puffs.length - 1, prev + 1)];
       const t = b.x === a.x ? 0 : (x - a.x) / (b.x - a.x);
       const yy = Math.round(a.y + (b.y - a.y) * t);
-      // Lit top, then a dithered step into shade toward the bank's base.
-      for (let k = yy; k < cv.h; k++) {
-        const t = (k - yy) / gap;
-        const c = t < 0.4 ? body : t < 0.7 ? (bayer(x, k) < (t - 0.4) / 0.3 ? tones.shade : body) : tones.shade;
-        cv.set(x, k, c);
-      }
+      // Lit top, then a hard step into shade toward the bank's base (no dither).
+      for (let k = yy; k < cv.h; k++) cv.set(x, k, (k - yy) / gap < 0.55 ? body : tones.shade);
     }
     // A single highlight row along the top of each puff's lit side.
     for (const p of puffs) for (let dx = Math.round(-p.r * 0.1); dx <= Math.round(p.r * 0.7); dx++) {

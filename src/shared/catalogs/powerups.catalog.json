@@ -5,7 +5,8 @@
     "color": 11032055,
     "lightColor": 14533370,
     "durationMs": 10000,
-    "tickVolume": 0.18,
+    "touchVolume": 0.08,
+    "tickVolume": 0.045,
     "modifiers": {
       "damageMult": 1.35,
       "speedMult": 1.25
@@ -37,7 +38,8 @@
     "color": 3462041,
     "lightColor": 11070912,
     "durationMs": 10000,
-    "tickVolume": 0.2,
+    "touchVolume": 0.12,
+    "tickVolume": 0.065,
     "healingPerSecond": 100,
     "visual": {
       "bubbleStrength": 0.82,
@@ -67,6 +69,7 @@
     "color": 16347926,
     "lightColor": 16500895,
     "durationMs": 10000,
+    "touchVolume": 0.19,
     "modifiers": {
       "damageTakenMult": 0.7
     },
@@ -80,7 +83,8 @@
     "color": 16436245,
     "lightColor": 16114543,
     "durationMs": 8000,
-    "tickVolume": 0.28,
+    "touchVolume": 0.06,
+    "tickVolume": 0.18,
     "damagePerSecond": 50,
     "visual": {
       "bubbleStrength": 0.78,
@@ -105,7 +109,8 @@
     "color": 15680580,
     "lightColor": 16103608,
     "durationMs": 7000,
-    "tickVolume": 0.2,
+    "touchVolume": 0.09,
+    "tickVolume": 0.021,
     "modifiers": {
       "jumpMult": 1.55,
       "speedMult": 1.15
@@ -135,14 +140,15 @@
     "assetDir": "invisibility",
     "color": 12616956,
     "lightColor": 14533370,
-    "durationMs": 8000
+    "durationMs": 8000,
+    "touchVolume": 0.15
   },
   "shockwave": {
     "assetDir": "shockwave",
     "color": 16747008,
     "lightColor": 16500881,
     "durationMs": 1,
-    "touchVolume": 0.75,
+    "touchVolume": 0.2,
     "radius": 420,
     "forceX": 990,
     "forceY": 750
@@ -152,7 +158,8 @@
     "color": 6809849,
     "lightColor": 12119797,
     "durationMs": 7000,
-    "tickVolume": 0.7,
+    "touchVolume": 0.19,
+    "tickVolume": 0.14,
     "modifiers": {
       "speedMult": 0.45,
       "jumpMult": 0.6

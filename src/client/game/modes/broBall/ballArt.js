@@ -58,7 +58,7 @@ function orthonormalize(m) {
 
 /**
  * A ball sprite whose texture is redrawn from a 3D orientation.
- * `paint({ dt, vx, gold, heat })` rolls it by its speed and repaints it;
+ * `paint({ dt, vx, gold, heat, press })` rolls and repaints it;
  * `tumble(strength)` adds a spin around the screen axes after a hit.
  */
 export function createBallSprite(scene, Phaser, diameter, key = 'bro-ball-sphere') {
@@ -71,7 +71,7 @@ export function createBallSprite(scene, Phaser, diameter, key = 'bro-ball-sphere
   let orientation = [1, 0, 0, 0, 1, 0, 0, 0, 1];
   let spinX = 0, spinY = 0, frame = 0;
 
-  function paint({ dt = 1 / 60, vx = 0, radius = diameter / 2, gold = 0, heat = 0 } = {}) {
+  function paint({ dt = 1 / 60, vx = 0, radius = diameter / 2, gold = 0, heat = 0, press = null } = {}) {
     const roll = vx / radius;
     spinX *= Math.exp(-dt * 1.6);
     spinY *= Math.exp(-dt * 1.6);
@@ -85,7 +85,14 @@ export function createBallSprite(scene, Phaser, diameter, key = 'bro-ball-sphere
     for (let y = 0; y < ART; y++) {
       for (let x = 0; x < ART; x++) {
         const index = (y * ART + x) * 4;
-        const u = (x + 0.5 - half) / half, v = (y + 0.5 - half) / half;
+        let u = (x + 0.5 - half) / half, v = (y + 0.5 - half) / half;
+        if (press) {
+          // Sample the original sphere from the compressed cap. The opposite
+          // side stays in place, including the edge resting against the pitch.
+          const depth = Math.max(0, u * press.nx + v * press.ny - 0.18) * press.stretch;
+          u += depth * press.nx;
+          v += depth * press.ny;
+        }
         const r2 = u * u + v * v;
         if (r2 > 1) {
           data[index + 3] = 0;
@@ -134,11 +141,27 @@ export function createBallSprite(scene, Phaser, diameter, key = 'bro-ball-sphere
 // Kicks lengthen the silhouette along the launch vector. Surfaces flatten it
 // along their normal. Both ease continuously back to the round resting pose.
 export function deformationAt(impact, ageMs, maxSpeed) {
-  if (!impact) return 1;
+  if (!impact || impact.contact?.foot) return 1;
   const power = Math.min(1, impact.strength / maxSpeed);
   const duration = 390 + 1050 * power;
   const remaining = Math.max(0, 1 - ageMs / duration);
   const recovery = remaining * remaining * (3 - 2 * remaining);
   const surface = impact.kind === 'wall' || impact.kind === 'post';
   return 1 + (surface ? -0.36 : 0.55) * power * recovery;
+}
+
+export function footPressAt(impact, ageMs, maxSpeed) {
+  const contact = impact?.contact;
+  const holdMs = 60;
+  const recoveryMs = 200;
+  if (!contact?.foot || ageMs >= holdMs + recoveryMs) return null;
+  const power = Math.min(1, impact.strength / maxSpeed);
+  const afterHold = Math.max(0, ageMs - holdMs);
+  const remaining = 1 - afterHold / recoveryMs;
+  const compression = (0.40 + 0.33 * Math.sqrt(power)) * remaining ** 2 * (3 - 2 * remaining);
+  const release = Math.min(1, afterHold / 80);
+  return {
+    nx: -contact.nx, ny: -contact.ny, stretch: compression / (1 - compression),
+    release: release ** 2 * (3 - 2 * release),
+  };
 }

@@ -19,7 +19,7 @@ function fixture(t, character = 'draven') {
 
 test('character charge requirements are hit counts at every level', t => {
   const { room } = fixture(t);
-  for (const [character, hits] of Object.entries({ ninja: 6, thorg: 3, draven: 4, ozzy: 5, sparrow: 6, gloop: 6 })) {
+  for (const [character, hits] of Object.entries({ ninja: 6, thorg: 3, draven: 4, ozzy: 5, sparrow: 10, gloop: 6 })) {
     for (const level of [1, 5, 10]) assert.equal(computeMatchStats(character, level).specialChargeHits, hits);
     assert.equal(getSuperChargeHits(character), hits);
     assert.equal(getSuperChargePerHit(character, 'basic'), 1);
@@ -53,8 +53,7 @@ test('only configured supers grant charge and charge caps at ready', t => {
     assert.equal(p.superCharge, p.maxSuperCharge);
   }
   assert.equal(getSuperChargePerHit('ninja', 'ninja-special-swarm'), .25);
-  assert.equal(getSuperChargePerHit('sparrow', 'sparrow-burning-arrow'), 1);
-  assert.equal(getSuperChargePerHit('sparrow', 'sparrowBurn'), 0);
+  assert.equal(getSuperChargePerHit('sparrow', 'sparrow-light-bolt'), 1);
 });
 
 test('each registered arrow in one volley grants one hit, including simultaneous contacts', t => {

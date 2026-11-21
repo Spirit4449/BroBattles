@@ -33,7 +33,30 @@ function validateAssets(document, publicRoot=PUBLIC, directory){
       cache.set(cacheKey,true);
     }catch(e){errors.push(`assets.${key}: ${e.code==='ENOENT'?'Asset file does not exist in public/assets':e.message}`);}
   }
-  for(const layer of map.scenery?.layers||[])try{imageSize(read(layer.url));}catch(e){errors.push(`scenery.${layer.id}: ${e.code==='ENOENT'?'Image file does not exist':e.message}`);}
+  const sceneryImages = new Map();
+  function scenerySize(url) {
+    if (!sceneryImages.has(url)) sceneryImages.set(url, imageSize(read(url)));
+    return sceneryImages.get(url);
+  }
+  for (const layer of map.scenery?.layers || []) {
+    try {
+      scenerySize(layer.url);
+    } catch (error) {
+      errors.push(`scenery.${layer.id}: ${error.code === 'ENOENT' ? 'Image file does not exist' : error.message}`);
+    }
+    for (const [index, part] of (layer.parts || []).entries()) {
+      try {
+        const { width, height } = scenerySize(part.url);
+        const total = Math.floor(width / part.frameWidth) * Math.floor(height / part.frameHeight);
+        if (!total) throw Error('Spritesheet is smaller than its frame');
+        for (const frame of part.frames) {
+          if (frame >= total) throw Error(`Unknown spritesheet frame ${frame}`);
+        }
+      } catch (error) {
+        errors.push(`scenery.${layer.id}.parts[${index}]: ${error.code === 'ENOENT' ? 'Spritesheet file does not exist' : error.message}`);
+      }
+    }
+  }
   return errors;
 }
 module.exports={validateAssets,imageSize};

@@ -10,7 +10,7 @@ import {
   resolveSpriteAnimationKey,
 } from "../shared/animationState.js";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
-import { playerSoundVolume } from "../../audio/playerAudio";
+import { startInfernoAudio } from "./infernoAudio";
 
 const { key: NAME } = characterDefinitions.draven;
 
@@ -26,9 +26,15 @@ const DRAVEN_INFERNO_LIFT_PX = INFERNO.liftPx;
 const DRAVEN_INFERNO_BOB_PX = INFERNO.bobPx;
 const DRAVEN_INFERNO_RADIUS = INFERNO_AIM.radius; // same radius the server damages
 const DRAVEN_FIRE_PULSE_MS = INFERNO.firePulseMs;
-const DRAVEN_EXPLOSION_PULSE_MS = INFERNO.explosionPulseMs;
 const DRAVEN_SPECIAL_FX_TEXTURE_KEY = "draven-special-fx";
 const DRAVEN_SPECIAL_FX_ANIM_KEY = "draven-special-fx";
+
+// The Inferno art is designed on a 192px square inside a larger frame that
+// leaves headroom for the flames (scripts/art/draven-pixel/fx.cjs SP.art), so
+// the overlay is sized from that square, not from the frame.
+const INFERNO_FX_ART_PX = 192;
+// How much larger than the legacy overlay sizing the effect is drawn.
+const INFERNO_FX_GROWTH = 1.3;
 
 const FIRE_COLORS = [0xff5a2f, 0xff8a00, 0xb13cff, 0xff2f5d];
 
@@ -64,11 +70,10 @@ function ensureInfernoOverlay(scene, player) {
 
   const overlay = scene.add.sprite(player.x, player.y, fxKey);
   overlay.setAlpha(0);
-  overlay.setBlendMode(Phaser.BlendModes.ADD);
+  // Normal blending keeps the pixel-art palette (and the team colour) intact on
+  // bright maps; additive washed it out to white.
   const scaleBase = player.displayWidth || player.width || 72;
-  // Retain world size while using the higher-resolution source frames.
-  const frameWidth = overlay.frame?.realWidth || overlay.width || 72;
-  overlay.setScale(Math.max(0.45, (scaleBase / 92) * 1.7) * 72 / frameWidth);
+  overlay.setScale(Math.max(0.45, (scaleBase / 92) * 1.7) * INFERNO_FX_GROWTH * 72 / INFERNO_FX_ART_PX);
   syncInfernoOverlay(player, overlay);
   try {
     overlay.anims.play(fxKey, true);
@@ -83,12 +88,13 @@ function ensureInfernoOverlay(scene, player) {
   return overlay;
 }
 
-function spawnFireParticle(scene, x, y, owner) {
+function spawnFireParticle(scene, x, y, owner, particles) {
   const colors = teamColor(owner) === TEAM_RED ? [0xff5148, 0xff965b, 0xe63960, 0xffcd83] : FIRE_COLORS;
   const color = colors[Phaser.Math.Between(0, colors.length - 1)];
   const p = scene.add.circle(x, y, Phaser.Math.Between(3, 7), color, 0.8);
   p.setDepth(18);
   p.setBlendMode(Phaser.BlendModes.ADD);
+  particles.add(p);
 
   scene.tweens.add({
     targets: p,
@@ -99,11 +105,11 @@ function spawnFireParticle(scene, x, y, owner) {
     scaleY: Phaser.Math.FloatBetween(1.2, 2),
     duration: Phaser.Math.Between(260, 460),
     ease: "Cubic.easeOut",
-    onComplete: () => p.destroy(),
+    onComplete: () => { particles.delete(p); p.destroy(); },
   });
 }
 
-function spawnInfernoPulse(scene, cx, cy, strength = 1, owner = null) {
+function spawnInfernoPulse(scene, cx, cy, owner, particles) {
   const ring = scene.add.circle(
     cx,
     cy,
@@ -113,6 +119,7 @@ function spawnInfernoPulse(scene, cx, cy, strength = 1, owner = null) {
   );
   ring.setDepth(14);
   ring.setBlendMode(Phaser.BlendModes.ADD);
+  particles.add(ring);
   scene.tweens.add({
     targets: ring,
     scaleX: 1.35,
@@ -120,22 +127,21 @@ function spawnInfernoPulse(scene, cx, cy, strength = 1, owner = null) {
     alpha: 0,
     duration: 260,
     ease: "Quad.easeOut",
-    onComplete: () => ring.destroy(),
+    onComplete: () => { particles.delete(ring); ring.destroy(); },
   });
 
-  const sparks = Math.floor(10 * strength);
-  for (let i = 0; i < sparks; i++) {
+  for (let i = 0; i < 10; i++) {
     const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
     const radius = Phaser.Math.FloatBetween(20, DRAVEN_INFERNO_RADIUS);
     const px = cx + Math.cos(angle) * radius;
     const py = cy + Math.sin(angle) * radius;
-    spawnFireParticle(scene, px, py, owner);
+    spawnFireParticle(scene, px, py, owner, particles);
   }
 }
 
-function startInfernoVisualLoop(scene, player, token, isOwner) {
+function startInfernoVisualLoop(scene, player, token, isOwner, particles) {
   let nextFireAt = scene.time.now;
-  let nextExplosionAt = scene.time.now + 80;
+  let timer;
 
   const tick = () => {
     if (!player || !player.active || player._matchEnded) return;
@@ -165,7 +171,7 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
 
     if (now >= nextFireAt) {
       nextFireAt = now + DRAVEN_FIRE_PULSE_MS;
-      spawnInfernoPulse(scene, centerX, centerY, 1, player);
+      spawnInfernoPulse(scene, centerX, centerY, player, particles);
     }
 
     // Explosion positions come from the authoritative damage events. Keeping
@@ -206,10 +212,11 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
         now / 1000, until - Date.now(), shieldReflections);
     }
 
-    scene.time.delayedCall(16, tick);
+    timer = scene.time.delayedCall(16, tick);
   };
 
   tick();
+  return () => timer?.remove?.(false);
 }
 
 export function perform({ scene, player, isOwner = false }) {
@@ -254,43 +261,25 @@ export function perform({ scene, player, isOwner = false }) {
   shield.setDepth(RENDER_LAYERS.PLAYER + 1);
   player._dravenInfernoShield = shield;
 
-  try {
-    const sound = scene.sound?.add("draven-special", { volume: 0 });
-    if (sound) {
-      const fadeState = { gain: 0 };
-      const updateVolume = () => {
-        sound.volume = playerSoundVolume(scene, player, 0.65) * fadeState.gain;
-      };
-      const fade = scene.tweens.add({
-        targets: fadeState,
-        gain: 1,
-        duration: DRAVEN_INFERNO_RISE_MS,
-        ease: "Sine.easeInOut",
-        onUpdate: updateVolume,
-      });
-      let cleaned = false;
-      const cleanup = () => {
-        if (cleaned) return;
-        cleaned = true;
-        scene.events?.off("update", updateVolume);
-        scene.events?.off("shutdown", cleanup);
-        player.off?.("attack:interrupted", cleanup);
-        fade.remove();
-        sound.destroy();
-      };
-      scene.events?.on("update", updateVolume);
-      scene.events?.once("shutdown", cleanup);
-      sound.once("complete", cleanup);
-      player.once?.("attack:interrupted", cleanup);
-      if (!sound.play()) cleanup();
-    }
-  } catch (_) {}
+  const stopAudio = startInfernoAudio(scene, player, {
+    riseMs: DRAVEN_INFERNO_RISE_MS,
+    durationMs: DRAVEN_INFERNO_DURATION_MS,
+  });
 
+  const particles = new Set();
   const interrupt = () => {
     if (player._dravenInfernoToken !== token) return;
     player.off?.("attack:interrupted", interrupt);
     player.off?.("destroy", interrupt);
     scene.events?.off("shutdown", interrupt);
+    endTimer?.remove?.(false);
+    stopVisualLoop();
+    for (const particle of particles) {
+      scene.tweens.killTweensOf?.(particle);
+      particle.destroy();
+    }
+    particles.clear();
+    stopAudio(false);
     player._movementLockedUntil = player._dravenInfernoUntil = 0;
     delete player._dravenInfernoToken;
     unlockFlip();
@@ -301,15 +290,17 @@ export function perform({ scene, player, isOwner = false }) {
   player.once?.("attack:interrupted", interrupt);
   player.once?.("destroy", interrupt);
   scene.events?.once("shutdown", interrupt);
-  startInfernoVisualLoop(scene, player, token, isOwner);
+  const stopVisualLoop = startInfernoVisualLoop(scene, player, token, isOwner, particles);
 
-  scene.time.delayedCall(DRAVEN_INFERNO_DURATION_MS, () => {
+  const endTimer = scene.time.delayedCall(DRAVEN_INFERNO_DURATION_MS, () => {
     player.off?.("attack:interrupted", interrupt);
     player.off?.("destroy", interrupt);
     scene.events?.off("shutdown", interrupt);
     if (!player || !player.active) return;
     if (player._dravenInfernoToken !== token) return;
+    stopVisualLoop();
 
+    stopAudio(!player._matchEnded);
     player._movementLockedUntil = 0;
     player._dravenInfernoUntil = 0;
     unlockFlip();

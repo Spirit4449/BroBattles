@@ -259,7 +259,7 @@ class GameRoom {
   /**
    * Schedule the countdown from the ready signals received so far (see
    * shared/matchIntroTiming). `force` starts now; used by the start deadline.
-   * Editor playtest rooms override this to never start a countdown.
+   * Quick Map Studio playtests bypass this countdown.
    */
   potentialStartGame(options) {
     lifecycleManager.potentialStartGame(this, options);

@@ -22,9 +22,9 @@ class Ozzy extends CharacterEntityBase {
   static performSpecial = performSpecial;
 
   static sounds = {
-    attack: { key: "ozzy-fireball", volume: 0.55 },
-    hit: { key: "ozzy-impact", volume: 0.45 },
-    special: { key: "ozzy-special", volume: 0.5, rate: 1 },
+    attack: { key: "ozzy-fireball" },
+    hit: { key: "ozzy-impact" },
+    special: { key: "ozzy-special" },
   };
 
   static attackFlow = {
@@ -63,7 +63,7 @@ class Ozzy extends CharacterEntityBase {
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     if (data.type === `${NAME}-fireball`) {
       chargeOzzyFireball(scene, ownerSprite, data);
-      playOzzyCastWindup(scene, ownerSprite, 0.55, data.id ?? null);
+      playOzzyCastWindup(scene, ownerSprite, data.id ?? null);
       return true;
     }
     if (data.type === `${NAME}-fireball-release`) {

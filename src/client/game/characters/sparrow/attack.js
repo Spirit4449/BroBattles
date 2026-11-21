@@ -22,7 +22,7 @@ export function performSparrowArrowSpread(instance, attackContext = null) {
     variant: sparrowAimVariant(angle) });
   try {
     if (scene?.cache?.audio?.exists?.("sparrow-attack") || scene?.sound?.get?.("sparrow-attack")) {
-      playPlayerSound(scene, p, "sparrow-attack", { volume: 0.48 });
+      playPlayerSound(scene, p, "sparrow-attack");
     }
   } catch (_) {}
   // The network adapter converts aim speed to normalized power. The server

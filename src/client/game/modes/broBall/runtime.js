@@ -3,8 +3,8 @@ import { createCometBow } from '../../scene/dash';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { spawnRespawnEffect } from '../../scene/respawnEffect';
 import { prefersReducedMotion } from '../../../ui/domMotion';
-import { createBallSprite, deformationAt } from './ballArt';
-import { createBallEffects } from './effects';
+import { createBallSprite, deformationAt, footPressAt } from './ballArt';
+import { BALL_HALO_TEXTURE, createBallEffects } from './effects';
 import { createGoalNets, TEAM_COLORS } from './arena';
 import { layerDepths } from '../../maps/sceneryRuntime';
 import { createHangingPlatforms } from './hangingPlatforms';
@@ -30,7 +30,7 @@ const STANDS = { width: 702, height: 234, sourceWidth: 2172, ledges: [182, 339, 
 
 // The world lines the crowd sits on: a scroll-1 scenery layer is drawn at the
 // camera bounds' centre plus its offset.
-function crowdRows(map) {
+export function crowdRows(map) {
   const layer = map.scenery?.layers?.find(entry => entry.id === 'stands');
   const camera = mapArena(map)?.camera;
   if (!layer || !camera || layer.scroll !== 1) return null;
@@ -43,7 +43,7 @@ function crowdRows(map) {
   }));
 }
 
-export function createBroBallRuntime({ scene, Phaser, getGameData, getModeState, getLocalPlayer, onGoal, playerLookup }) {
+export function createBroBallRuntime({ scene, Phaser, getGameData, getModeState, getLocalPlayer, playerLookup }) {
   const map = getGameData()?.mapSnapshot?.map;
   const layout = map?.objectiveLayout?.broBall;
   if (!layout) return { render() {}, destroy() {} };
@@ -70,10 +70,10 @@ export function createBroBallRuntime({ scene, Phaser, getGameData, getModeState,
   const ball = scene.add.container(kickoff.x, kickoff.y, [sphere.sprite]).setDepth(RENDER_LAYERS.BRO_BALL);
   const comet = reduced ? null : createCometBow(scene, ball.depth + 0.1, rules.radius + 8, rules.radius + 10)
     .setVisible(false);
-  // A soft halo behind a heated or freshly kicked ball.
-  const halo = scene.add.image(kickoff.x, kickoff.y, 'bro-ball-glow').setDepth(ball.depth - 0.5).setAlpha(0);
+  // The ball's resting glow expands and brightens after an impact.
+  const halo = scene.add.image(kickoff.x, kickoff.y, BALL_HALO_TEXTURE).setDepth(ball.depth - 0.5).setAlpha(0);
 
-  let lastImpact = null, impact = null, previousReset = null;
+  let lastImpact = null, impact = null, footImpact = null, previousReset = null;
   let dropSince = null;
   let state = { ...kickoff, vx: 0, vy: 0 };
 
@@ -93,6 +93,7 @@ export function createBroBallRuntime({ scene, Phaser, getGameData, getModeState,
       }
       previousReset = latest.reset;
       impact = null;
+      footImpact = null;
     }
     if (lastImpact === null) {
       lastImpact = latest.impacts.at(-1)?.seq || 0;
@@ -111,6 +112,7 @@ export function createBroBallRuntime({ scene, Phaser, getGameData, getModeState,
     audio.impact(event, onTurf, getGameData()?.yourTeam);
     nets.strike(event, now);
     if (event.kind === 'goal') {
+      footImpact = null;
       const team = event.defendingTeam === 'team1' ? 'team2' : 'team1';
       const goal = goals[event.defendingTeam];
       effects.celebrateGoal(goal.x, event.y, TEAM_COLORS[team],
@@ -119,10 +121,10 @@ export function createBroBallRuntime({ scene, Phaser, getGameData, getModeState,
       if (!reduced) {
         scene.cameras.main.shake(260, 0.006);
       }
-      onGoal?.();
       return;
     }
     impact = { ...event, at: now };
+    if (event.contact) footImpact = event.contact.foot ? impact : null;
     if (event.kind === 'super' || event.kind === 'smash') {
       if (!reduced) scene.cameras.main.shake(140, 0.0045);
     }
@@ -153,11 +155,14 @@ export function createBroBallRuntime({ scene, Phaser, getGameData, getModeState,
     }
     const age = impact ? now - impact.at : Infinity;
     const pace = Math.hypot(state.vx, state.vy);
-    const angle = impact?.angle || 0;
-    const scale = reduced ? 1 : deformationAt(impact, age, rules.maxSpeed);
+    const press = reduced || !footImpact ? null : footPressAt(footImpact, now - footImpact.at, rules.maxSpeed);
+    const angle = press ? 0 : impact?.angle || 0;
+    const scale = reduced || press ? 1 : deformationAt(impact, age, rules.maxSpeed);
     const footprint = rules.radius * Math.hypot(Math.sin(angle) * scale, Math.cos(angle) / scale);
-    const x = state.x;
-    const y = state.y + rules.radius >= floor - 0.5 ? floor - footprint : Math.min(state.y, floor - footprint);
+    // Show the compression at contact before catching up to the outgoing ball.
+    const x = press ? footImpact.x + (state.x - footImpact.x) * press.release : state.x;
+    const ballY = press ? footImpact.y + (state.y - footImpact.y) * press.release : state.y;
+    const y = ballY + rules.radius >= floor - 0.5 ? floor - footprint : Math.min(ballY, floor - footprint);
     if (comet) {
       const threshold = rules.dashSpeed + (rules.smashSpeed - rules.dashSpeed) * 0.25;
       const intensity = Math.min(1, Math.max(0, (pace - threshold) / (rules.smashSpeed - threshold)));
@@ -172,12 +177,12 @@ export function createBroBallRuntime({ scene, Phaser, getGameData, getModeState,
 
     const power = Math.min(1, (impact?.strength || 0) / rules.smashSpeed);
     const heat = power * Math.max(0, 1 - age / HEAT_MS);
-    sphere.paint({ dt, vx: state.vx, radius: rules.radius, heat: heat * 0.35 });
+    sphere.paint({ dt, vx: state.vx, radius: rules.radius, heat: heat * 0.35, press });
     effects.trail({ x, y, vx: state.vx, vy: state.vy }, pace, heat, dt);
     effects.update(dt, { x, y });
-    const haloAlpha = heat * 0.95;
-    halo.setPosition(x, y).setAlpha(haloAlpha).setScale(0.9 + heat * 0.8 + (reduced ? 0 : Math.sin(now / 60) * 0.06 * heat))
-      .setTint(power > 0.7 ? 0xff8a1f : 0xffd84a);
+    const haloScale = 0.82 + heat * 0.88 + (reduced ? 0 : Math.sin(now / 60) * 0.06 * heat);
+    halo.setPosition(x, y).setRotation(angle).setScale(haloScale * scale, haloScale / scale)
+      .setAlpha(0.5 + heat * 0.45);
 
     const height = Math.max(0, floor - y - rules.radius);
     shadow.fillStyle(0x1d2a1c, 0.5 / (1 + height / 110))

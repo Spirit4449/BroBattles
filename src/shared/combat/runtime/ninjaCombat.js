@@ -90,6 +90,21 @@ function tick(room){
 function trusted(room,entry,payload){return !!entry&&room.ninjaCombatState?.active.get(entry.projectile.id)===entry&&entry.contact?.instanceId===payload.instanceId&&entry.contact.target===payload.target;}
 function bootstrap(room){return {ninjaCombatVersion:room.ninjaCombatVersion,...timing(room),colliders:room.geometry?.colliders||[],
   active:[...room.ninjaCombatState.active.values()].map(e=>({projectile:e.projectile,requestId:e.requestId,viewRewindMs:e.viewRewindMs})),terminals:room.ninjaCombatState.terminals};}
+function cancelCasts(room, player, { releasedSupers = false } = {}) {
+  const state = room.ninjaCombatState;
+  if (!state) return;
+  const owner = participantId(player);
+  state.pending = state.pending.filter(cast => {
+    if (cast.owner !== owner) return true;
+    const projectile = model.launch(player, cast.angle, `${player.name}:${cast.requestId}:${cast.index ?? 0}`, cast.index);
+    finish(room, { projectile, requestId: cast.requestId }, player, 'owner-unavailable');
+    return false;
+  });
+  if (!releasedSupers) return;
+  for (const entry of state.active.values()) {
+    if (entry.owner === owner && entry.projectile.special) finish(room, entry, player, 'owner-unavailable');
+  }
+}
 function dispose(room) {
   const state = room.ninjaCombatState;
   if (!state) return;
@@ -98,4 +113,4 @@ function dispose(room) {
   state.terminals.length = 0;
   state.requests.clear();
 }
-module.exports={dispose,initialize,request,tick,trusted,bootstrap};
+module.exports={dispose,cancelCasts,initialize,request,tick,trusted,bootstrap};

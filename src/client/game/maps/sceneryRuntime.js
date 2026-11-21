@@ -31,7 +31,7 @@ const color = (hex, fallback = 0xffffff) => (typeof hex === 'string' ? parseInt(
 const between = ([min, max], t = Math.random()) => min + (max - min) * t;
 
 export function preloadScenery(scene, data) {
-  for (const url of sceneryUrls(data?.scenery)) {
+  for (const url of new Set(sceneryUrls(data?.scenery))) {
     const key = layerKey(url);
     if (!scene.textures.exists(key)) scene.load.image(key, url);
   }
@@ -79,9 +79,11 @@ function atmosphereEnabled(scene) {
  * Build a map's scenery into a scene. The match runs it live: parallax against
  * the camera, drifting clouds and atmosphere. `still: true` (Map Studio's edit
  * view) composes it once as the match camera sees it at its reference zoom,
- * centred in its bounds, with clouds at their placed positions.
+ * centred in its bounds, with clouds at their placed positions. `preview`
+ * fits the still composition to the whole arena with Super High atmosphere.
  */
-export function buildScenery(scene, data, { still = false } = {}) {
+export function buildScenery(scene, data, { still = false, preview = false } = {}) {
+  still ||= preview;
   destroyScenery(scene);
   const scenery = data?.scenery;
   const camera = mapArena(data)?.camera;
@@ -136,11 +138,23 @@ export function buildScenery(scene, data, { still = false } = {}) {
   });
 
   if (still) {
+    const far = runtime.layers[0];
+    const scale = preview && far?.scroll < 1
+      ? Math.max(1, camera.width / (far.image.width * far.sx), camera.height / (far.image.height * far.sy))
+      : 1;
     for (const item of [...runtime.layers, ...runtime.parts, ...runtime.clouds]) {
-      item.obj.setScrollFactor(1).setPosition(runtime.center.x + item.offset.x, runtime.center.y + item.offset.y)
-        .setScale(item.sx, item.sy);
+      placeStill(runtime, item, scale);
     }
-    runtime.destroy = () => { for (const item of [...runtime.layers, ...runtime.parts, ...runtime.clouds]) item.obj.destroy(); };
+    if (preview && scenery.atmosphere && scene.game.renderer.type === Phaser.WEBGL) {
+      const cam = scene.cameras.main;
+      const origin = { x: cam.width * cam.originX, y: cam.height * cam.originY };
+      runtime.atmosphere = buildAtmosphere(runtime, 'super-high', true);
+      updateAtmosphere(runtime, cam, origin, 1.25, scale);
+    }
+    runtime.destroy = () => {
+      runtime.atmosphere?.destroy();
+      for (const item of [...runtime.layers, ...runtime.parts, ...runtime.clouds]) item.obj.destroy();
+    };
     scene._sceneryRuntime = runtime;
     return runtime;
   }
@@ -214,8 +228,9 @@ function buildLayerParts(runtime, still) {
   const { scene } = runtime;
   for (const item of runtime.layers) {
     for (const [index, part] of (item.layer.parts || []).entries()) {
-      const key = layerKey(part.url);
-      if (!scene.textures.exists(key)) continue;
+      const texture = loadTexture(scene, part.url, item.layer.filter);
+      if (!texture) continue;
+      const key = texture.key;
       const obj = scene.add.sprite(0, 0, key, part.frames[0]).setScrollFactor(item.scroll)
         .setDepth(runtime.depths[item.layer.id] + 0.5).setAlpha(item.layer.alpha ?? 1);
       if (item.layer.tint) obj.setTint(color(item.layer.tint));
@@ -241,6 +256,12 @@ function place(runtime, item, cam, origin) {
   item.obj.setPosition(t.x, t.y).setScale(item.sx * t.scale, item.sy * t.scale);
 }
 
+function placeStill(runtime, item, scale) {
+  const k = item.scroll < 1 ? scale : 1;
+  item.obj.setScrollFactor(1).setPosition(runtime.center.x + item.offset.x * k, runtime.center.y + item.offset.y * k)
+    .setScale(item.sx * k, item.sy * k);
+}
+
 function updateScenery(runtime) {
   const cam = runtime.scene.cameras.main;
   if (!cam) return;
@@ -255,6 +276,10 @@ function updateScenery(runtime) {
     cloud.offset.x = ((x % span) + span) % span - cloud.halfSpan;
     place(runtime, cloud, cam, origin);
   }
+  updateAtmosphere(runtime, cam, origin, time);
+}
+
+function updateAtmosphere(runtime, cam, origin, time, stillScale = null) {
   const atmosphere = runtime.atmosphere;
   if (!atmosphere) return;
   for (const { lamp, phase, cone, pool, bulb } of atmosphere.lamps) {
@@ -263,7 +288,10 @@ function updateScenery(runtime) {
     pool.setAlpha(alpha * 0.9);
     bulb.setAlpha(alpha * 1.4);
   }
-  for (const item of atmosphere.placed) place(runtime, item, cam, origin);
+  for (const item of atmosphere.placed) {
+    if (stillScale === null) place(runtime, item, cam, origin);
+    else placeStill(runtime, item, stillScale);
+  }
   // Full-screen overlays: scroll factor 0, sized to the zoomed view.
   for (const obj of atmosphere.screens) {
     obj.setPosition(origin.x, origin.y).setDisplaySize(cam.width / cam.zoom * 1.04, cam.height / cam.zoom * 1.04);
@@ -278,24 +306,27 @@ function updateScenery(runtime) {
     }
   }
   for (const mist of atmosphere.mists) {
-    const t = sceneryTransform({ scroll: mist.scroll, offset: { x: 0, y: mist.y }, center: runtime.center, origin,
-      zoom: cam.zoom, referenceZoom: runtime.referenceZoom });
+    const t = stillScale === null
+      ? sceneryTransform({ scroll: mist.scroll, offset: { x: 0, y: mist.y }, center: runtime.center, origin,
+        zoom: cam.zoom, referenceZoom: runtime.referenceZoom })
+      : { y: runtime.center.y + mist.y * (mist.scroll < 1 ? stillScale : 1), scale: mist.scroll < 1 ? stillScale : 1 };
     const scaleY = (mist.height * t.scale) / mist.obj.height;
     mist.obj.setPosition(origin.x, t.y).setScale(1 / cam.zoom, scaleY);
     // Keep the mist texture's aspect, then drift it and parallax it horizontally.
     mist.obj.tileScaleX = scaleY * cam.zoom;
     mist.obj.tileScaleY = 1;
-    mist.obj.tilePositionX = (time * mist.speed + cam.scrollX * mist.scroll * cam.zoom) / mist.obj.tileScaleX;
+    const drift = stillScale === null ? time * mist.speed + cam.scrollX * mist.scroll * cam.zoom : 0;
+    mist.obj.tilePositionX = drift / mist.obj.tileScaleX;
   }
 }
 
-function buildAtmosphere(runtime) {
+function buildAtmosphere(runtime, level = getSettings().graphics, still = false) {
   const { scene, scenery, depths } = runtime;
   const a = scenery.atmosphere || {};
-  const level = getSettings().graphics;
   ensureSceneryTextures(scene);
   const objects = [], placed = [], screens = [], mists = [], tweens = [], lit = [];
   const add = (obj) => { objects.push(obj); return obj; };
+  const tween = (config) => { if (!still) tweens.push(scene.tweens.add(config)); };
   const depthFor = (item, step) => stackDepth(depths, item, step);
   const fogColor = color(a.fogColor);
 
@@ -307,19 +338,20 @@ function buildAtmosphere(runtime) {
   }
 
   for (const m of a.mist || []) {
-    const obj = add(scene.add.tileSprite(0, 0, Math.ceil(GAME_VIEW.width * 1.1), 256, T.mist)
-      .setScrollFactor(0, m.scroll).setDepth(depthFor(m, STACK.mist)).setTint(color(m.color)).setAlpha(m.alpha));
+    const width = Math.ceil((still ? scene.cameras.main.width : GAME_VIEW.width) * 1.1);
+    const obj = add(scene.add.tileSprite(0, 0, width, 256, T.mist)
+      .setScrollFactor(0, still ? 1 : m.scroll).setDepth(depthFor(m, STACK.mist)).setTint(color(m.color)).setAlpha(m.alpha));
     mists.push({ obj, scroll: m.scroll, y: m.y || 0, height: m.height, speed: m.speed ?? 8 });
   }
 
   for (const g of a.glows || []) {
     const glowTexture = scene.textures.get(T.glow).getSourceImage();
     const obj = add(scene.add.image(0, 0, T.glow).setScrollFactor(g.scroll).setDepth(depthFor(g, STACK.glow))
-      .setBlendMode(Phaser.BlendModes.ADD).setTint(color(g.color)).setAlpha(g.alpha[0]));
+      .setBlendMode(Phaser.BlendModes.ADD).setTint(color(g.color)).setAlpha(still ? between(g.alpha, 0.75) : g.alpha[0]));
     const size = (g.radius * 2) / glowTexture.width;
     placed.push({ obj, scroll: g.scroll, offset: { x: g.x, y: g.y }, sx: size, sy: size });
-    tweens.push(scene.tweens.add({ targets: obj, alpha: g.alpha[1], duration: g.periodMs || 6000,
-      yoyo: true, repeat: -1, ease: 'Sine.easeInOut' }));
+    tween({ targets: obj, alpha: g.alpha[1], duration: g.periodMs || 6000,
+      yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
 
   const rayTexture = scene.textures.get(T.ray).getSourceImage();
@@ -329,18 +361,18 @@ function buildAtmosphere(runtime) {
       const angle = r.angle + (spreadAt - 0.5) * r.spread + (Math.random() - 0.5) * 3;
       const obj = add(scene.add.image(0, 0, T.ray).setOrigin(0.5, 0).setAngle(angle)
         .setScrollFactor(r.scroll).setDepth(depthFor(r, STACK.rays))
-        .setBlendMode(Phaser.BlendModes.ADD).setTint(color(r.color)).setAlpha(r.alpha[0]));
+        .setBlendMode(Phaser.BlendModes.ADD).setTint(color(r.color)).setAlpha(still ? between(r.alpha, 0.75) : r.alpha[0]));
       const item = { obj, scroll: r.scroll, offset: { x: r.x, y: r.y },
         sx: between(r.width) / rayTexture.width, sy: (r.length * between([0.8, 1.15])) / rayTexture.height };
       placed.push(item);
       // Independent periods keep the shafts from pulsing in step.
       const period = between(r.periodMs);
-      tweens.push(scene.tweens.add({ targets: obj, alpha: between([r.alpha[0], r.alpha[1]], 0.5 + Math.random() * 0.5),
-        duration: period, delay: Math.random() * period, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' }));
-      tweens.push(scene.tweens.add({ targets: item, sx: item.sx * between([1.1, 1.35]), duration: period * 1.7,
-        delay: Math.random() * period, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' }));
-      tweens.push(scene.tweens.add({ targets: obj, angle: angle + (Math.random() < 0.5 ? -1.5 : 1.5),
-        duration: period * 2.3, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' }));
+      tween({ targets: obj, alpha: between([r.alpha[0], r.alpha[1]], 0.5 + Math.random() * 0.5),
+        duration: period, delay: Math.random() * period, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      tween({ targets: item, sx: item.sx * between([1.1, 1.35]), duration: period * 1.7,
+        delay: Math.random() * period, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      tween({ targets: obj, angle: angle + (Math.random() < 0.5 ? -1.5 : 1.5),
+        duration: period * 2.3, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
   }
 
@@ -364,7 +396,10 @@ function buildAtmosphere(runtime) {
   const dustFields = Array.isArray(a.dust) ? a.dust : a.dust ? [a.dust] : [];
   for (const d of dustFields) {
     const count = level === 'super-high' ? d.superHighCount ?? Math.round(d.count * 1.8) : d.count;
-    const bounds = scene.cameras.main.getBounds();
+    const bounds = still
+      ? { x: runtime.center.x - runtime.bounds.width / 2, right: runtime.center.x + runtime.bounds.width / 2,
+        y: runtime.center.y - runtime.bounds.height / 2, bottom: runtime.center.y + runtime.bounds.height / 2 }
+      : scene.cameras.main.getBounds();
     const dot = scene.textures.get(T.dot).getSourceImage().width;
     const peak = d.alpha ?? 0.7;
     const lifespan = { min: 6000, max: 11000 };
@@ -385,8 +420,9 @@ function buildAtmosphere(runtime) {
     }));
     const depth = d.after ? depthFor(d, STACK.dust)
       : d.front === false ? RENDER_LAYERS.WORLD - 1 : RENDER_LAYERS.SCENERY_FRONT + 0.2;
-    emitter.setScrollFactor(d.scroll).setDepth(depth);
+    emitter.setScrollFactor(still ? 1 : d.scroll).setDepth(depth);
     emitter.fastForward(lifespan.max);
+    if (still) emitter.pause();
   }
 
   // Platform lighting uses tinted copies of each platform rather than preFX,

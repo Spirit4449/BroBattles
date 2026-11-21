@@ -2,7 +2,7 @@ import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { THORG_SWEEP, thorgAttackFrameAt } from "../../../../shared/characters/thorgSweep";
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
-import { playerSoundVolume } from "../../audio/playerAudio";
+import { combatSoundVolume, playerSoundVolume } from "../../audio/playerAudio";
 import { inHitstop } from "../shared/shotPrediction";
 
 // The video frames already contain the complete attack and mace. Drive their
@@ -24,8 +24,9 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
   let finished = false;
   let sound;
   try {
-    sound = scene.sound?.add(scene.cache?.audio?.exists('thorg-sweep') ? 'thorg-sweep' : 'thorg-throw');
-    const volume = playerSoundVolume(scene, body, 0.48);
+    const key = scene.cache?.audio?.exists('thorg-sweep') ? 'thorg-sweep' : 'thorg-throw';
+    sound = scene.sound?.add(key);
+    const volume = playerSoundVolume(scene, body, combatSoundVolume(key));
     if (volume > 0) sound?.play({ volume });
   } catch (_) {}
   const cleanup = () => {

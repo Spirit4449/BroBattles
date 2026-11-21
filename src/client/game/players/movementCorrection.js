@@ -73,6 +73,9 @@ function createMovementCorrector({ now = () => Date.now() } = {}) {
       // discarding this client's packets as pre-correction traffic.
       ack = id;
     }
+    // The respawn event already moved the body. Only acknowledge the barrier
+    // for packets that were sent from before Reset to Spawn.
+    if (correction.reason === 'spawn-reset') return true;
     const body = player?.body;
     if (!body || !Number.isFinite(player.x) || !Number.isFinite(player.y)) {
       stats.unacknowledgedWhileDead += 1;

@@ -126,10 +126,11 @@ export function installMovingPlatforms(scene, { riders = () => [], paused = () =
   if (!movingObjects(scene).length) return () => {};
   const step = () => { if (!paused()) advanceMovingPlatforms(scene, platformClock(), riders()); };
   const settle = () => { if (!paused()) settleMovingPlatformOverlaps(scene, riders()); };
+  const world = scene.physics.world;
   scene.events.on('preupdate', step);
   // Registered after the local player's dash correction, so this runs last.
-  scene.physics.world.on('worldstep', settle);
-  const remove = () => { scene.events.off('preupdate', step); scene.physics.world.off('worldstep', settle); };
+  world.on('worldstep', settle);
+  const remove = () => { scene.events.off('preupdate', step); world.off('worldstep', settle); };
   scene.events.once('shutdown', remove);
   return remove;
 }

@@ -8,9 +8,9 @@
     "ammoCooldownMs": 400,
     "ammoReloadMs": 1500,
     "ammoCapacity": 3,
-    "specialDescription": "Unleashes a wide volley of burning arrows that ignite enemies.",
-    "specialBaseDamage": 1500,
-    "specialChargeHits": 6,
+    "specialDescription": "Rises on angel wings and aims a piercing bolt of light that tears through everyone in its path.",
+    "specialBaseDamage": 800,
+    "specialChargeHits": 10,
     "specialChargePerHit": 1,
     "spriteScale": 1.65,
     "body": {
@@ -76,59 +76,39 @@
       },
       "special": {
         "aim": {
-          "kind": "throw",
-          "specialKey": "burningVolley",
-          "minRange": 180,
-          "defaultRange": 820,
-          "maxRange": 1050,
-          "anchorForwardOffset": 34,
-          "anchorOffsetY": 14,
-          "reticlePathOffsetY": 14,
-          "reticleThickness": 42,
-          "angleMode": "free",
-          "minSpeedScale": 0.84,
-          "maxSpeedScale": 1.2,
-          "trajectorySamples": 36,
-          "previewStartBackOffset": 4,
-          "previewStartLiftY": -8,
-          "previewEndDropY": 96,
-          "previewArcHeight": 84,
-          "previewCurveMagnitude": -13,
-          "previewCurveMode": "facing",
-          "previewCurveUpwardScale": 1.1,
-          "previewCurveMidBoost": 1.2,
-          "previewCurveVerticalScale": 0,
-          "previewArcHeightMinScale": 0.52,
-          "previewArcHeightUpwardScale": 0.64,
-          "previewEndDropMinScale": 0.72,
-          "previewEndDropUpwardScale": 0.7,
-          "throwMinOffsetX": -980,
-          "throwMaxOffsetX": 980,
-          "throwMinOffsetY": -460,
-          "throwMaxOffsetY": 320,
-          "quickTargetOffsetX": 820,
-          "quickTargetOffsetY": 24,
-          "projectileAngleOffsetDeg": 0,
-          "trajectory": "arrowFlight",
+          "kind": "round",
+          "radius": 64,
+          "defaultRange": 64,
+          "anchorForwardOffset": 0,
+          "anchorOffsetY": -6,
+          "reticleAnchor": "core",
           "reticleFadeOnTurn": true
         },
-        "burningVolley": {
-          "count": 6,
-          "spreadDeg": 20,
-          "speed": 960,
-          "range": 960,
-          "collisionRadius": 18,
-          "damagePerArrow": 165,
-          "visualScale": 0.24,
-          "visualThickness": 1.7,
-          "castDelayMs": 230,
-          "releaseMs": 0,
-          "burnDurationMs": 5000,
-          "burnTotalDamage": 85,
-          "groundBurnMs": 2200,
-          "gravity": 360,
-          "maxLifetimeMs": 6000,
-          "embedMs": 2200
+        "seraph": {
+          "aimMs": 10000,
+          "releaseGraceMs": 250,
+          "riseMs": 650,
+          "liftPx": 120,
+          "bobPx": 4,
+          "bobWaveMs": 340,
+          "hoverDragPerSec": 4.5,
+          "damageTakenMult": 0.7,
+          "botFireDelayMs": [
+            1100,
+            2600
+          ]
+        },
+        "lightBolt": {
+          "speed": 4800,
+          "range": 2500,
+          "collisionRadius": 30,
+          "muzzle": "seraphBow",
+          "aim": {
+            "kind": "line",
+            "anchorForwardOffset": 0,
+            "anchorOffsetY": 0,
+            "angleMode": "free"
+          }
         }
       }
     },
@@ -150,7 +130,7 @@
   ],
   "specialHitTypes": [
     "special",
-    "sparrow-burning-arrow"
+    "sparrow-light-bolt"
   ],
   "attacks": {
     "sparrow-arrow": {
@@ -170,10 +150,29 @@
     }
   },
   "rig": {
-    "frame": [160, 160],
-    "feet": [80.5, 156],
+    "frame": [
+      160,
+      160
+    ],
+    "feet": [
+      80.5,
+      156
+    ],
     "points": {
-      "bow": { "pivot": [80.5, 125], "reach": 19.5 }
+      "bow": {
+        "pivot": [
+          80.5,
+          125
+        ],
+        "reach": 19.5
+      },
+      "seraphBow": {
+        "seraphAim": [
+          [84, 101], [90, 103], [96, 106], [100, 109], [103, 114],
+          [105, 120], [105, 125], [105, 131], [104, 137], [101, 142],
+          [98, 146], [93, 149], [89, 151]
+        ]
+      }
     }
   }
 }

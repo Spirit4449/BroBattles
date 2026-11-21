@@ -133,7 +133,7 @@ test('landing carry follows elapsed time and clears on reset, spectate, shutdown
   }
 });
 
-test('Sunset Bowl shows more of the arena through the climb while other profiles share a scale', () => {
+test('Rumble Stadium shows more of the arena through the climb while other profiles share a scale', () => {
   const profiles = [...arenaIds(), 'duels-1v1', 'duels-2v2']
     .filter(id => id !== BRO_BALL_VARIANT)
     .map(id => arenaFor(id).camera);

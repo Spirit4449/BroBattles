@@ -93,6 +93,8 @@ describe("Character assets", () => {
       exports,
       Phaser: { Loader: { Events: { COMPLETE: 'complete' } } },
       require(name) {
+        if (name === '../../audio/playerAudio') return loadModule('src/client/game/audio/playerAudio.js');
+        if (name === './infernoAudio') return loadModule('src/client/game/characters/draven/infernoAudio.js');
         if (name.includes('characterEntityBase')) return loadModule('src/client/game/characters/shared/characterEntityBase.js');
         if (name.includes('characterTuning')) return require('../src/shared/characters/characterTuning.js');
         return {};

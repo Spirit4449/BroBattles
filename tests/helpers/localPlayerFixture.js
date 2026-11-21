@@ -7,9 +7,10 @@ const { createBrowserFixture } = require('./browserFixture');
 const physics = require('../../src/shared/physics/movementPhysics.json');
 const { DEFAULT_BINDINGS } = require('../../src/client/site/keyBindings.mjs');
 
-function createLocalPlayerFixture() {
+function createLocalPlayerFixture({ character = 'ninja', characterClass = null } = {}) {
   const keys = new Map();
   const controllerHooks = [];
+  let lifeHooks;
   let now = 10000;
   class Clock extends Date { static now() { return now; } }
   const Phaser = {
@@ -31,7 +32,7 @@ function createLocalPlayerFixture() {
     setOrigin(x, y) { this.originX = x; this.originY = y; this.displayOriginX = this.width * x; this.displayOriginY = this.height * y; return this; }
   }
   function sprite(x, y, texture) {
-    const value = Object.assign(new Sprite(), { x, y, width: 256, height: 256,
+    const value = Object.assign(new Sprite(), { scene, x, y, width: 256, height: 256,
       displayWidth: 256, displayHeight: 256, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
       displayOriginX: 128, displayOriginY: 128, angle: 0, rotation: 0, active: true, visible: true,
       frame: { realWidth: 256, realHeight: 256, name: 'idle00' }, texture: { key: texture, has: () => true, get: () => ({ width: 256 }) },
@@ -50,7 +51,7 @@ function createLocalPlayerFixture() {
   }
   const input = Object.assign(new EventEmitter(), { keyboard: { enabled: true,
     addKey(code) { if (!keys.has(code)) keys.set(code, { isDown: false, isUp: true, fresh: false, reset() { this.isDown = false; this.isUp = true; } }); return keys.get(code); },
-    resetKeys() {},
+    resetKeys() { for (const key of keys.values()) key.reset(); },
   } });
   const scene = { input, physics: { world, add: { sprite } }, events: new EventEmitter(),
     sys: { isActive: () => true }, _mapObjects: [],
@@ -64,9 +65,9 @@ function createLocalPlayerFixture() {
   Object.assign(f.imports, {
     [modulePath('lib/socket')]: { __esModule: true, default: f.socket },
     [modulePath('site/preferences')]: { getSettings: () => ({ keys: DEFAULT_BINDINGS }), subscribeSettings: () => noop, bindCanvasName: noop },
-    [modulePath('game/characters')]: { createFor: (_, { ammoHooks }) => { controllerHooks.push(ammoHooks); return null; }, getTextureKey: () => 'ninja', getCharacterClassByKey: () => null,
+    [modulePath('game/characters')]: { createFor: (_, { ammoHooks }) => { controllerHooks.push(ammoHooks); return null; }, getTextureKey: () => character, getCharacterClassByKey: () => characterClass,
       resolveAnimKey: (_, character, logical) => `${character}-${logical}`, getStats: () => ({ baseHealth: 8000 }), getEffectsClass: () => null },
-    [modulePath('game/players/localSocketEvents')]: { bindLocalSocketEvents: () => ({ dispose: noop }) },
+    [modulePath('game/players/localSocketEvents')]: { bindLocalSocketEvents: hooks => { lifeHooks = hooks; return { dispose: noop }; } },
     [modulePath('game/characters/networkRegistry')]: { predictCharacterSpecial: noop },
     [modulePath('game/scene/attackAimReticle')]: { createAttackAimReticleController: () => ({ hide: noop, destroy: noop }) },
     [modulePath('game/scene/mobileControls')]: { createMobileControlsController: () => ({ ensure: noop, update: noop, destroy: noop, isEnabled: () => false }) },
@@ -79,10 +80,10 @@ function createLocalPlayerFixture() {
       updateGroundMotion: () => 0, updateFalling: noop, updateLanding: noop, updateRunDust: noop, updateWallSlide: noop }) },
   });
   const api = f.load('src/client/game/players/localPlayer.js');
-  api.createPlayer(scene, { username: 'Player', character: 'ninja', opponentPlayers: {} });
+  api.createPlayer(scene, { username: 'Player', character, opponentPlayers: {} });
   api.player.setVisible(true);
   api.player.body.reset(400, 300);
-  return { ...f, api, scene, keys, controllerHooks, player: api.player,
+  return { ...f, api, scene, keys, controllerHooks, lifeHooks, player: api.player,
     press(binding) { const key = keys.get(DEFAULT_BINDINGS[binding]); key.isDown = true; key.isUp = false; key.fresh = true; },
     release(binding) { const key = keys.get(DEFAULT_BINDINGS[binding]); key.isDown = false; key.isUp = true; key.fresh = false; },
     advance(ms) { now += ms; },

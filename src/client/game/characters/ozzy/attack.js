@@ -167,9 +167,9 @@ function spawnImpact(scene, x, y, playSound = true, owner = null) {
     }
     // Play impact sound (audible to everyone if called from remote visual too)
     if (playSound) {
-      const played = playPlayerSound(scene, { x, y }, "ozzy-impact", { volume: 0.45 });
+      const played = playPlayerSound(scene, { x, y }, "ozzy-impact");
       if (!played) {
-        playPlayerSound(scene, { x, y }, "sfx-damage", { volume: 0.4 });
+        playPlayerSound(scene, { x, y }, "sfx-damage");
       }
     }
   } catch (_) {}
@@ -177,7 +177,7 @@ function spawnImpact(scene, x, y, playSound = true, owner = null) {
 
 // Each fireball id is its own cast, so a new fireball starts the throw over
 // while a repeated packet for the same fireball leaves it alone.
-export function playOzzyCastWindup(scene, ownerSprite, volume = 0.3, id = null) {
+export function playOzzyCastWindup(scene, ownerSprite, id = null) {
   playSpriteAnimation({
     scene,
     sprite: ownerSprite,
@@ -188,11 +188,9 @@ export function playOzzyCastWindup(scene, ownerSprite, volume = 0.3, id = null) 
   });
 
   try {
-    const played = playPlayerSound(scene, ownerSprite, "ozzy-fireball", { volume });
+    const played = playPlayerSound(scene, ownerSprite, "ozzy-fireball");
     if (!played) {
-      playPlayerSound(scene, ownerSprite, "draven-fireball", {
-        volume: Math.max(0.2, volume * 0.8),
-      });
+      playPlayerSound(scene, ownerSprite, "draven-fireball");
     }
   } catch (_) {}
 }
@@ -462,7 +460,7 @@ export function performOzzyFireball(instance, attackContext = null) {
   const attackId = createRuntimeId("ozzyFireball");
 
   const unlockFlip = lockPlayerFlip(p);
-  playOzzyCastWindup(scene, p, 0.55, attackId);
+  playOzzyCastWindup(scene, p, attackId);
   chargeOzzyFireball(scene, p, { id: attackId, angle, direction, predict: true });
   scene.time.delayedCall(FIREBALL_FLIP_LOCK_MS, () => {
     try {

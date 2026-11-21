@@ -119,15 +119,17 @@ node scripts/art/sky-soil/compose-backdrop.cjs --install
 node scripts/art/sky-soil/library-clouds.cjs --install
 ```
 
-**Main platform** (`island-v4.webp` built-in, `island-saved-v4.webp` saved
-layout). Drawn in code on the small platform's own grid: 2 world px per art
-pixel, with the palette sampled from `small-platform-sharp.webp` (lime grass
+**Main platform** (`island-native.webp` built-in, `island-saved-native.webp` saved
+layout). Stored at the native 550×340 grid and drawn with nearest filtering
+at 2 world px per art pixel, with the palette sampled from `small-platform-sharp.webp` (lime grass
 over warm brown soil, light left rim, dark base). Extra texture: broad
 two-tone strata, rounded outlined stones, speckles, leafy vines, grass bumps
 and branching roots. The silhouette comes from the previous island art in
 `scripts/art/sky-soil/platform-masks/`, opened to drop plant overhangs and
 flattened along each ledge, so the grassy tops stay on the unchanged invisible
-`p0`–`p3` collision rows. A Codex repaint was tried and rejected: its art
+`p0`–`p3` collision rows. The sloping steps where each side ledge met the raised
+middle rose above the side ledges' collision, so fighters walked through them.
+They are cut from the base, leaving a clean wall. A Codex repaint was tried and rejected: its art
 pixels were 4x the small platform's.
 
 **Backdrop.** Islands were generated with Codex `image_gen` in BB style on flat
@@ -144,19 +146,38 @@ references: `small-platform-sharp.webp`, Candy Land's full preview, then
   blossom tree, bushes, strata, stones, a deep rocky keel, roots and vines.
 - islets: three small islands in a row: one with a pine, a bare grassy rock,
   and one with a blossom tree and a bush.
+- distant: four distinct silhouettes in a row: a tall rock spire with a
+  wind-bent tree, a stone arch with hanging vines, an upside-down mountain with
+  a thin stream, and a mushroom-shaped island under a giant blossom tree.
+  These are the hazed far islands, so the back reads differently from the near
+  framing islands.
+- lush: two large, very lush islands: a broad island under a dense forest of
+  round trees and pines with flowers and vine curtains, and a three-terrace
+  island with leafy and pink blossom trees and moss pouring down. These are the
+  blurred islands in the sky.
 
 Layers, back to front:
 
-- `sky-v4.webp`: smooth gradient sky, soft sun glow and blurred, sky-tinted
-  distant islands and cloud banks. No pixel grid, linear filtering.
-- `far-isles-v4.webp`: hazed islands (2 px grid) over a far cloud sea.
-- `cloud-sea.webp` + `cloud-sea-anim.webp`: the cloud sea the arena floats in,
-  stored at native size (the cover fit scales it 2x). The part loops 12 frames
-  at 5 fps: lobes swell on their own phases and banks sway by one pixel.
-- `near-isles-v4.webp` (3 px grid): framing islands and islets, with
-  `waterfall-1/2.webp` parts (8 frames at 14 fps) placed on each island's
-  inner grass lip and falling into the sea.
-- Sky clouds come only from the scenery clouds feature (library clouds).
+- `sky-v4.webp`: smooth gradient sky, soft sun glow and three large, lush,
+  blurred islands from `lush.png` (a forest island and a terraced one), lightly
+  hazed so their greenery shows and padded before blurring so their soft edges
+  are not clipped, plus soft cloud banks. No pixel grid, linear filtering.
+- `far-isles-v4.webp`: the distant silhouettes at double size, hazed, over a
+  far cloud sea.
+- `cloud-sea.webp` + `cloud-sea-anim.webp`: the back two banks of the cloud sea
+  the arena floats in, stored at native size (the cover fit scales it 2x).
+- `near-isles-v4.webp` (3 px grid): framing islands and islets, hazed toward
+  the sky so they read as scenery rather than standable ground, with
+  `waterfall-1/2.webp` parts (8 frames at 14 fps) on each island's inner lip.
+- `cloud-front.webp` + `cloud-front-anim.webp`: the front two banks, over the
+  near islands, so the waterfalls pour into them.
+- Both sea parts loop 24 frames at 3 fps (8 s): every lobe drifts left and
+  right, bobs and swells on its own phases, and each bank sways. No dithering.
+- Sky clouds come only from the scenery clouds feature (library clouds),
+  slow, and placed after `cloud-front` so no cloud bank covers them.
+
+`--install` updates the shipped document and saves the effective map through
+the map repository's revision-aware save (`map-install.cjs`).
 
 **Cloud library.** `library-clouds.cjs` redraws all twelve
 `public/assets/clouds/cloud-*.png` as pixel cumulus on a 4 px grid, each at its
@@ -167,3 +188,11 @@ layout.
 helpers and the per-layer on-screen windows (`WIN`), which were measured from a
 game render of the whole camera bounds. Re-measure them if a layer's `scroll`,
 `fit` or offset changes.
+
+**Hitboxes.** After changing the island art or the floating platform texture,
+run `node scripts/art/sky-soil/fit-hitboxes.cjs` to preview the change and
+`--install` to apply it. It reads each map's own island image and fits `p0`–`p3`
+and the floating platforms: floor 2 world px below the grass (the small
+platforms' original rule), walls on the art's outer edges, and bodies kept
+inside the art. It keeps the middle floor at 580 (the shared Duels floor) by
+moving the island layers instead.

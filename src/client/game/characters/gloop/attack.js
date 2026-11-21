@@ -13,7 +13,7 @@ import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
-import { playPlayerSound } from "../../audio/playerAudio";
+import { combatSoundVolume, playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
 import { predictShotContact, shotBlockersFor, notePredictedHit, isEnemyShooter, localBodyContact, victimHoldWindowMs, victimLagMs, enemyShotTraced, traceEnemyShot } from "../shared/shotPrediction";
 import { releasedFlightAge, roomTerrain } from "../shared/projectileReplication";
@@ -47,11 +47,10 @@ function playAttackAnimation(scene, sprite, id = null) {
   });
 }
 
-function playSound(scene, key, options = {}, source = null) {
+function playSound(scene, key, options, source) {
   try {
     if (scene?.cache?.audio?.exists?.(key) || scene?.sound?.get?.(key)) {
-      if (source) playPlayerSound(scene, source, key, options);
-      else scene.sound?.play?.(key, options);
+      playPlayerSound(scene, source, key, options);
       return true;
     }
   } catch (_) {}
@@ -339,7 +338,7 @@ export function spawnGloopSlimeballVisual(
       }
       for (const hit of impacts) {
         visual.impact(hit);
-        playSound(scene, "gloop-hit", { volume: hit.terminal ? 0.48 : 0.3,
+        playSound(scene, "gloop-hit", { volume: combatSoundVolume("gloop-hit") * (hit.terminal ? 1 : 0.625),
           rate: state.bounceCount > 1 ? 0.85 : 1.05 }, { x: state.x, y: state.y });
       }
       if (state.done) { ended = true; visual.finish(); debug?.setVisible(false); }
@@ -388,7 +387,7 @@ export function performGloopSlimeball(instance, attackContext = null) {
 
   p.flipX = direction < 0;
   playAttackAnimation(scene, p, attackId);
-  playSound(scene, "gloop-attack", { volume: 0.5 }, p);
+  playSound(scene, "gloop-attack", {}, p);
   scene.time.delayedCall(Number(SLIMEBALL.flipLockMs) || 520, () => {
     try {
       unlockFlip();

@@ -6,6 +6,8 @@ import { COUNTDOWN_RISER_MS } from "../../../shared/matchIntroTiming.js";
 // navigation AudioContext and follow the SFX volume setting.
 import { getSettings } from "../../site/preferences.js";
 
+const COUNTDOWN_LAYER_GAIN = 0.35;
+
 function context() {
   try {
     const ctx = getNavigation()?.getAudioContext?.();
@@ -27,7 +29,7 @@ function volume() {
 
 function output(ctx, gain) {
   const node = ctx.createGain();
-  node.gain.value = gain * volume();
+  node.gain.value = gain * COUNTDOWN_LAYER_GAIN * volume();
   node.connect(ctx.destination);
   return node;
 }

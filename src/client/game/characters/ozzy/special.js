@@ -21,10 +21,7 @@ export function perform({ scene, player, isOwner = false }) {
     remote: !isOwner,
   });
   try {
-    playPlayerSound(scene, player, "ozzy-special", {
-      volume: 0.5,
-      rate: 1,
-    });
+    playPlayerSound(scene, player, "ozzy-special");
   } catch (_) {}
   playOzzySuperCast(scene, player, { elapsedMs: actionElapsedMs(player, "special") });
 }

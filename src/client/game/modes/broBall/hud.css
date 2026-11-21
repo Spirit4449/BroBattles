@@ -180,18 +180,6 @@ body[data-bb-screen="game"].bro-ball-match #battle-top-hud:has(#bank-bust-hud.hi
   --glyph-exit: translateX(calc(-0.72em * var(--glyph-position))) skewX(calc(27deg * var(--glyph-position))) scale(0.45, 0.65);
 }
 
-.bro-ball-goal-scorer {
-  position: absolute;
-  top: calc(50% + clamp(25px, min(8.5vw, 16vh), 150px) * 0.85);
-  color: color-mix(in srgb, var(--goal-accent) 64%, white);
-  font: 400 clamp(8px, 1.15vw, 14px) / 1.4 var(--bb-font-display);
-  text-transform: uppercase;
-  text-shadow: 2px 2px 0 #231a2b, -1px -1px 0 #231a2b;
-  animation:
-    bro-ball-goal-scorer-in 190ms ease-out 240ms both,
-    bro-ball-goal-scorer-out 180ms ease-in var(--goal-exit) forwards;
-}
-
 @keyframes bro-ball-goal-flare {
   0% { opacity: 0; transform: scale(0.64); }
   16% { opacity: 1; }
@@ -214,15 +202,6 @@ body[data-bb-screen="game"].bro-ball-match #battle-top-hud:has(#bank-bust-hud.hi
   0% { opacity: 1; transform: var(--glyph-pose); }
   100% { opacity: 0; transform: var(--glyph-exit) var(--glyph-pose); }
 }
-@keyframes bro-ball-goal-scorer-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes bro-ball-goal-scorer-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
 @keyframes bro-ball-score-bump {
   0% { transform: scale(1); }
   25% {
@@ -277,7 +256,6 @@ body[data-bb-screen="game"].bro-ball-match #battle-top-hud:has(#bank-bust-hud.hi
   .bro-ball-score { transition: none; }
   .bro-ball-goal-flare, .bro-ball-goal-confetti, .bro-ball-score-confetti { display: none; }
   .bro-ball-goal-word span { animation: none; transform: var(--glyph-pose); }
-  .bro-ball-goal-scorer { animation: none; }
   .bro-ball-score.scored,
   .bro-ball-score.scored .bro-ball-score-value,
   .bro-ball-score.scored .just-filled { animation: none; }

@@ -1,6 +1,7 @@
 import { getNavigation, getPageScope } from "../../lib/globals.cjs";
 import { describeKiller } from "../../../shared/net/matchPresentation.js";
 import { createModeHud } from "../modes/modeHud";
+import { BRO_BALL_MODE } from "../../../shared/broBall";
 import { replayClass } from "../../ui/domMotion";
 import { COUNTDOWN_MS, COUNTDOWN_RISER_MS } from "../../../shared/matchIntroTiming.js";
 import { renderTitle } from "../../views/titleView.js";
@@ -69,6 +70,7 @@ export function createGameHudController({
   let currentCardNodes = [];
   let modeHud;
   let hudType;
+  let playerGoals = {};
   function syncModeState(modeState, yourTeam) {
     const type = modeState?.type;
     if (type !== hudType) {
@@ -77,6 +79,8 @@ export function createGameHudController({
       hudType = type;
     }
     modeHud?.sync(modeState, yourTeam);
+    playerGoals = type === BRO_BALL_MODE ? (modeState.playerGoals || {}) : {};
+    for (const [name, entry] of teamRows) updateGoalBadge(entry, playerGoals[name]);
   }
   getPageScope()?.onDispose(() => modeHud?.destroy());
   let noticeAutoCloseTimer = null;
@@ -417,7 +421,7 @@ export function createGameHudController({
     if (c) c.textContent = String(Math.ceil(COUNTDOWN_MS / 1000));
 
     root.classList.remove("hidden");
-    root.classList.remove("phase-darkened", "phase-cards");
+    root.classList.remove("phase-darkened", "phase-cards", "is-dismissing");
     root.classList.add("phase-cinematic");
     root.setAttribute("aria-hidden", "false");
     const wrap = root.querySelector(".bs-wrap");
@@ -774,6 +778,15 @@ export function createGameHudController({
     }, 5000);
   }
 
+  function updateGoalBadge(entry, count) {
+    const goals = Number(count) || 0;
+    entry.goalBadge.hidden = goals <= 0;
+    if (goals > 0) {
+      entry.goalBadge.lastChild.textContent = String(goals);
+      entry.goalBadge.setAttribute("aria-label", `${goals} ${goals === 1 ? "goal" : "goals"}`);
+    }
+  }
+
   function initTeamStatusHud(players) {
     const root = document.getElementById("team-status-hud");
     const leftStack = document.getElementById("team-status-left");
@@ -842,12 +855,21 @@ export function createGameHudController({
         avatarCore.appendChild(youTag);
       }
       avatarRing.appendChild(avatarCore);
+      const goalBadge = document.createElement("span");
+      goalBadge.className = "team-hud-goal-badge";
+      goalBadge.hidden = true;
+      const ballIcon = document.createElement("span");
+      ballIcon.className = "team-hud-goal-ball";
+      ballIcon.setAttribute("aria-hidden", "true");
+      goalBadge.append(ballIcon, document.createElement("span"));
+      avatarRing.appendChild(goalBadge);
       row.appendChild(avatarRing);
       row.appendChild(nameWrap);
 
       const entry = {
         name,
         row,
+        goalBadge,
         maxHealth: Number(p?.stats?.health) || Number(p?.health) || 1,
         currentHealth:
           typeof p?.health === "number"
@@ -855,6 +877,7 @@ export function createGameHudController({
             : Number(p?.stats?.health) || 1,
       };
       teamRows.set(name, entry);
+      updateGoalBadge(entry, playerGoals[name]);
       row.classList.toggle("is-spectated", name === spectatedPlayerName);
 
       if (p?.connected === false) row.classList.add("disconnected");
@@ -949,6 +972,7 @@ export function createGameHudController({
     const mountedCards = currentCardNodes;
     currentCardNodes = [];
     const wrap = overlay.querySelector(".bs-wrap");
+    overlay.classList.add("is-dismissing");
     if (wrap) wrap.style.opacity = "0";
     setTimeout(() => {
       overlay.classList.add("hidden");
@@ -992,10 +1016,8 @@ export function createGameHudController({
   }
 
   /**
-   * Player cards and the countdown appear together. FIGHT lands `seconds`
-   * after the server's game:start; `elapsedMs` skips time already spent (a
-   * rejoin mid-countdown). Each beat is scheduled from the start time so
-   * timer drift cannot accumulate.
+   * Rejoins start at the current number. Each displayed number gets a full
+   * beat so a delayed browser callback cannot bunch up the sounds.
    */
   let fightBurstTimer = null;
   function hideFightBurst() {
@@ -1004,6 +1026,11 @@ export function createGameHudController({
     const fightBurst = document.getElementById("fight-burst");
     fightBurst?.classList?.remove("is-on");
     fightBurst?.classList?.add("hidden");
+  }
+
+  function prepareCountdownAudio() {
+    preloadSound("beep");
+    preloadSound(_gameData()?.modeId === "soccer" ? "kickoffWhistle" : "start");
   }
 
   function startCountdown(seconds = COUNTDOWN_MS / 1000, { elapsedMs = 0 } = {}) {
@@ -1017,10 +1044,9 @@ export function createGameHudController({
       countdownRunning = false;
       return;
     }
-    preloadSound("beep");
+    prepareCountdownAudio();
     const isBroBall = _gameData()?.modeId === "soccer";
     const startCue = isBroBall ? "kickoffWhistle" : "start";
-    preloadSound(startCue);
 
     try {
       if (typeof onCountdownStart === "function") onCountdownStart();
@@ -1031,7 +1057,6 @@ export function createGameHudController({
 
     const totalMs = Math.max(1, Number(seconds) || COUNTDOWN_MS / 1000) * 1000;
     const skippedMs = Math.min(totalMs, Math.max(0, Number(elapsedMs) || 0));
-    const at = (ms, fn) => setTimeout(fn, Math.max(0, ms - skippedMs));
 
     const overlay = document.getElementById("battle-start-overlay");
     const fightBurst = document.getElementById("fight-burst");
@@ -1051,24 +1076,16 @@ export function createGameHudController({
       overlay?.classList?.toggle("is-final", num <= riserSeconds);
       replayClass(countdownEl, "is-beat");
       replayClass(overlay, "is-beat");
-      playSound("beep", 0.38 + heat * 0.2, { playbackRate: 1 + (count - num) * 0.06 });
+      playSound("beep", 0.18 + heat * 0.12, {
+        playbackRate: 1 + (count - num) * 0.06,
+        requireReady: true,
+      });
       playCountdownThump(heat);
-      if (num === riserSeconds) {
-        const elapsedRiserMs = Math.max(0, skippedMs - (totalMs - COUNTDOWN_RISER_MS));
-        playCountdownRiser(COUNTDOWN_RISER_MS - elapsedRiserMs);
-      }
     };
 
-    // 5, 4, 3, 2, 1 on whole seconds, then FIGHT.
-    for (let num = count; num >= 1; num--) {
-      const shownAt = totalMs - num * 1000;
-      // A rejoin starts on the current number instead of replaying past ones.
-      if (shownAt + 1000 <= skippedMs) continue;
-      at(shownAt, () => showNumber(num));
-    }
-    at(totalMs, () => {
+    function showFight() {
       countdownEl.textContent = "FIGHT!";
-      playSound(startCue, 0.8);
+      playSound(startCue, isBroBall ? 0.12 : 0.33, { requireReady: true });
       if (!isBroBall) playFightBoom();
       overlay?.classList?.add("is-fight");
       if (fightBurst) {
@@ -1086,9 +1103,21 @@ export function createGameHudController({
 
       // Immediately hide overlay, enable input
       hideBattleStartOverlay();
-      _enableInput();
       countdownRunning = false;
-    });
+      _enableInput();
+    }
+
+    const firstNumber = Math.ceil((totalMs - skippedMs) / 1000);
+    function playBeat(num) {
+      if (num <= 0) {
+        showFight();
+        return;
+      }
+      setTimeout(() => playBeat(num - 1), 1000);
+      showNumber(num);
+      if (num === Math.min(firstNumber, riserSeconds)) playCountdownRiser(num * 1000);
+    }
+    playBeat(firstNumber);
   }
 
   window.addEventListener("resize", _syncVisibleOverlayCardSize);
@@ -1119,6 +1148,8 @@ export function createGameHudController({
     isBattleIntroActive: () => pregameActive || countdownRunning || _isOverlayVisible(),
     setPregameActive,
     prepareBattleCards,
+    prepareCountdownAudio,
+    isCountdownRunning: () => countdownRunning,
     startCountdown,
     hideBattleStartOverlay,
   };

@@ -1,6 +1,7 @@
 import { getNavigation } from "../../lib/globals.cjs";
 import { drawAmmoChargeBar } from "../../game/scene/ammoBarRenderer";
 import { createShowcaseFight } from "./showcaseFight";
+import { isMovementSuppressed } from "../../../shared/combat/runtime/abilityRuntimeManager";
 import { showcaseRoster } from "./showcaseKit";
 import { POWERUP_CATALOG } from "../../../shared/powerups";
 // Phaser side of the character showcase (loaded on demand by
@@ -511,8 +512,10 @@ export function createShowcaseStage(host) {
       combat.special(hero);
       // Let the actual ability finish, including the full Inferno / Rage.
       await d.wait(1200);
+      // Channels and aim phases (Inferno, Seraph) hold the fighter until they end.
       while (Object.values(hero.status || {}).some(ms => ms > 0) ||
-        (combat.session.players.get(hero.id)?.effects?.dravenInfernoUntil || 0) > combat.session.now) await d.wait(200);
+        isMovementSuppressed(combat.session.players.get(hero.id), combat.session.now)) await d.wait(200);
+      await d.wait(600);
       hero.sprite.y = hero.standY;
       idlePose(hero);
       await d.wait(400);

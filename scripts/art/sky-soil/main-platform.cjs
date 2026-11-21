@@ -8,13 +8,16 @@
 // soil. This draws the main island on the same 2-world-px grid and palette, with
 // extra texture: soil strata, embedded stone slabs, roots and vines.
 //
-// --install installs assets and updates the shipped map only.
+// --install installs the art and updates the shipped and effective map.
+// The sloping steps where each side ledge meets the raised middle are cut out of
+// the base, leaving a clean wall where fighters meet it.
 // The silhouette comes from the previous island art (so the grassy ledges stay
 // on the unchanged invisible collision rows), opened to drop plant overhangs and
 // stray specks. Output keeps the 1100x680 world frame of the old island layer.
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('../../../spritesheet-generator/node_modules/sharp');
+const { updateSkySoil } = require('./map-install.cjs');
 
 const ROOT = path.resolve(__dirname, '../../..');
 const argv = process.argv.slice(2);
@@ -22,7 +25,7 @@ const OUT = path.resolve(argv.includes('--out') ? argv[argv.indexOf('--out') + 1
 const INSTALL = argv.includes('--install');
 const SRC = path.join(__dirname, 'platform-masks');
 
-const WORLD_W = 1100, WORLD_H = 680, CELL = 2, UP = 3; // 2 world px per art pixel, 3 texture px per art pixel
+const WORLD_W = 1100, WORLD_H = 680, CELL = 2; // 2 world px per art pixel
 const W = WORLD_W / CELL, H = WORLD_H / CELL;
 
 const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -91,6 +94,33 @@ async function loadMask(file) {
     if (support >= 5 && x > 0 && x < W - 1 && (opened[i - 1] || opened[i + 1] || support === 6)) opened[i] = 1;
   }
   return flattenTops(keepLargest(opened));
+}
+
+// The source art had sloping steps where each low side ledge meets the raised
+// middle. They rise above the side ledges' collision, so fighters walked through
+// them. Between two broad ledges, lower every column whose top sits between the
+// two levels down to the lower ledge, and report the wall each step leaned on.
+function cutSteps(m) {
+  const top = Array.from({ length: W }, (_, x) => { for (let y = 0; y < H; y++) if (m[y * W + x]) return y; return -1; });
+  const runs = [];
+  for (let x = 0; x < W;) {
+    let e = x;
+    while (e + 1 < W && top[e + 1] >= 0 && Math.abs(top[e + 1] - top[x]) <= 3) e++;
+    if (top[x] >= 0 && e - x + 1 >= 40) runs.push({ x0: x, x1: e, level: top[x] });
+    x = e + 1;
+  }
+  const out = new Uint8Array(m), steps = [];
+  for (let k = 0; k + 1 < runs.length; k++) {
+    const a = runs[k], b = runs[k + 1], low = Math.max(a.level, b.level), high = Math.min(a.level, b.level);
+    const cut = [];
+    for (let x = a.x1 + 1; x < b.x0; x++) if (top[x] > high + 4 && top[x] < low - 4) cut.push(x);
+    if (cut.length < 6) continue;
+    for (const x of cut) for (let y = 0; y < low; y++) out[y * W + x] = 0;
+    // The step leaned on the higher ledge's wall.
+    const wallOnRight = b.level < a.level;
+    steps.push({ wall: wallOnRight ? cut[cut.length - 1] + 1 : cut[0] - 1, wallOnRight, floor: low });
+  }
+  return { mask: out, steps };
 }
 
 // Ledge tops wobble by a cell or two after resampling; snap each column's top
@@ -265,28 +295,35 @@ function draw(mask, seed) {
   return img;
 }
 
+const writeArt = (img, file) => sharp(Buffer.from(img.buffer), { raw: { width: W, height: H, channels: 4 } })
+  .webp({ lossless: true, effort: 6 }).toFile(file);
+
 async function build(maskFile, outFile, seed) {
-  const mask = await loadMask(maskFile);
-  const img = draw(mask, seed);
-  await sharp(Buffer.from(img.buffer), { raw: { width: W, height: H, channels: 4 } })
-    .resize(W * UP, H * UP, { kernel: 'nearest' }).webp({ lossless: true, effort: 6 }).toFile(outFile);
+  const { mask, steps } = cutSteps(await loadMask(maskFile));
+  await writeArt(draw(mask, seed), outFile);
+  return steps.length;
 }
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   // Built-in layout (original pillar height) and the saved Map Studio layout.
-  await build(path.join(SRC, 'builtin.webp'), path.join(OUT, 'island-v4.webp'), 301);
-  await build(path.join(SRC, 'saved.webp'), path.join(OUT, 'island-saved-v4.webp'), 301);
-  console.log('wrote', OUT);
+  const n1 = await build(path.join(SRC, 'builtin.webp'), path.join(OUT, 'island-native.webp'), 301);
+  const n2 = await build(path.join(SRC, 'saved.webp'), path.join(OUT, 'island-saved-native.webp'), 301);
+  console.log('wrote', OUT, 'ledge steps removed:', n1, n2);
   if (!INSTALL) return;
   const dest = path.join(ROOT, 'public/assets/sky-soil');
-  for (const f of ['island-v4.webp', 'island-saved-v4.webp']) fs.copyFileSync(path.join(OUT, f), path.join(dest, f));
-  const file = path.join(ROOT, 'src/shared/maps/2.json');
-  const map = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const base = map.scenery.layers.find(layer => layer.id === 'island-base');
-  base.url = '/assets/sky-soil/island-v4.webp';
-  base.scale = WORLD_W / (W * UP);
-  base.filter = 'nearest';
-  fs.writeFileSync(file, JSON.stringify(map, null, 2) + '\n');
+  for (const f of ['island-native.webp', 'island-saved-native.webp']) fs.copyFileSync(path.join(OUT, f), path.join(dest, f));
+  // The shipped map uses the built-in silhouette; the effective map keeps
+  // whichever variant it already shows.
+  updateSkySoil((map, { shipped }) => {
+    const layers = map.scenery.layers, base = layers.find(layer => layer.id === 'island-base');
+    const saved = shipped ? false : base.url.includes('island-saved');
+    base.url = `/assets/sky-soil/${saved ? 'island-saved-native' : 'island-native'}.webp`;
+    base.scale = CELL;
+    base.filter = 'nearest';
+    // The former front-layer steps are gone.
+    const front = layers.findIndex(layer => layer.id === 'island-front');
+    if (front >= 0) layers.splice(front, 1);
+  });
   console.log('installed');
 })().catch(e => { console.error(e); process.exit(1); });

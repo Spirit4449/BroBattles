@@ -133,7 +133,9 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
       face(fighter, moving && !aiming ? Math.sign(p.vx) : p.flip ? -1 : 1);
       // playSpriteAnimation respects an active action's lock.
       if (performance.now() >= remoteAnimationLockUntil(sprite)) {
-        play(fighter, !p.grounded ? (p.vy < 0 ? 'jumping' : 'falling') : moving ? 'running' : 'idle');
+        // A hovering pose a super reports (Sparrow's Seraph aim) wins over airborne.
+        const held = /^seraph-/.test(String(p.animation || '')) && isMovementSuppressed(p, session.now) ? p.animation : null;
+        play(fighter, held || (!p.grounded ? (p.vy < 0 ? 'jumping' : 'falling') : moving ? 'running' : 'idle'));
         // Legacy run atlases have no bbMotion metadata. Match their stride
         // to simulation speed too, without slowing attacks or airborne poses.
         sprite.anims.timeScale = moving && p.grounded ? Math.max(0.15, fighter.movementSpeedRatio) : 1;

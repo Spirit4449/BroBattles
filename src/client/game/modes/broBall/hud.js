@@ -84,10 +84,9 @@ export function createBroBallHud(isIntroBlocking) {
   banner.hidden = true;
   banner.innerHTML = '<div class="bro-ball-goal-flare" aria-hidden="true"></div>' +
     '<div class="bro-ball-goal-confetti" aria-hidden="true"></div>' +
-    '<div class="bro-ball-goal-word" aria-hidden="true"></div>' +
-    '<div class="bro-ball-goal-scorer" role="status"></div>';
+    '<div class="bro-ball-goal-word" role="status" aria-label="Goal!"></div>';
   document.body.append(banner);
-  const [, confetti, word, scorer] = banner.children;
+  const [, confetti, word] = banner.children;
   let score = null;
   let bannerTimer = null;
   let layoutIndex = Math.floor(Math.random() * GOAL_LAYOUTS.length);
@@ -98,7 +97,7 @@ export function createBroBallHud(isIntroBlocking) {
     [motions[i], motions[j]] = [motions[j], motions[i]];
   }
 
-  function announce(team, yourTeam) {
+  function announce(team) {
     const { text, scale, y, tilt } = GOAL_LAYOUTS[layoutIndex];
     const motion = motions[motionIndex];
     // Three layouts and four motions produce twelve distinct combinations before repeating.
@@ -127,8 +126,6 @@ export function createBroBallHud(isIntroBlocking) {
     // Commit the hidden state so a new score also restarts the flare.
     void banner.offsetWidth;
     banner.hidden = false;
-    scorer.textContent = !yourTeam ? `${TEAM_NAMES[team]} scores`
-      : yourTeam === team ? 'Your team scores' : 'Enemy scores';
     clearTimeout(bannerTimer);
     bannerTimer = setTimeout(() => { banner.hidden = true; },
       GOAL_EXIT_MS + (text.length - 1) * LETTER_STEP_MS + LETTER_OUT_MS);
@@ -172,7 +169,7 @@ export function createBroBallHud(isIntroBlocking) {
         if (scored) {
           void box.offsetWidth;
           box.classList.add('scored');
-          announce(team, yourTeam);
+          announce(team);
         }
       }
       score = { ...state.score };

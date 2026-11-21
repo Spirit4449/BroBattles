@@ -1,5 +1,8 @@
 const { SOCKET_EVENTS } = require("../../../shared/net/socketEvents.js");
 const { PICKUP_DELAY_MS } = require("../../../shared/powerups");
+const { clearFighterEffects } = require("./respawn");
+const { cancelCasts } = require("../../../shared/combat/runtime/characterCombatRegistry");
+const { participantId } = require("./participants");
 const {
   DEATH_DROP_DESPAWN_MS,
   DEATH_DROP_BLINK_MS,
@@ -116,6 +119,15 @@ function handlePlayerDeath(room, playerData, meta = {}) {
   playerData.isAlive = false;
   playerData.health = 0;
   playerData._deathHandled = true;
+  clearFighterEffects(playerData);
+  cancelCasts(room, playerData);
+  const sourceId = participantId(playerData);
+  for (const target of room.players.values()) {
+    if (!sourceId || target._gloopPullState?.sourceSocketId !== sourceId) continue;
+    delete target._gloopPullState;
+    delete target.activeEffects?.stun;
+    target._controlLockUntil = 0;
+  }
   playerData.vx = 0;
   playerData.vy = 0;
   playerData.ducking = false;

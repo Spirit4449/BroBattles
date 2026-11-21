@@ -27,7 +27,7 @@ The signed `user_id` cookie carries a session token. Socket authentication resol
 1. The coordinator emits `game:join` with `matchId` and combat protocol versions. The gateway authenticates membership before joining `game:{matchId}`.
 2. `game:init` provides roster, mode/map, server spawns, loaded/connected flags, effects, items and protocol bootstrap state. Clients merge roster data without inventing ownership.
 3. Once the scene is built and the loading screen lifts, the client emits `game:ready` and begins the pregame. Readiness is keyed by account, not socket ID. The coordinator retries join/readiness only after local readiness.
-4. `src/shared/matchIntroTiming.js` defines a five-second pregame, up to two seconds of grace for loading peers, a five-second countdown and a 45-second room-start deadline. `game:start` sends countdown duration and spawns. Rejoins receive remaining countdown state; live rejoins skip pregame. Controls and movement sync begin at FIGHT.
+4. `src/shared/matchIntroTiming.js` defines a five-second pregame, up to two seconds of grace for loading peers, a three-second countdown and a 45-second room-start deadline. `game:start` sends countdown duration and spawns. Rejoins receive the remaining countdown state and show each remaining number for a full beat. Live rejoins skip pregame. The client tracks held keys during the intro and begins sending movement at FIGHT.
 5. `src/shared/gameConstants.js` defines a 60 Hz simulation (`SERVER_TICK_HZ`, `FIXED_DT_MS`), 60 Hz player snapshots (`SNAPSHOT_EVERY_TICKS`) and 7.5 Hz world state (`WORLD_STATE_EVERY_TICKS`).
    `BB_SNAPSHOT_HZ` overrides the player snapshot rate for newly created rooms. The render timeline reads `game:init.snapshotIntervalMs`.
    Delta keyframes stay about once a second.
@@ -194,13 +194,13 @@ How an attack reaches its target decides how it is networked, so attacks are net
 | Delivery | Attacks | Server rewind | Attacker's client |
 | --- | --- | --- | --- |
 | attached: the hitbox moves with the attacker | Thorg sweep (`path-rect`), Draven splash (`attached-rect`), Ozzy's charging fireball (`attached-charge`), `attached-cone` | targets where the attacker saw them, capped lower than shots | swing tested against enemies as drawn; hit sound and a hitstop on both fighters |
-| released: flies on its own | Sparrow arrows and burning volley, Ninja shuriken and swarm, Ozzy fireball, Gloop slimeball and hook | constant offset for the whole flight | launch predicted and reconciled by ID; hit sound and a shorter hitstop on the victim |
+| released: flies on its own | Sparrow arrows and Seraph light bolt, Ninja shuriken and swarm, Ozzy fireball, Gloop slimeball and hook | constant offset for the whole flight | launch predicted and reconciled by ID; hit sound and a shorter hitstop on the victim |
 | area: warned, resolves later | Draven Inferno | none: the target had time to react (favor the target) | nothing predicted |
 | self | Thorg Rage, Ozzy Arcane Surge, dash | not applicable | predicted locally |
 
 The caps and hitstop lengths are in `DELIVERIES`; a cap bounds the network part of a rewind, on top of the attacker's render buffer. The trade-off of every rewind is the victim's: under latency they can still be struck up to the buffer plus the cap after reaching cover or stepping out of reach.
 
-1. **Requests carry the render time.** `withShotView` adds `viewMono`, the server simulation time the render timeline is drawing remote actors at, to every `game:action` and `game:special`.
+1. **Requests carry the render time.** `withCombatRequestContext` adds `viewMono`, the server simulation time the render timeline is drawing remote actors at, to attack requests. In Bro Ball it also includes the rally ID on basic attacks, supers, and follow-up releases so the server can discard inputs from before the last kickoff.
    Requests also carry `viewDelayMs`, the client's current render delay.
    The socket handlers overwrite `viewRewindMs` with the server's monotonic time at arrival minus `viewMono` (attacks start at arrival; the last step's simulation time trailed it by up to a step, and `BB_VIEW_REWIND_CLOCK=simulation` restores that stamp, paired with `netRemoteLead=legacy`), bounded by both `HIT_STALENESS_MAX_MS` (300 ms) and a per-connection allowance; and set `viewBufferMs` to the reported render delay, bounded by `MAX_RENDER_DELAY_MS` and by the rewind itself.
    Each attack then bounds it again by its delivery (`clampDeliveryRewind`, in `attackIdentity` and the Sparrow and Ninja runtimes): the render buffer always counts and the delivery's `rewindCapMs` caps the network part.
@@ -263,7 +263,7 @@ What is left (`tests/serverClockAndHistory.test.js` measures it): the server hol
 
 1. Pick each attack's delivery by how it reaches its target, and give it an existing runtime kind in the character's JSON (`runtime.kind`) with its tuning. No new netcode is needed.
 2. An attached attack with a new shape adds one pure shape function to `attackDelivery.js`, used by its server runtime and its client attack, plus a case in `tests/attackDelivery.test.js` comparing the two.
-3. The client attack sends its request through `emitAttackAction` (or `withShotView`), tests its predicted contact with `predictShotContact` or `predictAttachedContacts`, and calls `notePredictedHit` for each contact.
+3. The client attack sends its request through `emitAttackAction` or uses `withCombatRequestContext` when it emits directly. It tests its predicted contact with `predictShotContact` or `predictAttachedContacts` and calls `notePredictedHit` for each contact.
 4. Only an attack that reaches its target in a new way (a beam, a grab) needs a new delivery, with its policy in `DELIVERIES`.
 
 ## Production network tracing

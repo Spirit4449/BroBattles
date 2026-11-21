@@ -4,14 +4,12 @@ const { getResolvedCharacterAttackConfig, getResolvedCharacterSpecialConfig } = 
 const slime = getResolvedCharacterAttackConfig('gloop', 'slimeball');
 const hook = getResolvedCharacterSpecialConfig('gloop', 'hook');
 const thorg = getResolvedCharacterSpecialConfig('thorg');
-const volley = getResolvedCharacterSpecialConfig('sparrow', 'burningVolley');
 
 // Pure rules shared by authoritative effects and client movement. Ability-owned
 // values stay in the character definition; generic status effects live here.
 const EFFECT_RULES = {
   ...POWERUP_CATALOG,
   thorgRage: { durationMs: thorg.rageDurationMs, modifiers: thorg.rageModifiers },
-  sparrowBurn: { durationMs: volley.burnDurationMs, totalDamage: volley.burnTotalDamage },
   gloopSlimeSlow: { durationMs: slime.slowDurationMs, modifiers: { speedMult: slime.slowSpeedMult, jumpMult: slime.slowJumpMult } },
   gloopHookSlow: { durationMs: hook.slowDurationMs, modifiers: { speedMult: hook.slowSpeedMult, jumpMult: hook.slowJumpMult } },
   ...require('./catalogs/statusEffects.catalog.cjs'),

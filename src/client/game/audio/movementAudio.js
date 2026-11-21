@@ -1,12 +1,53 @@
 import { clamp01 } from "../../../shared/math.js";
 import terrainAudio from '../../../shared/physics/terrainAudio.json';
+import { movementSoundKey } from '../../../shared/physics/movementSounds';
 import { playerSoundVolume, playPlayerSound } from './playerAudio';
 
 const terrainCueTimes = new WeakMap();
 
+// Keep repeated steps around -39 dB K-weighted at full pace, with stronger
+// landings around -31 dB. Bank Bust substitutes its own metal recordings.
+const terrainSampleGain = {
+  'sfx-step-1': 0.44, 'sfx-step-2': 0.52, 'sfx-step-3': 0.43,
+  'sfx-grass-step-1': 0.48, 'sfx-grass-step-2': 0.49,
+  'sfx-grass-step-3': 0.50, 'sfx-grass-step-4': 0.48,
+  'sfx-truss-step-1': 0.80, 'sfx-truss-step-2': 0.87, 'sfx-truss-step-3': 1,
+  'bank-bust-sfx-step-1': 0.41, 'bank-bust-sfx-step-2': 0.61, 'bank-bust-sfx-step-3': 0.39,
+  'sfx-hard-land': 0.13, 'sfx-grass-land': 0.43, 'sfx-truss-land': 0.44,
+  'bank-bust-sfx-hard-land': 0.15,
+};
+
+export function terrainSampleVolume(scene, key, volume) {
+  return volume * (terrainSampleGain[movementSoundKey(scene, key)] ?? 1);
+}
+
+export function wallSlideVolume(speedRatio) {
+  return 0.08 + clamp01(Number(speedRatio) || 0) * 0.06;
+}
+
+export function jumpVolume(speedRatio) {
+  return 0.23 + clamp01(Number(speedRatio) || 0) * 0.06;
+}
+
+export const WALL_JUMP_VOLUME = 0.17;
+
 // Shared mix for local and remote falling wind; retain the speed/time swell.
 export function fallingAirVolume(speedRatio, timeRatio) {
-  return (0.06 + clamp01(Number(speedRatio) || 0) * (0.16 + clamp01(Number(timeRatio) || 0) * 0.14)) * 0.45;
+  return (0.06 + clamp01(Number(speedRatio) || 0) * (0.16 + clamp01(Number(timeRatio) || 0) * 0.14)) * 0.5;
+}
+
+export function movementPlaybackTime(scene) {
+  const manager = scene.sound;
+  if (!manager || manager.locked ||
+      (typeof document !== 'undefined' && document.hidden)) return null;
+  const context = manager.context;
+  if (!context) return performance.now();
+  // The shared Web Audio context can be suspended while Phaser is unlocked.
+  return context.state === 'running' ? context.currentTime * 1000 : null;
+}
+
+export function fallingAirRamp(elapsedMs) {
+  return clamp01(elapsedMs / 220);
 }
 
 export function getTerrainSteps(terrain) {
@@ -33,7 +74,8 @@ export function terrainLandingSound(terrain, baseVolume, scene) {
   const gain = scene?.movementAudioProfile === "bank-bust" ? 1.2 : 1;
   return {
     key: landing.key,
-    volume: Math.min(1, Math.max(0, Number(baseVolume) || 0) * (Number(landing.volumeScale) || 1) * gain),
+    volume: terrainSampleVolume(scene, landing.key,
+      Math.min(1, Math.max(0, Number(baseVolume) || 0) * (Number(landing.volumeScale) || 1) * gain)),
   };
 }
 
@@ -93,7 +135,7 @@ export function preloadTerrainAudio(scene, staticPath) {
 export function playDuckTransitionSound(scene, ducking, source = null) {
   try {
     const options = {
-      volume: 1.75,
+      volume: 0.57,
       rate: ducking ? 0.92 : 1.08,
     };
     if (source) playPlayerSound(scene, source, "sfx-duck-transition", options);
@@ -103,6 +145,6 @@ export function playDuckTransitionSound(scene, ducking, source = null) {
 
 export function playDuckBlockSound(scene) {
   try {
-    scene?.sound?.play?.("sfx-duck-block", { volume: 0.5 });
+    scene?.sound?.play?.("sfx-duck-block", { volume: 0.25 });
   } catch (_) {}
 }

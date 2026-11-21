@@ -20,7 +20,6 @@ function resolveBankBustSettings(settings = {}) {
     lowCoinsRatio: setting(settings.lowCoinsRatio, defaults.lowCoinsRatio, 0),
     matchDurationMs: setting(settings.matchDurationMs, defaults.matchDurationMs, 1),
     respawnDelayMs: setting(settings.respawnDelayMs, defaults.respawnDelayMs, 0),
-    respawnShieldMs: setting(settings.respawnShieldMs, defaults.respawnShieldMs, 0),
   };
 }
 

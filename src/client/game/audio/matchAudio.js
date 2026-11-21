@@ -1,5 +1,33 @@
 // Match-level music cues: sudden-death loop and result stings.
 import { bindAudio } from "../../site/preferences";
+import { getUISoundSources } from "../../ui/uiSounds.js";
+
+const resultVolumes = { win: 0.23, lose: 0.21, draw: 0.28 };
+const rewardSounds = {
+  shopReveal: 1,
+  rewardCoinImpact: 8,
+  rewardGemImpact: 8,
+  shopCurrencyImpact: 16,
+  streakIncrease: 1,
+  streakLost: 1,
+  streakDingCoin: 3,
+  streakDingGem: 3,
+};
+
+export function preloadMatchRewardSounds(scene) {
+  for (const [name, instances] of Object.entries(rewardSounds)) {
+    scene.load.audio(name, getUISoundSources(name), { instances });
+  }
+}
+
+// These timed cues use the same unlocked audio context and volume as combat.
+export function playMatchRewardSound(scene, key, volume, rate = 1) {
+  if (document.hidden || !scene?.sys.isActive() || !scene.sound || scene.sound.locked ||
+      !scene.cache.audio.exists(key)) return;
+  const playing = scene.sound.getAllPlaying().filter(sound => sound.key === key);
+  if (playing.length >= rewardSounds[key]) playing[0]?.destroy();
+  scene.sound.play(key, { volume, rate });
+}
 
 export function startSuddenDeathMusic(gameScene) {
   if (document.hidden || !gameScene || !gameScene.sound) return;
@@ -10,7 +38,7 @@ export function startSuddenDeathMusic(gameScene) {
     if (!gameScene._suddenDeathMusicSfx) {
       const track = new Audio('/assets/game-sounds/suddendeath.mp3');
       track.loop = true;
-      const disposeVolume = bindAudio(track, 'music', 0.32);
+      const disposeVolume = bindAudio(track, 'music', 0.10);
       gameScene._suddenDeathMusicSfx = {
         get isPlaying() { return !track.paused; },
         play() { track.play().catch(() => {}); },
@@ -49,9 +77,7 @@ export function playMatchEndSound(gameScene, winnerTeam, yourTeam, { skipSting =
     } catch (_) {}
     if (skipSting) return;
     try {
-      gameScene.sound.play(key, {
-        volume: key === "win" ? 0.55 : 0.48,
-      });
+      gameScene.sound.play(key, { volume: resultVolumes[key] });
     } catch (_) {}
   };
   if (gameScene.sound.locked) {

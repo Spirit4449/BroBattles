@@ -19,7 +19,7 @@ function newBubbleState(frame, sprite, overrides = {}) {
 
 export function createStatusAuraRenderer({ scene, Phaser, colors, getLatestPlayerEffects, getGameData, getLocalPlayer, getUsername, playerLookup, shieldImpactQueue, applyCharacterPowerupFx, drawCharacterPowerupAura, auraGraphics, fxG }) {
   const auraBubbleStates = new Map();
-  const spawnShieldReflections = new WeakMap();
+  let spawnShieldReflections = new WeakMap();
   function spawnTrailParticle(x, y, color, r = 5, life = 260) {
     const c = addPixelCircle(scene, x, y, r, color, 0.75);
     c.setDepth(RENDER_LAYERS.PLAYER_HUD);
@@ -545,5 +545,15 @@ export function createStatusAuraRenderer({ scene, Phaser, colors, getLatestPlaye
     }
   }
 
-  return { renderPowerupAuras, prepareClaim, primeClaimedBubble, spriteFrameForAura };
+  function resetEffects(username) {
+    if (username) {
+      auraBubbleStates.delete(username);
+      spawnShieldReflections.delete(playerLookup.sprite(username));
+      return;
+    }
+    auraBubbleStates.clear();
+    spawnShieldReflections = new WeakMap();
+  }
+
+  return { renderPowerupAuras, prepareClaim, primeClaimedBubble, spriteFrameForAura, resetEffects };
 }

@@ -13,7 +13,7 @@ import {
   validateMap,
 } from "../../shared/maps/mapDocument";
 import { arenaFor, arenaIds, mapArena } from "../../shared/maps/arenas";
-import { sceneryUrls } from "../../shared/maps/scenery";
+import { sceneryParts, sceneryUrls } from "../../shared/maps/scenery";
 import { allRows, exportDocument, retargetMap } from "./editorModel";
 import { $, editor, friendlyName, map, status, dirty, setBusy } from "./studioState";
 import { syncToolbarSelect } from "./toolbarSelects";
@@ -80,10 +80,13 @@ function commit(message = "Edit applied", { merge = false } = {}) {
   status(message);
 }
 
-// Loads scenery art an edit introduced (a new layer image or cloud type).
-const sceneryMissing = () =>
-  !!editor.scene &&
-  sceneryUrls(map().scenery).some((url) => !editor.scene.textures.exists(sceneryTextureKey(url)));
+// Loads scenery art introduced by an edit or a history change.
+function sceneryMissing() {
+  if (!editor.scene) return false;
+  const { scenery } = map();
+  const urls = [...sceneryUrls(scenery), ...sceneryParts(scenery).map(part => part.url)];
+  return urls.some(url => !editor.scene.textures.exists(sceneryTextureKey(url)));
+}
 
 function transaction(fn, message, options) {
   if (editor.busy) return;
@@ -165,6 +168,7 @@ async function setPreview(value, row = null) {
         document: editor.documentData,
         modeVariantId: mapArena(map()).modeId === "duels" ? $("playtest-formation").value : null,
         bots: $("playtest-kind").value === "bots",
+        fullBattle: $("playtest-full-battle").checked,
         infiniteSupers: $("infinite-supers").checked,
         debugHitboxes: $("debug-hitboxes").checked,
         character: $("playtest-character").value,

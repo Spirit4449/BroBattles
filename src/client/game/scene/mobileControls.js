@@ -64,7 +64,7 @@ function createStick() {
     dx: 0,
     dy: 0,
     strength: 0,
-    context: null,
+    followUp: false,
   };
 }
 
@@ -79,6 +79,7 @@ export function createMobileControlsController({
   resolveAimContext,
   resolveQuickContext,
   getSuperChargeRatio,
+  isFollowUpActive,
   onBasicFire,
   onSpecialFire,
   onSpecialNotReady,
@@ -311,7 +312,7 @@ export function createMobileControlsController({
     const button = state.geometry?.buttons?.[kind];
     const stick = state[kind];
     sampleStick(stick, event.clientX, event.clientY, (button?.size || 80) * 0.5);
-    stick.context = resolveStickContext(kind);
+    resolveStickContext(kind);
   }
 
   function startPress(kind, event) {
@@ -340,7 +341,8 @@ export function createMobileControlsController({
     }
     const stick = state[kind];
     if (stick.pointerId !== null) return;
-    if (kind === "special" && !isSuperReady()) {
+    const followUp = !!isFollowUpActive?.();
+    if (kind === "special" && !isSuperReady() && !followUp) {
       try {
         onSpecialNotReady?.();
       } catch (_) {}
@@ -348,6 +350,7 @@ export function createMobileControlsController({
     }
     stick.pointerId = event.pointerId;
     stick.active = true;
+    stick.followUp = followUp;
     stick.originX = Number(event.clientX) || 0;
     stick.originY = Number(event.clientY) || 0;
     aimStickTo(kind, event);
@@ -413,6 +416,7 @@ export function createMobileControlsController({
     if (!player) return null;
     const family = kind === "special" ? "special" : "basic";
     const stick = state[family];
+    if (stick.followUp !== !!isFollowUpActive?.()) return null;
     // A tap (or a drag that never leaves the deadzone) auto-aims at the
     // nearest opponent, like a keyboard quick attack.
     if (stick.strength < AIM_STICK_DEADZONE && typeof resolveQuickContext === "function") {
@@ -442,7 +446,7 @@ export function createMobileControlsController({
 
   function releaseStick(kind, shouldFire = false) {
     const stick = state[kind];
-    const context = shouldFire && stick.active ? resolveStickContext(kind) || stick.context : null;
+    const context = shouldFire && stick.active ? resolveStickContext(kind) : null;
     Object.assign(stick, createStick());
     if (kind === "movement") resetMoveBase();
     if (kind === "basic" && context) onBasicFire?.(context);
@@ -533,9 +537,11 @@ export function createMobileControlsController({
   function updateReticle(reticleController) {
     for (const kind of ["basic", "special"]) {
       if (!state[kind].active) continue;
-      state[kind].context = resolveStickContext(kind);
+      const context = resolveStickContext(kind);
+      if (!context) continue;
       try {
-        reticleController?.update?.(state[kind].context);
+        if (state[kind].followUp) reticleController?.hide?.();
+        else reticleController?.update?.(context);
       } catch (_) {}
       return;
     }

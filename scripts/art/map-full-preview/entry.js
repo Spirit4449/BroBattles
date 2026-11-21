@@ -3,7 +3,9 @@
 // signals window.__snapshotReady for the screenshot.
 import Phaser from 'phaser/dist/phaser-arcade-physics.min.js';
 import { preloadMapDocument, buildMapDocument } from '../../../src/client/game/maps/documentRuntime';
-import { buildScenery, preloadScenery } from '../../../src/client/game/maps/sceneryRuntime';
+import { buildScenery, layerDepths, preloadScenery } from '../../../src/client/game/maps/sceneryRuntime';
+import { createCrowd } from '../../../src/client/game/modes/broBall/crowd';
+import { crowdRows } from '../../../src/client/game/modes/broBall/runtime';
 import { mapArena } from '../../../src/shared/maps/arenas';
 
 const map = window.__SNAPSHOT_MAP__;
@@ -17,27 +19,33 @@ const { camera } = mapArena(map);
 const width = window.innerWidth, height = window.innerHeight;
 
 class SnapshotScene extends Phaser.Scene {
-  preload() { preloadMapDocument(this, map); preloadScenery(this, map); }
+  preload() {
+    this.failedAssets = [];
+    this.load.on('loaderror', file => this.failedAssets.push(file.src));
+    preloadMapDocument(this, map);
+    preloadScenery(this, map);
+  }
   create() {
+    if (this.failedAssets.length) throw new Error(`Failed to load: ${this.failedAssets.join(', ')}`);
     buildMapDocument(this, map.id, map);
-    const scenery = buildScenery(this, map, { still: true });
-    // Still scenery is composed for the camera at rest. Zoomed out to the whole
-    // arena, grow the parallax (scroll < 1) layers about the arena centre until
-    // the farthest one covers the frame, as panning would reveal in a match.
-    const far = scenery?.layers[0];
-    if (far && far.scroll < 1) {
-      const k = Math.max(1, camera.width / far.obj.displayWidth, camera.height / far.obj.displayHeight);
-      for (const item of [...scenery.layers, ...scenery.parts]) {
-        if (item.scroll >= 1) continue;
-        item.obj.setScale(item.sx * k, item.sy * k)
-          .setPosition(scenery.center.x + item.offset.x * k, scenery.center.y + item.offset.y * k);
+    const cam = this.cameras.main;
+    const card = new URLSearchParams(window.location.search).has('card');
+    cam.removeBounds();
+    cam.setZoom(card ? height / camera.height : Math.max(width / camera.width, height / camera.height));
+    cam.centerOn(camera.x + camera.width / 2, camera.y + camera.height / 2);
+    buildScenery(this, map, { preview: true });
+    if (map.objectiveLayout?.broBall) {
+      const rows = crowdRows(map);
+      if (rows) {
+        const { goals } = map.objectiveLayout.broBall;
+        createCrowd(this, Phaser, {
+          rows, goals, reduced: true,
+          left: goals.team1.backX, right: goals.team2.backX,
+          skyY: camera.y, depth: layerDepths(map.scenery.layers).stands + 0.25,
+        });
       }
     }
-    const cam = this.cameras.main;
-    cam.removeBounds();
-    cam.setZoom(Math.max(width / camera.width, height / camera.height));
-    cam.centerOn(camera.x + camera.width / 2, camera.y + camera.height / 2);
-    // Two frames so every texture has drawn before the capture.
+    // Let textures draw before the capture.
     this.time.delayedCall(250, () => { window.__snapshotReady = true; });
   }
 }

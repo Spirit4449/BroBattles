@@ -16,7 +16,7 @@ You can select Bank Bust after reaching 250 peak trophies. You can also play it 
 
 ## Bro Ball
 
-Bro Ball is a 2v2 match on Sunset Bowl. Kick the ball into the other team’s goal. The first team to five goals wins, or the team with more goals when time expires. A tie goes to 45 seconds of golden-goal overtime. If neither team scores, the match ends in a draw.
+Bro Ball is a 2v2 match on Rumble Stadium. Kick the ball into the other team’s goal. The first team to five goals wins, or the team with more goals when time expires. A tie goes to 45 seconds of golden-goal overtime. If neither team scores, the match ends in a draw.
 
 Run into the ball to deflect it, tap attack to kick, or aim and release to place a shot. Dash into the ball for a power shot. Lift your shot over the raised goal step and keep a teammate back to defend.
 

@@ -1,4 +1,5 @@
 import { createRemoteMovementFx } from "./remoteMovementFx";
+import { cancelFighterCombat } from "./fighterCombatCleanup";
 import { standingBodyHeight, applyBodyFlipOffset, hudTopY } from "./playerBodyGeometry";
 import { getHealth, resolveCharacterKey } from "../../../shared/characters/characterStats.js";
 import { spawnRespawnEffect } from '../scene/respawnEffect';
@@ -550,6 +551,7 @@ export default class RemotePlayer {
       return;
 
     this._deathPresentationActive = true;
+    cancelFighterCombat(this.opponent);
     this.movementFx.reset();
     this._spawnPresented = true;
     this.opCurrentHealth = 0;
@@ -566,7 +568,7 @@ export default class RemotePlayer {
     }
 
     try {
-      playPlayerSound(this.scene, this.opponent, "sfx-death", { volume: 0.55 });
+      playPlayerSound(this.scene, this.opponent, "sfx-death", { volume: 0.11 });
     } catch (_) {}
     spawnDeathBurst(this.scene, this.opponent, {
       color: 0xff7394,
@@ -628,6 +630,7 @@ export default class RemotePlayer {
       this.opCurrentHealth = this.opMaxHealth;
     }
     try {
+      cancelFighterCombat(this.opponent);
       if (Number.isFinite(meta?.x) && Number.isFinite(meta?.y)) {
         const serverX = Number(meta.x);
         const serverY = Number(meta.y);

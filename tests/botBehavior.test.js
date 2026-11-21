@@ -678,6 +678,113 @@ describe("Bot behavior and routes", () => {
     assert.ok(context.routeTo(decision.goal.surfaceId)?.length);
   });
 
+  test('bots hold high ground instead of dropping into a remembered stream of fire', (t) => {
+    const { chooseDecision } = require('../src/server/core/bots/tactics');
+    const { updateFireLanes } = require('../src/server/core/bots/perception');
+    const h = setup(t, ['sparrow', 'ninja']), enemy = h.players[1];
+    const solid = { up: true, down: true, left: true, right: true };
+    const floor = { id: 'floor', x: 1100, left: 100, right: 2100, top: 900, bottom: 940, collision: solid };
+    const ledge = { id: 'ledge', x: 550, left: 300, right: 800, top: 620, bottom: 660, collision: solid };
+    h.room.geometry = { ...h.room.geometry, mapId: 993, colliders: [floor, ledge] };
+    h.place(h.p, 550, ledge);
+    h.place(enemy, 1500, floor);
+    Object.assign(h.brain, { openingUntil: 0, superPlan: null, retreating: false, random: () => 0.5 });
+    const context = h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
+    assert.equal(chooseDecision(h.brain, context, enemy, [enemy], h.now()).goal.surfaceId, floor.id,
+      'without fire the bot drops down to fight');
+    // A swarm of shots streaming along the floor toward the ledge.
+    const shots = Array.from({ length: 10 }, (_, i) => ({ x: enemy.x - 50 - i * 90, y: enemy.y + (i % 3 - 1) * 20,
+      vx: -1400, vy: 0, gravity: 0, radius: 14, ownerId: enemy.participantId }));
+    h.brain.fireLanes = updateFireLanes(null, { at: h.now(), enemies: [enemy], projectiles: shots }, h.now());
+    assert.equal(chooseDecision(h.brain, context, enemy, [enemy], h.now()).goal.surfaceId, ledge.id);
+    // The lane outlasts a short pause in fire, then is forgotten.
+    h.brain.fireLanes = updateFireLanes(h.brain.fireLanes, { at: h.now() + 400, enemies: [enemy], projectiles: [] }, h.now() + 400);
+    assert.equal(chooseDecision(h.brain, context, enemy, [enemy], h.now() + 400).goal.surfaceId, ledge.id);
+    h.brain.fireLanes = updateFireLanes(h.brain.fireLanes, null, h.now() + 5000);
+    assert.equal(h.brain.fireLanes.size, 0);
+  });
+
+  test('Sparrow takes the far exit to attack a Ninja firing under the platform', (t) => {
+    const { chooseDecision } = require('../src/server/core/bots/tactics');
+    const { updateFireLanes } = require('../src/server/core/bots/perception');
+    const h = setup(t, ['sparrow', 'ninja']), enemy = h.players[1];
+    const collision = { up: true, down: true, left: true, right: true };
+    const floor = { id: 'floor', x: 1100, left: 100, right: 2100, top: 900, bottom: 940, collision };
+    const ledge = { id: 'ledge', x: 1000, left: 450, right: 1550, top: 620, bottom: 660, collision };
+    h.room.geometry = { ...h.room.geometry, mapId: 994, colliders: [floor, ledge] };
+    h.place(h.p, 620, ledge);
+    h.place(enemy, 1100, floor);
+    const shots = Array.from({ length: 10 }, (_, i) => ({ x: enemy.x - i * 70, y: enemy.y,
+      vx: -1400, vy: 0, radius: 14, ownerId: enemy.participantId }));
+    h.brain.fireLanes = updateFireLanes(null, { at: h.now(), enemies: [enemy], projectiles: shots }, h.now());
+    const context = h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
+    h.brain.decision = chooseDecision(h.brain, context, enemy, [enemy], h.now());
+    const goal = h.brain.decision.goal;
+    assert.equal(goal.surfaceId, floor.id);
+    assert.ok(goal.x > enemy.x);
+    h.brain.navigate(context, h.now());
+    assert.ok(h.brain.approachEdge.takeoffX > enemy.x);
+    const stance = standOn(floor, h.p.char_class, goal.x);
+    const shooter = { ...h.p, ...stance };
+    const aim = basicAim(shooter, enemy, h.brain.profile, () => 0.5, h.room);
+    assert.ok(aim.canHit && hasClearShot(h.room, shooter, enemy, aim));
+    const thinkSteps = h.brain.thinkSteps.bind(h.brain);
+    t.mock.method(h.brain, 'thinkSteps', (observed, mods, now) =>
+      thinkSteps(observed && { ...observed, projectiles: shots }, mods, now));
+    const initialHealth = enemy.health;
+    for (let frame = 0; frame < 720; frame++) {
+      h.advance(1);
+      if (h.p.platformId === floor.id && h.p.x > enemy.x && enemy.health < initialHealth) break;
+    }
+    assert.equal(h.p.platformId, floor.id);
+    assert.ok(h.p.x > enemy.x && enemy.health < initialHealth, 'lands behind the stream and damages the shooter');
+  });
+
+  for (const [index, character] of ['ninja', 'ozzy', 'draven', 'thorg', 'gloop', 'sparrow'].entries()) {
+    test(`${character} reroutes around sustained fire on the way down`, (t) => {
+      const { updateFireLanes } = require('../src/server/core/bots/perception');
+      const h = setup(t, [character, 'ozzy']);
+      const collision = { up: true, down: true, left: true, right: true };
+      const floor = { id: 'ground', x: 1100, left: 100, right: 2100, top: 900, bottom: 940, collision };
+      const upper = { id: 'upper', x: 1100, left: 650 - index * 15, right: 1550 + index * 15,
+        top: 540 + index * 10, bottom: 580 + index * 10, collision };
+      h.room.geometry = { ...h.room.geometry, mapId: 9960 + index, colliders: [floor, upper] };
+      const side = index % 2 ? 1 : -1;
+      h.place(h.p, upper.x + side * 300, upper);
+      const context = () => h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
+      const route = () => context().routeTo(floor.id)[0];
+      const direct = route();
+      assert.equal(Math.sign(direct.takeoffX - upper.x), side);
+      const midFlight = direct.frames.find(frame => frame.y > upper.bottom);
+      assert.ok(midFlight);
+      const shots = Array.from({ length: 12 }, (_, i) => ({
+        x: (side > 0 ? upper.right : upper.left) + side * i * 55, y: midFlight.y - i * 5, vx: side * 50, vy: 1000,
+        gravity: 0, radius: 20, ownerId: 'opponent',
+      }));
+      h.brain.fireLanes = updateFireLanes(null, { at: h.now(), enemies: [], projectiles: shots }, h.now());
+      assert.equal(Math.sign(route().takeoffX - upper.x), -side);
+      h.brain.fireLanes = updateFireLanes(h.brain.fireLanes, null, h.now() + 5000);
+      assert.equal(route(), direct);
+    });
+  }
+
+  test('a bot can leave its goal platform to bypass fire across the final walk', (t) => {
+    const { updateFireLanes } = require('../src/server/core/bots/perception');
+    const h = setup(t, ['gloop', 'draven']);
+    const collision = { up: true, down: true, left: true, right: true };
+    const floor = { id: 'ground', x: 1100, left: 100, right: 2100, top: 900, bottom: 940, collision };
+    const bridge = { id: 'bridge', x: 1100, left: 850, right: 1350, top: 735, bottom: 760, collision };
+    h.room.geometry = { ...h.room.geometry, mapId: 9970, colliders: [floor, bridge] };
+    h.place(h.p, 650, floor);
+    const route = () => h.brain.context(effects.getModifiers(h.p, h.now()), h.now()).routeTo(floor.id, 1550);
+    assert.deepEqual(route(), []);
+    const shots = Array.from({ length: 12 }, (_, i) => ({
+      x: 1000 + i * 16, y: h.p.y, vx: 0, vy: 800, gravity: 0, radius: 14, ownerId: 'opponent',
+    }));
+    h.brain.fireLanes = updateFireLanes(null, { at: h.now(), enemies: [], projectiles: shots }, h.now());
+    assert.deepEqual(route().map(edge => edge.to), [bridge.id, floor.id]);
+  });
+
   test('sampled navigation routes land on their advertised platforms under real physics', () => {
     const { buildGraph, standOn } = require('../src/server/core/bots/navigation');
     const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');

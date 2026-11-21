@@ -25,7 +25,6 @@ const { EFFECT_RULES, getEffectModifiers } = require('../../../effectRules');
 // }
 
 const { POWERUP_HEALTH_REGEN_PER_SEC, POWERUP_POISON_DPS, POWERUP_EFFECT_TICK_MS, POWERUP_AMBIENT_TICK_MS, POWERUP_SHOCKWAVE_RADIUS, POWERUP_SHOCKWAVE_FORCE_X, POWERUP_SHOCKWAVE_FORCE_Y } = require("../../matchConfig.js");
-const { reduceDuckDamage } = require("../../../physics/ducking");
 
 function getPowerScale(params = {}) {
   const scale = Number(params?.powerScale);
@@ -226,54 +225,6 @@ const effectDefs = {
       });
     },
     snapshotKey: "thorgRage",
-  },
-
-  sparrowBurn: {
-    durationMs: EFFECT_RULES.sparrowBurn.durationMs,
-    tickIntervalMs: 1000,
-    modifiers: {},
-    onApply: null,
-    onTick(player, room, now, params = {}) {
-      const totalDamage = Math.max(0, Number(params.totalDamage ?? EFFECT_RULES.sparrowBurn.totalDamage));
-      const durationMs = Math.max(1, Number(params.durationMs ?? EFFECT_RULES.sparrowBurn.durationMs));
-      const prev = Number(player.health || 0);
-      const rawDamage = Math.max(1, Math.round((totalDamage * 1000) / durationMs));
-      const duckBlocked = player.ducking === true;
-      const dmg = Math.max(1, Math.round(reduceDuckDamage(player, rawDamage)));
-      player.health = Math.max(0, prev - dmg);
-      player.lastCombatAt = now;
-
-      const sourceName = String(params.sourceName || "");
-      const source = sourceName
-        ? Array.from(room.players.values()).find(
-            (entry) => entry?.name === sourceName,
-          )
-        : null;
-      const applied = Math.max(0, prev - player.health);
-      if (source && source !== player && applied > 0) {
-        source.lastCombatAt = now;
-        room.recordCombatStat?.(source, { damage: applied, hits: 1 });
-      }
-
-      if (player.health !== prev) {
-        room.broadcastHealthUpdate(player, { cause: "burn", duckBlocked });
-        room.broadcast(SOCKET_EVENTS.POWERUP_TICK, {
-          type: "sparrowBurn",
-          username: player.name,
-        });
-        if (player.health <= 0 && prev > 0) {
-          if (source && source !== player) {
-            room.recordCombatStat?.(source, { kills: 1 });
-          }
-          room.handlePlayerDeath(player, {
-            cause: "burn",
-            killedBy: sourceName || undefined,
-            at: now,
-          });
-        }
-      }
-    },
-    snapshotKey: "sparrowBurn",
   },
 
   // ── Available for future powerups / abilities ────────────────────────────────

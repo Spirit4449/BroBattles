@@ -292,6 +292,9 @@
       #battle-start-overlay.hidden {
         display: none !important;
       }
+      #battle-start-overlay.is-dismissing {
+        pointer-events: none;
+      }
       #battle-start-overlay .bs-wrap {
         position: absolute;
         inset: 0;
@@ -1089,6 +1092,28 @@
           transform 180ms ease,
           filter 180ms ease,
           opacity 180ms ease;
+      }
+      #team-status-hud .team-hud-goal-badge {
+        position: absolute;
+        z-index: 2;
+        bottom: 3px;
+        right: 3px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 1px 2px 0;
+        background: color-mix(in srgb, var(--team-core-end) 88%, transparent);
+        color: #f5f7fc;
+        text-shadow: 1px 1px 0 #03060b;
+        font: 8px/1 "Press Start 2P", monospace;
+        white-space: nowrap;
+      }
+      #team-status-hud .team-hud-goal-badge[hidden] { display: none; }
+      #team-status-hud .team-hud-goal-ball {
+        width: 10px;
+        height: 10px;
+        flex: none;
+        background: center / contain no-repeat url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ccircle%20cx='8'%20cy='8'%20r='7.5'%20fill='%2310101a'/%3E%3Ccircle%20cx='8'%20cy='8'%20r='6.5'%20fill='%23f5f4ee'/%3E%3Cpath%20fill='%23abb3bf'%20d='M2%209a6.1%206.1%200%200%200%2011.7%201.5A7.7%207.7%200%200%201%202%209Z'/%3E%3Cpath%20fill='none'%20stroke='%23737c8c'%20stroke-width='.55'%20d='M8%202v4m5.7.3-3.7%201.4m1.4%205.7-2-3.4m-5%203.1%202.3-3.2M2%206.3l3.8%201.4'/%3E%3Cpath%20fill='%2320212c'%20d='m8%205%202.9%202.1-1.1%203.4H6.2L5.1%207.1ZM5.8%201.9a6.5%206.5%200%200%201%204.4%200L8%203.5Zm8.1%203.4a6.5%206.5%200%200%201%20.5%203.8l-2-1.8Zm-1%206.9a6.5%206.5%200%200%201-3.1%202l.3-2.3Zm-6.7%202a6.5%206.5%200%200%201-3.1-2l2.8-.3ZM1.6%209.1a6.5%206.5%200%200%201%20.5-3.8l1.5%202Z'/%3E%3C/svg%3E");
       }
       #team-status-hud .team-hud-avatar-ring::after {
         content: "";

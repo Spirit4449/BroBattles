@@ -49,7 +49,7 @@ const soundFiles = {
   notification: "notification",
   beep: "/assets/game-sounds/beep.mp3",
   start: "/assets/game-sounds/start.mp3",
-  kickoffWhistle: "/assets/bro-ball/kickoff-whistle.mp3",
+  kickoffWhistle: "/assets/bro-ball/opening-whistle.mp3",
   playerJoin: "/assets/player-join.mp3",
   upgrade: "/assets/upgrade.mp3",
   unlock: "/assets/unlock.mp3",
@@ -61,7 +61,7 @@ const soundFiles = {
   shopConfirm: "shop-confirm.ogg",
   shopBigSuccess: "shop-big-success.ogg",
   shopError: "shop-error.ogg",
-  shopReveal: "shop-reveal.ogg",
+  shopReveal: "shop-reveal.mp3",
   skinSwitch: "skin-switch.wav",
   streakIncrease: "rewards/streak-increase.mp3",
   streakLost: "rewards/streak-lost.mp3",
@@ -77,11 +77,16 @@ const soundFiles = {
   shopCurrencyImpact: "shop-currency-impact.mp3",
 };
 
-function createAudioWithFallback(filename) {
+export function getUISoundSources(soundName) {
+  const filename = soundFiles[soundName];
+  if (!filename) return [];
   const hasExtension = /\.[a-z0-9]+$/i.test(filename);
-  const sources = hasExtension
+  return hasExtension
     ? [filename.startsWith("/") ? filename : `${soundPath}${filename}`]
     : [".mp3", ".wav", ".ogg"].map((ext) => `${soundPath}${filename}${ext}`);
+}
+
+function createAudioWithFallback(sources) {
   const audio = new Audio();
   audio.preload = "auto";
 
@@ -113,9 +118,9 @@ function createAudioWithFallback(filename) {
 
 function getOrLoadSound(soundName) {
   if (sounds[soundName]) return sounds[soundName];
-  const filename = soundFiles[soundName];
-  if (!filename) return null;
-  const audio = createAudioWithFallback(filename);
+  const sources = getUISoundSources(soundName);
+  if (!sources.length) return null;
+  const audio = createAudioWithFallback(sources);
   sounds[soundName] = audio;
   return audio;
 }
@@ -126,7 +131,8 @@ export function preloadSound(soundName) { getOrLoadSound(soundName); }
 // Play a sound
 export function playSound(soundName, volume = 0.5, options = {}) {
   const source = getOrLoadSound(soundName);
-  if (!source) return;
+  // A timed cue should never start late while its media finishes buffering.
+  if (!source || (options.requireReady && source.readyState < 3)) return;
   trackSoundSettings();
   const clickContext = automaticClickCue ? null : [...clickContexts].reverse().find(context => context.event.eventPhase !== 0);
   if (clickContext) {
@@ -152,7 +158,7 @@ export function playSound(soundName, volume = 0.5, options = {}) {
     }
     soundPools.set(soundName, pool);
   }
-  sound.currentTime = 0;
+  if (sound.currentTime !== 0) sound.currentTime = 0;
   activeSounds.set(sound, volume);
   sound.volume = volume * getSettings().sfx;
   const release = () => activeSounds.delete(sound);

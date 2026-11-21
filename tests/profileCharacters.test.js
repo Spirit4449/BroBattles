@@ -395,17 +395,20 @@ test('Ozzy surge grants real expiring modifiers to living allies, excluding dead
   assert.deepEqual(combatEffects.snapshotActive(hero, session.now), {});
 });
 
-test('Sparrow super ignites targets and applies damage ticks after the arrows stop', () => {
+test('Sparrow Seraph rises, aims, then looses a bolt that strikes for her special damage', () => {
+  const { SERAPH } = require('../src/shared/characters/sparrowLightBolt');
   const { session, hero, enemy, events, advance } = preview('sparrow');
   enemy.health = enemy.maxHealth = 10000;
   hero.superCharge = hero.maxSuperCharge;
-  assert.ok(session.requestSpecial(hero.name, { id: 'burn', aim: { angle: 0, power: 0.5 } }));
-  advance(1000);
-  assert.ok(combatEffects.snapshotActive(enemy, session.now).sparrowBurn > 0);
+  const groundY = hero.y;
+  assert.ok(session.requestSpecial(hero.name, { aim: {} }));
+  advance(SERAPH.riseMs);
+  assert.ok(hero.y < groundY - SERAPH.liftPx / 2, 'she rises into the air');
+  assert.equal(events.some(e => e.payload?.action?.type === 'sparrow-bolt'), false, 'the tap alone fires nothing');
   const hp = enemy.health;
-  advance(1800);
-  assert.ok(enemy.health < hp);
-  assert.ok(events.some(e => e.type === 'health-update' && e.payload.cause === 'burn'));
+  advance(SERAPH.aimMs);
+  assert.ok(events.some(e => e.payload?.action?.type === 'sparrow-bolt'));
+  assert.equal(enemy.health, hp - hero.specialDamage);
 });
 
 test('Gloop basic and hook apply real slowing modifiers, pull and expiry', () => {

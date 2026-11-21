@@ -43,7 +43,7 @@ const MODE_COPY = {
   },
   soccer: {
     tags: ["2v2", "Respawns"],
-    line: "Kick, lob, or dash the ball into the opposing goal on Sunset Bowl.",
+    line: "Kick, lob, or dash the ball into the opposing goal on Rumble Stadium.",
     guide: "bro-ball",
   },
 };

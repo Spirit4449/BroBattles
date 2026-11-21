@@ -1,8 +1,47 @@
 import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
 import { RENDER_LAYERS } from '../../scene/renderLayers';
+import { createSwarmAura } from './swarmFx';
+import { combatSoundVolume, playerSoundVolume } from '../../audio/playerAudio';
+
+export const FLIGHT_SOUND = 'ninja-shuriken-flight';
+// Any shuriken hit, on a wall or a player (the character's `hit` sound too).
+export const HIT_SOUND = 'ninja-shuriken-hit';
+// The whoop-whoop of a shuriken spinning through the air (scripts/art/
+// ninja-pixel/swarm-sfx.cjs), looped while it flies and following it: it fades
+// with distance from the listener like any player sound.
+function createFlightSound(scene, sprite) {
+  const base = combatSoundVolume(FLIGHT_SOUND);
+  let sound;
+  let failed = false;
+  const stop = () => {
+    if (sound?.manager) sound.destroy();
+    sound = null;
+  };
+  return {
+    update(visible) {
+      if (!visible) return stop();
+      const manager = scene.sound;
+      if (failed || !manager || manager.locked) return;
+      const volume = playerSoundVolume(scene, sprite, base);
+      if (sound?.manager) {
+        sound.volume = volume;
+        return;
+      }
+      // The match can already be running while Phaser downloads and decodes audio.
+      if (!scene.cache.audio.exists(FLIGHT_SOUND)) return;
+      try {
+        sound = manager.add(FLIGHT_SOUND, { loop: true });
+        if (sound.play({ volume, rate: 0.94 + Math.random() * 0.12 })) return;
+      } catch (_) {}
+      failed = true;
+      stop();
+    },
+    stop,
+  };
+}
 
 // The supplied 320 × 576 sheet has five 64px frames per color; row 5 is white.
-export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special = false, launch = true } = {}) {
+export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special = false, launch = true, flightSound = true } = {}) {
   const particles = new Set();
   const color = teamColor(sprite) === TEAM_RED ? 0xff625b : 0x60eaa0;
   const fade = (object, duration, values = {}) => {
@@ -30,8 +69,11 @@ export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special 
     }
     fade(burst, 180, { scaleX: 1.4, scaleY: 1.4 });
   }
+  // Swarm shuriken spin in the super's spirit ring (swarmFx.js) when its art is loaded.
+  const spirit = special ? createSwarmAura(scene, sprite) : null;
+  const flight = flightSound ? createFlightSound(scene, sprite) : null;
   // Two spinning arcs stamped on a coarse grid so they read as pixel art, not a vector halo.
-  const aura = graphics();
+  const aura = graphics().setVisible(!spirit);
   const pixel = 2, radius = special ? 19 : 16, cells = Math.ceil((radius + pixel) / pixel);
   const ringCells = [], fillCells = [];
   for (let gx = -cells; gx < cells; gx++) {
@@ -53,8 +95,12 @@ export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special 
   let lastX = sprite.x, lastY = sprite.y, lastTrail = -Infinity;
   return {
     update(now, visible = true) {
-      aura.setVisible(visible).setPosition(Math.round(sprite.x), Math.round(sprite.y));
-      if (visible) drawAura(now * 0.012);
+      flight?.update(visible);
+      if (spirit) spirit.update(visible);
+      else {
+        aura.setVisible(visible).setPosition(Math.round(sprite.x), Math.round(sprite.y));
+        if (visible) drawAura(now * 0.012);
+      }
       if (!visible || now - lastTrail < 50) return;
       lastTrail = now;
       const dx = sprite.x - lastX, dy = sprite.y - lastY;
@@ -73,6 +119,8 @@ export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special 
     },
     destroy() {
       aura.destroy();
+      spirit?.destroy();
+      flight?.stop();
       for (const object of particles) { scene.tweens.killTweensOf(object); object.destroy(); }
       particles.clear();
     },

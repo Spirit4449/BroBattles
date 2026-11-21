@@ -22,7 +22,7 @@ The dash’s cyan-and-white comet bow appears on the ball when its speed exceeds
 
 In Bro Ball, the grandstand in `game/modes/broBall/crowd.js` follows the rendered ball for goalmouth anticipation and checks impact height and distance before triggering goalmouth reactions. Each fan has a preferred gesture, attention range, celebration delay and bounce rhythm. Ambient gestures and stadium waves pause during slow or stopped play. Reduced motion keeps the expressive poses with spectators seated in place.
 
-The Bro Ball scoreboard shows one chip per goal required to win. Each goal fills the next chip and triggers a team-colored glow and a confetti shower from the scoring panel. The goal banner pairs three pixel-text layouts with four animation styles, varying letter order, entrance and exit for each goal. Light and pixel confetti burst behind the letters in screen space, while the goal impact drives the light and confetti at the goalmouth and midfield. With reduced motion, the HUD displays the chips and full word immediately and suppresses the flares and particles.
+The Bro Ball scoreboard shows one chip per goal required to win. A ball badge beside each scorer’s portrait shows their cumulative goals for the match. Each goal fills the next chip and triggers a team-colored glow and a confetti shower from the scoring panel. The goal banner pairs three pixel-text layouts with four animation styles, varying letter order, entrance and exit for each goal. Light and pixel confetti burst behind the letters in screen space, while the goal impact drives the light and confetti at the goalmouth and midfield. With reduced motion, the HUD displays the chips and full word immediately and suppresses the flares and particles.
 
 ### Lobby module state and slots
 
@@ -257,7 +257,8 @@ per idle turn. During the flythrough it pauses unfinished preparation and holds
 optional downloads, including downloads released by deferred audio. At countdown
 the same prepared elements are mounted and pending work resumes through idle
 callbacks. Preparation respects gameplay holds and speculative network limits;
-it never delays the server countdown. Duplicate cards share a video decoder and
+it never delays the server countdown. The kickoff overlay lets pointer input
+pass through as soon as it starts fading. Duplicate cards share a video decoder and
 copy presented frames to canvases sized for display; browsers without video frame
 callbacks use independent videos. The shadow is a separate static poster layer.
 Visible automatic cards, deliberate previews, and reward reveals bypass
@@ -426,15 +427,14 @@ ready, then fades out over 320 ms. Reduced motion keeps the hold and skips
 the animation. The cover presents a retry button on timeout.
 
 Respawns use `src/client/game/scene/respawnEffect.js` for local and remote
-fighters (including snapshot recovery): a cyan arrival beam, two expanding
-foot rings, and rising pixel sparks clear within a second. The effect stays at
-the arrival position without changing the fighter's alpha, physics, or input.
-Scene shutdown and sprite destruction cancel its tweens and remove its objects.
-Bro Ball also plays the arrival beam at the opening kickoff and whenever fighters return to their spawn positions after a goal.
-Initial match arrivals retain the separate spawn burst; the existing respawn
-shield still indicates protection after the arrival cue ends. Fupicat's CC0
+fighters (including snapshot recovery). A soft cyan column, bright core, floor
+flare and rising streaks echo the lobby arrival and clear within a second. The
+effect stays at the arrival position without changing the fighter's alpha, physics
+or input. Scene shutdown and sprite destruction remove the effect. Bro Ball also
+uses it at the opening kickoff and when fighters return to their spawns after a goal.
+Death respawns and goal resets grant no shield. Fupicat's CC0
 Teleport cue (`game-sounds/respawn.mp3`) plays with the arrival effect through
-player-distance audio at half gain; unavailable audio never delays the visuals.
+player-distance audio at subdued gain. Unavailable audio never delays the visuals.
 Source and license are recorded in `game-sounds/respawn-credits.txt`.
 
 Knockback from every source starts a short pale streak and afterimage trail in
@@ -524,7 +524,8 @@ including character and mode sounds, and starts them after scene creation with
 two parallel downloads. Visual assets and their atlas/map data remain blocking;
 audio downloads and decoding do not block scene creation or visual loading
 progress. Missing one-shots are skipped, never replayed late. Local movement
-loops initialize when their decoded audio enters the cache. Shutdown cancels
+loops initialize when their decoded audio enters the cache. Ninja flight audio
+can start once its sample is available and the shuriken is still visible. Shutdown cancels
 pending startup and restores patched methods; Phaser owns active loader cleanup.
 
 ### Verification
@@ -645,6 +646,18 @@ local volume to `playPlayerSound`. Use `playerSoundVolume` for sound instances t
 their own playback lifecycle. Dash, duck, attack, special, hit, death, and power-up tick
 cues use this path.
 
+Attack releases and impacts use per-sample gain in `playerAudio.js`, calibrated
+from the loudest 200 ms of each K-weighted sample. Regular attacks target
+−26.5 dB, and super cues sit 1 dB above them. Position-based attenuation applies
+after calibration.
+
+Hard landings and jumps sit below attacks. Repeating footsteps, wind, wall
+slides, and status ticks sit further back so nearby fighters remain readable.
+Footstep and landing gains account for the actual terrain sample, including
+Bank Bust's replacement metal recordings. Countdown, goals, results, and
+other match cues use separate gains based on how often they play and what
+they need to signal.
+
 The local player hears their own sounds at the requested volume. The watched fighter
 becomes that listener in spectator mode, so their sounds also play at full volume. Other
 fighters start at 90% of the same effect's volume when close. Their volume falls
@@ -678,9 +691,11 @@ each rendered frame and stop on landing, death, disconnect, respawn, presentatio
 or scene shutdown. Invisible fighters remain audible. The spawn intro suppresses
 movement audio.
 
-Falling wind uses `fallingAirVolume` in `movementAudio.js` for both local and remote
-fighters, at 45% of the original gain while retaining speed/time swell and playback
-fades.
+Falling wind starts silent and fades in after the loop becomes playable for both
+local and remote fighters. Its fade uses the audio clock when Web Audio is active,
+so deferred loading and browser audio suspension cannot advance the fade before
+playback starts. The local fade tracks its own gain because Web Audio can report
+an older value while a gain update is pending.
 
 ## Lobby and match audio
 
@@ -688,7 +703,7 @@ Bank Bust vault damage reuses the shared coin-pickup sound, with randomized
 pitch and volume that scales with damage. Rapid hits are throttled, including
 when reduced motion is enabled.
 
-Sunset Bowl streams its own match music beneath a continuous loop of soccer fans
+Rumble Stadium streams its own match music beneath a continuous loop of soccer fans
 cheering, chanting and clapping. The crowd swells after goals and big plays and
 continues through kickoff resets. Goals and goal-frame hits reuse the ball's wall
 rebound sound. Goals also play a stereo celebration cue with a percussion hit,
@@ -771,7 +786,9 @@ Relevant checks: `node --test tests/lobbyAudio.test.mjs tests/musicEnvelope.test
 tests/matchPresentation.test.js tests/navigation.test.js
 tests/navigationTransitions.test.js tests/rewardPresentation.test.js`.
 
-The battle countdown plays its beeps and the final `/assets/game-sounds/start.mp3` FIGHT cue. Both cues are preloaded when the countdown starts.
+The battle countdown shows 3, 2, 1 on a local one-second cadence and plays each
+beep with its number. The final cue is FIGHT or Bro Ball's opening whistle.
+The client warms those samples during arena loading.
 
 On the match results screen, Escape, Enter, or Space activates Exit. The Exit button
 preloads and plays the UI click cue before returning to the lobby. The automatic
@@ -783,11 +800,11 @@ Set each map document's `metadata.terrain` through Map Studio/API (built-in defa
 
 - `grass`: Lushy Peaks, Mangrove Meadow, Serenity. Four natural foot-on-grass steps and the soft “smush” landing.
 - `hard`: Industrial terrain defaults to the original three footsteps and concrete
-  landing. Bank Bust overrides only the footsteps with a ready-made metal contact.
+  landing. Bank Bust overrides both with metal contacts.
 
 Bank Bust uses three individual metal footsteps and a heavier metal landing extracted
 from SoftDistortionFX’s CC0 `Metal Footsteps`. The landing layers a short bass thud with
-the recorded impact and plays at increased gain capped at full volume. Footstep and
+the recorded impact and is calibrated against other strong landings. Footstep and
 hard-terrain landing keys are overridden for local and remote fighters; other movement
 retains shared samples. `src/shared/physics/movementSounds.js` owns the isolated key
 mapping. Source and processing details live in
@@ -852,7 +869,8 @@ rewards are omitted. Recorded zero trophy changes remain visible.
 Match results play separate win, loss, and draw cues. Null and explicit `draw`
 outcomes use `/assets/game-sounds/draw.mp3`, a short original suspended-fifth
 chime; result playback pauses map music and respects the existing SFX settings
-and audio-unlock handling.
+and audio-unlock handling. The result screen's streak, reveal and currency impact
+cues also use the battle scene's audio context and deferred loader.
 
 The lobby profile opens native dialogs for name and password changes. The name dialog
 uses signup's username field and availability indicators, shows the gem cost on the
@@ -870,11 +888,27 @@ elapsed frame time independently of the rising surface, fading at their spawn
 and surface instead of recalculating their loop from the changing water depth.
 Surface interpolation is frame-rate independent; long resume gaps are capped.
 
-Sparrow arrows use compact orange/gold pixel flame clusters on both basic and
-super volleys. Flight flames trail backward; embedded flames rise until the arrow
-expires. Super flames are larger, with a brief bow-side spark cue and a held-draw
-release animation. These cosmetics do not change burn damage or projectile timing.
-The renderer caps flame objects and clears them on presentation reset/shutdown.
+Sparrow arrows and Bank Bust turret bullets share the pixel comet in
+`scene/projectileComet.js`. Its stepped leading edge sheds pixels that sweep
+backward, stretch and fade. Faster shots leave a longer trail. Sparrow arrows
+also carry compact orange/gold pixel flames that trail backward in flight and rise
+after impact. The arrow renderer caps flame objects and clears them on
+presentation reset/shutdown.
+
+Sparrow's super, Seraph, is presented by `characters/sparrow/special.js` with
+effects from `seraphFx.js` (the `seraph-fx` atlas). The activation circle and
+Seraph shield use the same `core` anchor on Sparrow's body. The owner flies the
+hover in `updateSeraphHover` (called through the class's `updateMovementLock`): the rise
+and bob move her directly while knockback keeps its velocity and drains, and a
+Gloop pull owns her body while it lasts. `_abilityKeepsMomentum` stops the
+ability lock from zeroing her horizontal velocity. During the aim phase the
+class's `followUpActive` hook routes mouse motion and both mobile sticks to
+the bow's aim light. Both mouse buttons and both sticks fire on release, and
+J/I fire along the current aim. The aim light replaces the generic reticle
+during this phase. Firing sends `sparrow-light-bolt`. Other viewers read her aim
+from the pose she reports (`seraph-aim-NN`, see `sparrowSeraphAim.js`), which
+`chooseRemoteAnimation` passes through untouched. The server uses that pose if
+the timer expires before she fires.
 
 In Gloop’s showcase, Thorg retreats while hurt and slimed. Gloop prioritizes his earned
 hook over another basic attack once charged. Preview rounds clear packet deduplication

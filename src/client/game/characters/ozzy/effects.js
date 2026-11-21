@@ -76,6 +76,8 @@ function createPowerupBeam(scene, caster, sprite, entry) {
     scene.events?.off("update", checkAlive);
     sprite.off?.("destroy", cleanup);
     caster?.off?.("destroy", cleanup);
+    sprite.off?.("combat:reset", cleanup);
+    caster?.off?.("combat:reset", cleanup);
     destroyMany([graphics, icon]);
   };
   const checkAlive = () => {
@@ -90,6 +92,8 @@ function createPowerupBeam(scene, caster, sprite, entry) {
   scene.events?.on("update", checkAlive);
   sprite.once?.("destroy", cleanup);
   caster?.once?.("destroy", cleanup);
+  sprite.once?.("combat:reset", cleanup);
+  caster?.once?.("combat:reset", cleanup);
   tween = scene.tweens.add({
     targets: state,
     elapsed: ARCANE_SURGE_BEAM_MS,

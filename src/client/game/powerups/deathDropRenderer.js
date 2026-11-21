@@ -32,10 +32,8 @@ export function createDeathDropRenderer({ scene, Phaser, getLatestDeathDrops, de
       const id = String(evt.id);
       pickupClient.forget(id);
       try {
-        scene.sound.play(
-          evt.type === "gem" ? "sfx-gem-pickup" : "sfx-coin-pickup",
-          { volume: 0.42 },
-        );
+        const gem = evt.type === "gem";
+        scene.sound.play(gem ? "sfx-gem-pickup" : "sfx-coin-pickup", { volume: gem ? 0.24 : 0.13 });
       } catch (_) {}
       const visual = visuals[id];
       if (visual && !visual.despawning) {

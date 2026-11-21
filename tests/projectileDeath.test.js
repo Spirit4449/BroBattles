@@ -3,6 +3,9 @@ const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
 const { registerAttackFromAction, tickActiveAttacks } = require('../src/shared/combat/runtime/attackRuntimeManager.js');
 const { getAttackCollisionCenter } = require('../src/shared/combat/runtime/attackRuntimes/geometry.js');
+const characterCombat = require('../src/shared/combat/runtime/characterCombatRegistry');
+const { isMovementSuppressed, tickActiveAbilities } = require('../src/shared/combat/runtime/abilityRuntimeManager');
+const { respawnPlayer } = require('../src/server/core/gameRoom/respawn');
 
 function fixture(t, character) {
   const f = makeRoom({ characters: [character, 'ozzy'] });
@@ -94,8 +97,90 @@ test('player-attached melee and hook attacks still stop on death', t => {
   for (const [character, type] of [['draven', 'draven-splash'], ['thorg', 'thorg-fall'], ['gloop', 'gloop-hook-release']]) {
     const f = fixture(t, character), [owner, target] = f.players, hp = target.health;
     assert.equal(registerAttackFromAction(f.room, owner, { type, id: type, angle: 0 }), true, type);
-    f.room.handlePlayerDeath(owner);f.step();
+    f.room.handlePlayerDeath(owner);
+    respawnPlayer(f.room, owner, { position: { x: owner.x, y: owner.y } });
+    f.step();
     assert.equal(f.room.activeAttacks.length, 0, type);
     assert.equal(target.health, hp, type);
   }
+});
+
+test('a Bro Ball death ends Inferno and status effects before the normal respawn', t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000000 });
+  const { room, players } = makeRoom({ characters: ['draven', 'gloop'], map: 6 });
+  t.after(() => room.cleanup());
+  const [draven, gloop] = players;
+  const spawn = room.spawnStateFor(draven);
+  const castX = spawn.x + 180;
+  Object.assign(draven, { x: castX, superCharge: draven.maxSuperCharge });
+  assert.equal(room.requestSpecial(draven.participantId), true);
+  assert.equal(isMovementSuppressed(draven, Date.now()), true);
+  room.applyPowerupToPlayer(draven, 'gravityBoots', Date.now());
+  draven._gloopPullState = { sourceSocketId: gloop.participantId };
+  room.handlePlayerDeath(draven);
+  assert.equal(isMovementSuppressed(draven, Date.now()), false);
+  assert.deepEqual(draven.activeEffects, {});
+  assert.equal(draven._gloopPullState, undefined);
+  const plan = room.gameMode.getRespawnPlan(draven);
+  t.mock.timers.tick(plan.delayMs);
+  assert.equal(draven.isAlive, true);
+  tickActiveAbilities(room, Date.now());
+  tickActiveAttacks(room, Date.now());
+  assert.equal(draven.x, spawn.x);
+  assert.equal(draven.y, spawn.y);
+  assert.deepEqual(draven.effects, {});
+
+  room.applyPowerupToPlayer(draven, 'stun', Date.now());
+  draven._gloopPullState = { sourceSocketId: gloop.participantId };
+  room.handlePlayerDeath(gloop);
+  assert.equal(draven._gloopPullState, undefined);
+  assert.equal(draven.activeEffects.stun, undefined);
+});
+
+for (const character of ['ninja']) {
+  test(`${character}: spawning ends super projectiles while released basic shots keep flying`, t => {
+    const { room, players: [owner], events } = fixture(t, character);
+    owner.x = 100;
+    owner.y = 100;
+    owner.superCharge = owner.maxSuperCharge;
+    room.simulationMono = 1;
+    const basicType = require('../src/shared/characters').characterDefinitions[character].basicAction;
+    assert.equal(room.handlePlayerAction(owner.participantId, { type: basicType, id: 'basic', angle: 0 }), true);
+    room.tickId += 100;
+    characterCombat.tick(room);
+    assert.equal(room.requestSpecial(owner.participantId, { id: 'super', aim: { angle: 0 } }), true);
+    characterCombat.tick(room);
+    const state = room[`${character}CombatState`];
+    const basicShots = [...state.active.values()].filter(entry => !entry.projectile.special);
+    assert.ok([...state.active.values()].some(entry => entry.projectile.special));
+    assert.ok(state.pending.length);
+    room.handlePlayerDeath(owner);
+    assert.equal(state.pending.length, 0);
+    assert.ok([...state.active.values()].some(entry => entry.projectile.special));
+    respawnPlayer(room, owner, { position: { x: 200, y: 100 } });
+    assert.ok(basicShots.length);
+    assert.deepEqual([...state.active.values()], basicShots);
+    assert.ok(events.some(({ payload }) => payload?.action?.type === `${character}-terminal` &&
+      payload.action.requestId === 'super'));
+  });
+}
+
+test('sparrow: a released Seraph bolt flies on through death but ends at respawn; basic arrows keep flying', t => {
+  const { room, players: [owner] } = fixture(t, 'sparrow');
+  Object.assign(owner, { x: 100, y: 100, superCharge: owner.maxSuperCharge });
+  room.simulationMono = 1;
+  assert.equal(room.handlePlayerAction(owner.participantId, { type: 'sparrow-arrow', id: 'basic', angle: 0 }), true);
+  room.tickId += 100;
+  characterCombat.tick(room);
+  const state = room.sparrowCombatState;
+  const basicShots = [...state.active.values()];
+  assert.ok(basicShots.length);
+  assert.equal(room.requestSpecial(owner.participantId, { aim: {} }), true);
+  assert.equal(room.handlePlayerAction(owner.participantId, { type: 'sparrow-light-bolt', id: 'bolt', angle: 0 }), true);
+  assert.equal(state.bolts.size, 1);
+  room.handlePlayerDeath(owner);
+  assert.equal(state.bolts.size, 1, 'a released bolt outlives its shooter');
+  respawnPlayer(room, owner, { position: { x: 200, y: 100 } });
+  assert.equal(state.bolts.size, 0);
+  assert.deepEqual([...state.active.values()], basicShots);
 });

@@ -44,6 +44,7 @@ export function pullLocalPlayerByHook(action, {
   const startX = Number.isFinite(Number(localPlayer.x)) ? Number(localPlayer.x) : endX;
   const startY = Number.isFinite(Number(localPlayer.y)) ? Number(localPlayer.y) : endY;
   const sourceName = String(action?.sourceName || action?.playerName || "").trim() || null;
+  localPlayer._gloopHookPullSource = sourceName;
   const stopDistance = Math.max(1, Number(action?.pulledStopDistance) || HOOK.pulledStopDistance);
 
   try {

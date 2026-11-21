@@ -9,7 +9,7 @@ export const COMBAT_MOUSE_CONFIG = Object.freeze({
   lookAhead: 0,
 });
 
-export function createCombatMouseController({ scene, canPlay, canCapture = canPlay, canPrepare = canCapture, onRelease, config = COMBAT_MOUSE_CONFIG, getPreferences = () => ({ sensitivity: 1, autoHideCursor: true }) }) {
+export function createCombatMouseController({ scene, canPlay, canCapture = canPlay, canPrepare = canCapture, onRelease, onLockedAimMove, config = COMBAT_MOUSE_CONFIG, getPreferences = () => ({ sensitivity: 1, autoHideCursor: true }) }) {
   const canvas = scene.game.canvas;
   const doc = canvas.ownerDocument;
   const win = doc.defaultView;
@@ -88,11 +88,16 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
   };
   listen(doc, 'pointerlockerror', fail);
   listen(doc, 'mousemove', (event) => {
-    if (!active || !dragging || !canPlay()) return;
-    if (doc.pointerLockElement !== canvas && event.target !== canvas) return;
-    const dx = Number(event.movementX) || 0, dy = Number(event.movementY) || 0;
-    dragX += dx * config.mouseSensitivity * getPreferences().sensitivity;
-    dragY += dy * config.mouseSensitivity * getPreferences().sensitivity;
+    if (!active || !canPlay()) return;
+    const locked = doc.pointerLockElement === canvas;
+    if (!locked && event.target !== canvas) return;
+    const scale = config.mouseSensitivity * getPreferences().sensitivity;
+    const dx = (Number(event.movementX) || 0) * scale;
+    const dy = (Number(event.movementY) || 0) * scale;
+    if (locked && onLockedAimMove?.(dx, dy)) return;
+    if (!dragging) return;
+    dragX += dx;
+    dragY += dy;
     let distance = Math.hypot(dragX, dragY);
     // Discard outward overshoot for throws so the first inward movement
     // immediately shortens the attack, even after pushing against the limit.
@@ -122,11 +127,6 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
       !event.target?.isContentEditable &&
       !['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(event.target?.tagName) &&
       (getPreferences().keys ? ['left','right','up','down','leftAlt','rightAlt','upAlt','downAlt','jump'].some(slot => getPreferences().keys[slot] === event.keyCode) : ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', ' '].includes(event.key?.length === 1 ? event.key.toLowerCase() : event.key))) {
-      // Phaser does not consume keys while its keyboard plugin is disabled
-      // for the countdown. Keep the focused arena from scrolling/selecting.
-      // Once capture is allowed, Phaser handles these keys itself and ignores
-      // any keydown that already has defaultPrevented set.
-      if (event.target === canvas && !canCapture()) event.preventDefault?.();
       if (getPreferences().autoHideCursor) controller.beginInput();
     }
   });
@@ -144,6 +144,7 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
     // The canvas has keyboard focus from the countdown even if the browser
     // cannot grant pointer lock until the next user gesture.
     isActive: () => active || (preparedForBattle && canCapture() && !doc.hidden && doc.hasFocus()),
+    isPointerLocked: () => doc.pointerLockElement === canvas,
     getDirection: () => direction,
     isAiming: () => active && dragging && aiming,
     getStrength,
@@ -163,10 +164,10 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
     // Countdown preparation focuses the canvas and applies the automatic
     // cursor preference without enabling movement before the fight starts.
     prepareForBattle() {
-      if (destroyed || !canPrepare() || doc.hidden || !doc.hasFocus() || !getPreferences().autoHideCursor) return false;
+      if (destroyed || !canPrepare() || doc.hidden || !doc.hasFocus()) return false;
       preparedForBattle = true;
       cursorReleased = false;
-      showCursor(true);
+      showCursor(getPreferences().autoHideCursor);
       try {
         canvas.tabIndex = -1;
         canvas.focus?.({ preventScroll: true });
@@ -195,7 +196,6 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
       if (!playable && wasPlayable) preparedForBattle = false;
       wasPlayable = playable;
       const autoHideCursor = getPreferences().autoHideCursor;
-      if (!autoHideCursor) preparedForBattle = false;
       const hideCursor = !cursorReleased && (autoHideCursor
         ? (preparedForBattle || playable)
         : playable && active);

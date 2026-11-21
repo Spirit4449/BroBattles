@@ -201,6 +201,7 @@ export function playOzzySuperCast(scene, sprite, { elapsedMs = 0 } = {}) {
     drawSurge(pBack, pFront, feet, head, body, ms, limit);
   };
   return attachToPlayer(scene, sprite, {
+    endOn: ["combat:reset"],
     key: "ozzy-super",
     layers: ["floor", "behind", "front"],
     lifetimeMs: SUPER_TIMELINE.endMs - startMs,

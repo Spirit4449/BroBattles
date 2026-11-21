@@ -1,5 +1,6 @@
 import { characterDefinitions } from "../../../../shared/characters/index.js";
 import settings from '../../../../../public/assets/ninja/animation-settings.json';
+import { createSwarmFxAnimations } from './swarmFx';
 
 // Logical keys remain compatible with movement and returning-shuriken combat.
 
@@ -29,4 +30,5 @@ export function animations(scene) {
     key: 'ninja-special', frames: attack.frames.map(frame => ({ key: NAME, frame })),
     frameRate: attack.fps, repeat: 0,
   });
+  createSwarmFxAnimations(scene);
 }

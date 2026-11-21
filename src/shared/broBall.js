@@ -1,8 +1,8 @@
 const BRO_BALL_MODE = 'soccer';
 const BRO_BALL_VARIANT = 'soccer-2v2';
 
-// The ball is only ever kicked: by body contact, by an attack or super fired
-// within reach (away from the kicker and upward), or by dashing through it.
+// The ball is kicked by body contact, by coming within reach during an attack
+// or super (away from the kicker with some lift), or by dashing through it.
 const ballRules = Object.freeze({
   radius: 24,
   gravity: 700,
@@ -12,6 +12,10 @@ const ballRules = Object.freeze({
   hardLandingMinSpeed: 280,
   hardLandingFullSpeed: 650,
   wallRestitution: 0.65,
+  // Extra reach in px for passive player touches.
+  bodyContactPadding: 6,
+  // Additional reach above the head, around the local super bar.
+  bodyContactTopPadding: 8,
   // Maximum passive overlap correction per player in px/s.
   bodySeparationSpeed: 90,
   bodyRestitution: 0.52,
@@ -29,13 +33,15 @@ const ballRules = Object.freeze({
   bodyLift: 260,
   bodyLiftMax: 360,
   bodyLiftFloorRange: 22,
+  // Treat foot contact within this many px of the player's center as head-on.
+  footCenterTolerance: 4,
   dashReach: 16,
   dashGraceMs: 85,
   maxSpeed: 1650,
-  // An attack kick sends the ball away from the kicker, tilted well upward.
   kickSpeed: 720,
-  kickLift: 0.95,
-  // A super kick is harder and climbs as steeply.
+  // Upward bias added to the contact direction for attacks and supers.
+  kickLift: 0.55,
+  // A super kick uses the same direction with a higher launch speed.
   superKickSpeed: 1150,
   dashSpeed: 1340,
   // A level dash on a grounded ball lifts it over the goal step.
@@ -43,6 +49,7 @@ const ballRules = Object.freeze({
   smashSpeed: 1540,
   smashLiftRatio: 0.6,
   kickReach: 30,
+  // Close-range kick grace after a cast releases, or after an instant action.
   kickWindowMs: 160,
   // Bots kick at most this often (people are limited by their attack reload).
   botKickCooldownMs: 420,

@@ -310,7 +310,7 @@ test('visual priority resolves overlapping status tints independently of bubble 
   let tint;
   const sprite = { x: 0, setTint(value) { tint = value; }, clearTint() { tint = null; } };
   const context = { sprite, nowSec: 1, colors: {}, Phaser: {} };
-  const effects = { gravityBoots: 1, poison: 1, health: 1, sparrowBurn: 1, rage: 1, freeze: 1, shield: 1 };
+  const effects = { gravityBoots: 1, poison: 1, health: 1, rage: 1, freeze: 1, shield: 1 };
   assert.deepEqual(Array.from(activeBubbleStyles(effects), style => style.type),
     ['shield', 'rage', 'health', 'poison', 'gravityBoots']);
   for (const key of ['freeze', 'rage', 'health']) {
@@ -319,8 +319,5 @@ test('visual priority resolves overlapping status tints independently of bubble 
     delete effects[key];
   }
   applyPrimaryStatus(effects, context);
-  assert.equal(tint, null, 'poison takes priority over burn');
-  delete effects.poison;
-  applyPrimaryStatus(effects, context);
-  assert.ok(Number.isInteger(tint), 'burn takes priority over boots');
+  assert.equal(tint, null, 'poison takes priority over boots and has no tint');
 });

@@ -14,6 +14,10 @@
     "mapFullPreviewAsset": "/assets/bank-bust/full-preview.webp"
   },
   "assets": {
+    "bank-bust-shape-ceiling": {
+      "type": "image",
+      "url": "/assets/bank-bust/shape-ceiling-native.webp"
+    },
     "bank-bust-shape-side-wall": {
       "type": "image",
       "url": "/assets/bank-bust/shape-side-wall.webp"
@@ -229,9 +233,17 @@
         ],
         "repeat": -1
       }
+    },
+    "bank-bust-shape-ceiling-right": {
+      "type": "image",
+      "url": "/assets/bank-bust/shape-ceiling-right-native.webp"
     }
   },
   "textureSizes": {
+    "bank-bust-shape-ceiling": {
+      "width": 602,
+      "height": 56
+    },
     "bank-bust-shape-side-wall": {
       "width": 336,
       "height": 1680
@@ -319,10 +331,46 @@
     "bank-bust-deco-coinchute": {
       "width": 80,
       "height": 140
+    },
+    "bank-bust-shape-ceiling-right": {
+      "width": 602,
+      "height": 56
     }
   },
   "layout": {
     "platforms": [
+      {
+        "textureKey": "bank-bust-shape-ceiling",
+        "x": 1296,
+        "y": -428,
+        "scaleX": 4,
+        "scaleY": 4,
+        "flipX": false,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "id": "ceiling-l"
+      },
+      {
+        "textureKey": "bank-bust-shape-ceiling-right",
+        "x": 3704,
+        "y": -428,
+        "scaleX": 4,
+        "scaleY": 4,
+        "flipX": true,
+        "body": {
+          "width": 1,
+          "height": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "collisionEnabled": false,
+        "id": "ceiling-r"
+      },
       {
         "textureKey": "bank-bust-shape-side-wall",
         "x": -72,
@@ -896,9 +944,9 @@
     "hitboxes": [
       {
         "x": -80,
-        "y": 190,
+        "y": 166,
         "width": 160,
-        "height": 1620,
+        "height": 1668,
         "collision": {
           "up": true,
           "down": true,
@@ -909,9 +957,9 @@
       },
       {
         "x": 5080,
-        "y": 190,
+        "y": 166,
         "width": 160,
-        "height": 1620,
+        "height": 1668,
         "collision": {
           "up": true,
           "down": true,
@@ -922,7 +970,7 @@
       },
       {
         "x": 2500,
-        "y": -520,
+        "y": -568,
         "width": 5000,
         "height": 200,
         "collision": {
@@ -935,9 +983,9 @@
       },
       {
         "x": 48,
-        "y": 290,
+        "y": 266,
         "width": 96,
-        "height": 1420,
+        "height": 1468,
         "collision": {
           "up": true,
           "down": true,
@@ -948,9 +996,9 @@
       },
       {
         "x": 4952,
-        "y": 290,
+        "y": 266,
         "width": 96,
-        "height": 1420,
+        "height": 1468,
         "collision": {
           "up": true,
           "down": true,

@@ -44,9 +44,9 @@
   "bank-bust-3v3": {
     "world": {
       "x": 0,
-      "y": -420,
+      "y": -468,
       "width": 5000,
-      "height": 1420
+      "height": 1468
     },
     "camera": {
       "x": -120,

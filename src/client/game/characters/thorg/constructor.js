@@ -1,4 +1,5 @@
 import { characterDefinitions } from "../../../../shared/characters/index.js";
+import { combatSoundVolume, SUPER_SOUND_GAIN } from "../../audio/playerAudio";
 import { perform as performSpecial } from "./special";
 import { setThorgRageVisual } from "./rageVisual";
 import { drawPixelRing } from "../../scene/fx/pixelShapes";
@@ -21,9 +22,9 @@ class Thorg extends CharacterEntityBase {
   static performSpecial = performSpecial;
 
   static sounds = {
-    attack: { key: "thorg-throw", volume: 0.6 },
-    hit: { key: "thorg-hit", volume: 0.72 },
-    special: { key: "thorg-throw", volume: 0.5, rate: 0.85 },
+    attack: { key: "thorg-throw" },
+    hit: { key: "thorg-hit" },
+    special: { key: "thorg-throw", volume: combatSoundVolume("thorg-throw") * SUPER_SOUND_GAIN, rate: 0.88 },
   };
 
   static attackFlow = { attackResetMs: THORG_FALL_DURATION_MS };
@@ -121,7 +122,7 @@ class Thorg extends CharacterEntityBase {
     return {
       thorgRage: {
         key: "pu-tick-rage",
-        options: { volume: 0.24, rate: 0.78 },
+        options: { volume: 0.045, rate: 0.78 },
       },
     };
   }

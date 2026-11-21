@@ -5,6 +5,42 @@ import { RENDER_LAYERS } from "../scene/renderLayers";
 import { pickupVisualParts, destroyVisualParts } from "./pickupVisualParts";
 export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getLatestPowerups, getLocalPlayer, powerupCollectQueue, fxG, prepareClaim, primeClaimedBubble, spriteFrameForAura }) {
   const visuals = Object.create(null);
+  const claimEffects = new Map();
+
+  function resetClaimEffects(username) {
+    for (const [cancel, owner] of claimEffects) {
+      if (username && owner !== username) continue;
+      claimEffects.delete(cancel);
+      cancel();
+    }
+  }
+
+  function delayClaimEffect(username, delay, callback) {
+    let timer;
+    const cancel = () => timer?.remove?.(false);
+    claimEffects.set(cancel, username);
+    timer = scene.time.delayedCall(delay, () => {
+      if (claimEffects.delete(cancel)) callback();
+    });
+  }
+
+  function tweenClaimEffect(username, objects, config, onComplete) {
+    const destroy = () => destroyVisualParts(objects);
+    let tween;
+    const cancel = () => {
+      tween?.stop?.();
+      destroy();
+    };
+    claimEffects.set(cancel, username);
+    tween = scene.tweens.add({
+      ...config,
+      onComplete: () => {
+        if (!claimEffects.delete(cancel)) return;
+        destroy();
+        onComplete?.();
+      },
+    });
+  }
 
   function powerupTextureFor(type) {
     const webpKey = `pu-icon-${type}-webp`;
@@ -25,7 +61,7 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
     delete visuals[id];
   }
 
-  function spawnShockwaveExplosion(x, y, scale = 5.2) {
+  function spawnShockwaveExplosion(username, x, y, scale = 5.2) {
     const textureKey = "pu-shockwave-explosion";
     const animationKey = "pu-shockwave-explosion-burst";
     if (!scene.textures?.exists(textureKey)) return null;
@@ -56,27 +92,29 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
     explosion.setBlendMode(Phaser.BlendModes.ADD);
     if (scene.anims?.exists(animationKey)) {
       explosion.anims.play(animationKey);
-      explosion.once("animationcomplete", () => explosion.destroy());
+      const cancel = () => explosion.destroy();
+      claimEffects.set(cancel, username);
+      explosion.once("destroy", () => claimEffects.delete(cancel));
+      explosion.once("animationcomplete", cancel);
     } else {
-      scene.tweens.add({
+      tweenClaimEffect(username, [explosion], {
         targets: explosion,
         alpha: 0,
         scaleX: scale * 1.35,
         scaleY: scale * 1.35,
         duration: 320,
-        onComplete: () => explosion.destroy(),
       });
     }
     return explosion;
   }
 
-  function spawnShockwaveRing(x, y, delay = 0, phase = 0) {
-    scene.time.delayedCall(delay, () => {
+  function spawnShockwaveRing(username, x, y, delay = 0, phase = 0) {
+    delayClaimEffect(username, delay, () => {
       const graphics = scene.add.graphics();
       graphics.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
       graphics.setBlendMode(Phaser.BlendModes.ADD);
       const state = { progress: 0 };
-      scene.tweens.add({
+      tweenClaimEffect(username, [graphics], {
         targets: state,
         progress: 1,
         duration: 500,
@@ -106,7 +144,6 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
           graphics.lineStyle(3, 0xfff1b8, 0.95 * alpha);
           graphics.strokePoints(points, true);
         },
-        onComplete: () => graphics.destroy(),
       });
     });
   }
@@ -122,14 +159,15 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
     if (evt?.type === "shockwave") {
       const frame = spriteFrameForAura(collector);
       const shockwaveColor = colors.shockwave || 0xff8a00;
-      spawnShockwaveExplosion(frame.x, frame.y, 5.4);
+      spawnShockwaveExplosion(evt.username, frame.x, frame.y, 5.4);
       for (let ring = 0; ring < 3; ring += 1) {
-        spawnShockwaveRing(frame.x, frame.y, ring * 65, ring * 1.4);
+        spawnShockwaveRing(evt.username, frame.x, frame.y, ring * 65, ring * 1.4);
       }
       for (let burst = 0; burst < 5; burst += 1) {
         const angle = (burst / 5) * Math.PI * 2 + 0.28;
-        scene.time.delayedCall(35 + burst * 18, () => {
+        delayClaimEffect(evt.username, 35 + burst * 18, () => {
           spawnShockwaveExplosion(
+            evt.username,
             frame.x + Math.cos(angle) * 72,
             frame.y + Math.sin(angle) * 48,
             2.25,
@@ -140,14 +178,13 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
       const flash = addPixelCircle(scene, frame.x, frame.y, 38, 0xfff7d6, 0.9);
       flash.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
       flash.setBlendMode(Phaser.BlendModes.ADD);
-      scene.tweens.add({
+      tweenClaimEffect(evt.username, [flash], {
         targets: flash,
         scaleX: 4.5,
         scaleY: 3.2,
         alpha: 0,
         duration: 260,
         ease: "Cubic.easeOut",
-        onComplete: () => flash.destroy(),
       });
 
       for (let i = 0; i < 30; i += 1) {
@@ -163,7 +200,7 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
         spark.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
         spark.setBlendMode(Phaser.BlendModes.ADD);
         const distance = Phaser.Math.Between(170, 430);
-        scene.tweens.add({
+        tweenClaimEffect(evt.username, [spark], {
           targets: spark,
           x: frame.x + Math.cos(angle) * distance,
           y: frame.y + Math.sin(angle) * distance * 0.78,
@@ -172,7 +209,6 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
           scaleY: 0.15,
           duration: Phaser.Math.Between(330, 520),
           ease: "Quad.easeOut",
-          onComplete: () => spark.destroy(),
         });
       }
 
@@ -198,7 +234,7 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
     });
     const travel = { t: 0 };
     const side = Phaser.Math.Between(0, 1) === 0 ? -1 : 1;
-    scene.tweens.add({
+    tweenClaimEffect(evt.username, stream, {
       targets: travel,
       t: 1,
       duration: 235,
@@ -224,11 +260,7 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
           part.setAlpha((0.68 - i * 0.16) * Math.min(1, t * 8) * (1 - t * 0.45));
         });
       },
-      onComplete: () => {
-        stream.forEach((part) => part.destroy());
-        primeClaimedBubble(evt?.username, collector, color, shouldForm);
-      },
-    });
+    }, () => primeClaimedBubble(evt?.username, collector, color, shouldForm));
     return true;
   }
 
@@ -682,8 +714,9 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
 
   }
   function destroy() {
+    resetClaimEffects();
     for (const [id, visual] of Object.entries(visuals)) cleanupPowerupVisual(id, visual);
   }
 
-  return { render, consumeCollectedPowerupQueue, destroy };
+  return { render, consumeCollectedPowerupQueue, resetClaimEffects, destroy };
 }

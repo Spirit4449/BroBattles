@@ -22,9 +22,11 @@ export function attachNestedDropdown(control, { getOptions, getValue, onSelect }
       label: `${row.textContent} options`,
       className: 'is-compact studio-nested-select',
       onSelect(value) {
+        if (control.element.contains(document.activeElement)) document.activeElement.blur();
         childControl.close({ focus: false });
-        control.close();
+        control.close({ focus: false });
         onSelect(parentValue, value);
+        return false;
       },
     });
     panel.replaceChildren(childControl.element);

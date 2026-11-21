@@ -18,6 +18,7 @@ const { effectDefs } = require("./effectDefs.js");
 const { combineModifiers } = require("../../../effectRules");
 const { getResolvedCharacterSpecialConfig } = require("../../../characters/characterTuning");
 const inferno = getResolvedCharacterSpecialConfig("draven", "inferno");
+const seraph = getResolvedCharacterSpecialConfig("sparrow", "seraph");
 
 function _state(player) {
   if (!player.activeEffects) player.activeEffects = {};
@@ -85,6 +86,12 @@ function getModifiers(player, now) {
   if (player.effects?.dravenInfernoUntil > now) {
     modifiers.push({ damageTakenMult: inferno.damageTakenMult });
   }
+  // Sparrow's Seraph shield lasts while she aims and drops when the bolt flies.
+  const e = player.effects;
+  if (e?.sparrowSeraphUntil > 0 && !e.sparrowSeraphFired &&
+      now < e.sparrowSeraphUntil + seraph.releaseGraceMs) {
+    modifiers.push({ damageTakenMult: seraph.damageTakenMult });
+  }
   for (const [key, entry] of Object.entries(state)) {
     if (entry.until <= now) continue;
     const def = effectDefs[key];
@@ -111,6 +118,7 @@ function tickAll(player, room, now) {
     if (!def || !def.tickIntervalMs || !def.onTick) continue;
     if (now >= entry.nextTickAt) {
       def.onTick(player, room, now, entry.params || {});
+      if (player.activeEffects !== state) return;
       entry.nextTickAt = now + def.tickIntervalMs;
     }
   }

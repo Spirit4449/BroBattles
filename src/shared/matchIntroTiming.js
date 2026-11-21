@@ -9,7 +9,7 @@
 // for at most PREGAME_GRACE_MS before the countdown starts regardless.
 const PREGAME_MS = 5000;
 const PREGAME_GRACE_MS = 2000;
-const COUNTDOWN_MS = 5000;
+const COUNTDOWN_MS = 3000;
 const COUNTDOWN_RISER_MS = 3000;
 // Start even if no client ever reports loaded (stuck tabs, closed browsers).
 const START_DEADLINE_MS = 45000;

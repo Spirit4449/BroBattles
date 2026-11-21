@@ -59,6 +59,32 @@ const { spawnForParticipant } = require('../src/shared/physics/duelGeometry');
    assert.deepEqual(new MapRepository(repo.directory).get(1),saved);
    assert.ok(fs.existsSync(path.join(repo.directory,'history','1',original.revision+'.json')));
   });
+  test('publishing validates scenery frames and pins their sheets for a match', t => {
+    const repo = repository(t);
+    const { document, revision } = repo.get(2);
+    const edited = clone(document);
+    const sea = edited.scenery.layers.find(layer => layer.id === 'cloud-sea');
+    const part = sea.parts[0];
+    const sourceUrl = part.url;
+    const resolve = require('../src/server/services/maps/mapAssetFiles').resolveAssetFile;
+
+    part.url = '/assets/sky-soil/missing-sheet.webp';
+    assert.throws(() => repo.save(edited, revision), error =>
+      error.status === 422 && error.errors.some(message => message.includes('Spritesheet file does not exist')));
+    part.url = sourceUrl;
+    part.frames.push(Number.MAX_SAFE_INTEGER);
+    assert.throws(() => repo.save(edited, revision), error =>
+      error.status === 422 && error.errors.some(message => message.includes('Unknown spritesheet frame')));
+    part.frames.pop();
+
+    edited.label += ' test revision';
+    repo.save(edited, revision);
+    const snapshot = repo.forMatch(101, edited.id);
+    const pinned = snapshot.map.scenery.layers.find(layer => layer.id === sea.id).parts[0];
+    assert.deepEqual(pinned.frames, part.frames);
+    assert.match(pinned.url, /^\/assets\/map-revisions\//);
+    assert.deepEqual(fs.readFileSync(resolve(pinned.url, repo.directory)), fs.readFileSync(resolve(sourceUrl, repo.directory)));
+  });
   test('legacy import preserves the effective revision, archive, editor-created maps and metadata', t => {
     const repo = repository(t);
     const legacy = clone(defaults[0]);
@@ -317,6 +343,160 @@ describe("Isolated playtest lifecycle", () => {
    bot.isAlive=false;bot.health=0;const plan=room.gameMode.getRespawnPlan(bot);room.scheduleRespawn(bot,plan);
    t.mock.timers.tick(plan.delayMs+1);assert.equal(bot.isAlive,true);assert.ok(bot.health>0);assert.ok(emitted.some(e=>e.type==='player:respawn'));
    service.remove(created.session);assert.equal(service.sessions.size,0);assert.equal(room._disposed,true);
+  });
+
+  test('full battle waits for ready, counts down, runs the match clock and publishes a reward-free result', async t => {
+    const { EventEmitter } = require('node:events');
+    const { SOCKET_EVENTS } = require('../src/shared/net/socketEvents');
+    const { NETWORK_WIRE_VERSION } = require('../src/shared/networkWire');
+    const { PREGAME_MS, COUNTDOWN_MS } = require('../src/shared/matchIntroTiming');
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000000 });
+    t.mock.method(console, 'log', () => {});
+    const service = new MapPlaytestService();
+    const emitted = [];
+    const namespace = Object.assign(new EventEmitter(), {
+      sockets: new Map(),
+      use() {},
+      to() { return { emit(type, payload) { emitted.push({ type, payload }); }, compress() { return this; } }; },
+      in() { return { disconnectSockets() {} }; },
+    });
+    const user = { user_id: 99, name: 'BattleTester' };
+    service.attach({ of: () => namespace }, async () => user, () => true);
+    t.after(() => service.dispose());
+    const document = defaults.find(map => mapArena(map).modeId === 'duels');
+    const { session } = service.create(user, { document, fullBattle: true, infiniteSupers: true });
+    const editorSession = service.get(session, user);
+    const { room, gameData } = editorSession;
+    assert.equal(gameData.editorFullBattle, true);
+    assert.equal(gameData.editorSoloPlaytest, false);
+    assert.equal(gameData.players.filter(player => player.isBot).length, 1);
+
+    const socket = Object.assign(new EventEmitter(), { id: 'player', data: { user, editorSession }, async join() {} });
+    namespace.emit(SOCKET_EVENTS.CONNECTION, socket);
+    const joined = await new Promise(resolve => socket.emit(SOCKET_EVENTS.GAME_JOIN, {
+      matchId: room.matchId, networkWireVersion: NETWORK_WIRE_VERSION,
+      ninjaCombatVersion: room.ninjaCombatVersion, sparrowCombatVersion: room.sparrowCombatVersion,
+    }, resolve));
+    assert.equal(joined.ok, true);
+    const player = room.players.get(socket.id);
+    assert.equal(player.superCharge, 0);
+    socket.emit(SOCKET_EVENTS.GAME_READY);
+    t.mock.timers.tick(PREGAME_MS - 1);
+    assert.equal(room.status, 'waiting');
+    assert.equal(room._loopRunning, false);
+    t.mock.timers.tick(1);
+    assert.equal(room.status, 'active');
+    assert.equal(emitted.find(event => event.type === SOCKET_EVENTS.GAME_START).payload.countdownMs, COUNTDOWN_MS);
+    assert.equal(room._loopRunning, false);
+    t.mock.timers.tick(COUNTDOWN_MS);
+    assert.equal(room._loopRunning, true);
+    room._tickTimerAndSuddenDeath();
+    assert.ok(emitted.some(event => event.type === SOCKET_EVENTS.GAME_TIMER));
+
+    const bot = [...room.players.values()].find(player => player.isBot);
+    room.handlePlayerDeath(bot, { cause: 'test', at: Date.now() });
+    const gameOver = new Promise(resolve => t.mock.method(room, 'broadcast', (type, payload) => {
+      if (type === SOCKET_EVENTS.GAME_OVER) resolve(payload);
+    }));
+    t.mock.timers.tick(require('../src/shared/combat/matchConfig').ALL_DEAD_GAME_OVER_DELAY_MS);
+    const result = await gameOver;
+    assert.equal(room.status, 'finished');
+    assert.equal(result.winnerTeam, 'team1');
+    assert.deepEqual(result.meta.rewards, []);
+    assert.equal(room._loopRunning, false);
+  });
+
+  test('solo reset teleports through Inferno and cancels every character super', async t => {
+    const { EventEmitter } = require('node:events');
+    const { SOCKET_EVENTS } = require('../src/shared/net/socketEvents');
+    const { NETWORK_WIRE_VERSION } = require('../src/shared/networkWire');
+    const { tick, bootstrap } = require('../src/shared/combat/runtime/characterCombatRegistry');
+    const { processTick } = require('../src/server/core/gameRoom/simulation');
+    const { exposeDamageHitbox } = require('../src/shared/combat/runtime/damageHitboxes');
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000000 });
+    t.mock.method(console, 'log', () => {});
+    const service = new MapPlaytestService();
+    const emitted = [];
+    const namespace = Object.assign(new EventEmitter(), {
+      sockets: new Map(),
+      use() {},
+      to() { return { emit(type, payload) { emitted.push({ type, payload }); }, compress() { return this; } }; },
+      in() { return { disconnectSockets() {} }; },
+    });
+    service.attach({ of: () => namespace }, async () => user, () => true);
+    t.after(() => { for (const token of service.sessions.keys()) service.remove(token); });
+    const user = { user_id: 99, name: 'ResetTester' };
+    const document = defaults.find(map => mapArena(map).modeId === 'duels');
+    for (const character of ['draven', 'gloop', 'ninja', 'ozzy', 'sparrow', 'thorg']) {
+      const { session } = service.create(user, { document, character, infiniteSupers: true, debugHitboxes: true });
+      const editorSession = service.get(session, user);
+      const { room } = editorSession;
+      room.simulationMono = performance.now();
+      const socket = Object.assign(new EventEmitter(), { id: 'player', data: { user, editorSession }, async join() {} });
+      namespace.emit(SOCKET_EVENTS.CONNECTION, socket);
+      const joined = await new Promise(resolve => socket.emit(SOCKET_EVENTS.GAME_JOIN, {
+        matchId: room.matchId, networkWireVersion: NETWORK_WIRE_VERSION,
+        ninjaCombatVersion: room.ninjaCombatVersion, sparrowCombatVersion: room.sparrowCombatVersion,
+      }, resolve));
+      assert.equal(joined.ok, true);
+      const player = room.players.get(socket.id);
+      const spawn = room.spawnStateFor(player);
+      Object.assign(player, { loaded: true, x: spawn.x + 100, y: spawn.y - 200, flip: true, vx: 300 });
+      room.applyPowerupToPlayer(player, 'gravityBoots', Date.now());
+      const cast = { id: 'before-reset', aim: { angle: 0, direction: 1 } };
+      assert.equal(room.requestSpecial(socket.id, cast), true, character);
+      if (character === 'draven') {
+        t.mock.timers.tick(100);
+        processTick(room);
+        assert.notEqual(player.y, spawn.y - 200, 'Inferno is holding Draven above the cast position');
+      }
+      if (character === 'gloop') {
+        assert.ok(room.activeAttacks.length > 0);
+        room.handlePlayerAction(socket.id, { type: 'gloop-slimeball', id: 'pending', angle: 0, direction: 1 });
+        assert.ok(room._scheduledActions.length > 0);
+      }
+      if (character === 'ninja') {
+        tick(room);
+        assert.ok(bootstrap(room).ninjaCombat.active.length > 0);
+        assert.ok(room.ninjaCombatState.pending.length > 0);
+      }
+      if (character === 'sparrow') {
+        // Seraph: a released bolt in flight, then a second aim phase underway.
+        assert.equal(room.handlePlayerAction(socket.id, { type: 'sparrow-light-bolt', id: 'bolt', angle: 0 }), true);
+        assert.ok(room.sparrowCombatState.bolts.size > 0);
+        assert.equal(room.requestSpecial(socket.id, { ...cast, id: 'pending' }), true);
+        assert.ok(player.effects.sparrowSeraphUntil > 0);
+      }
+      exposeDamageHitbox(room, { attackerName: player.name, instanceId: 'test' },
+        { kind: 'circle', x: player.x, y: player.y, radius: 10 });
+      player.health = 1;
+      player._knockbackUntil = Date.now() + 5000;
+      emitted.length = 0;
+      socket.emit(SOCKET_EVENTS.EDITOR_SELF_KILL);
+
+      assert.deepEqual([player.x, player.y, player.vx, player.vy, player.flip], [spawn.x, spawn.y, 0, 0, false], character);
+      assert.equal(player.health, player.maxHealth);
+      assert.deepEqual(player.activeEffects, {});
+      assert.deepEqual(player.effects, {});
+      assert.equal(room.damageHitboxes.size, 0);
+      assert.equal(player._knockbackUntil, 0);
+      assert.equal(room.deathDrops.size, 0);
+      assert.ok(emitted.some(({ type, payload }) => type === SOCKET_EVENTS.PLAYER_RESPAWN && payload.spawnReset));
+      assert.ok(emitted.some(({ type, payload }) => type === SOCKET_EVENTS.GAME_CORRECTION && payload.reason === 'spawn-reset'));
+
+      room.handlePlayerInput(socket.id, { x: spawn.x + 10, y: spawn.y, sequence: 1, correctionAck: 0 });
+      t.mock.timers.tick(500);
+      room.tickId += 100;
+      processTick(room);
+      tick(room);
+      assert.deepEqual([player.x, player.y], [spawn.x, spawn.y], character);
+      assert.equal(room.activeAttacks.length, 0);
+      assert.equal(bootstrap(room).ninjaCombat.active.length, 0);
+      assert.equal(bootstrap(room).sparrowCombat.projectiles.length, 0);
+      assert.equal(room.sparrowCombatState.bolts.size, 0);
+      assert.equal(room.requestSpecial(socket.id, { ...cast, id: 'after-reset' }), true, character);
+      service.remove(session);
+    }
   });
 });
 

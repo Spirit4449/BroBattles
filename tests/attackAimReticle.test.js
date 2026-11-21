@@ -19,6 +19,50 @@ describe("Aim guides", () => {
     assert.equal(state.baseY, state.anchorY);
   });
 
+  test('Sparrow super circle follows the body below her sprite origin', () => {
+    const { createClientModuleGraph } = require('./helpers/clientModule');
+    const { createAttackAimReticleController } = createClientModuleGraph({
+      globals: { Phaser: { Textures: { FilterMode: { LINEAR: 0 } } } },
+    }).load(
+      require.resolve('../src/client/game/scene/attackAimReticle.js'),
+    );
+    const player = { x: 200, y: 300, _bbCharacter: 'sparrow', scaleX: 1.25, scaleY: 1.25,
+      displayOriginX: 80, displayOriginY: 80,
+      body: { offset: { x: 70, y: 100 }, width: 30, height: 50 } };
+    const positions = [];
+    const strokes = [];
+    const noop = () => {};
+    const ctx = {
+      beginPath: noop, closePath: noop, clearRect: noop, fill: noop,
+      ellipse(...args) { this.path = args; },
+      stroke() { strokes.push(this.path); },
+    };
+    const texture = {
+      setFilter: noop, refresh: noop,
+      getContext: () => ctx,
+    };
+    const scene = {
+      textures: { createCanvas(key, width, height) {
+        assert.ok(width > 1 && height > 1);
+        return Object.assign(texture, { width, height });
+      } },
+      add: { image: () => ({
+        setDepth: noop, setVisible: noop, setAlpha: noop, setSizeToFrame: noop,
+        updateDisplayOrigin: noop, setScale: noop,
+        setPosition(x, y) { positions.push([x, y]); },
+      }) },
+    };
+    const reticle = createAttackAimReticleController(scene, { getPlayer: () => player });
+    const aim = () => resolveAttackAimContext({ character: 'sparrow', player, family: 'special', quick: true });
+    reticle.update(aim());
+    player.y -= 40;
+    reticle.update(aim());
+    assert.deepEqual(positions, [[202.5, 350], [202.5, 310]]);
+    assert.equal(strokes.length, 2);
+    assert.deepEqual(strokes[0], strokes[1]);
+    assert.equal(strokes[0][6], Math.PI * 2);
+  });
+
 });
 
 describe("Quick attack direction", () => {

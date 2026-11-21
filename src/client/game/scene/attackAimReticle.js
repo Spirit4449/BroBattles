@@ -1,5 +1,6 @@
 import { RENDER_LAYERS } from "./renderLayers";
 import { DEFAULT_CONE_RADIUS, DEFAULT_CONE_SPREAD_DEG } from "../characters/shared/attackAim";
+import { playerAnchor } from "../characters/shared/rig.js";
 
 const RETICLE_RENDERERS = new Map();
 
@@ -69,6 +70,12 @@ class BaseAttackReticleRenderer {
     this.main.setVisible(next);
     this.accent.setVisible(next);
     this.crosshair.setVisible(next);
+  }
+
+  setPosition(x, y) {
+    for (const graphic of [this.shadow, this.main, this.accent, this.crosshair]) {
+      graphic.setPosition(x, y);
+    }
   }
 
   setAlpha(alpha) {
@@ -356,34 +363,108 @@ class SplashAttackReticleRenderer extends BaseAttackReticleRenderer {
   }
 }
 
-class RoundAttackReticleRenderer extends BaseAttackReticleRenderer {
+const ROUND_RETICLE_RESOLUTION = 2;
+let nextRoundReticleId = 0;
+
+class RoundAttackReticleRenderer {
+  constructor(scene) {
+    this.scene = scene;
+  }
+
+  setVisible(visible) {
+    this.image?.setVisible(visible);
+  }
+
+  setAlpha(alpha) {
+    this.image.setAlpha(alpha);
+  }
+
+  setPosition(x, y) {
+    this.image.setPosition(this.cx + x, this.cy + y);
+  }
+
+  clear() {
+    this.setVisible(false);
+  }
+
+  destroy() {
+    this.image?.destroy();
+    this.texture?.destroy();
+  }
+
   render(state) {
-    super.render(state);
-    if (!state) return;
     const palette = getPalette(state);
     const visualScale = Number(state.visualScale) || 1;
     const reticleScale = Number(state.config?.reticleScale) || 1;
-    const reveal = 1;
-    const radius = reveal * visualScale * reticleScale * Math.max(
+    const radius = visualScale * reticleScale * Math.max(
       16,
       Number(state.roundRadius) || Number(state.range) || 60,
     );
-    const radiusY = Math.max(16, Number(state.config?.radiusY) * visualScale * reticleScale * reveal || radius);
-    const cx = Number(state.baseX ?? state.anchorX) || 0;
-    const cy = (Number(state.baseY ?? state.anchorY) || 0) +
+    const radiusY = Math.max(16, Number(state.config?.radiusY) * visualScale * reticleScale || radius);
+    this.cx = Number(state.baseX ?? state.anchorX) || 0;
+    this.cy = (Number(state.baseY ?? state.anchorY) || 0) +
       (Number(state.config?.reticleOffsetY) || 0) * visualScale -
       (Number(state.config?.reticleScaleLiftY) || 0) * (visualScale - 1);
 
-    // Concentric fills fade radially; the outer ellipse is a visual aim cue.
-    this.shadow.lineStyle(palette.shadowColor === 0xffaa00 ? 12 : 5, palette.shadowColor === 0xffaa00 ? 0xffaa00 : 0x101725, 0.45);
-    this.shadow.strokeEllipse(cx, cy, radius * 2, radiusY * 2);
-    for (let band = 10; band >= 1; band -= 1) {
-      const scale = band / 10;
-      this.main.fillStyle(palette.fillColor, 0.035);
-      this.main.fillEllipse(cx, cy, radius * scale * 2, radiusY * scale * 2);
+    if (this.radius === radius && this.radiusY === radiusY && this.palette === palette) return;
+    this.radius = radius;
+    this.radiusY = radiusY;
+    this.palette = palette;
+
+    // Rasterize the whole curve once so translucent strokes have no segment joins.
+    const special = palette.shadowColor === 0xffaa00;
+    const glowWidth = special ? 12 : 5;
+    const padding = glowWidth / 2 + 2;
+    const resolution = ROUND_RETICLE_RESOLUTION;
+    const width = Math.ceil((radius + padding) * 2 * resolution);
+    const height = Math.ceil((radiusY + padding) * 2 * resolution);
+    // Phaser chooses WebGL wrapping at allocation. Resizing a repeating 1x1
+    // texture to a non-power-of-two ellipse makes it incomplete in WebGL 1.
+    if (this.texture?.width !== width || this.texture?.height !== height) {
+      const previous = this.texture;
+      this.texture = this.scene.textures.createCanvas(`bb-round-reticle-${nextRoundReticleId++}`, width, height);
+      this.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+      if (this.image) {
+        this.image.setTexture(this.texture);
+      } else {
+        this.image = this.scene.add.image(0, 0, this.texture);
+        this.image.setDepth(RENDER_LAYERS.RETICLES);
+      }
+      previous?.destroy();
     }
-    this.accent.lineStyle(3, palette.accentColor, 0.85);
-    this.accent.strokeEllipse(cx, cy, radius * 2, radiusY * 2);
+    const ctx = this.texture.getContext();
+    ctx.clearRect(0, 0, width, height);
+    const ellipse = (scale) => {
+      ctx.beginPath();
+      ctx.ellipse(width / 2, height / 2, radius * resolution * scale,
+        radiusY * resolution * scale, 0, 0, Math.PI * 2);
+      ctx.closePath();
+    };
+    const color = (value) => `#${value.toString(16).padStart(6, "0")}`;
+
+    ellipse(1);
+    ctx.globalAlpha = 0.45;
+    ctx.strokeStyle = color(special ? palette.shadowColor : 0x101725);
+    ctx.lineWidth = glowWidth * resolution;
+    ctx.stroke();
+
+    ctx.fillStyle = color(palette.fillColor);
+    ctx.globalAlpha = 0.035;
+    for (let band = 10; band >= 1; band -= 1) {
+      ellipse(band / 10);
+      ctx.fill();
+    }
+
+    ellipse(1);
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = color(palette.accentColor);
+    ctx.lineWidth = 3 * resolution;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    this.texture.refresh();
+    this.image.setSizeToFrame();
+    this.image.updateDisplayOrigin();
+    this.image.setScale(1 / resolution);
   }
 }
 
@@ -432,7 +513,7 @@ function resolveRenderer(kind) {
   );
 }
 
-function createAttackAimReticleController(scene, { getAmmoCharges } = {}) {
+function createAttackAimReticleController(scene, { getAmmoCharges, getPlayer } = {}) {
   let renderer = null;
   let rendererKind = "";
   let shownState = null;
@@ -451,11 +532,15 @@ function createAttackAimReticleController(scene, { getAmmoCharges } = {}) {
   };
 
   return {
-    update(state) {
-      if (!state) {
+    update(aim) {
+      if (!aim) {
         this.hide();
         return;
       }
+      const anchor = aim.kind === "round" && aim.config?.reticleAnchor
+        ? playerAnchor(getPlayer?.(), aim.config.reticleAnchor)
+        : null;
+      const state = anchor ? { ...aim, baseX: anchor.x, baseY: anchor.y } : aim;
       const activeRenderer = ensureRenderer(state.kind || state?.config?.kind);
       const renderedState = state?.paletteKey === "special" || state?.family === "special" ||
         typeof getAmmoCharges !== "function"
@@ -479,9 +564,7 @@ function createAttackAimReticleController(scene, { getAmmoCharges } = {}) {
       const offsetX = renderedState.baseX - shownState.baseX;
       const offsetY = renderedState.baseY - shownState.baseY;
       activeRenderer.render(shownState);
-      for (const graphic of [activeRenderer.shadow, activeRenderer.main, activeRenderer.accent, activeRenderer.crosshair]) {
-        graphic.setPosition(offsetX, offsetY);
-      }
+      activeRenderer.setPosition(offsetX, offsetY);
       activeRenderer.setAlpha(opacity);
       activeRenderer.setVisible(true);
     },

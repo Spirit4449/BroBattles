@@ -29,6 +29,53 @@ describe("Rewards and wallet", () => {
   });
 
   describe("Reward cues and lazy audio", () => {
+    test('match reward cues skip locked and uncached audio, then play through the scene with bounded overlap', () => {
+      const { getUISoundSources } = loadUISounds();
+      const { preloadMatchRewardSounds, playMatchRewardSound } = loadClientModule(
+        require.resolve('../src/client/game/audio/matchAudio.js'), {
+          require: name => name.includes('uiSounds') ? { getUISoundSources } : {},
+          document: { hidden: false },
+        },
+      );
+      const queued = new Map();
+      const playing = [];
+      let cached = false;
+      let active = true;
+      const scene = {
+        sys: { isActive: () => active },
+        load: { audio: (key, urls, { instances }) => queued.set(key, { urls, instances }) },
+        cache: { audio: { exists: key => cached && queued.has(key) } },
+        sound: {
+          locked: true,
+          getAllPlaying: () => [...playing],
+          play(key, { volume, rate }) {
+            const cue = { key, volume, rate, destroy: () => playing.splice(playing.indexOf(cue), 1) };
+            playing.push(cue);
+          },
+        },
+      };
+      preloadMatchRewardSounds(scene);
+      for (const { urls } of queued.values()) {
+        for (const url of urls) assert.ok(fs.statSync(path.join(__dirname, '../public', url)).size > 0);
+      }
+      playMatchRewardSound(scene, 'rewardCoinImpact', .22);
+      scene.sound.locked = false;
+      playMatchRewardSound(scene, 'rewardCoinImpact', .22);
+      assert.equal(playing.length, 0);
+
+      cached = true;
+      playMatchRewardSound(scene, 'rewardCoinImpact', .22);
+      const first = playing[0];
+      const { instances } = queued.get('rewardCoinImpact');
+      for (let i = 0; i < instances; i++) playMatchRewardSound(scene, 'rewardCoinImpact', .22, 1.2);
+      assert.equal(playing.length, instances);
+      assert.ok(!playing.includes(first));
+      assert.ok(playing.every(cue => cue.volume === .22 && cue.rate === 1.2));
+      active = false;
+      playMatchRewardSound(scene, 'shopReveal', .3);
+      assert.equal(playing.length, instances);
+    });
+
     test('rapid reward impacts overlap in a bounded reusable pool and honor volume settings', () => {
       const clones = [];
       let settingsListener;

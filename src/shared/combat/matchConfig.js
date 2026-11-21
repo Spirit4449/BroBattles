@@ -214,7 +214,7 @@ const ATTACK_MAX_DIST_MAP = {
   "gloop|basic": 1200,
   "gloop|special": 1500,
   "sparrow|sparrow-arrow": 1050,
-  "sparrow|sparrow-burning-arrow": 1150,
+  "sparrow|sparrow-light-bolt": getResolvedCharacterSpecialConfig("sparrow", "lightBolt").range + 200,
   "any|basic": 520,
   "any|special": 800,
   "any|ninja-special-swarm": 800,

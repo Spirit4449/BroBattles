@@ -107,8 +107,10 @@ function pinMapAssets(map, directory) {
       asset.url = immutableAsset(asset.url, directory);
       if (asset.atlasURL) asset.atlasURL = immutableAsset(asset.atlasURL, directory);
     }
-    for (const layer of layout.scenery?.layers || [])
+    for (const layer of layout.scenery?.layers || []) {
       layer.url = immutableAsset(layer.url, directory);
+      for (const part of layer.parts || []) part.url = immutableAsset(part.url, directory);
+    }
     if (typeof layout.background === "string")
       layout.background = immutableAsset(layout.background, directory);
   }

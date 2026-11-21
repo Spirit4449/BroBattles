@@ -97,6 +97,14 @@ for (const input of Object.values(playtestInputs)) {
   });
 }
 
+for (const [id, fullBattle] of [["playtest-quick-option", false], ["playtest-full-option", true]]) {
+  $(id).addEventListener("click", () => {
+    $(id).blur();
+    playtestInputs.fullBattle.checked = fullBattle;
+    playtestInputs.fullBattle.dispatchEvent(new Event("change"));
+  });
+}
+
 if (
   !skinsCatalog.characters[playtestInputs.character.value].skins.some(
     (s) => s.id === playtestInputs.skin.value,
@@ -106,7 +114,7 @@ if (
 
 syncPlaytestSummary();
 
-for (const id of ["playtest-formation", "playtest-kind", "playtest-character", "grid"])
+for (const id of ["playtest-formation", "playtest-character", "grid"])
   syncToolbarSelect(id);
 
 $("map-select").onchange = () => {
@@ -118,6 +126,10 @@ $("map-select").onchange = () => {
 };
 
 $("search").oninput = renderBrowser;
+
+document.addEventListener("change", (event) => {
+  if (event.target.matches?.("select")) event.target.blur();
+}, true);
 
 $("camera-preview").onclick = () => editor.scene?.setCameraPreview(!editor.cameraPreview);
 
@@ -179,9 +191,10 @@ window.addEventListener("keydown", (ev) => {
   const typing = /INPUT|SELECT|TEXTAREA/.test(ev.target.tagName);
   const key = ev.key.toLowerCase(),
     ctrl = ev.metaKey || ev.ctrlKey;
+  if (key === " " && ev.target.closest?.(".playtest-split")) return;
   if (key === "escape") {
     ev.preventDefault();
-    if (typing) {
+    if (typing && ev.target.type !== "checkbox") {
       ev.target.blur();
       return;
     }

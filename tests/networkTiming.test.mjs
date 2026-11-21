@@ -202,7 +202,7 @@ test("continuous precision crosses snapshot boundaries and exits without reversi
   assert.equal(readNetworkExperiments("?netInputCadence=legacy").legacyInputCadence, true);
 });
 
-function runLoop(t, coalesce, stall, finishAt = null) {
+function runLoop(t, coalesce, stall, finishAt = null, combatPaused = false) {
   let clock = 0, callback;
   t.mock.method(performance, "now", () => clock);
   t.mock.method(globalThis, "setTimeout", (fn) => { callback = fn; return 1; });
@@ -212,6 +212,10 @@ function runLoop(t, coalesce, stall, finishAt = null) {
     status: "active", _netTestEnabled: true, tickId: 0,
     FIXED_DT_MS: 1000 / 60, SNAPSHOT_EVERY_TICKS: 2, WORLD_STATE_EVERY_TICKS: 8,
     COALESCE_SNAPSHOTS: coalesce, powerups: new Map(), deathDrops: new Map(), players: new Map(),
+    gameMode: {
+      isCombatPaused: () => combatPaused,
+      tick() { events.push({ type: "mode" }); },
+    },
     _spawnPowerup: noop, _tickPowerupEffects: noop, processRegen: noop,
     _tickTimerAndSuddenDeath: noop, _tickPowerups: noop, _tickDeathDrops: noop,
     processTick() {
@@ -242,6 +246,13 @@ test("publication rollback keeps the old cadence", (t) => {
   const { events } = runLoop(t, false, 1000);
   assert.equal(events.filter(e => e.type === "snapshot").length, 30);
   assert.equal(events.filter(e => e.type === "world").length, 7);
+});
+
+test("a combat pause keeps mode ticks and snapshots running", (t) => {
+  const { room, events } = runLoop(t, true, 1000, null, true);
+  assert.equal(events.filter(e => e.type === "mode").length, room.tickId);
+  assert.equal(events.filter(e => e.type === "simulation").length, 0);
+  assert.equal(events.filter(e => e.type === "snapshot").length, 1);
 });
 
 test("ordinary ticks preserve 30 Hz cadence and a terminal tick stops catch-up", (t) => {

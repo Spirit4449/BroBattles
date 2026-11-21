@@ -1,10 +1,28 @@
 const { BaseGameMode } = require('../BaseGameMode');
 const { advanceBall } = require('./physics');
 const { ballRules: rules, broBallField } = require('../../../../shared/broBall');
+const { characterDefinitions } = require('../../../../shared/characters');
+const { getResolvedCharacterSpecialConfig } = require('../../../../shared/characters/characterTuning');
+const { getResolvedAttackDescriptor } = require('../../../../shared/combat/runtime/attackDescriptorResolver');
 const characterCombat = require('../../../../shared/combat/runtime/characterCombatRegistry');
 const { participantId } = require('../../../../shared/combat/runtime/participants');
 const { respawnPlayer } = require('../../gameRoom/respawn');
 const { correctPosition } = require('../../gameRoom/inputManager');
+
+function kickWindowMs(character, special) {
+  if (!special) {
+    const attack = getResolvedAttackDescriptor(characterDefinitions[character]?.basicAction);
+    const startup = attack?.actionFlow?.startupMs || 0;
+    const activeEnd = (attack?.runtime?.windupMs || 0) + (attack?.runtime?.activeWindowMs || 0);
+    return Math.max(startup + rules.kickWindowMs, activeEnd);
+  }
+
+  const config = getResolvedCharacterSpecialConfig(character);
+  if (character === 'ninja') return (config.swarm.count - 1) * config.swarm.releaseMs + rules.kickWindowMs;
+  const startup = config.inferno?.firstDamageDelayMs ||
+    config.hook?.castDelayMs || 0;
+  return startup + rules.kickWindowMs;
+}
 
 class BroBallGameMode extends BaseGameMode {
   usesModeClock = true;
@@ -31,6 +49,7 @@ class BroBallGameMode extends BaseGameMode {
       impactSequence: 0,
       impacts: [],
       score: { team1: 0, team2: 0 },
+      playerGoals: {},
       phase: 'regulation',
       remainingMs: rules.regulationMs,
       goal: null,
@@ -57,7 +76,11 @@ class BroBallGameMode extends BaseGameMode {
   }
 
   getRespawnPlan(player) {
-    return { enabled: true, delayMs: rules.respawnMs, shieldMs: 1000, position: this.room.spawnStateFor(player) };
+    return { enabled: true, delayMs: rules.respawnMs, position: this.room.spawnStateFor(player) };
+  }
+
+  isCombatPaused() {
+    return !!this.getModeState().goal;
   }
 
   // Client actions name the rally they were aimed in, so one sent before a
@@ -80,18 +103,19 @@ class BroBallGameMode extends BaseGameMode {
       player.loaded && player.isAlive && !(player._controlLockUntil > Date.now());
   }
 
-  armKick(player, special) {
+  armKick(player, special, windowMs) {
     const id = participantId(player);
     this.kicks.set(id, {
       special,
-      untilTick: this.room.tickId + Math.ceil(rules.kickWindowMs / this.room.FIXED_DT_MS),
+      untilTick: this.room.tickId + Math.ceil(windowMs / this.room.FIXED_DT_MS),
+      interruptSeq: player._attackInterruptSeq || 0,
       consume: () => this.kicks.delete(id),
     });
   }
 
-  // An accepted attack or super also kicks the ball if it is within reach.
-  onAttackAccepted(player, data, special = false) {
-    if (this.canKick(player)) this.armKick(player, special);
+  // Give a close-range kick from input time through the active swing or release.
+  onAttackAccepted(player, _data, special = false) {
+    if (this.canKick(player)) this.armKick(player, special, kickWindowMs(player.char_class, special));
   }
 
   // Bots kick without firing an attack, at about the rate people can attack.
@@ -99,7 +123,7 @@ class BroBallGameMode extends BaseGameMode {
     const now = Date.now();
     if (!this.canKick(player) || now < (player._broBallKickAt || 0) + rules.botKickCooldownMs) return false;
     player._broBallKickAt = now;
-    this.armKick(player, false);
+    this.armKick(player, false, rules.kickWindowMs);
     return true;
   }
 
@@ -131,16 +155,18 @@ class BroBallGameMode extends BaseGameMode {
       const acceptedDash = player._dashUntil > 0 && player.dashSeq !== player._broBallDashSeq;
       const chasing = dx * player.dashX + dy * player.dashY > 0;
       const dashLive = now < player._dashUntil || (chasing && now < player._dashUntil + rules.dashGraceMs);
+      const facing = player.flip ? -1 : 1;
       const dash = !locked && acceptedDash && dashLive
-        ? { x: player.dashX, y: player.dashY, facing: player.flip ? -1 : 1 } : null;
-      let kick = !locked ? this.kicks.get(id) : null;
-      if (kick?.untilTick < this.room.tickId) {
+        ? { x: player.dashX, y: player.dashY, facing } : null;
+      let kick = this.kicks.get(id);
+      if (kick && (locked || kick.untilTick < this.room.tickId ||
+          kick.interruptSeq !== (player._attackInterruptSeq || 0))) {
         kick.consume();
         kick = null;
       }
       current.set(id, { x, feet, halfHeight });
       bodies.push({
-        id, dash, kick, team: player.team,
+        id, dash, kick, facing, team: player.team, name: player.name,
         standingUp: halfHeight > previous.halfHeight,
         consumeDash: () => { player._broBallDashSeq = player.dashSeq; },
         left: previous.x - width, right: previous.x + width,
@@ -186,6 +212,10 @@ class BroBallGameMode extends BaseGameMode {
     const state = this.getModeState();
     const team = defendingTeam === 'team1' ? 'team2' : 'team1';
     state.score[team]++;
+    const touch = state.ball.lastTouch;
+    if (touch?.team === team && touch.name) {
+      state.playerGoals[touch.name] = (state.playerGoals[touch.name] || 0) + 1;
+    }
     const winner = !this.isPractice && (state.score[team] >= rules.scoreLimit || state.phase === 'overtime')
       ? team : null;
     state.goal = {
@@ -193,7 +223,7 @@ class BroBallGameMode extends BaseGameMode {
     };
     const { x, y, vx, vy } = state.ball;
     this.pushImpact('goal', { defendingTeam, winner, x, y, strength: Math.hypot(vx, vy) });
-    this.clearRally(state.goal.until);
+    for (const player of this.room.players.values()) player.vx = player.vy = 0;
     this.room.broadcastSnapshot();
     this.room.broadcastWorldState();
   }
@@ -209,30 +239,23 @@ class BroBallGameMode extends BaseGameMode {
     }
   }
 
-  clearRally(lockUntil) {
+  clearRally() {
     const room = this.room;
     room.activeAttacks = [];
     room._scheduledActions.length = 0;
     characterCombat.dispose(room);
+    room.damageHitboxes?.clear();
     this.kicks.clear();
     this.previousBodies.clear();
     for (const p of room.players.values()) {
       clearTimeout(p._respawnTimeout);
       p._respawnTimeout = null;
-      p._controlLockUntil = lockUntil;
-      p._attackInterruptedUntil = 0;
-      p._attackInterruptSeq = (p._attackInterruptSeq || 0) + 1;
-      p._knockbackUntil = 0;
-      p._dashUntil = 0;
-      p._stompPendingUntil = 0;
-      p.activeEffects = {};
-      p.effects = {};
-      p.vx = p.vy = 0;
     }
   }
 
   resetKickoff(now) {
     const state = this.getModeState();
+    this.clearRally();
     state.reset++;
     // A free drop from high over the centre, drifting a little to one side.
     state.ball = { ...this.layout.kickoff, vx: (Math.random() * 2 - 1) * rules.kickoffDrift, vy: 0 };
@@ -283,6 +306,7 @@ class BroBallGameMode extends BaseGameMode {
     return {
       type: this.modeId,
       score: { ...state.score },
+      playerGoals: { ...state.playerGoals },
       phase: state.phase,
       goal: state.goal?.team || null,
       remainingMs: Math.ceil(state.remainingMs),

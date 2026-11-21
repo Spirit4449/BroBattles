@@ -12,7 +12,7 @@ const { createRouteSearch, routeSearchTablesSteps, edgeKey, nearestSurface, safe
 const { buildGraph } = require("./navigation");
 const { staticGeometry } = require('../../../shared/maps/platformMotion');
 const { advanceAmmo } = require('../../../shared/combat/combat.js');
-const { observe, incomingThreat } = require('./perception');
+const { observe, incomingThreat, updateFireLanes, fireLaneExposure, edgeExposure, walkExposure } = require('./perception');
 const { healthFraction, selectTargetSteps, chooseDecisionSteps, finishSteps } = require('./tactics');
 const { updateSuperPlan } = require('./supers');
 const effects = require('../../../shared/combat/runtime/effects/effectManager.js');
@@ -188,10 +188,18 @@ class BotController {
         blocked: this.blockedEdges,
         startX: p.x,
         tables,
-        edgeCost: (edge, from, pair) => {
+        goalWalkCost: this.fireLanes?.size && ((surface, fromX, x) => {
+          const point = { x, y: surface.top - graph.body.offsetY - graph.body.halfHeight };
+          return Math.abs(x - fromX) / movement.maxSpeed * 1000 +
+            walkExposure(this.fireLanes, p.char_class, fromX, point, now) * 1000;
+        }),
+        edgeCost: (edge, from, pair, fromX) => {
           const key = pair ?? `${from}:${edge.to}`;
           if (!this.routePreferences.has(key)) this.routePreferences.set(key, this.random() * 240);
-          return (edge.jump ? 70 : 0) + (edge.dash ? 140 : 0) + this.routePreferences.get(key);
+          const landing = edge.frames?.at(-1);
+          // Price the landing before the search settles on a route to this platform.
+          const exposure = landing && this.fireLanes?.size ? fireLaneExposure(this.fireLanes, p.char_class, landing, now) : 0;
+          return (exposure + edgeExposure(this.fireLanes, p.char_class, fromX, edge, now)) * 1000 + (edge.jump ? 70 : 0) + (edge.dash ? 140 : 0) + this.routePreferences.get(key);
         },
     });
     const routeTo = (id, goalX) => {
@@ -232,6 +240,7 @@ class BotController {
     this.metrics.thinks++;
     const p = this.player, enemies = observed?.enemies || [];
     this.collectNearbyDeathDrops(now);
+    this.fireLanes = updateFireLanes(this.fireLanes, observed, now);
     const context = yield* this.contextSteps(mods, now);
     this.objective = resolveBotObjective(this.room, p, {
       now,
@@ -240,7 +249,7 @@ class BotController {
     });
     this.poisonY = context.poisonY;
     if (this.objective.behavior === 'bro-ball') {
-      yield* broBallThinkSteps(this, now);
+      yield* broBallThinkSteps(this, now, context);
       return;
     }
     const suddenDeathStarted = this.room.suddenDeathActive && !this.suddenDeathActive;
@@ -339,7 +348,12 @@ class BotController {
     const lootGone = this.decision?.mode === 'loot' && !this.room.deathDrops.has(this.decision.dropId);
     const emergency = wasRetreating !== this.retreating || newRetreatHit;
     if (p.grounded && emergency) { this.clearTravel(); this.duckUntil = 0; }
-    const goalUnsafe = p.grounded && !this.traversal && this.decision?.goal && context.routeTo(this.decision.goal.surfaceId, this.decision.goal.x) === null;
+    // A jump not yet taken is reconsidered when its landing comes under fire.
+    const landing = this.approachEdge?.frames?.at(-1);
+    const approachUnderFire = !!landing && (fireLaneExposure(this.fireLanes, p.char_class, landing, now) > 0 ||
+      edgeExposure(this.fireLanes, p.char_class, p.x, this.approachEdge, now) > 0);
+    const goalUnsafe = p.grounded && !this.traversal && this.decision?.goal && (approachUnderFire ||
+      context.routeTo(this.decision.goal.surfaceId, this.decision.goal.x) === null);
     const committedRoute = !bankMode && (this.approachEdge || this.traversal) && !targetChanged && !roleChanged && !recentlyHurt && !threatened &&
       !newRetreatHit && !goalUnsafe && !(this.retreating && enemies.some((enemy) => Math.hypot(enemy.x - p.x, enemy.y - p.y) < 320)) && wasRetreating === this.retreating && bounds(p).bottom < context.poisonY - 100;
     if (!this.decision || (now >= this.nextDecisionAt && !committedRoute) || pickupGone || lootGone || emergency || goalUnsafe) {
@@ -354,7 +368,7 @@ class BotController {
         this.metrics.lootGoals++;
         this.lastLootGoalId = this.decision.dropId;
       } else if (this.decision.mode !== 'loot') this.lastLootGoalId = null;
-      if (previousGoal !== this.decision.goal?.surfaceId) this.approachEdge = null;
+      if (approachUnderFire || previousGoal !== this.decision.goal?.surfaceId) this.approachEdge = null;
       if (this.decision.mode !== 'fight') this.pursuit = null;
     }
     yield;
@@ -557,6 +571,7 @@ class BotController {
     this.routePreferences.clear();
     this.ineffectivePositions.length = 0;
     this.combatProgress = null;
+    this.fireLanes = null;
     this.projectileSamples = new WeakMap();
     this.decision = null;
     this.objective = null;

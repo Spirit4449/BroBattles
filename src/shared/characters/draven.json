@@ -63,7 +63,7 @@
           "liftPx": 125,
           "bobPx": 8,
           "firePulseMs": 120,
-          "explosionPulseMs": 260,
+          "explosionPulseMs": 450,
           "bobWaveMs": 120,
           "firstDamageDelayMs": 80,
           "damageTickMs": 220,

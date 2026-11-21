@@ -2,6 +2,9 @@ import { getSettings } from "../../site/preferences";
 import { getPlayerAimBasePoint, resolveAttackAimContext, getNearestOpponentDirection } from "../characters/shared/attackAim";
 import { createAttackAimReticleController } from "../scene/attackAimReticle";
 import { createCombatMouseController } from "../scene/combatMouse";
+
+const FOLLOW_UP_CURSOR_RADIUS = 38;
+
 export function serializeAimContext(context) {
   if (!context || typeof context !== "object") return null;
   const out = {
@@ -46,6 +49,8 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
   let pointerContextMenuHandler = null;
   let combatMouseController = null;
   let player;
+  let followUpCursor = null;
+  let followUpPointer = null;
 
   const attackAimState = {
     active: false,
@@ -55,7 +60,10 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
     currentContext: null,
   };
 
-  attackAimReticleController = createAttackAimReticleController(scene, { getAmmoCharges: options.getAmmoCharges });
+  attackAimReticleController = createAttackAimReticleController(scene, {
+    getAmmoCharges: options.getAmmoCharges,
+    getPlayer: () => player,
+  });
 
   function clearAttackAimReticle() {
     try {
@@ -165,7 +173,9 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
   function startPointerAttackAim(pointer, family = "basic", button = 0) {
     if (!pointer || stats.dead) return;
     resetPointerAttackAim();
-    combatMouseController?.beginDrag(player?.flipX ? -1 : 1, getAimBasePoint(family).config?.kind === "throw");
+    if (family !== "followup") {
+      combatMouseController?.beginDrag(player?.flipX ? -1 : 1, getAimBasePoint(family).config?.kind === "throw");
+    }
     attackAimState.active = true;
     attackAimState.family = family;
     attackAimState.button = button;
@@ -175,6 +185,15 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
 
   function updatePointerAttackAimState() {
     if (options.getMobileControls()?.isEnabled?.()) return;
+    if (options.followUpActive?.()) {
+      if (attackAimState.active && attackAimState.family !== "followup") resetPointerAttackAim();
+      clearAttackAimReticle();
+      if (followUpPointer) updateWorldFollowUpAim(followUpPointer);
+      return;
+    }
+    followUpCursor = null;
+    followUpPointer = null;
+    if (attackAimState.family === "followup") resetPointerAttackAim();
     if (!player || stats.dead || !combatMouseController?.shouldShowReticle()) {
       clearAttackAimReticle();
       return;
@@ -186,9 +205,34 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
       centerCue: combatMouseController.getCenterCue() });
   }
 
-  function finishPointerAttackAim(pointer) {
-    if (!attackAimState.active ||
-        (pointer && pointer.id !== attackAimState.pointerId)) return null;
+  function updateWorldFollowUpAim(pointer) {
+    const camera = scene.cameras?.main;
+    if (!camera || combatMouseController?.isPointerLocked?.() || options.isUiCapturingInput()) return;
+    const target = camera.getWorldPoint(pointer.x, pointer.y);
+    const { baseX, baseY } = getAimBasePoint("followup");
+    const dx = target.x - baseX, dy = target.y - baseY;
+    if (Math.hypot(dx, dy) > 1) options.aimFollowUp?.(Math.atan2(dy, dx));
+  }
+
+  function updateLockedFollowUpAim(dx, dy) {
+    if (!options.followUpActive?.()) return false;
+    if (!dx && !dy) return true;
+    followUpPointer = null;
+    if (!followUpCursor) {
+      const angle = options.getFollowUpAngle?.() ?? (player.flipX ? Math.PI : 0);
+      followUpCursor = { x: Math.cos(angle) * FOLLOW_UP_CURSOR_RADIUS, y: Math.sin(angle) * FOLLOW_UP_CURSOR_RADIUS };
+    }
+    // Pointer lock supplies deltas. Keep a virtual cursor within easy reach of
+    // Sparrow so large movements don't make it harder to turn back.
+    const x = followUpCursor.x + dx, y = followUpCursor.y + dy;
+    const distance = Math.hypot(x, y);
+    const scale = FOLLOW_UP_CURSOR_RADIUS / Math.max(FOLLOW_UP_CURSOR_RADIUS, distance);
+    followUpCursor = { x: x * scale, y: y * scale };
+    if (distance > 1) options.aimFollowUp?.(Math.atan2(y, x));
+    return true;
+  }
+
+  function finishPointerAttackAim() {
     // Resolve from the current player position with the same direction as the preview.
     const context = combatMouseController?.isAiming()
       ? resolveDirectionalAttackContext(attackAimState.family)
@@ -204,10 +248,15 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
     const pointerDownHandler = (pointer) => {
       if (stats.dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
       if (options.isUiCapturingInput()) return;
-      if (options.isControlLocked()) return;
+      if (options.isControlLocked() && !options.followUpActive?.()) return;
       // Touches belong to the mobile controls overlay.
       if (options.getMobileControls()?.isEnabled?.() && pointer?.wasTouch) return;
       if (!combatMouseController?.beginInput()) return;
+      // A super's follow-up aim (Sparrow's Seraph) takes either button.
+      if (options.followUpActive?.() && (pointer.button === 0 || pointer.button === 2)) {
+        startPointerAttackAim(pointer, "followup", pointer.button);
+        return;
+      }
       if (pointer.button === 0) {
         startPointerAttackAim(pointer, "basic", 0);
         return;
@@ -225,6 +274,12 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
       if (options.isUiCapturingInput()) return;
       // Touches belong to the mobile controls overlay.
       if (options.getMobileControls()?.isEnabled?.() && pointer?.wasTouch) return;
+      if (options.followUpActive?.() && !combatMouseController?.isPointerLocked?.()) {
+        followUpPointer = pointer;
+        followUpCursor = null;
+        updateWorldFollowUpAim(pointer);
+        return;
+      }
       if (!attackAimState.active) return;
       if (
         attackAimState.pointerId !== null &&
@@ -240,9 +295,15 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
       if (options.isUiCapturingInput()) return;
       // Touches belong to the mobile controls overlay.
       if (options.getMobileControls()?.isEnabled?.() && pointer?.wasTouch) return;
-      const movementLockedNow = options.isControlLocked();
-      const context = finishPointerAttackAim(pointer);
-      if (!context || stats.dead || movementLockedNow || Date.now() < (player?._attackInterruptedUntil || 0)) return;
+      if (!attackAimState.active || (pointer && pointer.id !== attackAimState.pointerId)) return;
+      if (attackAimState.family === "followup") {
+        if (pointer && pointer.button !== attackAimState.button) return;
+        resetPointerAttackAim();
+        if (!stats.dead && options.followUpActive?.()) options.fireFollowUp?.();
+        return;
+      }
+      const context = finishPointerAttackAim();
+      if (!context || stats.dead || options.isControlLocked() || Date.now() < (player?._attackInterruptedUntil || 0)) return;
       if (String(context.family || "basic").toLowerCase() === "special") {
         options.fireSpecialAttack(context);
         return;
@@ -251,6 +312,7 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
     };
 
     const pointerGameOutHandler = () => {
+      followUpPointer = null;
       resetPointerAttackAim();
     };
 
@@ -273,11 +335,14 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
         !options.getMobileControls()?.isEnabled?.() && scene.sys.isActive(),
       canCapture: () => !!player && !scene._battleEnded && !options.isUiCapturingInput() && !options.isSystemNoticeOpen?.() &&
         !options.getMobileControls()?.isEnabled?.() &&
-        scene.input.keyboard?.enabled !== false && scene.sys.isActive(),
+        scene._canPlayBattle?.() !== false && scene.sys.isActive(),
       canPlay: () => !!player && !stats.dead && !options.isUiCapturingInput() && !options.isSystemNoticeOpen?.() &&
         !options.getMobileControls()?.isEnabled?.() &&
-        scene.input.keyboard?.enabled !== false && scene.sys.isActive(),
+        scene._canPlayBattle?.() !== false && scene.sys.isActive(),
+      onLockedAimMove: updateLockedFollowUpAim,
       onRelease: () => {
+        followUpCursor = null;
+        followUpPointer = null;
         resetPointerAttackAim();
         options.resetMovementInputState({ preserveVelocity: true });
       },

@@ -171,7 +171,7 @@ function attackPose(key, direction = DIRECTIONS.find((d) => !d.key)) {
     return { ...arm, hand, elbow: [0, 1].map((i) => Math.round(hand[i] + ((back[i] - hand[i]) / unit) * fore)) };
   };
   return {
-    pose, drawn, bowTop: tip(BOW_TOP), bowBottom: tip(BOW_BOTTOM),
+    pose, drawn, grip, aimDir, bowTop: tip(BOW_TOP), bowBottom: tip(BOW_BOTTOM),
     nock: levelNock && drawnAt(levelNock),
     along: levelNock && apply(draw, [levelNock[0] + 40, levelNock[1]]),
     shoulder: apply(body, JOINTS.backShoulder),
@@ -336,4 +336,4 @@ async function main() {
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exitCode = 1; });
 
-module.exports = { FRAMES, SETS, KEYS };
+module.exports = { FRAMES, SETS, KEYS, attackPose, MARGIN, SIDE, RGB, grid, cell, put, get, line, limb, outline, drawArm, arrow };

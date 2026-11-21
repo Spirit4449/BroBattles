@@ -175,4 +175,4 @@ async function main() {
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exitCode = 1; });
 
-module.exports = { CANVAS, FRAMES, POSES, airPose };
+module.exports = { CANVAS, FRAMES, POSES, airPose, legChain, flare, NEAR_HIP, FAR_HIP };

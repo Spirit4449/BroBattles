@@ -6,6 +6,7 @@ const movement = require('../../src/shared/physics/movementPhysics.json');
 const duck = require('../../src/shared/physics/ducking');
 const { LEVEL_CAP, upgradePrice } = require('../../src/shared/characters/characterStats');
 const { BANK_BUST_GOLD_ARRIVAL_MS, resolveBankBustSettings } = require('../../src/shared/bankBustSettings');
+const { ballRules } = require('../../src/shared/broBall');
 const modeCatalog = require('../../src/shared/catalogs/gameModes.catalog.cjs');
 const bank = require('../../src/server/core/gameModes/bankBust/state');
 const { VAULT_BUST_FINISH_DELAY_MS } = require('../../src/server/core/gameModes/bankBust/modeRules');
@@ -79,7 +80,7 @@ const rows = [
     `${bankSettings.deathDropVaultCoins} vault coins per banked death-drop coin, ` +
     `${bankSettings.purchaseFloorCoins} purchase floor, ${percent(bankSettings.lowCoinsRatio)} low vault warning, ` +
     `${seconds(bankSettings.matchDurationMs)} match, ${seconds(bankSettings.respawnDelayMs)} respawn, ` +
-    `${seconds(bankSettings.respawnShieldMs)} respawn shield, ${bankMode.unlockTrophies} peak trophies to unlock, ` +
+    `${bankMode.unlockTrophies} peak trophies to unlock, ` +
     `${seconds(VAULT_BUST_FINISH_DELAY_MS)} vault bust finish delay`,
   ],
   ['Bank Bust loose gold',
@@ -94,6 +95,10 @@ const rows = [
     `${seconds(bank.CENTER_GOLD_INTERVAL_MS)} spawn-to-spawn interval, ` +
     `${seconds(bank.CENTER_GOLD_ANNOUNCE_LEAD_MS)} advance warning, ` +
     `${seconds(bank.CENTER_GOLD_LIFETIME_MS)} crate lifetime`,
+  ],
+  ['Bro Ball touches',
+    `${ballRules.bodyContactPadding} px of extra reach for passive player contact, ` +
+    `plus ${ballRules.bodyContactTopPadding} px above the head`,
   ],
 ];
 

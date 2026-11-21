@@ -2,12 +2,13 @@ import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { trackDebugShape, isAttackDebugDraw } from "../shared/attackDebugDraw";
 import { applyTeamVisual, teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
 // Draven splash attack extracted
-import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
+import { getResolvedCharacterAttackConfig, getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { playInfernoHit } from "./infernoAudio";
 import { attackerPose, attachedRectShape } from "../../../../shared/combat/attackDelivery";
 import { attackDescriptors } from "../../../../shared/characters/index.js";
 import { predictAttachedContacts, notePredictedHit } from "../shared/shotPrediction";
@@ -54,10 +55,16 @@ export function performDravenSplashAttack(instance, attackContext = null) {
   // Play fireball SFX (local-only)
   try {
     if (scene.sound) {
-      playPlayerSound(scene, p, "draven-fireball", { volume: 0.4, rate: 1 });
+      playPlayerSound(scene, p, "draven-fireball");
     }
   } catch (_) {}
 
+  const stop = () => {
+    scene.events.off("update", updateListener);
+    scene.events.off("presentation:reset", stop);
+    p.off?.("attack:interrupted", stop);
+    if (dbg) dbg.destroy();
+  };
   const updateListener = () => {
     const dt = scene.game.loop.delta || 16;
     elapsed += dt;
@@ -84,11 +91,12 @@ export function performDravenSplashAttack(instance, attackContext = null) {
       }
     }
     if (elapsed >= ACTIVE_WINDOW_MS) {
-      scene.events.off("update", updateListener);
-      if (dbg) dbg.destroy();
+      stop();
     }
   };
   scene.events.on("update", updateListener);
+  scene.events.once?.("presentation:reset", stop);
+  p.once?.("attack:interrupted", stop);
   // Unlock facing after fixed delay independent of explosion window
   scene.time.delayedCall(FLIP_UNLOCK_MS, unlockFlip);
 
@@ -103,7 +111,16 @@ export function performDravenSplashAttack(instance, attackContext = null) {
   };
 }
 
-export function spawnExplosion(scene, x, y, owner = null) {
+// The explosion art (scripts/art/draven-pixel/fx.cjs) is 48 art pixels drawn
+// at 2x; at this scale each art pixel is 2 world px and the fireball peaks
+// around 56 px, small enough not to bury the struck player.
+const EXPLOSION_SCALE = 1;
+// Inferno impacts repeat on every damage tick, so they are smaller still.
+const INFERNO_EXPLOSION_SCALE = 0.8;
+const INFERNO = getResolvedCharacterSpecialConfig(NAME, "inferno");
+const lastInfernoExplosion = new Map();
+
+export function spawnExplosion(scene, x, y, owner = null, scale = EXPLOSION_SCALE) {
   const texture = teamColor(owner) === TEAM_RED && scene?.textures?.exists("draven-explosion-red") ? "draven-explosion-red" : "draven-explosion";
   try {
     if (!scene || !scene.add || !scene.textures?.exists(texture)) {
@@ -112,25 +129,45 @@ export function spawnExplosion(scene, x, y, owner = null) {
     const e = scene.add.sprite(x, y, texture);
     // The impact must sit above the struck actor, not behind their body.
     e.setDepth(RENDER_LAYERS.ATTACKS);
-    e.setScale(2.05);
-    e.setAlpha(0.42);
-    scene.tweens?.add({ targets: e, alpha: 0.92, duration: 70, ease: "Sine.easeOut" });
+    e.setScale(scale);
+    e.setAlpha(0.9);
     applyTeamVisual(e, owner);
+    const destroy = () => {
+      scene.events?.off("presentation:reset", destroy);
+      scene.tweens?.killTweensOf?.(e);
+      e.destroy();
+    };
+    scene.events?.once?.("presentation:reset", destroy);
     if (scene.anims?.exists(texture)) {
-      // Begin with visible contact rather than replaying the pre-impact buildup.
-      e.anims.play({ key: texture, startFrame: 3, frameRate: 22 });
-      e.once("animationcomplete", () => e.destroy());
+      // The art opens on the impact flash; there is no build-up to skip.
+      e.anims.play({ key: texture, frameRate: 24 });
+      e.once("animationcomplete", destroy);
     } else {
       // No animation defined; fade out and destroy for a minimal visual cue
       scene.tweens?.add({
         targets: e,
         alpha: 0,
         duration: 200,
-        onComplete: () => e.destroy(),
+        onComplete: destroy,
       });
     }
     return e;
   } catch (_) {
     return null;
   }
+}
+
+// Inferno damage ticks every special.inferno.damageTickMs per target; showing
+// an impact on each one buries the target in fire. Each target shows at most
+// one (smaller) explosion per special.inferno.explosionPulseMs.
+export function spawnInfernoExplosion(scene, x, y, owner = null, target = null, now = Date.now()) {
+  const key = target || `${Math.round(x / 32)}:${Math.round(y / 32)}`;
+  const last = lastInfernoExplosion.get(key);
+  if (last !== undefined && now - last < INFERNO.explosionPulseMs) return null;
+  lastInfernoExplosion.set(key, now);
+  if (lastInfernoExplosion.size > 64) {
+    for (const [k, at] of lastInfernoExplosion) if (now - at >= INFERNO.explosionPulseMs) lastInfernoExplosion.delete(k);
+  }
+  playInfernoHit(scene, x, y);
+  return spawnExplosion(scene, x, y, owner, INFERNO_EXPLOSION_SCALE);
 }

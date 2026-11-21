@@ -1,5 +1,6 @@
 import { TEAM_PALETTE } from "./teamPalette";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
+import { createProjectileComet } from "../../scene/projectileComet";
 
 export function createTurretShots({
   reducedMotion,
@@ -85,7 +86,7 @@ export function createTurretShots({
         RENDER_LAYERS.ATTACKS,
       );
       if (!sprite) continue;
-      const ownerTeam = shot?.ownerTeam || null;
+      const colour = colourTeam(shot?.ownerTeam || null);
       sprite.setVisible(true);
       const serverX = Number(shot?.x) || 0;
       const serverY = Number(shot?.y) || 0;
@@ -103,6 +104,14 @@ export function createTurretShots({
           lastServerY: serverY,
           bornAt: now,
           rotation: targetAngle,
+          comet: createProjectileComet(scene, sprite, {
+            nose: sprite.displayWidth / 2,
+            radius: sprite.displayHeight / 2 + 4,
+            tail: 25,
+            color: (TEAM_PALETTE[colour] || TEAM_PALETTE.neutral).muzzle,
+            trailThickness: 5,
+            brightness: 1.9,
+          }),
         });
       }
 
@@ -140,14 +149,15 @@ export function createTurretShots({
         if (hitBarrier) {
           turretProjectileLocallyDestroyed.add(shot.id);
           sprite.setVisible(false);
+          visual.comet.hide();
           continue;
         }
+        visual.comet.update(visual.rotation, Math.hypot(visual.vx, visual.vy), now);
       } else {
         sprite.setPosition(serverX, serverY);
         sprite.setRotation(targetAngle);
       }
       sprite.clearTint();
-      const colour = colourTeam(ownerTeam);
       if (colour === "team1" || colour === "team2") sprite.setTint(TEAM_PALETTE[colour].soft);
     }
     for (const [id, sprite] of turretProjectileSprites.entries()) {

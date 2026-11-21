@@ -28,7 +28,9 @@ describe("Draven confirmed impacts", () => {
   test('Inferno shield follows local and remote Draven and clears on completion or interruption', () => {
     const { EventEmitter } = require('node:events');
     const tuning = require('../src/shared/characters/characterTuning');
+    const audio = [];
     const api = load('src/client/game/characters/draven/special.js', {
+      './infernoAudio': { startInfernoAudio: () => { const run = { stops: [] }; audio.push(run); return released => run.stops.push(released); } },
       '../../../../shared/characters/characterTuning.js': tuning,
       '../../../../shared/projectilePresentation': require('../src/shared/projectilePresentation'),
       '../shared/runtimeId': { createRuntimeId: () => 'inferno' },
@@ -87,7 +89,72 @@ describe("Draven confirmed impacts", () => {
       }
       assert.equal(shield.active, false);
       assert.equal(player._dravenInfernoShield, undefined);
+      // The sound stops with the super; only a completed channel plays its release.
+      assert.deepEqual(audio.at(-1).stops, [ending === 'complete']);
       assert.equal(scene.events.listenerCount('shutdown'), 0);
+    }
+  });
+
+  test('Inferno impacts show at most one smaller explosion per target per pulse', () => {
+    const tuning = require('../src/shared/characters/characterTuning');
+    const hits = [];
+    const api = load('src/client/game/characters/draven/attack.js', {
+      './infernoAudio': { playInfernoHit: (_scene, x) => hits.push(x) },
+      '../../../../shared/characters/characterTuning.js': tuning,
+      '../../../../shared/projectilePresentation': require('../src/shared/projectilePresentation'),
+      '../../scene/renderLayers': { RENDER_LAYERS: { ATTACKS: 40 } },
+    });
+    const sprites = [];
+    const scene = {
+      textures: { exists: () => true }, anims: { exists: () => false }, tweens: { add() {} },
+      add: { sprite(x, y) {
+        const s = { x, y, setDepth: () => s, setScale(v) { s.scale = v; return s; }, setAlpha: () => s, destroy() {} };
+        sprites.push(s); return s;
+      } },
+    };
+    const pulse = tuning.getResolvedCharacterSpecialConfig('draven', 'inferno').explosionPulseMs;
+    api.spawnInfernoExplosion(scene, 10, 20, null, 'bob', 1000);
+    api.spawnInfernoExplosion(scene, 10, 20, null, 'bob', 1000 + pulse - 1);
+    api.spawnInfernoExplosion(scene, 90, 20, null, 'amy', 1000 + pulse - 1);
+    api.spawnInfernoExplosion(scene, 10, 20, null, 'bob', 1000 + pulse);
+    assert.deepEqual(sprites.map(s => s.x), [10, 90, 10]);
+    assert.deepEqual(hits, [10, 90, 10], 'each shown explosion sizzles once');
+    api.spawnExplosion(scene, 5, 5);
+    assert.ok(sprites[0].scale < sprites[3].scale, 'inferno impacts are smaller than splash impacts');
+  });
+
+  test('Inferno sound layers stop touching a sound once Phaser destroys it', () => {
+    const { EventEmitter } = require('node:events');
+    for (const destroyedBy of ['manager', 'complete']) {
+      const api = load('src/client/game/characters/draven/infernoAudio.js', {
+        '../../audio/playerAudio': { combatSoundVolume: () => 0.2, playerSoundVolume: (_s, _p, v) => v, playPlayerSound() {} },
+      });
+      // Like Phaser's BaseSound: destroy() nulls the config the volume setter writes to.
+      const sounds = [];
+      const makeSound = () => {
+        const s = Object.assign(new EventEmitter(), { manager: {}, currentConfig: {}, duration: 4,
+          play: () => true, setRate() {},
+          destroy() { this.emit('destroy'); this.manager = null; this.currentConfig = null; } });
+        Object.defineProperty(s, 'volume', { set(v) { this.currentConfig.volume = v; } });
+        sounds.push(s);
+        return s;
+      };
+      const tweens = [];
+      const scene = { events: new EventEmitter(), sound: { add: makeSound },
+        tweens: { add(cfg) { const t = { ...cfg, remove() { t.removed = true; } }; tweens.push(t); return t; } },
+        time: { addEvent: () => ({ remove() {} }) } };
+      const stop = api.startInfernoAudio(scene, { active: true, x: 0, y: 0 }, { riseMs: 100, durationMs: 5000 });
+      assert.ok(sounds.length > 0);
+      for (const s of sounds) {
+        if (destroyedBy === 'manager') s.destroy();
+        else s.emit('complete');
+      }
+      assert.doesNotThrow(() => {
+        scene.events.emit('update');
+        for (const t of tweens) t.onUpdate?.();
+        stop(true);
+        scene.events.emit('shutdown');
+      });
     }
   });
 });

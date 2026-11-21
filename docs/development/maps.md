@@ -8,7 +8,7 @@ World and camera profiles live in `src/shared/maps/arenas.json` (read through `s
 
 - `world`: the physics bounds.
 - `camera`: the follow camera's bounds (`x`, `y`, `width`, `height`) and its dead zone.
-  - `sceneryZoom` is the reference zoom for composing scenery. All modes follow the local fighter during play. Sunset Bowl uses lower gameplay zoom levels than the default in `arenas.js` so more of the pitch fits on screen.
+  - `sceneryZoom` is the reference zoom for composing scenery. All modes follow the local fighter during play. Rumble Stadium uses lower gameplay zoom levels than the default in `arenas.js` so more of the pitch fits on screen.
   - The live zoom eases from `maxZoom`, with the player at or below `climbY[1]`, to `minZoom` at or above `climbY[0]`. See `restingCameraFrame` in `cameraDynamics.js`.
   - Where the player rests in the view is the same in every mode and while spectating: `FOLLOW_SCREEN_OFFSET` in `cameraDynamics.js` sets it in screen pixels below the middle of the view (more at the top of the climb), so the zoom does not change it. Arenas do not set a follow offset.
   - Maps that share an arena keep their main floor at the same height, so the climb zoom, camera bounds and sudden-death poison treat each alike. The 1v1 duel maps (1–3) put the top of their main floor (`p0`) at y 580. Shift every platform, hitbox and free powerup point together when moving a layout.
@@ -35,7 +35,8 @@ The toolbar’s map, formation, opponents and character selectors reuse the Sett
 - Command/Control Z undoes; Command/Control Shift Z or Control Y redoes. History keeps 250 document states, including settings and scenery, while retaining the Phaser scene and camera.
 - D duplicates; Delete removes; Command/Control A selects everything. A platform supporting a player spawn cannot be deleted until its markers are moved to another platform.
 - **?** (or the ? button on the canvas toolbar) lists every shortcut. Clicking an object in the list pans to it when it is off screen; double-click always centres it.
-- Escape opens a real game playtest (Escape inside a text field only leaves the field). The gear beside **Playtest** sets opponents (Solo or With bots), character, hitbox debugging and infinite supers; the browser remembers them. Escape in the playtest returns to the editor. Controls/tutorial overlays stay hidden; the actual GameRoom, movement, combat, bots, objectives, effects, and powerups run in an isolated admin session. Playtests expire after an hour and do not award rewards or create matchmaking records.
+- Escape opens a playtest (Escape inside a text field only leaves the field). Use the dropdown next to **Playtest** to choose **Quick Playtest** or **Full Battle**. Quick playtests start immediately and let you choose **Solo** or **With bots**, hitbox debugging, and infinite supers. Full Battle runs the arena intro, countdown, and a timed match with bots and standard super charge. The results screen returns you to Map Studio, and Escape returns you at any point. The browser remembers your settings. Playtests use an isolated admin session and expire after an hour. They do not award rewards or create matchmaking records.
+- Press **Q** in a solo playtest to return to the selected spawn at full health. The reset cancels active effects, attacks, projectiles and supers.
 
 Powerup markers can be placed anywhere. Editing or dragging an older anchored powerup turns it into a free point; its coordinates are used directly by the server. Player markers always stay anchored.
 
@@ -61,7 +62,7 @@ Before removing legacy overrides from a rollout, back up the map directory and `
 
 Each save validates the document and its image/frame files, rejects stale revisions, writes the immutable document and artwork, then atomically updates the pointer. Published and former revisions use `history/{id}/`. The matching files under `pinned/{id}/` reference immutable artwork in `assets/revisions/`. Back up the full map store and keep it writable by the game server. Browser drafts recover the document and its undo and redo history even after switching maps or reloading. A stale draft keeps its local history and is subject to the usual save conflict. The importer also pins older team-size variants and checks each archived asset against its SHA-256 filename. Each publisher holds `locks/{id}.lock` while comparing the revision and replacing the pointer. If a publisher crashes, check the PID in the lock file on its host and clear that lock after confirming the process has stopped.
 
-Run `node scripts/art/render-map-full-previews.cjs [mapId ...]` to render from the effective map documents and publish new full-arena previews through the same repository. Set `BB_MAP_DIR` to select the target environment. The preview bytes are saved with their content hash, and the update observes the same stale-revision check as Map Studio.
+Run `node scripts/art/render-map-full-previews.cjs [mapId ...]` to render from the effective map documents and publish new full-arena previews through the same repository. The renderer captures the authored Super High atmosphere, including fog and lighting, and updates the compact map cards for Iron Junction, Sky Soil and Rumble Stadium. Set `BB_MAP_DIR` to select the target environment. The preview bytes are saved with their content hash, and the update observes the same stale-revision check as Map Studio.
 
 The November 17 local archive import recovered three Candy Land source images from Git commit `0596810a75`. Six older Iron Junction image names were missing from Git and the source asset directory. The restored `shape-climb-base-3`, `shape-climb-hill-3`, `shape-gantry-gate`, `shape-gantry-out`, `shape-lane-in` and `shape-lane-out` WebPs use archived artwork of matching dimensions that predates the corresponding save. Those old documents recorded filenames without checksums, so the original byte identity of those six images is uncertain. The imported copies now carry content hashes.
 
@@ -74,7 +75,7 @@ The format is data-only JSON, validated by `src/shared/maps/mapDocument.js`. Sta
 - `id`, `label`, `modeVariantId`, optional duel `arenaId` and `metadata` (presentation: previews, lobby background, music).
 - `layout.platforms`, `layout.hitboxes`, `assets`, `textureSizes`, `anchors`, `spawns`, `powerups` and `scenery`. Bank Bust maps also need `objectiveLayout.bankBust`.
 
-Sunset Bowl (map 6) is generated by `node scripts/maps/build-sunset-bowl.cjs`, which writes the map and its Bro Ball arena profile together.
+Rumble Stadium (map 6) is generated by `node scripts/maps/build-sunset-bowl.cjs`, which writes the map and its Bro Ball arena profile together.
 Its smooth sunset gradient is rebuilt with `node scripts/art/install-bro-ball-art.cjs --only=sky`. The shared clouds and valley sit behind a single grandstand layer.
 The valley, roof and goal walls are rebuilt with `node scripts/art/install-bro-ball-art.cjs --only=peaks,roof,wall`. The underside of the roof follows the ceiling hitbox. During play, the painted goal net flexes as the ball enters and ripples after a scoring hit or post impact. The original wall sprite supplies the resting net and the pixels used for the deformation.
 
@@ -93,9 +94,10 @@ JSON. To install a new generated layout into an environment with an existing pub
 buildable walls on a 4-world-pixel grid from one palette, so they share a pixel
 size and colours. Nothing is scaled at runtime.
 
-The roof uses two mirrored sprites along the existing ceiling hitbox. Its
-trusses, lamps and pipework are decorative. To rebake just the roof, pass
-`--ceiling` to the art script.
+The roof blocks at the arena's upper world bound. Its two sprites share a
+mirrored steel frame with different gold plates on each side. Trusses, lamps
+and pipework are decorative. To rebake just the roof, pass `--ceiling` to the
+art script.
 
 Solid ground is painted from the union of all solid rectangles rather than
 stamped per block. A pixel with air above becomes walking surface and a pixel
@@ -301,11 +303,20 @@ Map 2 is displayed as **Sky Soil** (formerly Mangrove Meadow). The stable
 `mangrove-meadow` key and asset keys remain compatible with existing matches.
 `public/assets/sky-soil/` holds the art. The backdrop uses Codex-generated BB
 islands pixelated onto a true grid (`scripts/art/sky-soil/compose-backdrop.cjs`).
-It has a smooth sky with blurred distant islands, hazed far islands, an animated
-cloud sea (`cloud-sea` layer part) and near framing islands with animated
-waterfall parts. Sky clouds come only from the clouds feature. The main island
-renders as one world-fixed `island-base` scenery image (`stack: "arena"`,
-decorative, no collision), drawn in code on the small platform's 2-world-px
-grid and palette (`main-platform.cjs`). The original `p0`–`p3` rows keep their
+It has a smooth sky with blurred distant islands, hazed far islands, and an
+animated cloud sea split into back banks (`cloud-sea`) and front banks
+(`cloud-front`). Hazed near framing islands sit between them, so their animated
+waterfalls pour into the front banks. Sky clouds come only from the clouds
+feature and sit above every bank. The main island renders as one world-fixed
+`island-base` scenery image (`stack: "arena"`, decorative, no collision), drawn
+in code on the small platform's 2-world-px grid and palette
+(`main-platform.cjs`). The sloping steps where the side ledges met the middle are cut out of the art,
+leaving a clean wall.
+
+Hitboxes are fitted to the art by `scripts/art/sky-soil/fit-hitboxes.cjs`. It
+puts every floor 2 world px below its grass surface, the side walls on the
+artwork's edges, and no body below the artwork. The island art is moved, not the
+floor, so the middle floor stays at the height shared by maps in the same
+arena. The original `p0`–`p3` rows keep their
 collision surfaces and IDs with `alpha: 0`. Art notes are in
 `public/assets/sky-soil/README.md`.

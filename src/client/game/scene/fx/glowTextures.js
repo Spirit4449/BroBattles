@@ -1,7 +1,9 @@
 export const DEATH_LOOT_GLOW = "death-loot-soft-glow";
+export const RESPAWN_GLOW = "bb-respawn-glow";
 export const VAULT_PUFF = "bb-vault-fx-puff";
 
 const styles = {
+  [RESPAWN_GLOW]: { size: 64, inner: 0, stops: [[0.2, 0.72], [0.6, 0.15]] },
   [DEATH_LOOT_GLOW]: { size: 64, inner: 0, stops: [[0.2, 0.65], [0.5, 0.18]] },
   [VAULT_PUFF]: { size: 48, inner: 2, stops: [[0.6, 0.55]] },
 };

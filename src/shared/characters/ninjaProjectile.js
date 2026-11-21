@@ -2,16 +2,27 @@ const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getReso
 const { sweep } = require('./sparrowProjectile');
 // Replays step at the server tick so client predictions match the server.
 const { FIXED_DT_MS: STEP_MS } = require('../gameConstants');
-const VERSION = 1;
+// 2: the swarm aims at any angle (its fan turns with the aim).
+const VERSION = 2;
 function config() { return getResolvedCharacterAttackConfig('ninja', 'returningShuriken'); }
 function swarmConfig() { return getResolvedCharacterSpecialConfig('ninja', 'swarm'); }
+// The swarm's fan spreads along `side`: straight down for a level throw either
+// way, turning with the aim so the fan stays square to it at any angle.
+function swarmSide(angle) {
+  const direction = Math.cos(angle) < 0 ? -1 : 1;
+  return { x: -Math.sin(angle) * direction, y: Math.cos(angle) * direction };
+}
 // Flight shape of shard `index` in the swarm fan (special.swarm in ninja.json).
 // The single source for the server model, bots, and the client renderer.
+// `forward` is along the aim and `spread` along swarmSide; spawnYBase is the
+// hand's height and stays vertical.
 function swarmShard(index, direction) {
   const swarm = swarmConfig();
   const spread = index - (swarm.count - 1) / 2, reach = Math.abs(spread);
   const yOffset = spread * swarm.yOffsetPerShard, fan = spread * swarm.fanStrengthPerShard;
   return {
+    forward: swarm.spawnForwardBase + reach * swarm.spawnForwardPerShard,
+    spread: yOffset,
     spawnOffsetX: direction * (swarm.spawnForwardBase + reach * swarm.spawnForwardPerShard),
     spawnOffsetY: swarm.spawnYBase + yOffset,
     forwardDistance: swarm.forwardDistanceBase + reach * swarm.forwardDistancePerShard,
@@ -26,22 +37,25 @@ function swarmShard(index, direction) {
 function launch(pose, angle, id, index = null) {
   const basic = config(), aim = getResolvedCharacterAimConfig('ninja'), swarm = swarmConfig();
   const special = index !== null, direction = Math.cos(angle) < 0 ? -1 : 1;
-  if (special) angle = direction < 0 ? Math.PI : 0;
   const shard = special ? swarmShard(index, direction) : null;
   const cfg = special ? { ...basic, forwardDistance: shard.forwardDistance, outwardDuration: shard.outwardDuration,
     returnSpeed: shard.returnSpeed, endYOffset: shard.endYOffset, ctrl1YOffset: shard.ctrl1YOffset, ctrl2YOffset: shard.ctrl2YOffset,
     maxLifetimeMs: swarm.maxLifetimeMs, scale: swarm.scale, rotationSpeed: shard.rotationSpeed } : basic;
-  const x = pose.x + (special ? shard.spawnOffsetX : Math.cos(angle) * aim.anchorForwardOffset);
-  const y = pose.y + (special ? shard.spawnOffsetY : aim.anchorOffsetY + Math.sin(angle) * aim.anchorForwardOffset);
-  return { id, special, direction, angle, cfg, x, y, startX:x, startY:y, elapsed:0,
+  const side = special ? swarmSide(angle) : { x: 0, y: 1 };
+  const x = pose.x + (special ? Math.cos(angle) * shard.forward + side.x * shard.spread : Math.cos(angle) * aim.anchorForwardOffset);
+  const y = pose.y + (special ? swarm.spawnYBase + Math.sin(angle) * shard.forward + side.y * shard.spread
+    : aim.anchorOffsetY + Math.sin(angle) * aim.anchorForwardOffset);
+  return { id, special, direction, angle, side, cfg, x, y, startX:x, startY:y, elapsed:0,
     phase:'outward', returnTarget:{x:pose.x,y:pose.y}, returnElapsed:0, currentReturnSpeed:cfg.returnSpeed * cfg.returnStartSpeedFactor, done:false };
 }
 function outward(p, elapsed) {
   const c=p.cfg, t=(1-Math.cos(Math.PI*Math.max(0,Math.min(1,elapsed/c.outwardDuration))))/2, u=1-t;
   const fx=Math.cos(p.angle),fy=Math.sin(p.angle),nx=-fy,ny=fx,d=c.forwardDistance;
+  // The fan's end offset follows the swarm's side; a basic throw's is vertical.
+  const ex=p.side?.x||0,ey=p.side?.y??1,e=c.endYOffset;
   const cubic=(a,b,c,d)=>u*u*u*a+3*u*u*t*b+3*u*t*t*c+t*t*t*d;
-  return { x:cubic(p.startX,p.startX+fx*d*.25+nx*c.ctrl1YOffset,p.startX+fx*d*.6-nx*Math.abs(c.ctrl2YOffset),p.startX+fx*d),
-    y:cubic(p.startY,p.startY+fy*d*.25+ny*c.ctrl1YOffset,p.startY+fy*d*.6-ny*Math.abs(c.ctrl2YOffset)+c.endYOffset*.45,p.startY+fy*d+c.endYOffset) };
+  return { x:cubic(p.startX,p.startX+fx*d*.25+nx*c.ctrl1YOffset,p.startX+fx*d*.6-nx*Math.abs(c.ctrl2YOffset)+ex*e*.45,p.startX+fx*d+ex*e),
+    y:cubic(p.startY,p.startY+fy*d*.25+ny*c.ctrl1YOffset,p.startY+fy*d*.6-ny*Math.abs(c.ctrl2YOffset)+ey*e*.45,p.startY+fy*d+ey*e) };
 }
 // Earliest blocker the flight point meets on a->b, as a fraction, or null.
 // A shot already touching a wall (just turned back off it) is leaving it.
@@ -88,4 +102,4 @@ function step(p, owner, terrain = [], blockers = []) {
   }
   return segments;
 }
-module.exports={VERSION,STEP_MS,config,swarmConfig,launch,outward,step};
+module.exports={VERSION,STEP_MS,config,swarmConfig,swarmSide,launch,outward,step};

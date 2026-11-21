@@ -496,14 +496,9 @@ const MOVES = [
   { key: 'dashdiagonal', prefix: 'dashDiagonal', ...DASH, poses: numbered('dashdiagonal', 4) },
   { key: 'dashup', prefix: 'dashUp', ...DASH, poses: numbered('dashup', 4) },
   { key: 'dying', prefix: 'dying', face: 'drawn', ms: 100, poses: ['die-0', 'die-1', 'die-2'] },
-  // The super: a barrage from alternating hands that sweeps from high to low,
-  // as the fifteen shuriken leave top to bottom over about half a second. The
-  // game loops this row at 30 fps for as long as the barrage lasts; eight poses
-  // shown twice each fill one barrage.
-  { key: 'special', prefix: 'special', loop: true, ms: 1000 / 30, poses: numbered('super', 8).flatMap((name) => [name, name]) },
 ];
 const HEAD_AT = new Map(); // clip key -> where its first frame's head sits, for `steady` and `endsOn`
-const ORDER = ['running', 'jumping', 'falling', 'wall', 'ducking', 'dashing', 'dashright', 'dashdiagonal', 'dashup', 'dying', 'special'];
+const ORDER = ['running', 'jumping', 'falling', 'wall', 'ducking', 'dashing', 'dashright', 'dashdiagonal', 'dashup', 'dying'];
 const built = new Map();
 for (const move of MOVES) {
   if (!move.poses.every((spec) => has(spec.split('@')[0]))) continue;
@@ -573,6 +568,91 @@ for (const move of MOVES) {
     frames: drawn.map((_, j) => ({ ms: Math.round((move.msEach?.[j] ?? move.ms) / wind) })), drawn });
 }
 for (const key of ORDER) if (built.has(key)) CLIPS.push(built.get(key));
+
+// ---- the super ---------------------------------------------------------------
+// Shuriken Swarm, one clip per throw direction (the game picks the one nearest
+// the aim, like the basic throw): he draws a fan of shuriken between his
+// fingers, flings four fans in a flurry along the aim (each release bursts a fan
+// from the hand, each follow-through leaves a swoosh), then opens his arms. About
+// 770 ms: the fifteen releases (36 ms apart) and the facing hold after them.
+// The level clip is `special`; the others are `special-<direction>`.
+// Two drawings of one four-point shuriken, a quarter-turn apart, so a fan of
+// them alternating reads as spinning steel. Light tips, dark centre hole.
+const STARS = [
+  ['...l...', '...b...', '..bBb..', 'lbBkBbl', '..bBb..', '...b...', '...l...'],
+  ['l.....l', '.b...b.', '..bBb..', '..BkB..', '..bBb..', '.b...b.', 'l.....l'],
+];
+// A shuriken centred on (cx, cy), outlined where it meets empty space.
+function stampStar(grid, cx, cy, turn = 0) {
+  const STAR = STARS[turn % 2];
+  const x0 = Math.round(cx) - 3; const y0 = Math.round(cy) - 3;
+  const at = (x, y) => grid[y]?.[x];
+  STAR.forEach((row, dy) => [...row].forEach((ch, dx) => {
+    if (ch === '.') return;
+    for (const [ox, oy] of N8) if (at(x0 + dx + ox, y0 + dy + oy) === '.') grid[y0 + dy + oy][x0 + dx + ox] = 'k';
+  }));
+  STAR.forEach((row, dy) => [...row].forEach((ch, dx) => { if (ch !== '.' && at(x0 + dx, y0 + dy) !== undefined) grid[y0 + dy][x0 + dx] = ch; }));
+}
+const aimVector = (elevation) => { const a = (-elevation * Math.PI) / 180; return [Math.cos(a), Math.sin(a)]; };
+// A fan of three shuriken opening out of the hand along the aim.
+function fanAt(grid, [hx, hy], elevation, { out = 13, spread = 34 } = {}) {
+  [-1, 0, 1].forEach((k, i) => {
+    const [ux, uy] = aimVector(elevation + k * spread);
+    stampStar(grid, hx + ux * out, hy + uy * out, i);
+  });
+}
+// The follow-through: an arc of light from over the shoulder down to the hand,
+// only where nothing is drawn, so it reads as the throw's path behind the arm.
+function swoosh(grid, hand, elevation) {
+  const r = Math.hypot(hand[0] - CHEST[0], hand[1] - CHEST[1]);
+  const SWEEP = 110;
+  for (let deg = elevation + SWEEP; deg >= elevation; deg -= 1) {
+    const a = (-deg * Math.PI) / 180; const near = (elevation + SWEEP - deg) / SWEEP;
+    // Thin where it starts, three pixels wide as it reaches the hand.
+    const width = near < 0.3 ? 1 : near < 0.65 ? 2 : 3;
+    for (let w = 0; w < width; w++) {
+      const x = Math.round(CHEST[0] + Math.cos(a) * (r + 3 - w)); const y = Math.round(CHEST[1] + Math.sin(a) * (r + 3 - w));
+      if (grid[y]?.[x] === '.') grid[y][x] = w === 0 ? 'm' : 'l';
+    }
+  }
+}
+// Where the hands meet in the draw pose: the frontmost wrap pixel below the chin.
+function drawHands(grid) {
+  let best = null;
+  for (let y = NECK_ROW + 4; y <= HIP_ROW; y++) for (let x = 0; x < SIZE; x++) {
+    if ((grid[y][x] === 'm' || grid[y][x] === 'M') && (!best || x > best[0])) best = [x, y];
+  }
+  return best || [CHEST[0] + 6, CHEST[1] + 4];
+}
+const SUPER_FLINGS = 4;
+const SUPER_MS = { draw: 60, gather: 40, fling: 40, finish: 90, settle: 90 };
+if (has('super-0') && has('super-7')) {
+  for (const [name, elevation] of Object.entries(DIRECTIONS)) {
+    if (!has(`${name}-release`)) continue;
+    const copyOf = (poseName) => copy(pose(poseName));
+    const drawPose = copyOf('super-0'); fanAt(drawPose, drawHands(drawPose), -15, { out: 9, spread: 44 });
+    const shots = []; const beats = []; const ms = [];
+    const push = (grid, beat, time) => { shots.push(grid); beats.push(beat); ms.push(time); };
+    push(drawPose, 'draw', SUPER_MS.draw);
+    push(copyOf(`${name}-gather`), 'gather', SUPER_MS.gather);
+    for (let i = 0; i < SUPER_FLINGS; i++) {
+      // Every other fling he sinks a pixel into it, so the flurry bobs.
+      const bob = (grid) => (i % 2 ? sinkBody(grid, 1) : grid);
+      const release = copyOf(`${name}-release`); const hand = knuckles(release, elevation);
+      fanAt(release, hand, elevation);
+      const follow = copyOf(`${name}-follow`); swoosh(follow, hand, elevation);
+      push(bob(release), `fling ${i + 1}`, SUPER_MS.fling);
+      push(bob(follow), `follow ${i + 1}`, SUPER_MS.fling);
+      push(bob(copyOf(`${name}-gather`)), `gather ${i + 2}`, SUPER_MS.fling);
+    }
+    push(copyOf('super-7'), 'finish', SUPER_MS.finish);
+    const drawn = shots.map((grid, j) => frame(flutter(grid, (j * 2) / shots.length)));
+    drawn.push(idleDrawn(SETTLED)); beats.push('settle'); ms.push(SUPER_MS.settle);
+    const level = name === 'level';
+    CLIPS.push({ key: level ? 'special' : `special-${name}`, prefix: level ? 'special' : `special${name[0].toUpperCase()}${name.slice(1)}`,
+      loop: false, superDirection: name, beats, frames: ms.map((t) => ({ ms: t })), drawn });
+  }
+}
 
 function toPixels(canvas) {
   const out = Buffer.alloc(canvas.px.length * 4);

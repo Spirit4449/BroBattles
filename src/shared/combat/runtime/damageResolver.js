@@ -1,7 +1,6 @@
 const { SOCKET_EVENTS } = require("../../net/socketEvents.js");
 const { isPlaced } = require('../targetable.js');
 const sparrowModel = require('../../characters/sparrowProjectile');
-const { EFFECT_RULES } = require('../../effectRules');
 const ninjaCombat = require('./ninjaCombat.js');
 const sparrowCombat = require('./sparrowCombat.js');
 const { isTrustedProjectileContact, isRuntimeContact } = require('./attackRuntimes/projectileLifecycle.js');
@@ -148,15 +147,18 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
     // Determine damage from server-side stats
     const attackType = String(payload.attackType || "basic").toLowerCase();
     const isNinjaSwarm = attackType === "ninja-special-swarm";
+    const isSparrowBolt = attackType === "sparrow-light-bolt";
     const isSparrowArrow = attackType === "sparrow-arrow";
-    const isSparrowBurningArrow = attackType === "sparrow-burning-arrow";
-    const base = (trustedSparrow || isSparrowArrow || isSparrowBurningArrow)
-      ? sparrowModel.attackConfig(isSparrowBurningArrow).damagePerArrow
-      : isNinjaSwarm
-        ? NINJA_SWARM_HIT_DAMAGE
-        : attackType === "special"
-          ? Number(attacker.specialDamage || 0)
-          : Number(attacker.baseDamage || 0);
+    // Sparrow's light bolt is her super: it deals her level-scaled special damage.
+    const base = isSparrowBolt && trustedSparrow
+      ? Number(attacker.specialDamage || 0)
+      : (trustedSparrow || isSparrowArrow)
+        ? sparrowModel.attackConfig().damagePerArrow
+        : isNinjaSwarm
+          ? NINJA_SWARM_HIT_DAMAGE
+          : attackType === "special"
+            ? Number(attacker.specialDamage || 0)
+            : Number(attacker.baseDamage || 0);
     let dmg = Number.isFinite(base) && base > 0 ? base : 0;
     // Outgoing damage modifiers (rage powerup, thorgRage ability, damageBoost, etc.)
     const now = combatNow(room);
@@ -202,7 +204,7 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
       if (
         attackType === "special" ||
         isNinjaSwarm ||
-        isSparrowBurningArrow
+        isSparrowBolt
       ) {
         // Super attacks can hit vaults from farther than basic melee/projectile ranges.
         maxDist = Math.max(maxDist, 2400);
@@ -334,23 +336,6 @@ function handleHit(room, socketId, payload, { server = false, sparrowProjectile 
     attacker.lastAttackAt = now;
     target._lastAttackerParticipantId = participantId(attacker);
     attacker.lastCombatAt = now;
-    if (!isSelf && isSparrowBurningArrow && target.health > 0) {
-      try {
-        effectManager.apply(
-          target,
-          "sparrowBurn",
-          now,
-          {
-            durationMs: EFFECT_RULES.sparrowBurn.durationMs,
-            totalDamage: EFFECT_RULES.sparrowBurn.totalDamage,
-            sourceSocketId: attacker?.socketId,
-            sourceName: attacker?.name,
-            sourceTeam: attacker?.team,
-          },
-          room,
-        );
-      } catch (_) {}
-    }
     if (appliedDamage > 0) {
       room.recordCombatStat(attacker, { damage: appliedDamage });
 

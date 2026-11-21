@@ -6,6 +6,11 @@ const { updateBodyGeometry } = require('../src/server/core/gameRoom/inputManager
 const { ballRules: rules, broBallField, BRO_BALL_MODE, BRO_BALL_VARIANT } = require('../src/shared/broBall');
 const { geometryFromMap, validateDocument, clone } = require('../src/shared/maps/mapDocument');
 const { FIXED_DT_MS } = require('../src/shared/gameConstants');
+const { characterDefinitions } = require('../src/shared/characters');
+const { getResolvedCharacterSpecialConfig } = require('../src/shared/characters/characterTuning');
+const { getResolvedAttackDescriptor } = require('../src/shared/combat/runtime/attackDescriptorResolver');
+const { handleCharacterAction } = require('../src/shared/combat/runtime/characterActionRegistry');
+const { requestSpecial } = require('../src/shared/combat/runtime/actions');
 const { createSelectionCatalog } = require('../src/shared/gameSelection');
 const { selectionToLegacyMode } = require('../src/server/services/match/gameSelectionCatalog');
 const { formatModeLabel } = require('../src/server/services/match/battleLog');
@@ -83,20 +88,57 @@ test('body contact deflects the ball without commanding a kick', () => {
   assert.deepEqual(hit.contact, { x: hit.x - rules.radius, y: hit.y, nx: 1, ny: 0 });
 });
 
-test('an attack kick sends the ball away from the kicker and steeply upward', () => {
+test('passive touches deflect a ball just outside its physical radius', () => {
   const body = player();
-  const ball = { x: body.right + rules.radius + 1, y: kickoff.y, vx: 0, vy: 0 };
+  const edge = body.right + rules.radius;
+  const vx = -rules.bodyContactPadding / (4 * dt);
+  const near = { x: edge + rules.bodyContactPadding * 1.125, y: kickoff.y, vx, vy: 0 };
+  const far = { ...near, x: edge + rules.bodyContactPadding * 2 };
   const effects = [];
-  let kicks = 0;
-  body.kick = { consume: () => kicks++ };
-  step(ball, [body], effects);
-  assert.equal(kicks, 1);
-  assert.ok(ball.vx > 0);
-  assert.ok(-ball.vy > ball.vx * 0.8, 'a level kick still climbs steeply');
-  assert.deepEqual(effects.map(event => event.kind), ['kick']);
-  const [hit] = effects;
-  assert.deepEqual(hit.contact, { x: hit.x - rules.radius, y: hit.y, nx: 1, ny: 0 });
-  assert.ok(hit.angle < 0, 'the shot lifts even though the contact faces sideways');
+
+  step(far, [body], effects);
+  step(near, [body], effects);
+
+  assert.ok(far.vx < 0);
+  assert.ok(near.vx > 0 && near.x > edge);
+  assert.deepEqual(effects.map(event => event.kind), ['body']);
+});
+
+test('overhead touches have more reach than side touches', () => {
+  const body = player();
+  const sideReach = rules.radius + rules.bodyContactPadding;
+  const topReach = sideReach + rules.bodyContactTopPadding;
+  const gap = (sideReach + topReach) / 2;
+  const overhead = { x: (body.left + body.right) / 2, y: body.top - gap, vx: 0, vy: 80 };
+  const tooHigh = { ...overhead, y: body.top - topReach - rules.bodyContactTopPadding / 2 };
+  const alongside = { x: body.right + gap, y: kickoff.y, vx: -80, vy: 0 };
+  const effects = [];
+
+  step(tooHigh, [body], effects);
+  step(alongside, [body], effects);
+  step(overhead, [body], effects);
+
+  assert.ok(tooHigh.vy > 0);
+  assert.ok(alongside.vx < 0);
+  assert.ok(overhead.vy < 0);
+  assert.deepEqual(effects.map(event => event.kind), ['body']);
+});
+
+test('side-on attacks and supers send the ball forward with a shallow lift', () => {
+  for (const special of [false, true]) {
+    const body = player();
+    const ball = { x: body.right + rules.radius + 1, y: kickoff.y, vx: 0, vy: 0 };
+    const effects = [];
+    let kicks = 0;
+    body.kick = { special, consume: () => kicks++ };
+    step(ball, [body], effects);
+    assert.equal(kicks, 1);
+    assert.ok(-ball.vy > 0 && -ball.vy < ball.vx * 0.75);
+    assert.deepEqual(effects.map(event => event.kind), [special ? 'super' : 'kick']);
+    const [hit] = effects;
+    assert.deepEqual(hit.contact, { x: hit.x - rules.radius, y: hit.y, nx: 1, ny: 0 });
+    assert.ok(hit.angle < 0, 'the shot lifts even though the contact faces sideways');
+  }
 });
 
 test('a sweeping dash kicks before an armed attack and spends one activation', () => {
@@ -171,13 +213,69 @@ function fixture() {
   return { mode, room, results, state: mode.getModeState() };
 }
 
-test('own goal awards the other side once and kickoff invalidates previous attacks', () => {
+test('goals credit the last player to touch the ball on the scoring team', () => {
+  const { mode, state } = fixture();
+  const body = { ...player(), id: 'p1', name: 'First', team: 'team1' };
+  const ball = state.ball;
+  Object.assign(ball, { x: body.right + rules.radius + 2, y: kickoff.y, vx: -300, vy: 0 });
+  step(ball, [body]);
+  mode.scoreGoal('team2', 1000);
+  assert.deepEqual(mode.buildModeState().playerGoals, { First: 1 });
+  mode.scoreGoal('team2', 2000);
+  assert.deepEqual(mode.buildModeState().playerGoals, { First: 2 });
+  ball.lastTouch = { id: 'p2', name: 'Second', team: 'team2' };
+  mode.scoreGoal('team2', 3000);
+  assert.deepEqual(mode.buildModeState().playerGoals, { First: 2 });
+});
+
+test('Bro Ball respawns without protection even if an opening shield is still active', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 10000 });
+  const { mode, room } = fixture();
+  const spawn = { x: kickoff.x - 100, y: floor - 50 };
+  const fighter = athlete(room, 1, kickoff.x);
+  fighter.isAlive = false;
+  fighter.maxHealth = 100;
+  fighter.activeEffects = { respawnShield: { until: Date.now() + 10000 } };
+  const arrivals = [];
+  room.spawnStateFor = () => spawn;
+  room.broadcast = (event, payload) => { if (event === 'player:respawn') arrivals.push(payload); };
+  room.broadcastHealthUpdate = () => {};
+  const { scheduleRespawn } = require('../src/server/core/gameRoom/respawn');
+  scheduleRespawn(room, fighter, mode.getRespawnPlan(fighter));
+  t.mock.timers.tick(rules.respawnMs);
+  assert.equal(fighter.isAlive, true);
+  assert.equal(fighter.health, fighter.maxHealth);
+  assert.equal(fighter.activeEffects.respawnShield, undefined);
+  assert.equal(arrivals.length, 1);
+  assert.equal(arrivals[0].shieldMs, 0);
+  assert.deepEqual({ x: arrivals[0].x, y: arrivals[0].y }, spawn);
+});
+
+test('own goal pauses combat and the kickoff teleport clears the previous rally', () => {
   const { mode, room, state } = fixture();
+  const draven = athlete(room, 1, kickoff.x);
+  draven.effects = { dravenInfernoUntil: Infinity };
+  draven.activeEffects = { freeze: { until: Infinity } };
+  draven._gloopPullState = { until: Infinity };
+  room.activeAttacks = [{ attackerParticipantId: draven.participantId }];
+  room._scheduledActions.push({ callback() {}, at: 10000 });
+  const spawn = { x: kickoff.x - 100, y: kickoff.y };
+  room.spawnStateFor = () => spawn;
+  const arrivals = [];
+  room.broadcast = (event, payload) => { if (event === 'player:respawn') arrivals.push(payload); };
+  room.broadcastHealthUpdate = () => {};
   const now = 10000;
   Object.assign(state.ball, { x: goals.team1.x - rules.radius + 2,
     y: goals.team1.bottom - rules.radius - 10, vx: -rules.dashSpeed, vy: 0 });
   mode.tick(now);
   assert.deepEqual(state.score, { team1: 0, team2: 1 });
+  assert.equal(mode.isCombatPaused(), true);
+  assert.equal(draven.effects.dravenInfernoUntil, Infinity);
+  assert.equal(draven.activeEffects.freeze.until, Infinity);
+  assert.ok(draven._gloopPullState);
+  assert.equal(room.activeAttacks.length, 1);
+  assert.equal(room._scheduledActions.length, 1);
+  assert.equal(arrivals.length, 0);
   assert.equal(mode.acceptsCombatInput({ broBallRally: 0 }), false);
   assert.equal(state.impacts.filter(event => event.kind === 'goal').length, 1);
   const remaining = state.remainingMs;
@@ -195,6 +293,15 @@ test('own goal awards the other side once and kickoff invalidates previous attac
   assert.equal(state.score.team2, 1);
   room.tickId++;
   mode.tick(now + rules.goalPauseMs);
+  assert.equal(mode.isCombatPaused(), false);
+  assert.deepEqual([draven.x, draven.y], [spawn.x, spawn.y]);
+  assert.deepEqual(draven.effects, {});
+  assert.deepEqual(draven.activeEffects, {});
+  assert.equal(draven._gloopPullState, undefined);
+  assert.equal(room.activeAttacks.length, 0);
+  assert.equal(room._scheduledActions.length, 0);
+  assert.equal(arrivals.length, 1);
+  assert.equal(arrivals[0].kickoff, true);
   assert.equal(mode.acceptsCombatInput({ broBallRally: 0 }), false);
   assert.equal(mode.acceptsCombatInput({ broBallRally: 1 }), true);
   // The new ball drops straight away from the kickoff point with a little drift.
@@ -204,6 +311,28 @@ test('own goal awards the other side once and kickoff invalidates previous attac
   room.tickId++;
   mode.tick(now + rules.goalPauseMs + FIXED_DT_MS);
   assert.ok(state.ball.vy > 0 && state.ball.y > kickoff.y);
+});
+
+test('a scheduled death respawn waits for the kickoff teleport during a goal pause', t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 10000 });
+  const { mode, room } = fixture();
+  room.gameMode = mode;
+  const fighter = athlete(room, 1, kickoff.x);
+  fighter.isAlive = false;
+  const arrivals = [];
+  room.spawnStateFor = () => ({ x: kickoff.x - 100, y: kickoff.y });
+  room.broadcast = (event, payload) => { if (event === 'player:respawn') arrivals.push(payload); };
+  room.broadcastHealthUpdate = () => {};
+  const { scheduleRespawn } = require('../src/server/core/gameRoom/respawn');
+  scheduleRespawn(room, fighter, { ...mode.getRespawnPlan(fighter), delayMs: FIXED_DT_MS });
+  mode.scoreGoal('team1', Date.now());
+  t.mock.timers.tick(Math.ceil(FIXED_DT_MS));
+  assert.equal(fighter.isAlive, false);
+  assert.equal(arrivals.length, 0);
+  mode.tick(10000 + rules.goalPauseMs);
+  assert.equal(fighter.isAlive, true);
+  assert.equal(arrivals.length, 1);
+  assert.equal(arrivals[0].kickoff, true);
 });
 
 test('a slow goal rolls to a stop and disappears short of the back net', () => {
@@ -290,6 +419,72 @@ test('a grounded side touch lifts the ball and an airborne deflection keeps its 
   assert.ok(airborne.vy >= 0);
 });
 
+test('landing on a grounded ball pops it toward the contact side or the player’s facing', () => {
+  for (const [offset, flip, direction] of [[0, true, -1], [0, false, 1], [12, true, 1], [-12, false, -1]]) {
+    const { mode, room, state } = fixture();
+    const ball = { x: kickoff.x, y: floor - rules.radius, vx: 0, vy: 0 };
+    Object.assign(state.ball, ball);
+    const p = athlete(room, 1, ball.x - offset);
+    p.flip = flip;
+    p.y = ball.y - rules.radius - rules.bodyContactPadding - 42 - 2;
+    mode.tick(1000);
+
+    p.y += 350 * dt;
+    mode.tick(1000 + FIXED_DT_MS);
+
+    assert.ok(direction * state.ball.vx > 0, 'the ball goes in the expected direction');
+    assert.ok(state.ball.y < ball.y && state.ball.vy < 0, 'the ball lifts off the pitch');
+    assert.deepEqual(state.impacts.map(impact => impact.kind), ['body']);
+    assert.equal(mode.buildMovementState().impacts[0].contact.foot, true);
+    for (let i = 2; i < 8; i++) {
+      p.y = Math.min(floor - 42, p.y + 350 * dt);
+      mode.tick(1000 + i * FIXED_DT_MS);
+    }
+    assert.equal(state.impactSequence, 1, 'one landing produces one impact');
+  }
+});
+
+test('a foot impact compresses the visible top of the ball and keeps the bottom in place', () => {
+  const { loadClientModule } = require('./helpers/clientModule');
+  const { createBallSprite, footPressAt } = loadClientModule('src/client/game/modes/broBall/ballArt.js');
+  let image;
+  const context = {
+    createImageData: (width, height) => ({ width, height, data: new Uint8ClampedArray(width * height * 4) }),
+    putImageData: frame => { image = frame; },
+  };
+  const texture = { setFilter() {}, refresh() {}, getContext: () => context };
+  const scene = {
+    textures: { exists: () => false, createCanvas: () => texture },
+    add: { image: () => ({ setDisplaySize() { return this; } }) },
+  };
+  const sphere = createBallSprite(scene, { Textures: { FilterMode: { NEAREST: 0 } } }, rules.radius * 2);
+  function visibleRows() {
+    const rows = [];
+    for (let i = 3; i < image.data.length; i += 4) {
+      if (image.data[i]) rows.push(Math.floor((i - 3) / 4 / image.width));
+    }
+    return [rows[0], rows.at(-1)];
+  }
+  const round = visibleRows();
+  const impact = { strength: 350, contact: { nx: 0, ny: 1, foot: true } };
+  const contactPose = footPressAt(impact, 0, rules.maxSpeed);
+  const heldPose = footPressAt(impact, 45, rules.maxSpeed);
+  assert.equal(contactPose.release, 0);
+  assert.equal(heldPose.release, 0, 'the ball stays at contact during the squish');
+  assert.equal(heldPose.stretch, contactPose.stretch);
+  sphere.paint({ dt: 0, press: contactPose });
+  const pressed = visibleRows();
+  assert.ok(pressed[0] - round[0] >= (round[1] - round[0]) * 0.2, 'the top visibly squishes inward');
+  assert.equal(pressed[1], round[1], 'the opposite edge stays planted');
+
+  const releasePose = footPressAt(impact, 135, rules.maxSpeed);
+  assert.ok(releasePose.release > 0 && releasePose.release < 1, 'the ball starts moving as it springs back out');
+  sphere.paint({ dt: 0, press: releasePose });
+  assert.ok(visibleRows()[0] < pressed[0], 'the ball springs back out');
+  sphere.paint({ dt: 0, press: footPressAt(impact, 280, rules.maxSpeed) });
+  assert.deepEqual(visibleRows(), round);
+});
+
 test('a downward dash smashes a grounded ball upfield instead of flattening it into the floor', () => {
   const ball = { x: kickoff.x, y: floor - rules.radius, vx: 0, vy: 0 };
   const body = {
@@ -322,6 +517,89 @@ test('an accepted super kicks harder than an attack, and bots kick on a cooldown
   assert.equal(mode.botKick(p), true);
   assert.equal(mode.botKick(p), false, 'inside the cooldown');
 });
+
+test('Bro Ball kicks on late contact during a swing or around the firing moment', () => {
+  const { actionFlow } = getResolvedAttackDescriptor(characterDefinitions.ozzy.basicAction);
+  const { runtime } = getResolvedAttackDescriptor(characterDefinitions.thorg.basicAction);
+  const inferno = getResolvedCharacterSpecialConfig('draven', 'inferno');
+
+  for (const [character, elapsed, special] of [
+    ['ozzy', actionFlow.startupMs + rules.kickWindowMs / 2, false],
+    ['thorg', runtime.windupMs + runtime.activeWindowMs - FIXED_DT_MS, false],
+    ['draven', inferno.firstDamageDelayMs + rules.kickWindowMs / 2, true],
+  ]) {
+    const { state, advance, approach } = kickTimingFixture(character, special);
+    advance(elapsed - FIXED_DT_MS);
+    assert.equal(state.impacts.length, 0, character);
+    approach();
+    assert.deepEqual(state.impacts.map(impact => impact.kind), [special ? 'super' : 'kick'], character);
+
+    // Put the ball back beside the same player while the move could still kick.
+    Object.assign(state.ball, { x: kickoff.x, y: floor - rules.radius, vx: 0, vy: 0 });
+    advance(FIXED_DT_MS);
+    assert.equal(state.impactSequence, 1, character);
+  }
+});
+
+test('Inferno stops kicking the ball after its opening burst', () => {
+  const inferno = getResolvedCharacterSpecialConfig('draven', 'inferno');
+  const { state, advance, approach } = kickTimingFixture('draven', true);
+  advance(inferno.firstDamageDelayMs + rules.kickWindowMs + 2 * FIXED_DT_MS);
+  approach();
+  assert.equal(state.impacts.length, 0);
+});
+
+test('an expired or interrupted cast cannot kick the ball', () => {
+  const { actionFlow } = getResolvedAttackDescriptor(characterDefinitions.ozzy.basicAction);
+  const expired = kickTimingFixture('ozzy');
+  expired.advance(actionFlow.startupMs + rules.kickWindowMs + 2 * FIXED_DT_MS);
+  expired.approach();
+  assert.equal(expired.state.impacts.length, 0);
+
+  const interrupted = kickTimingFixture('ozzy');
+  interrupted.player._attackInterruptSeq = 1;
+  interrupted.advance(actionFlow.startupMs);
+  interrupted.approach();
+  assert.equal(interrupted.state.impacts.length, 0);
+});
+
+function kickTimingFixture(character, special = false) {
+  const { mode, room, state } = fixture();
+  const actionAt = 10000;
+  const reach = 26 + rules.radius + rules.kickReach;
+  const player = athlete(room, 1, kickoff.x - reach - 8);
+  Object.assign(player, { char_class: character, superCharge: player.maxSuperCharge });
+  Object.assign(state.ball, { x: kickoff.x, y: floor - rules.radius, vx: 0, vy: 0 });
+  room.gameMode = mode;
+  room.broadcast = () => {};
+  room.combatClock = { now: () => actionAt + (room.tickId - 1) * FIXED_DT_MS };
+  room.scheduleAction = (callback, delay) => {
+    room._scheduledActions.push({ callback, at: actionAt + delay });
+  };
+
+  function advance(ms) {
+    const steps = Math.round(ms / FIXED_DT_MS);
+    for (let i = 0; i < steps; i++) {
+      room.tickId++;
+      const now = room.combatClock.now();
+      if (room._scheduledActions[0]?.at <= now) room._scheduledActions.shift().callback();
+      mode.tick(now);
+    }
+  }
+  if (special) {
+    assert.equal(requestSpecial(room, `user:${player.user_id}`, { broBallRally: state.reset }), true);
+  } else {
+    const action = { type: characterDefinitions[character].basicAction, id: 'kick-test' };
+    assert.ok(handleCharacterAction(room, player, action));
+  }
+  return {
+    player, state, advance,
+    approach() {
+      player.x += 12;
+      advance(FIXED_DT_MS);
+    },
+  };
+}
 
 const { acceptDash } = require('../src/shared/physics/dash');
 
@@ -444,6 +722,50 @@ test('Bro Ball players can dash again when the full recharge ends after the burs
 
 const { makeRoom } = require('./helpers/botRoom');
 
+test('a human Sparrow releases one damaging bolt in the current Bro Ball rally', t => {
+  const { room, players: [sparrow, ninja], events } = makeRoom({ map: 6, characters: ['sparrow', 'ninja'] });
+  t.after(() => room.cleanup());
+  const { createLocalPlayerFixture } = require('./helpers/localPlayerFixture');
+  const { SERAPH, boltOrigin } = require('../src/shared/characters/sparrowLightBolt');
+  const ability = require('../src/shared/combat/runtime/abilities/sparrowSeraphAbility');
+  const sparrowCombat = require('../src/shared/combat/runtime/sparrowCombat');
+  const angle = -Math.PI / 6;
+  const f = createLocalPlayerFixture({ character: 'sparrow', characterClass: {
+    followUpActive: () => true,
+    getFollowUpAngle: () => angle,
+    releaseFollowUp: (_scene, _player, aim) => ({ type: 'sparrow-light-bolt', id: 'manual-release', angle: aim }),
+  } });
+  t.after(() => f.destroy());
+  const state = room.gameMode.getModeState();
+  state.reset = 2;
+  room.simulationMono = 10000;
+  f.scene._modeRuntime = { rally: state.reset };
+  const packets = [];
+  f.socket.on('game:action', action => packets.push(action));
+  Object.assign(sparrow, { isBot: false, loaded: true, superCharge: sparrow.maxSuperCharge, x: kickoff.x - 300, y: kickoff.y });
+  const origin = boltOrigin(sparrow, angle);
+  Object.assign(ninja, { loaded: true, x: origin.x + Math.cos(angle) * 240, y: origin.y + Math.sin(angle) * 240 });
+  const health = ninja.health;
+  assert.equal(room.requestSpecial(sparrow.participantId, { broBallRally: state.reset }), true);
+
+  f.press('attack');
+  f.frame();
+  assert.equal(packets.length, 1);
+  const [release] = packets;
+  assert.equal(room.handlePlayerAction(sparrow.participantId, { ...release, broBallRally: state.reset - 1 }), false);
+  assert.equal(room.handlePlayerAction(sparrow.participantId, release), true, 'the client release is accepted in this rally');
+  assert.equal(room.handlePlayerAction(sparrow.participantId, release), false, 'the same release cannot fire twice');
+  for (let frame = 0; frame < 5; frame++) {
+    room.simulationMono += FIXED_DT_MS;
+    sparrowCombat.tick(room);
+  }
+  assert.equal(ninja.health, health - sparrow.specialDamage, 'damage lands on the manual shot');
+  ability.tick(room, sparrow, Date.now() + SERAPH.aimMs + SERAPH.releaseGraceMs);
+  const bolts = events.filter(({ payload }) => payload?.action?.type === 'sparrow-bolt');
+  assert.equal(bolts.length, 1, 'no fallback shot fires after a successful release');
+  assert.equal(bolts[0].payload.action.auto, false);
+});
+
 test('bots keep one ball chaser, give the other a support strategy, and play the ball', (t) => {
   let now = 1000000;
   t.mock.method(Date, 'now', () => now);
@@ -483,7 +805,19 @@ test('bots keep one ball chaser, give the other a support strategy, and play the
   assert.equal(supportingTeams.size, 2);
 });
 
-test('sustained pressure against the step or floor does not repeatedly strike a trapped ball', () => {
+test('a body crossing the whole ball between samples still knocks it away', () => {
+  const { mode, room, state } = fixture();
+  const startX = kickoff.x;
+  Object.assign(state.ball, { x: startX, y: floor - rules.radius, vx: 0, vy: 0 });
+  const p = athlete(room, 1, startX - 100);
+  mode.tick(1000);
+  p.x = startX + 100;
+  mode.tick(1000 + FIXED_DT_MS);
+  assert.ok(state.ball.x > startX && state.ball.vx > 0);
+  assert.equal(state.impacts.filter(event => event.kind === 'body').length, 1);
+});
+
+test('walking or landing on a ball pinned against the goal step dislodges it once', () => {
   for (const overhead of [false, true]) {
     const ball = { x: rightGoal.x - rules.radius, y: floor - rules.radius, vx: 0, vy: 0 };
     const x = ball.x, y = ball.y;
@@ -491,22 +825,91 @@ test('sustained pressure against the step or floor does not repeatedly strike a 
       ? { left: x - 20, right: x + 20, top: y - 75, bottom: y - 15, vx: 0, vy: 350 }
       : { left: x - 65, right: x - 15, top: y - 40, bottom: floor, vx: 260, vy: 0 };
     const effects = [];
-    for (let i = 0; i < 60; i++) {
+    step(ball, [{ id: 'p', ...body, vx: 0, vy: 0 }], effects);
+    assert.equal(effects.length, 0, 'resting overlap alone has no impact');
+    for (let i = 0; i < 5; i++) {
       step(ball, [{ id: 'p', ...body }], effects);
-      assert.ok(Math.hypot(ball.x - x, ball.y - y) < 0.1, 'passive pressure holds the corner');
-      // Walk or land far enough to overlap the ball's center.
-      if (i < 5) {
-        body.left += body.vx * dt;
-        body.right += body.vx * dt;
-        body.top += body.vy * dt;
-        body.bottom += body.vy * dt;
-      } else {
-        body.vx = body.vy = 0;
-      }
+      body.left += body.vx * dt;
+      body.right += body.vx * dt;
+      body.top += body.vy * dt;
+      body.bottom += body.vy * dt;
     }
-    assert.equal(effects.length, 0);
+    assert.ok(ball.y < y && ball.vy < 0, 'the ball pops out of the corner');
+    assert.ok(ball.x <= x + 0.1, 'the goal step still blocks the ball');
+    if (overhead) assert.ok(ball.vx < 0, 'the landing uses the open side when facing the step');
+    assert.equal(effects.filter(event => event.kind === 'body').length, 1, 'one impact per encounter');
     body.kick = { consume() {} };
     step(ball, [{ id: 'p', ...body }], effects);
     assert.ok(effects.some(event => event.kind === 'kick'), 'a pinned player can still kick');
   }
 });
+
+for (const id of ['platform-left', 'platform-right', 'wall-log-left', 'wall-log-right']) {
+  test(`a chaser starting on the pitch plays a stationary ball on ${id}`, t => {
+    let now = 1000000;
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(console, 'log', () => {});
+    const h = makeRoom({ map: 6, characters: ['ninja'] });
+    t.after(() => h.room.cleanup());
+    const mode = h.room.gameMode;
+    h.room._loopRunning = true;
+    mode.onStart();
+    const p = h.players[0];
+    p.loaded = true;
+    h.place(p, kickoff.x, h.room.geometry.anchors['pitch-floor']);
+    const deck = mode.field.colliders.find(s => s.id === id);
+    const state = mode.getModeState();
+    Object.assign(state.ball, { x: deck.x, y: deck.top - rules.radius, vx: 0, vy: 0 });
+    let touched = false, cleared = false;
+    for (let i = 0; i < 60 * 14 && !cleared; i++) {
+      now += FIXED_DT_MS;
+      h.tick(now);
+      mode.tick(now);
+      touched ||= state.impacts.some(hit => ['super', 'kick', 'body', 'smash'].includes(hit.kind));
+      cleared = touched && (state.ball.x < deck.left || state.ball.x > deck.right);
+    }
+    assert.ok(cleared,
+      `stopped at ${p.x}, ${p.y} on ${p.platformId}`);
+  });
+}
+
+for (const powered of [false, true]) {
+  test(`an advanced teammate receives a ${powered ? 'dash' : 'regular'} pass`, t => {
+    let now = 1000000;
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(console, 'log', () => {});
+    const h = makeRoom({ map: 6, characters: ['ninja', 'thorg', 'ozzy'] });
+    t.after(() => h.room.cleanup());
+    h.room._loopRunning = true;
+    const mode = h.room.gameMode;
+    mode.onStart();
+    const [kicker, defender, receiver] = h.players;
+    const pitch = h.room.geometry.anchors['pitch-floor'];
+    for (const p of h.players) p.loaded = true;
+    h.place(kicker, 370, pitch);
+    h.place(receiver, powered ? 1050 : 850, pitch);
+    h.place(defender, 1650, pitch);
+    const state = mode.getModeState();
+    Object.assign(state.ball, { x: powered ? 475 : 435, y: pitch.top - rules.radius, vx: 0, vy: 0 });
+    const effects = require('../src/shared/combat/runtime/effects/effectManager');
+    const brain = h.room.botControllers.get(kicker.participantId);
+    brain.think(null, effects.getModifiers(kicker, now), now);
+    if (powered) assert.ok(brain.intent.dash);
+    brain.nextThink = now + 140;
+    const plan = h.room._broBallPlans[kicker.team];
+    assert.equal(plan.receiver, receiver.participantId);
+    let released = false, received = false, jumpedEarly = false;
+    for (let i = 0; i < 120 && !received; i++) {
+      now += FIXED_DT_MS;
+      h.tick(now);
+      mode.tick(now);
+      released ||= state.impacts.some(hit => hit.kind === (powered ? 'super' : 'kick'));
+      jumpedEarly ||= receiver.vy < 0 && state.ball.x < receiver.x - 100;
+      received = released && state.impacts.some(hit =>
+        ['super', 'body', 'kick'].includes(hit.kind) && Math.abs(hit.x - receiver.x) < 100);
+    }
+    assert.ok(released, 'the pass connects');
+    if (powered) assert.ok(jumpedEarly, 'receiver takes off before the ball arrives');
+    assert.ok(received, 'the teammate meets the moving ball');
+  });
+}

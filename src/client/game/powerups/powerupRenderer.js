@@ -30,6 +30,14 @@ export function createPowerupRenderer(options) {
     auraGraphics.destroy();
     fxG.destroy();
   }
+  function resetEffects(username) {
+    auras.resetEffects(username);
+    pickups.resetClaimEffects(username);
+    if (!username) {
+      auraGraphics.clear();
+      fxG.clear();
+    }
+  }
   scene.events?.once("shutdown", destroy);
-  return { renderPowerupsAndEffects, destroy };
+  return { renderPowerupsAndEffects, resetEffects, destroy };
 }

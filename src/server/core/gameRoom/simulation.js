@@ -64,8 +64,11 @@ function startGameLoop(room) {
       );
     }
   };
+  const platformsPhase = ['platforms', mono => tickMovingPlatforms(room, mono)];
+  const modePhase = ['mode', runMode];
+  const pausedPhases = [platformsPhase, modePhase];
   const phases = [
-    ['platforms', mono => tickMovingPlatforms(room, mono)],
+    platformsPhase,
     ['tick', () => room.processTick()],
     ['attacks', () => attackRuntimeManager.tickActiveAttacks(room, Date.now())],
     ['combat', () => characterCombat.tick(room)],
@@ -76,7 +79,7 @@ function startGameLoop(room) {
       room._tickPowerups();
       room._tickDeathDrops();
     }],
-    ['mode', runMode],
+    modePhase,
   ];
   const step = (currentMono) => {
     room.simulationMono = currentMono;
@@ -84,11 +87,12 @@ function startGameLoop(room) {
     const timings = room.netTrace ? {} : null;
     let previous = timings ? performance.now() : 0;
     const started = previous;
-    for (let i = 0; i < phases.length; i++) {
-      phases[i][1](currentMono);
+    const activePhases = room.gameMode?.isCombatPaused?.() ? pausedPhases : phases;
+    for (const [phase, run] of activePhases) {
+      run(currentMono);
       if (timings) {
         const end = performance.now();
-        timings[phases[i][0]] = end - previous;
+        timings[phase] = end - previous;
         previous = end;
       }
     }

@@ -4,7 +4,7 @@ import { playerAnchor } from "../shared/rig";
 import { PLAYER_LAYERS } from "../shared/attachToPlayer";
 import { playSpriteAnimation } from "../shared/animationState";
 import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
-import { playPlayerSound } from "../../audio/playerAudio";
+import { combatSoundVolume, playPlayerSound, SUPER_SOUND_GAIN } from "../../audio/playerAudio";
 
 const { key: NAME } = characterDefinitions.thorg;
 
@@ -42,6 +42,11 @@ export function perform({ scene, player, isOwner = false }) {
   const shock = scene.add.circle(centre.x, centre.y, 26, 0xffffff, 0.18);
   shock.setDepth(behind);
   shock.setBlendMode(Phaser.BlendModes.ADD);
+  const particles = new Set([aura, shock]);
+  const destroyParticle = (particle) => {
+    particles.delete(particle);
+    particle.destroy();
+  };
 
   scene.tweens.add({
     targets: aura,
@@ -50,7 +55,7 @@ export function perform({ scene, player, isOwner = false }) {
     alpha: 0,
     duration: 420,
     ease: "Cubic.easeOut",
-    onComplete: () => aura.destroy(),
+    onComplete: () => destroyParticle(aura),
   });
   scene.tweens.add({
     targets: shock,
@@ -59,7 +64,7 @@ export function perform({ scene, player, isOwner = false }) {
     alpha: 0,
     duration: 280,
     ease: "Quad.easeOut",
-    onComplete: () => shock.destroy(),
+    onComplete: () => destroyParticle(shock),
   });
 
   for (let i = 0; i < 18; i++) {
@@ -72,6 +77,7 @@ export function perform({ scene, player, isOwner = false }) {
     );
     spark.setDepth(behind);
     spark.setBlendMode(Phaser.BlendModes.ADD);
+    particles.add(spark);
     scene.tweens.add({
       targets: spark,
       x: spark.x + Phaser.Math.Between(-34, 34),
@@ -81,34 +87,45 @@ export function perform({ scene, player, isOwner = false }) {
       scaleY: Phaser.Math.FloatBetween(1.2, 1.8),
       duration: Phaser.Math.Between(320, 520),
       ease: "Cubic.easeOut",
-      onComplete: () => spark.destroy(),
+      onComplete: () => destroyParticle(spark),
     });
   }
 
   try {
     playPlayerSound(scene, player, "thorg-throw", {
-      volume: 0.6,
+      volume: combatSoundVolume("thorg-throw") * SUPER_SOUND_GAIN,
       rate: 0.88,
     });
   } catch (_) {}
   try {
     playPlayerSound(scene, player, "pu-touch-rage", {
-      volume: 0.46,
+      volume: 0.07,
       rate: 0.8,
     });
   } catch (_) {}
   try {
     playPlayerSound(scene, player, "pu-tick-rage", {
-      volume: 0.24,
+      volume: 0.06,
       rate: 0.78,
     });
   } catch (_) {}
 
-  scene.time.delayedCall(THORG_RAGE_DURATION_MS, () => {
-    if (!player || !player.active) return;
-    if ((player._thorgRageUntil || 0) <= Date.now()) {
+  const cancel = () => {
+    timer.remove(false);
+    for (const particle of particles) {
+      scene.tweens.killTweensOf(particle);
+      destroyParticle(particle);
+    }
+    finish();
+  };
+  const finish = () => {
+    player.off?.("combat:reset", cancel);
+    if (player.active && player._thorgRageUntil === rageUntil) {
       setLocalRageState(player, false);
       setThorgRageVisual(scene, player, false);
     }
-  });
+  };
+  const rageUntil = player._thorgRageUntil;
+  const timer = scene.time.delayedCall(THORG_RAGE_DURATION_MS, finish);
+  player.once?.("combat:reset", cancel);
 }

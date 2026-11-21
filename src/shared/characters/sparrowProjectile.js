@@ -1,30 +1,27 @@
 const { clamp } = require("../math.js");
 // No renderer or room dependencies: the server and predicted arrows use this model.
-const { getResolvedCharacterAttackConfig, getResolvedCharacterSpecialConfig,
-  getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig } = require("./characterTuning.js");
+const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig } = require("./characterTuning.js");
 
-const VERSION = 2;
+// 3: the super is Seraph (a light bolt, sparrowLightBolt.js), not an arrow volley.
+const VERSION = 3;
 // Replays step at the server tick so client predictions match the server.
 const { FIXED_DT_MS: STEP_MS } = require('../gameConstants');
 const { muzzleOf } = require('./characterRig.js');
 
-function attackConfig(special = false) {
-  const arrows = getResolvedCharacterAttackConfig('sparrow', 'arrowSpread');
-  const cfg = special ? getResolvedCharacterSpecialConfig('sparrow', 'burningVolley') : arrows;
-  return { ...cfg, muzzle: arrows.muzzle };
+function attackConfig() {
+  return getResolvedCharacterAttackConfig('sparrow', 'arrowSpread');
 }
 
-function resolveShot(aim = {}, special = false) {
-  const cfg = attackConfig(special);
+function resolveShot(aim = {}) {
+  const cfg = attackConfig();
   const aimCfg = getResolvedCharacterAimConfig('sparrow');
-  const specialAim = getResolvedCharacterSpecialAimConfig('sparrow');
-  const angle = Number(aim.angle) + (special ? (specialAim.projectileAngleOffsetDeg || 0) * Math.PI / 180 : 0);
+  const angle = Number(aim.angle);
   if (!Number.isFinite(angle)) return null;
   // The wire expresses power, never damage, gravity, hitbox sizes or launch position.
   const power = Number(aim.power ?? 0.5);
   if (!Number.isFinite(power) || power < 0 || power > 1) return null;
-  const scale = special ? 1 : aimCfg.minSpeedScale + (aimCfg.maxSpeedScale - aimCfg.minSpeedScale) * power;
-  return { angle, power, speed: cfg.speed * scale, special };
+  const scale = aimCfg.minSpeedScale + (aimCfg.maxSpeedScale - aimCfg.minSpeedScale) * power;
+  return { angle, power, speed: cfg.speed * scale };
 }
 
 function powerFromSpeed(angle, speed) {
@@ -34,7 +31,7 @@ function powerFromSpeed(angle, speed) {
 }
 
 function createVolley(pose, shot, requestId, launchMono) {
-  const cfg = attackConfig(shot.special), count = cfg.count;
+  const cfg = attackConfig(), count = cfg.count;
   return Array.from({ length: count }, (_, i) => {
     const offset = count === 1 ? 0 : (i - (count - 1) / 2) / ((count - 1) / 2) * cfg.spreadDeg * Math.PI / 360;
     return createProjectile(pose, shot, shot.angle + offset, cfg, {
@@ -61,15 +58,15 @@ function createProjectile(pose, shot, angle, cfg, identity = {}) {
       vx: Math.cos(angle) * shot.speed, vy: Math.sin(angle) * shot.speed,
       gravity: cfg.gravity, maxLifetimeMs: cfg.maxLifetimeMs,
       radius: cfg.playerCollisionRadius || cfg.collisionRadius,
-      scale: cfg.visualScale, embedMs: cfg.embedMs, special: shot.special,
+      scale: cfg.visualScale, embedMs: cfg.embedMs,
   };
 }
 
 // Solve the earliest flight to the selected point, including muzzle placement,
 // power tuning and the same fixed-step gravity used for collision.
-function aimAtTarget(pose, target, power = 0.5, special = false, samples = 32) {
-  const cfg = attackConfig(special);
-  const flatSpeed = resolveShot({ angle: 0, power }, special).speed;
+function aimAtTarget(pose, target, power = 0.5, samples = 32) {
+  const cfg = attackConfig();
+  const flatSpeed = resolveShot({ angle: 0, power }).speed;
   const { pivot, reach: forward } = bowMuzzle(pose, cfg);
   const dx = target.x - pivot.x, dy = target.y - pivot.y;
   const gravityOnly = { x: 0, y: 0, vx: 0, vy: 0, gravity: cfg.gravity, maxLifetimeMs: cfg.maxLifetimeMs };
@@ -90,10 +87,8 @@ function aimAtTarget(pose, target, power = 0.5, special = false, samples = 32) {
     if (evaluate(mid).error > 0) lo = mid; else hi = mid;
   }
   const durationMs = reachable ? hi : best.ms;
-  const resolvedAngle = evaluate(durationMs).angle;
-  const offset = special ? (getResolvedCharacterSpecialAimConfig('sparrow').projectileAngleOffsetDeg || 0) * Math.PI / 180 : 0;
-  const angle = resolvedAngle - offset;
-  const shot = resolveShot({ angle, power }, special);
+  const angle = evaluate(durationMs).angle;
+  const shot = resolveShot({ angle, power });
   const projectile = createProjectile(pose, shot, shot.angle, cfg);
   const points = Array.from({ length: samples + 1 }, (_, i) => sample(projectile, durationMs * i / samples));
   const end = points[points.length - 1];

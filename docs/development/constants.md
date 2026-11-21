@@ -185,9 +185,10 @@ Run `node scripts/dev/print-constants.cjs --write` to refresh the table after tu
 | Movement | 260 px/s run speed, 3000/3300 px/s² ground/air acceleration, 990 px/s² gravity, 506 px/s jump speed parameter, 660/670 px/s horizontal/vertical dash launch components (938 px/s straight down), 160 ms burst, 5 s cooldown, up to 850 ms coast with 1600/900 px/s² ground/air drag |
 | Ducking | Body height ×0.55, movement ×0.25, 50 ms minimum hold, 100 ms reentry delay |
 | Character upgrades | Level cap 10. Next-level coin costs from level 1 in order: 150, 300, 550, 900, 1400, 2100, 3000, 4200, 5800 |
-| Bank Bust mode | 20000 starting vault coins, 25 vault coins per banked death-drop coin, 1500 purchase floor, 25% low vault warning, 210 s match, 3.5 s respawn, 3 s respawn shield, 250 peak trophies to unlock, 1.8 s vault bust finish delay |
+| Bank Bust mode | 20000 starting vault coins, 25 vault coins per banked death-drop coin, 1500 purchase floor, 25% low vault warning, 210 s match, 3.5 s respawn, 250 peak trophies to unlock, 1.8 s vault bust finish delay |
 | Bank Bust loose gold | 5 pickups max, 250 coins each, 42 px pickup radius, 3.6 s spawn interval, 1.3 s arrival animation, claimable after 0.5 s, coin event retention 1.8 s |
 | Bank Bust centre crate | default 2000 HP and 2000 coins in 5 piles, first drop after 45 s, 50 s spawn-to-spawn interval, 8 s advance warning, 30 s crate lifetime |
+| Bro Ball touches | 6 px of extra reach for passive player contact, plus 8 px above the head |
 <!-- END GENERATED DEFAULTS -->
 
 - For the gain percentages and rounding applied to each level-1 stat, see `STANDARD_LEVEL_GAIN_FRACTION`, `MASTERY_LEVEL_GAIN_FRACTION` and `levelGain()` in [characterStats.js](../../src/shared/characters/characterStats.js).

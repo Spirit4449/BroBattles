@@ -149,6 +149,7 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--bb-border-highli
 #studio .playtest-settings select.playtest-inline { width: auto; height: 100%; padding-block: 0; border: 0; background-color: transparent; box-shadow: none; }
 .playtest-settings .playtest-toggle { position: relative; margin: 0; padding: 0 10px; gap: 0; color: var(--studio-muted); font: 8px/1 var(--bb-font-display); text-transform: uppercase; white-space: nowrap; user-select: none; }
 .playtest-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.playtest-settings .playtest-toggle[hidden] { display: none; }
 .playtest-toggle:hover { color: var(--studio-text); }
 .playtest-toggle:has(input:checked) { color: var(--bb-gold); background: rgba(255, 210, 90, 0.12); }
 .playtest-toggle:has(input:focus-visible) { outline: 2px solid var(--bb-border-highlight); outline-offset: -2px; }
@@ -186,9 +187,21 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--bb-border-highli
 .menu-summary { margin: 6px 0 0; font-size: 11px; }
 .menu-actions { display: grid; gap: 8px; width: 190px; }
 .menu-actions button { width: 100%; justify-content: flex-start; }
-.playtest-button span { text-transform: capitalize; }
-.playtest-button { color: #241703; background: linear-gradient(180deg, #ffd977, #e6a93a); }
-.playtest-button kbd { margin-left: 2px; color: #3a2705; background: rgba(255, 255, 255, 0.35); border-color: rgba(3, 6, 11, 0.4); box-shadow: none; }
+.playtest-split { display: flex; align-items: center; }
+.playtest-button, #playtest-menu > summary {
+  color: #241703;
+  background: linear-gradient(180deg, #ffd977, #e6a93a);
+}
+#playtest-menu > summary { width: 30px; border-left: 0; }
+#playtest-menu > summary .ui-icon { width: 14px; height: 14px; }
+#playtest-menu[open] > summary { background: #e6a93a; }
+#playtest-menu .menu-panel { width: max-content; }
+#playtest-menu button { justify-content: space-between; }
+#playtest-menu button::after { content: ""; width: 12px; height: 12px; }
+#playtest-menu button[aria-pressed="true"]::after {
+  background: url("/assets/ui/pixel-check.webp") center / contain no-repeat;
+  image-rendering: pixelated;
+}
 
 /* ---- Object browser ---- */
 .browser, .inspector { display: flex; min-height: 0; flex-direction: column; background: var(--studio-panel); }
@@ -436,7 +449,7 @@ dialog textarea { width: 100%; height: 44vh; font: 12px/1.5 ui-monospace, monosp
 /* ---- Narrow windows ---- */
 @media (max-width: 1360px) {
 
-  .playtest-button kbd, .footer-keys { display: none; }
+  .footer-keys { display: none; }
 }
 @media (max-width: 1100px) {
   #studio { grid-template-columns: 200px minmax(200px, 1fr) 268px; }

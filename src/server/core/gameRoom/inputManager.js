@@ -17,7 +17,7 @@ const {
   MAX_MOVEMENT_CREDIT_MS,
   IDLE_FALLBACK_AFTER_MS,
 } = require("../../../shared/combat/matchConfig.js");
-const { isMovementSuppressed } = require("../../../shared/combat/runtime/abilityRuntimeManager.js");
+const { isMovementSuppressed, holdsReportedPosition } = require("../../../shared/combat/runtime/abilityRuntimeManager.js");
 const netTestLogger = require("./netTestLogger");
 
 const { characterBody } = require("../../../shared/physics/characterBody");
@@ -86,8 +86,8 @@ function movementStats(player) {
 function correctPosition(room, player, sequence, detail = {}) {
   if (!player.socketId) return;
   const stats = movementStats(player);
-  const reason = ["collision", "idle", "kickoff"].includes(detail.reason) ? detail.reason : "budget";
-  if (reason !== "kickoff") stats[reason] += 1;
+  const reason = ["collision", "idle", "kickoff", "spawn-reset"].includes(detail.reason) ? detail.reason : "budget";
+  if (reason === "budget" || reason === "collision" || reason === "idle") stats[reason] += 1;
   const errorPx = Number(detail.errorPx) || 0;
   if (errorPx > stats.maxErrorPx) stats.maxErrorPx = errorPx;
   player._correctionId = (Number(player._correctionId) || 0) + 1;
@@ -243,13 +243,14 @@ function handlePlayerInput(room, socketId, inputData) {
   const now = Date.now();
   // Fighters stand at their spawns until FIGHT: before the countdown starts
   // and while it runs, movement packets cannot move them.
-  if (room.status === "waiting" || Number(playerData._controlLockUntil || 0) > now) {
+  if (room.status === "waiting" || room.gameMode?.isCombatPaused?.() ||
+      Number(playerData._controlLockUntil || 0) > now) {
     playerData.vx = 0;
     playerData.vy = 0;
     playerData.lastInput = now;
     return;
   }
-  const infernoActive = isMovementSuppressed(playerData, now);
+  const infernoActive = holdsReportedPosition(playerData, now);
   const packetSeq = Number(inputData?.sequence);
   const packetTimestamp = Number(inputData?.timestamp);
   if (Number.isFinite(packetSeq)) {

@@ -3,8 +3,8 @@ import socket from "../../../lib/socket";
 import { characterStats } from "../../../../shared/characters/characterStats.js";
 import { chooseRemoteAnimationState } from "./animationState";
 import { executeDefaultAttack } from "./attackFlow";
-import { playPlayerSound } from "../../audio/playerAudio";
-import { withShotView } from "./shotPrediction";
+import { combatSoundVolume, playPlayerSound } from "../../audio/playerAudio";
+import { withCombatRequestContext } from "./shotPrediction";
 
 /**
  * Base for browser character classes registered in ../manifest.js.
@@ -142,7 +142,7 @@ export default class CharacterEntityBase {
     if (!entry || !scene?.sound) return false;
     const key = typeof entry === "string" ? entry : entry.key;
     if (!key) return false;
-    const volume = overrides.volume ?? entry.volume ?? 1;
+    const volume = overrides.volume ?? entry.volume ?? combatSoundVolume(key);
     const rate = overrides.rate ?? entry.rate ?? 1;
     try {
       if (source) return playPlayerSound(scene, source, key, { volume, rate });
@@ -201,9 +201,7 @@ export default class CharacterEntityBase {
   static attackFlow = {};
 
   emitAttackAction(payload) {
-    const mode = this.scene?._modeRuntime;
-    if (mode?.rally != null) payload = { ...payload, broBallRally: mode.rally };
-    socket.emit(SOCKET_EVENTS.GAME_ACTION, withShotView(payload));
+    socket.emit(SOCKET_EVENTS.GAME_ACTION, withCombatRequestContext(payload, this.scene?._modeRuntime));
   }
 
   performDefaultAttack(payloadBuilder, onAfterFire) {

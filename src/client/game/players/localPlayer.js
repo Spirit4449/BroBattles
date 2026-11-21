@@ -18,7 +18,7 @@ import {
   resolveWallSlideFlipX,
 } from './wallMovement';
 import { predictCharacterSpecial } from '../characters/networkRegistry';
-import { withShotView } from '../characters/shared/shotPrediction';
+import { withCombatRequestContext } from '../characters/shared/shotPrediction';
 import socket from "../../lib/socket";
 import {
   createFor as createCharacterFor,
@@ -76,6 +76,8 @@ import { noteClientActionSent } from "../../lib/netTestLogger.js";
 import {
   playDuckTransitionSound,
   playDuckBlockSound,
+  jumpVolume,
+  WALL_JUMP_VOLUME,
 } from "../audio/movementAudio.js";
 import { resolveCharacterKey } from "../../../shared/characters/characterStats.js";
 import { characterPresentation } from "../../../shared/characters/index.js";
@@ -189,29 +191,11 @@ function resetMovementVfxTracking() {
   movementFx.reset();
 }
 
-function resetMovementInputState({ preserveVelocity = false } = {}) {
-  const resetKeyState = (key) => {
-    try {
-      key?.reset?.();
-      if (key) {
-        key.isDown = false;
-        key.isUp = true;
-      }
-    } catch (_) {}
-  };
-
-  try {
+function resetMovementInputState({ preserveVelocity = false, preserveHeldInput = false } = {}) {
+  if (!preserveHeldInput) {
     scene?.input?.keyboard?.resetKeys?.();
-  } catch (_) {}
-  resetKeyState(cursors?.left);
-  resetKeyState(cursors?.right);
-  resetKeyState(cursors?.up);
-  resetKeyState(cursors?.down);
-  resetKeyState(keySpace);
-  resetKeyState(keyJ);
-  resetKeyState(keyI);
-  resetKeyState(keyE);
-  mobileControlsController?.resetInput?.();
+    mobileControlsController?.resetInput?.();
+  }
 
   if (player?.body) {
     player._lastJumpPressTime = 0;
@@ -298,6 +282,7 @@ export function createPlayer(sceneParam, {
     getAmmoCharges: () => ammo.state.charges, getMobileControls: () => mobileControlsController,
     isUiCapturingInput, isSystemNoticeOpen, isControlLocked, triggerSpecialNotReadyFeedback,
     fireBasicAttack, fireSpecialAttack, resetMovementInputState,
+    followUpActive, fireFollowUp, aimFollowUp, getFollowUpAngle,
   });
   if (!mobileControlsController) {
     mobileControlsController = createMobileControlsController({
@@ -307,20 +292,25 @@ export function createPlayer(sceneParam, {
         getPlayerAimBasePoint({
           character: currentCharacter,
           player,
-          family,
+          family: followUpActive() ? "followup" : family,
         }),
-      resolveAimContext: ({ family, pointerWorldX, pointerWorldY, quick }) =>
-        resolveAttackAimContext({
+      resolveAimContext: ({ family, pointerWorldX, pointerWorldY, quick }) => {
+        const followUp = followUpActive();
+        const context = resolveAttackAimContext({
           character: currentCharacter,
           player,
-          family,
+          family: followUp ? "followup" : family,
           pointerWorldX,
           pointerWorldY,
           quick,
-          quickFacingDirection: quick ? getNearestOpponentDirection(player, opponentPlayersRef) : null,
-        }),
-      resolveQuickContext: (family) => pointerAttack?.quick(family),
+          quickFacingDirection: quick && !followUp ? getNearestOpponentDirection(player, opponentPlayersRef) : null,
+        });
+        if (followUp && !quick) aimFollowUp(context?.angle);
+        return context;
+      },
+      resolveQuickContext: (family) => followUpActive() ? { family: "followup" } : pointerAttack?.quick(family),
       getSuperChargeRatio: () => (localStats.maxSuperCharge > 0 ? localStats.superCharge / localStats.maxSuperCharge : 0),
+      isFollowUpActive: followUpActive,
       onBasicFire: (context) => fireBasicAttack(context?.direction, context),
       onSpecialFire: (context) => fireSpecialAttack(context),
       onSpecialNotReady: () => triggerSpecialNotReadyFeedback(),
@@ -441,8 +431,9 @@ export function createPlayer(sceneParam, {
     player._duckGroundSpan = holdDuckGround(player.body, player._duckGroundSpan, scene._mapObjects || [])?.span || null;
   };
   const protectDash = delta => { if (!dead) protectDashMotion(scene, player, Date.now(), delta); };
-  scene.physics.world.on("worldstep", protectDash);
-  scene.physics.world.on("worldstep", protectDuckEdge);
+  const physicsWorld = scene.physics.world;
+  physicsWorld.on("worldstep", protectDash);
+  physicsWorld.on("worldstep", protectDuckEdge);
   // Jumps and falls follow the same path at every refresh rate.
   const restoreIntegration = integrateLikeReferenceStep(player.body);
   // Arcade writes the frame's step back to the sprite in postupdate, after
@@ -487,7 +478,7 @@ export function createPlayer(sceneParam, {
       if (now - lastNoAmmoSfxAt < 120) return;
       lastNoAmmoSfxAt = now;
       try {
-        scene?.sound?.play("sfx-noammo", { volume: 0.2, rate: 1.06 });
+        scene?.sound?.play("sfx-noammo", { volume: 0.11, rate: 1.06 });
       } catch (_) {}
     },
     tryConsume: () => {
@@ -576,14 +567,17 @@ export function createPlayer(sceneParam, {
     stopWallSlideAudio: () => movementAudio.stopWallSlide(),
     onLocalDeath: () => {
       pointerAttack?.mouse?.endDrag();
-      resetMovementInputState();
+      resetMovementInputState({ preserveHeldInput: true });
       resetMovementVfxTracking();
       pointerAttack?.reset();
       updateHealthBar();
       localHud?.setLocalUiVisible(false);
     },
     onLocalRespawn: () => {
-      resetMovementInputState();
+      endDash(player, false);
+      pointerAttack?.mouse?.endDrag();
+      pointerAttack?.reset();
+      resetMovementInputState({ preserveHeldInput: true });
       resetMovementVfxTracking();
       resizeForDuckLocal?.(false);
       applyFlipOffsetLocal?.();
@@ -613,8 +607,8 @@ export function createPlayer(sceneParam, {
     if (disposePlayerLifetime !== dispose) return;
     disposePlayerLifetime = null;
     stopKeyUpdates();
-    sceneParam.physics.world.off("worldstep", protectDuckEdge);
-    sceneParam.physics.world.off("worldstep", protectDash);
+    physicsWorld.off("worldstep", protectDuckEdge);
+    physicsWorld.off("worldstep", protectDash);
     sceneParam.events.off("postupdate", syncUiAfterPhysics);
     restoreIntegration();
     localHud?.destroy();
@@ -666,8 +660,33 @@ export function finalizeLocalSpawnPresentation() {
   syncLocalUiPosition();
 }
 
+// A super's follow-up (Sparrow's Seraph bolt) takes the attack inputs while
+// its aim phase lasts; see the character class's followUp* hooks.
+function followUpActive() {
+  return !dead && !!getCharacterClassByKey(currentCharacter)?.followUpActive?.(player);
+}
+
+function aimFollowUp(angle = null) {
+  getCharacterClassByKey(currentCharacter)?.aimFollowUp?.(player, Number.isFinite(angle) ? angle : null);
+}
+
+function getFollowUpAngle() {
+  return getCharacterClassByKey(currentCharacter)?.getFollowUpAngle?.(player);
+}
+
+function fireFollowUp(context = null) {
+  const activeScene = player?.scene;
+  if (!followUpActive() || !activeScene || activeScene._canPlayBattle?.() === false || activeScene._modeRuntime?.goalPaused) return;
+  const angle = Number.isFinite(context?.angle) ? context.angle : getFollowUpAngle();
+  const request = getCharacterClassByKey(currentCharacter)?.releaseFollowUp?.(activeScene, player, angle);
+  if (!request) return;
+  noteClientActionSent(request.type, request);
+  socket.emit(SOCKET_EVENTS.GAME_ACTION, withCombatRequestContext(request, activeScene._modeRuntime));
+}
+
 function fireBasicAttack(direction, context = null) {
-  if (player?.scene?._modeRuntime?.goalPaused || dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
+  if (followUpActive()) { fireFollowUp(context?.family === "followup" ? context : null); return; }
+  if (player?.scene?._canPlayBattle?.() === false || player?.scene?._modeRuntime?.goalPaused || dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
   try {
     if (player?.scene) {
       player.scene._localAttackPrecisionUntil = performance.now() + 420;
@@ -683,7 +702,8 @@ function fireBasicAttack(direction, context = null) {
 }
 
 function fireSpecialAttack(context = null) {
-  if (player?.scene?._modeRuntime?.goalPaused || dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
+  if (followUpActive()) { fireFollowUp(context?.family === "followup" ? context : null); return; }
+  if (player?.scene?._canPlayBattle?.() === false || player?.scene?._modeRuntime?.goalPaused || dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
   if (localStats.superCharge < localStats.maxSuperCharge) {
     triggerSpecialNotReadyFeedback();
     return;
@@ -715,9 +735,7 @@ function fireSpecialAttack(context = null) {
   const specialRequest = predictCharacterSpecial(
     currentCharacter, player?.scene, player, username, { aim: serializeAimContext(context) },
   );
-  const rally = player?.scene?._modeRuntime?.rally;
-  if (rally != null) specialRequest.broBallRally = rally;
-  socket.emit(SOCKET_EVENTS.GAME_SPECIAL, withShotView(specialRequest));
+  socket.emit(SOCKET_EVENTS.GAME_SPECIAL, withCombatRequestContext(specialRequest, player?.scene?._modeRuntime));
 }
 
 function triggerSpecialNotReadyFeedback() {
@@ -726,7 +744,7 @@ function triggerSpecialNotReadyFeedback() {
   if (now - lastNoSuperSfxAt < 120) return;
   lastNoSuperSfxAt = now;
   try {
-    scene?.sound?.play("sfx-nosuper", { volume: 0.5 });
+    scene?.sound?.play("sfx-nosuper", { volume: 0.12 });
   } catch (_) {}
 }
 
@@ -745,7 +763,7 @@ export function handlePlayerMovement(activeScene) {
   updateInvisibleAttackAlpha();
   // Touch players read the cooldown from the dash button instead.
   drawDashCooldown(scene, player, dead || !!mobileControlsController?.isEnabled?.());
-  if (isLocalInputInactive(scene)) {
+  if (isLocalInputInactive(scene) || scene._modeRuntime?.goalPaused) {
     applyInactiveInputFrame(scene);
     return;
   }
@@ -841,7 +859,7 @@ function isLocalInputInactive(scene) {
 }
 
 function isControlLocked(now = Date.now()) {
-  if (player?.scene?._modeRuntime?.goalPaused) return true;
+  if (player?.scene?._canPlayBattle?.() === false || player?.scene?._modeRuntime?.goalPaused) return true;
   return Math.max(
     Number(player?._movementLockedUntil || 0),
     Number(player?._externalControlLockUntil || 0),
@@ -1038,7 +1056,8 @@ function applyMovementLocks(scene, input) {
     input.up = false;
     if (player.body) {
       player.setAccelerationX(0);
-      player.setVelocityX(0);
+      // A hover that keeps knockback (Sparrow's Seraph) drains it itself.
+      if (!player._abilityKeepsMomentum) player.setVelocityX(0);
     }
   };
   if (byExternal) {
@@ -1085,11 +1104,11 @@ function applyFastFallGravity(scene, wall, tuning) {
 function handleActionKeys() {
   try {
     const pressed = (key) => key && Phaser.Input.Keyboard.JustDown(key) && !dead;
-    if (pressed(keyJ) && !isControlLocked()) {
+    if (pressed(keyJ) && (!isControlLocked() || followUpActive())) {
       const context = pointerAttack?.quick("basic");
       fireBasicAttack(context.direction, context);
     }
-    if (pressed(keyI) && !isControlLocked()) {
+    if (pressed(keyI) && (!isControlLocked() || followUpActive())) {
       fireSpecialAttack(pointerAttack?.quick("special"));
     }
     if (pressed(keyE) && !isControlLocked()) {
@@ -1222,7 +1241,7 @@ function updateJumping(scene, wall, tuning, { movementLocked, shockwaveActive, g
   ) {
     performWallJump(scene, wall.effectiveWallSide, tuning);
     scene.sound.play("sfx-walljump", {
-      volume: 0.5,
+      volume: WALL_JUMP_VOLUME,
       rate: 0.96 + Phaser.Math.Clamp(Math.abs(body.velocity.x) / 720, 0, 0.08),
     });
     player._lastJumpPressTime = 0;
@@ -1237,7 +1256,7 @@ function updateJumping(scene, wall, tuning, { movementLocked, shockwaveActive, g
       (Math.abs(body.velocity.x || 0) / tuning.maxSpeed) * tuning.jumpBoost, 0, tuning.jumpBoost);
     performJump(scene, (tuning.jumpSpeed + boost) * tuning.jumpScale);
     scene.sound.play("sfx-jump", {
-      volume: 0.36 + groundSpeedRatio * 0.1,
+      volume: jumpVolume(groundSpeedRatio),
       rate: 0.96 + groundSpeedRatio * 0.08,
     });
     player._lastJumpPressTime = 0;

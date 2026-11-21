@@ -12,7 +12,11 @@ describe("Respawn synchronization", () => {
     const exports = {};
 
     const noop = () => {};
+    const combatCleanup = loadClientModule(require.resolve('../src/client/game/players/fighterCombatCleanup.js'), {
+      require: () => ({ endDash: noop }),
+    });
     const modules = {
+      './fighterCombatCleanup': combatCleanup,
       '../scene/respawnEffect': { spawnRespawnEffect: onRespawn },
       '../characters': {
         getTextureKey: noop,
@@ -71,7 +75,11 @@ describe("Respawn synchronization", () => {
       setVisible(visible) { this.visible = visible; },
     };
 
+    wrapper.opponent._movementLockedUntil = Infinity;
+    wrapper.opponent._specialCastLockUntil = Infinity;
     wrapper.startDeathPresentation();
+    assert.equal(wrapper.opponent._movementLockedUntil, 0);
+    assert.equal(wrapper.opponent._specialCastLockUntil, 0);
     wrapper.handleRespawn({ x: 10, y: 20, health: 100 });
     corpseCallback();
 

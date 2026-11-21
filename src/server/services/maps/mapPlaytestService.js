@@ -28,14 +28,24 @@ const {
 const { mapArena } = require("../../../shared/maps/arenas");
 const { validateAssets } = require("./mapAssetValidation");
 const { getParticipant } = require("../../core/gameRoom/participants");
+const { respawnPlayer } = require("../../core/gameRoom/respawn");
+const { correctPosition } = require("../../core/gameRoom/inputManager");
+const characterCombat = require("../../../shared/combat/runtime/characterCombatRegistry");
 
-// Real game room, with only matchmaking, rewards, timer expiry and persistence disabled.
-// Character combat, bots, effects, collision, objectives and replication use GameRoom.
+// Both playtest styles run the real simulation in an isolated, reward-free room.
 class EditorGameRoom extends GameRoom {
-  potentialStartGame() {}
-  checkVictoryCondition() {}
-  _tickTimerAndSuddenDeath() {}
-  async finishGame() {}
+  potentialStartGame(options) {
+    if (this.matchData.editorFullBattle) super.potentialStartGame(options);
+  }
+  checkVictoryCondition() {
+    if (this.matchData.editorFullBattle) super.checkVictoryCondition();
+  }
+  _tickTimerAndSuddenDeath() {
+    if (this.matchData.editorFullBattle) super._tickTimerAndSuddenDeath();
+  }
+  async finishGame(winnerTeam, meta) {
+    if (this.matchData.editorFullBattle) return super.finishGame(winnerTeam, meta);
+  }
   async distributeMatchRewards() {
     return [];
   }
@@ -58,10 +68,43 @@ class EditorGameRoom extends GameRoom {
     );
     this._refillPlaytestSuper(player);
   }
+  setupPlayerSocket(socket) {
+    super.setupPlayerSocket(socket);
+    if (this.matchData.editorFullBattle) return;
+    this.onSocket(socket, SOCKET_EVENTS.GAME_READY, () => {
+      if (!this._loopRunning) {
+        this.gameMode?.onStart?.();
+        this.startGameLoop();
+      }
+    });
+    this.onSocket(socket, SOCKET_EVENTS.EDITOR_SELF_KILL, () => {
+      this.resetToSpawn(this.players.get(socket.id));
+    });
+  }
   requestSpecial(id, payload = {}) {
     const used = super.requestSpecial(id, payload);
     if (used) this._refillPlaytestSuper(getParticipant(this, id));
     return used;
+  }
+  resetToSpawn(player) {
+    if (!this.matchData.editorSoloPlaytest || this.status !== "active" || !player?.loaded) return;
+    const position = this.spawnStateFor(player);
+    if (!position) return;
+
+    // There is only one fighter in a solo playtest, so all pending and active
+    // combat in the room belongs to this reset.
+    this._scheduledActions.length = 0;
+    this.activeAttacks = [];
+    characterCombat.dispose(this);
+    this.damageHitboxes?.clear();
+    player.flip = false;
+    clearTimeout(player._respawnTimeout);
+    player._respawnTimeout = null;
+    respawnPlayer(this, player, { position, spawnReset: true });
+    // Acknowledge the teleport so in-flight movement samples from the old
+    // position cannot move the fighter back.
+    correctPosition(this, player, player._lastPositionSeq, { reason: "spawn-reset", grounded: player.grounded });
+    this.broadcastWorldState();
   }
 }
 class MapPlaytestService {
@@ -105,21 +148,12 @@ class MapPlaytestService {
                 code: "CLIENT_UPDATE_REQUIRED",
               });
             await room.addPlayer(socket, socket.data.user);
-            room.initializeSpawnPositions();
-            room.sendGameStateToPlayer(socket);
+            if (!room.matchData.editorFullBattle) {
+              room.initializeSpawnPositions();
+              room.sendGameStateToPlayer(socket);
+            }
             cb?.({ ok: true, matchId: room.matchId });
             socket.emit(SOCKET_EVENTS.GAME_JOINED, { ok: true, matchId: room.matchId });
-            room.onSocket(socket, SOCKET_EVENTS.GAME_READY, () => {
-              if (!room._loopRunning) {
-                room.gameMode?.onStart?.();
-                room.startGameLoop();
-              }
-            });
-            room.onSocket(socket, SOCKET_EVENTS.EDITOR_SELF_KILL, () => {
-              const player = room.players.get(socket.id);
-              if (!room.matchData.editorSoloPlaytest || !player?.isAlive || !player.loaded) return;
-              room.handlePlayerDeath(player, { cause: "editor-self-kill", at: Date.now() });
-            });
           } catch (e) {
             cb?.({ ok: false, error: e.message });
             socket.emit(SOCKET_EVENTS.GAME_ERROR, { message: e.message, code: e.code });
@@ -136,6 +170,7 @@ class MapPlaytestService {
     {
       document,
       bots = false,
+      fullBattle = false,
       infiniteSupers = false,
       debugHitboxes = false,
       character = DEFAULT_CHARACTER,
@@ -144,6 +179,8 @@ class MapPlaytestService {
       modeVariantId = null,
     },
   ) {
+    fullBattle = fullBattle === true;
+    const withBots = fullBattle || bots;
     document = upgradeDuelMap(document);
     const errors = validateDocument(document);
     if (!errors.length) errors.push(...validateAssets(document));
@@ -182,7 +219,7 @@ class MapPlaytestService {
     });
     const players = [
       human,
-      ...(bots ? createBotParticipants([human], size, { seed: 42 }).map(decorateParticipant) : []),
+      ...(withBots ? createBotParticipants([human], size, { seed: 42 }).map(decorateParticipant) : []),
     ];
     const { modeId } = arena;
     modeVariantId = variantId;
@@ -208,8 +245,9 @@ class MapPlaytestService {
         map: document.id,
         players,
         editorMapSnapshot: snapshot,
-        editorSoloPlaytest: !bots,
-        editorInfiniteSupers: infiniteSupers === true,
+        editorFullBattle: fullBattle,
+        editorSoloPlaytest: !withBots,
+        editorInfiniteSupers: !fullBattle && infiniteSupers === true,
         editorDebugHitboxes: debugHitboxes === true,
       },
       {
@@ -222,17 +260,15 @@ class MapPlaytestService {
         navigation: this.navigation,
       },
     );
-    room.status = "active";
-    const normalPlan = room.gameMode.getRespawnPlan.bind(room.gameMode);
-    room.gameMode.getRespawnPlan = (p, meta) =>
-      meta?.cause === "editor-self-kill"
-        ? { enabled: true, delayMs: 1000, shieldMs: 1000, position: room.spawnStateFor(p) }
-        : normalPlan(p, meta) || {
-            enabled: true,
-            delayMs: 1200,
-            shieldMs: 1000,
-            position: room.spawnStateFor(p),
-          };
+    if (!fullBattle) {
+      room.status = "active";
+      const normalPlan = room.gameMode.getRespawnPlan.bind(room.gameMode);
+      room.gameMode.getRespawnPlan = (p, meta) => normalPlan(p, meta) || {
+        enabled: true,
+        delayMs: 1200,
+        position: room.spawnStateFor(p),
+      };
+    }
     const token = randomUUID();
     const session = {
       token,
@@ -247,8 +283,9 @@ class MapPlaytestService {
         map: document.id,
         mapSnapshot: snapshot,
         editorPlaytest: true,
+        editorFullBattle: fullBattle,
         editorDebugHitboxes: debugHitboxes === true,
-        editorSoloPlaytest: !bots,
+        editorSoloPlaytest: !withBots,
         yourName: user.name,
         yourTeam: "team1",
         yourCharacter: character,

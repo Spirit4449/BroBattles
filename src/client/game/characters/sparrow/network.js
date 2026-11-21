@@ -1,13 +1,16 @@
 import { characterDefinitions } from "../../../../shared/characters/index.js";
-import { applyTeamVisual } from "../../../../shared/projectilePresentation";
+import { applyTeamVisual, teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
+import { createProjectileComet } from '../../scene/projectileComet';
 import { SparrowReplica } from '../../../../shared/characters/sparrowReplication';
 import { serverClock as matchClock, ensureServerClockEpoch as ensureMatchEpoch } from '../../match/serverClock';
 import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/projectilePresentation';
 import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley, firstContact, sample, attachmentPoint } from '../../../../shared/characters/sparrowProjectile';
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { playPlayerSound } from '../../audio/playerAudio';
+import { presentSeraphRelease } from './special';
+import { playSeraphImpact } from './seraphFx';
 import { isLocalShooter, isEnemyShooter, localBodyContact, victimHoldWindowMs, victimLagMs, predictShotContact, shotBlockersFor, confirmWindowMs, noteShotWithdrawn, notePredictedHit, enemyShotTraced, traceEnemyShot } from '../shared/shotPrediction';
 import { movingColliderMotion, observeSnapshotClock, displayedPlayer, ownerTeamLook, catchUpAmmo, bindSceneUpdates, exposeDiagnostics, setRoomTerrain } from '../shared/projectileReplication';
 
@@ -83,9 +86,9 @@ function addSprite(scene, projectile) {
   const sprite = scene.add.sprite(projectile.x, projectile.y, 'sparrow-arrow');
   // Thicken across the shaft only so arrows read at a glance without growing longer.
   const visualScale = options.arrowLength ? Math.min(projectile.scale, options.arrowLength / sprite.width) : projectile.scale;
-  sprite.setScale(visualScale, options.arrowLength ? visualScale : visualScale * (attackConfig(projectile.special).visualThickness || 1)); sprite.setDepth(RENDER_LAYERS.ATTACKS + 4);
+  sprite.setScale(visualScale, options.arrowLength ? visualScale : visualScale * (attackConfig().visualThickness || 1)); sprite.setDepth(RENDER_LAYERS.ATTACKS + 4);
   applyTeamVisual(sprite, ownerTeamLook(context, projectile.ownerName), "arrow");
-  const entry = { sprite, projectile, revision: 0, lastTrail: 0 };
+  const entry = { sprite, projectile, revision: 0 };
   sprites.set(projectile.id, entry);
   return entry;
 }
@@ -139,7 +142,7 @@ function burningFx(scene, entry, now, embedded = false) {
   if (fireParticles.size >= 320) return;
   const angle = embedded ? Math.PI / 2 : entry.sprite.rotation || 0;
   const phase = (entry.fireFrame = (entry.fireFrame || 0) + 1) % 3;
-  const size = entry.projectile.special ? 3 : 2;
+  const size = 2;
   const x = entry.sprite.x, y = entry.sprite.y;
   const flame = scene.add.graphics().setPosition(x, y);
   flame.setRotation(angle);
@@ -204,7 +207,11 @@ function attachSparrowScene(scene, nextContext = {}) {
       }
       entry.revision = state.revision; entry.projectile = p; entry.lead = state.lead;
       const contact = !entry.held && flightContact(entry, p, point, enemy);
-      if (contact) entry.held = { ...contact, rotation: Math.atan2(point.vy, point.vx), at: now };
+      const heading = Math.atan2(point.vy, point.vx);
+      if (contact) {
+        entry.held = { ...contact, rotation: heading, at: now };
+        entry.comet?.hide();
+      }
       if (contact?.target && !contact.victim) notePredictedHit({ delivery: 'released', character: NAME, target: { name: contact.target, sprite: contact.sprite } });
       if (entry.held?.victim && now - entry.held.at > victimHoldWindowMs(entry.held.lead)) {
         // The server did not hit this player with it: withdrawn like an
@@ -228,7 +235,14 @@ function attachSparrowScene(scene, nextContext = {}) {
       }
       const blend = entry.correction ? Math.max(0, 1 - (now - entry.correction.at) / (entry.correction.duration || 80)) : 0;
       entry.sprite.setPosition(point.x + (entry.correction?.x || 0) * blend, point.y + (entry.correction?.y || 0) * blend);
-      entry.sprite.setRotation(Math.atan2(point.vy, point.vx));
+      entry.sprite.setRotation(heading);
+      entry.comet ??= createProjectileComet(scene, entry.sprite, {
+        nose: entry.sprite.displayWidth / 2,
+        radius: entry.sprite.displayHeight / 2 + 1,
+        tail: entry.sprite.displayWidth * 0.8,
+        color: teamColor(entry.sprite) === TEAM_RED ? 0xff8a69 : 0xffbf64,
+      });
+      entry.comet.update(heading, Math.hypot(point.vx, point.vy), now);
       if (enemy && enemyShotTraced()) traceEnemyShot(id, p.ownerName, NAME, entry.sprite.x, entry.sprite.y, p.radius, point.victimLead, p.viewRewindMs, 0, point.age);
       burningFx(scene, entry, now);
 
@@ -236,6 +250,7 @@ function attachSparrowScene(scene, nextContext = {}) {
     for (const [id, entry] of sprites) {
       const terminal = replica.terminals.get(id);
       if (!terminal && replica.active.has(id)) continue;
+      entry.comet?.hide();
       const embed = terminal && ['target', 'terrain'].includes(terminal.reason);
       if (embed && now - terminal.received > entry.projectile.embedMs) {
         entry.sprite.destroy(); sprites.delete(id); continue;
@@ -280,10 +295,10 @@ function handleSparrowPacket(scene, packet, nextContext) {
         // Predict readiness when the next request reaches the server, rather than
         // adding an upstream transit time to every local firing/reload cycle.
         const ammo = catchUpAmmo(action.ammoState, age + upstream);
-        if (action.accepted && predictedRequest && !predictedRequest.special) {
+        if (action.accepted && predictedRequest) {
           ammo.nextFireInMs = Math.max(0, ammo.cooldownMs - (performance.now() - predictedRequest.at));
         }
-        const outstanding = [...predictedRequests.values()].filter(p => !p.special);
+        const outstanding = [...predictedRequests.values()];
         ammo.charges = Math.max(0, ammo.charges - outstanding.length);
         for (const p of outstanding) ammo.nextFireInMs = Math.max(ammo.nextFireInMs, ammo.cooldownMs - (performance.now() - p.at));
         context.onAmmo?.(ammo);
@@ -294,6 +309,21 @@ function handleSparrowPacket(scene, packet, nextContext) {
     for (const p of action.projectiles) {
       if (replica.clock.now(performance.now()) - p.launchMono < p.maxLifetimeMs) replica.launch(p);
     }
+  } else if (action.type === 'sparrow-bolt') {
+    // Seraph's light bolt. The owner already showed a release it predicted.
+    const owner = targetSprite(packet.playerName);
+    const predicted = packet.playerName === context.localUsername && owner?._seraphPredictedRequestId === action.requestId;
+    if (!predicted) {
+      const age = Math.max(0, replica.clock.now(performance.now()) - action.simMono);
+      presentSeraphRelease(scene, owner, action.bolt, { ageMs: Math.min(age, 250) });
+    }
+  } else if (action.type === 'sparrow-bolt-hit') {
+    const target = targetSprite(action.target);
+    // The server's contact can be at the edge of the collision radius or in
+    // a rewound position. Put the burst on the fighter this client displays.
+    const impact = target?.active && target.visible ? target : action;
+    playSeraphImpact(scene, impact.x, impact.y);
+    if (action.appliedDamage > 0) playPlayerSound(scene, impact, 'sparrow-hit');
   } else if (action.type === 'sparrow-terminal') {
     withdrawn.delete(action.id);
     let existing = sprites.get(action.id);
@@ -307,8 +337,9 @@ function handleSparrowPacket(scene, packet, nextContext) {
         confirmAgeMs: replica.clock.now(performance.now()) - action.simMono, appliedDamage: action.appliedDamage });
       if (action.appliedDamage > 0) playPlayerSound(scene,
         targetSprite(existing?.projectile?.ownerName || action.ownerName) || { x: action.x, y: action.y },
-        'sparrow-hit', { volume: 0.48 });
+        'sparrow-hit');
       if (existing && ['target', 'terrain'].includes(action.reason)) {
+        existing.comet?.hide();
         // An arrow in this player lands on the body as drawn now (offsets are
         // relative to where the shooter saw it), not where the server tested it.
         const body = action.target === context.localUsername && action.targetOffset ? targetSprite(action.target) : null;
@@ -321,18 +352,16 @@ function handleSparrowPacket(scene, packet, nextContext) {
   return true;
 }
 
-function predictSparrowShot(scene, owner, username, payload, special = false) {
+function predictSparrowShot(scene, owner, username, payload) {
   if (version !== VERSION) return payload;
   const id = payload.id || createRuntimeId('sparrowShot');
-  const aim = special ? payload.aim || {} : payload;
-  const normalized = { angle: aim.angle ?? (owner.flipX ? Math.PI : 0),
-    power: special ? 0.5 : powerFromSpeed(aim.angle, aim.speed) };
-  const shot = resolveShot(normalized, special);
+  const normalized = { angle: payload.angle ?? (owner.flipX ? Math.PI : 0), power: powerFromSpeed(payload.angle, payload.speed) };
+  const shot = resolveShot(normalized);
   if (!shot) return payload;
   attachSparrowScene(scene, { localPlayer: owner, localUsername: username });
-  casts.set(id, { owner, username, shot, key: `${username}:${id}`, due: performance.now() + (attackConfig(special).castDelayMs || 0) });
-  predictedRequests.set(id, { key: `${username}:${id}`, at: performance.now(), special });
-  return special ? { ...payload, id, aim: normalized } : { type: 'sparrow-arrow', id, ...normalized };
+  casts.set(id, { owner, username, shot, key: `${username}:${id}`, due: performance.now() + (attackConfig().castDelayMs || 0) });
+  predictedRequests.set(id, { key: `${username}:${id}`, at: performance.now() });
+  return { type: 'sparrow-arrow', id, ...normalized };
 }
 
 // Lifecycle contract consumed by the generic match and scene controllers.
@@ -346,7 +375,6 @@ const networkAdapter = {
   attach: attachSparrowScene,
   observe: observeSparrowSnapshot,
   handlePacket: handleSparrowPacket,
-  predictSpecial: (scene, player, username, request) => predictSparrowShot(scene, player, username, request, true),
 };
 
 return { resetSparrowNetwork, discardSparrowPresentation, configureSparrowNetwork, observeSparrowSnapshot, burningFx, attachSparrowScene, handleSparrowPacket, predictSparrowShot, networkAdapter };

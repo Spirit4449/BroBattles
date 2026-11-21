@@ -172,3 +172,18 @@ test('walls built against the ninja turn shurikens back and stop their return',t
   for(let i=0;i<60&&!q.done;i++)model.step(q,owner,[behind],[behind]);
   assert.equal(q.reason,'blocked');assert.ok(q.x>=behind.left);
 });
+
+test('the swarm flies along any aim, its fan square to the aim',()=>{
+  const swarm=model.swarmConfig(),owner={x:500,y:300},mid=(swarm.count-1)/2;
+  for(const angle of [-Math.PI/2+0.2,-0.8,0.6,Math.PI-0.7,-Math.PI+0.4]){
+    const f={x:Math.cos(angle),y:Math.sin(angle)},hand={x:owner.x,y:owner.y+swarm.spawnYBase};
+    const end=i=>{const q=model.launch(owner,angle,'aim',i);return model.outward(q,q.cfg.outwardDuration);};
+    const across=p=>(p.x-hand.x)*f.y-(p.y-hand.y)*f.x, along=p=>(p.x-hand.x)*f.x+(p.y-hand.y)*f.y;
+    // The centre shuriken lands on the aim line, a full flight out along it.
+    assert.ok(Math.abs(across(end(mid)))<1e-6);
+    assert.ok(along(end(mid))>swarm.forwardDistanceBase);
+    // Mirrored shards land mirrored about it: the fan turns with the aim.
+    for(let i=0;i<mid;i++){const a=end(i),b=end(swarm.count-1-i);
+      assert.ok(Math.abs(across({x:(a.x+b.x)/2,y:(a.y+b.y)/2}))<1e-6);assert.ok(Math.abs(across(a))>1);}
+  }
+});

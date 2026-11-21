@@ -3,6 +3,7 @@ const { lerp: interpolate } = require("../../../../shared/math.js");
 const { slimeLaunch, sampleSlimePath } = require("../../../../shared/characters/gloopProjectile");
 const { aimAtTarget } = require("../../../../shared/characters/sparrowProjectile");
 const { resolveGloopHookSocket } = require("../../../../shared/characters/gloopHookGeometry");
+const { launchPoint } = require("../../../../shared/characters/characterRig");
 const {
   getResolvedCharacterAimConfig,
   getResolvedCharacterSpecialAimConfig,
@@ -104,7 +105,22 @@ function isSpecialFamily(family) {
   return String(family || "").toLowerCase() === "special";
 }
 
+// "followup": a super's second aim, after its tap (Sparrow's Seraph bolt). Its
+// config is the special tuning entry whose `aim` it is (`lightBolt.aim`).
+const FOLLOW_UP_KEYS = { sparrow: "lightBolt" };
+function isFollowUpFamily(family) {
+  return String(family || "").toLowerCase() === "followup";
+}
+
 function getAimConfig(character, family = "basic") {
+  if (isFollowUpFamily(family)) {
+    const key = FOLLOW_UP_KEYS[character];
+    const config = mergeObjects(DEFAULT_AIM_CONFIG, getResolvedCharacterSpecialConfig(character, key)?.aim || {});
+    config.family = "followup";
+    config.specialKey = key;
+    config.anchorCharacter = character;
+    return config;
+  }
   const special = isSpecialFamily(family);
   const overrides = special
     ? getResolvedCharacterSpecialAimConfig(character) || {}
@@ -115,7 +131,7 @@ function getAimConfig(character, family = "basic") {
 }
 
 function getAimTuning(character, config = {}, family = "basic") {
-  if (isSpecialFamily(family)) {
+  if (isSpecialFamily(family) || isFollowUpFamily(family)) {
     return getResolvedCharacterSpecialConfig(
       character,
       config.specialKey || null,
@@ -170,6 +186,10 @@ function getPlayerAimBasePoint({ character, player, family = "basic" } = {}) {
 }
 
 function getPlayerAimBase(player, config = {}, angle = 0) {
+  if (config.anchorKind === "rig-muzzle") {
+    const muzzle = launchPoint(config.anchorCharacter, config.muzzle, { x: Number(player?.x) || 0, y: Number(player?.y) || 0, flip: Math.cos(angle) < 0 }, angle);
+    if (muzzle) return { baseX: Number(player?.x) || 0, baseY: Number(player?.y) || 0, anchorX: muzzle.x, anchorY: muzzle.y };
+  }
   if (config.anchorKind === "gloop-hook") {
     const socket = resolveGloopHookSocket(player, angle);
     return {
@@ -583,8 +603,7 @@ function resolveAttackAimContext({
     const flight = aimAtTarget({ x: Number(player?.x) || 0, y: Number(player?.y) || 0,
       width: player?.displayWidth || player?.width || 150,
       height: player?.displayHeight || player?.height || 150 },
-    { x: resolvedTargetX, y: resolvedTargetY }, isSpecialFamily(family) ? 0.5 : rangeRatio,
-    isSpecialFamily(family), Number(config.trajectorySamples) || 32);
+    { x: resolvedTargetX, y: resolvedTargetY }, rangeRatio, Number(config.trajectorySamples) || 32);
     angle = flight.angle;
     throwPreview = flight.preview;
     base.anchorX = flight.projectile.x;
@@ -609,7 +628,7 @@ function resolveAttackAimContext({
     kind,
     quick: !!quick,
     config,
-    paletteKey: config.family === "special" ? "special" : "basic",
+    paletteKey: config.family === "basic" ? "basic" : "special",
     angle,
     direction,
     unitX,

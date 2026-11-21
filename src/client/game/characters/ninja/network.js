@@ -1,11 +1,16 @@
 import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { applyTeamVisual } from "../../../../shared/projectilePresentation";
-import { presentSwarmRelease } from "./swarmPresentation";
+import {
+  presentSwarmRelease,
+  presentSwarmTurn,
+  presentSwarmImpact,
+  presentSwarmShardEnd,
+} from "./swarmPresentation";
 import {
   ninjaProjectileTexture,
   animateNinjaProjectile,
 } from "./projectileTexture";
-import { createShurikenEffects } from "./effects";
+import { createShurikenEffects, HIT_SOUND } from "./effects";
 import {
   beginThrow,
   claimThrow,
@@ -58,6 +63,8 @@ import {
 // Match and embedded previews own separate flights, clocks and teardown.
 
 const { key: NAME } = characterDefinitions.ninja;
+// A swarm striking a wall is one clatter, not fifteen.
+const WALL_SOUND_GAP_MS = 45;
 
 export function createNinjaNetwork(options = {}) {
   const clock = options.clock || matchClock;
@@ -229,17 +236,27 @@ export function createNinjaNetwork(options = {}) {
       });
     }
   }
-  function remove(id) {
+  // A swarm shuriken that was drawn has ended: its catch (or loss) closes the
+  // super's flow. Once per shuriken, when it ends on screen or is removed.
+  function endSwarmShard(e, reason) {
+    if (!e?.p?.special || !e.sprite || e.swarmEnded || !sceneRef) return;
+    e.swarmEnded = true;
+    presentSwarmShardEnd(sceneRef, owner(e.p.ownerName), {
+      returned: reason === "returned",
+    });
+  }
+  function remove(id, reason) {
     const e = active.get(id);
+    endSwarmShard(e, reason);
     e?.fx?.destroy();
     e?.sprite?.destroy();
     active.delete(id);
   }
-  function tombstone(id) {
+  function tombstone(id, reason) {
     terminals.add(id);
     while (terminals.size > 512)
       terminals.delete(terminals.values().next().value);
-    remove(id);
+    remove(id, reason);
   }
   function applyAmmo(action) {
     if (action.revision <= revision) return;
@@ -367,10 +384,12 @@ export function createNinjaNetwork(options = {}) {
               displayedOwner,
               swarmConfig().releaseMs,
               e.p.ownerName !== ctx.localUsername,
+              { x: e.p.startX, y: e.p.startY, angle: e.p.angle },
             );
             e.releasePresented = true;
           }
-          const team = ownerTeamLook(ctx, e.p.ownerName, o);
+          // The thrower's own team, not the flight's return point (which has none).
+          const team = ownerTeamLook(ctx, e.p.ownerName);
           e.texture = ninjaProjectileTexture(scene, displayedOwner, team);
           e.sprite = scene.add.image(e.p.x, e.p.y, e.texture);
           e.sprite.setScale(e.p.cfg.scale);
@@ -392,6 +411,11 @@ export function createNinjaNetwork(options = {}) {
             angle: e.p.angle,
             special: e.p.special,
             launch: !!hand || e.p.elapsed < 180,
+            // One whoosh for the swarm, carried by its centre shuriken.
+            flightSound:
+              !e.p.special ||
+              Number(id.slice(id.lastIndexOf(":") + 1)) ===
+                (swarmConfig().count - 1) >> 1,
           });
           if (e.p.ownerName !== ctx.localUsername)
             e.correction = remoteLaunchCorrection(
@@ -478,6 +502,25 @@ export function createNinjaNetwork(options = {}) {
           e.sprite.setScale(e.p.cfg.scale * leaving.scale);
         }
         e.sprite.setPosition(x, y);
+        // Striking terrain on the way out: the hit sound, once per window so a
+        // swarm into a wall stays one clatter.
+        if (
+          e.renderPhase === "outward" &&
+          e.p.phase === "stall" &&
+          now - (scene._ninjaWallSoundAt ?? -Infinity) > WALL_SOUND_GAP_MS
+        ) {
+          scene._ninjaWallSoundAt = now;
+          playPlayerSound(scene, { x, y }, HIT_SOUND, {
+            rate: 0.94 + Math.random() * 0.12,
+          });
+        }
+        // A swarm shuriken glints where it turns back.
+        if (
+          e.p.special &&
+          e.renderPhase === "outward" &&
+          (e.p.phase === "hover" || e.p.phase === "stall")
+        )
+          presentSwarmTurn(scene, x, y, e.sprite);
         e.renderPhase = e.p.phase;
         animateNinjaProjectile(
           e.sprite,
@@ -488,6 +531,7 @@ export function createNinjaNetwork(options = {}) {
         );
         e.fx?.update(now, !e.p.done);
         if (e.p.done) {
+          endSwarmShard(e, e.p.reason);
           e.sprite.setVisible?.(false);
           if (until - e.at > 2000) tombstone(id);
           continue;
@@ -572,7 +616,6 @@ export function createNinjaNetwork(options = {}) {
           variant: beginThrow(sprite, a.projectile.angle, performance.now()),
         });
         playPlayerSound(scene, sprite, "shurikenThrow", {
-          volume: 1,
           rate: 1.3,
         });
       }
@@ -581,7 +624,7 @@ export function createNinjaNetwork(options = {}) {
       const e = active.get(a.id);
       if (e) accept({ ...e.p, ...a.state, done: false }, a.simMono);
     } else if (a.type === "ninja-terminal") {
-      tombstone(a.id);
+      tombstone(a.id, a.reason);
       if (packet.playerName === ctx.localUsername) applyAmmo(a);
     } else if (a.type === "ninja-impact") {
       const key = `hit:${a.id}:${a.phase}:${a.target}`;
@@ -589,12 +632,16 @@ export function createNinjaNetwork(options = {}) {
       terminals.add(key);
       while (terminals.size > 512)
         terminals.delete(terminals.values().next().value);
-      if (a.appliedDamage > 0)
+      const shooter = owner(packet.playerName);
+      if (active.get(a.id)?.p?.special) {
+        presentSwarmImpact(scene, a.x, a.y, shooter || ownerTeamLook(ctx, packet.playerName), {
+          sound: a.appliedDamage > 0,
+        });
+      } else if (a.appliedDamage > 0)
         playPlayerSound(
           scene,
           owner(packet.playerName) || { x: a.x, y: a.y },
-          "shurikenHit",
-          { volume: 0.5 },
+          HIT_SOUND,
         );
     }
     return true;
@@ -603,7 +650,7 @@ export function createNinjaNetwork(options = {}) {
   // Lifecycle contract consumed by the generic match and scene controllers.
   const networkAdapter = {
     key: NAME,
-    joinFields: { ninjaCombatVersion: 1 },
+    joinFields: { ninjaCombatVersion: VERSION },
     bootstrapKey: "ninjaCombat",
     configure: configureNinjaNetwork,
     reset: resetNinjaNetwork,

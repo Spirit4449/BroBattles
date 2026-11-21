@@ -141,6 +141,35 @@ function shotFor(kind, source, contact, floor, ball) {
   return { direction, speed, effect };
 }
 
+function bodyContactBounds(rect) {
+  return { ...rect, top: rect.top - rules.bodyContactTopPadding };
+}
+
+function releasePinnedBall(ball, player, nx, ny, speed, elapsed, dt, colliders) {
+  const vertical = Math.abs(ny) > Math.abs(nx);
+  const centerX = (player.left + player.right) / 2 + player.vx * elapsed;
+  const offset = ball.x - centerX;
+  const side = Math.abs(offset) > rules.footCenterTolerance
+    ? Math.sign(offset) : player.facing || 1;
+  const lift = Math.min(ball.vy, -rules.bodyLift);
+  // Try the space beside the feet first, or slide the ball up a wall.
+  const exits = vertical
+    ? [[side * speed, ny > 0 ? lift : 0], [-side * speed, ny > 0 ? lift : 0], [0, lift]]
+    : [[0, lift], [0, Math.max(ball.vy, speed)]];
+  for (const [vx, vy] of exits) {
+    const exitVx = Math.sign(vx) * Math.max(Math.abs(vx), Math.sign(vx) * ball.vx);
+    const blocked = colliders.some(rect => {
+      const hit = sweepCircle(ball.x, ball.y, exitVx * dt, vy * dt, rect, rules.radius);
+      return hit && hit.t <= EPSILON && faceBlocks(rect, hit, ball);
+    });
+    if (!blocked) {
+      ball.vx = exitVx;
+      ball.vy = vy;
+      return;
+    }
+  }
+}
+
 /**
  * Advances the ball one fixed step against the pitch and the players' bodies.
  * Returns the defending team when the whole ball crosses a goal line.
@@ -149,6 +178,7 @@ function shotFor(kind, source, contact, floor, ball) {
  */
 function advanceBall(ball, dt, field, players, onImpact, scoredGoal = null) {
   const { radius } = rules;
+  const bodyContactRadius = radius + rules.bodyContactPadding;
   const { colliders, goals, floor } = field;
   let remaining = dt;
   // Resting on the pitch or on top of a platform: roll instead of falling.
@@ -161,13 +191,13 @@ function advanceBall(ball, dt, field, players, onImpact, scoredGoal = null) {
     ball.vx *= drag;
     ball.vy = ball.vy * drag + rules.gravity * dt;
   }
-  // One passive impulse per encounter. A player can stay pressed against a
-  // pinned ball until there is room between them for another approach.
+  // Keep overlap corrections from repeating a squeeze response before the
+  // ball and the player have had room to separate.
   ball.contacts ??= new Set();
   ball.pinnedBodies ??= new Set();
   for (const id of ball.contacts) {
     const body = players.find(player => player.id === id);
-    if (!body || !sweepCircle(ball.x, ball.y, 0, 0, body, radius + 3)) {
+    if (!body || !sweepCircle(ball.x, ball.y, 0, 0, bodyContactBounds(body), bodyContactRadius + 3)) {
       ball.contacts.delete(id);
       ball.pinnedBodies.delete(id);
     }
@@ -200,7 +230,8 @@ function advanceBall(ball, dt, field, players, onImpact, scoredGoal = null) {
       const leavingStriker = ball.striker === player.id &&
         sweepCircle(ball.x, ball.y, 0, 0, rect, radius + rules.kickReach + 1);
       if (ball.striker === player.id && !leavingStriker) ball.striker = null;
-      const contact = leavingStriker || struck.has(player.id) || ball.pinnedBodies.has(player.id) ? null : sweepCircle(ball.x, ball.y, relativeX, relativeY, rect, radius);
+      const contact = leavingStriker || struck.has(player.id) || ball.pinnedBodies.has(player.id)
+        ? null : sweepCircle(ball.x, ball.y, relativeX, relativeY, bodyContactBounds(rect), bodyContactRadius);
       if (!struck.has(player.id)) {
         if (player.dash && !leavingStriker) {
           const reach = sweepCircle(ball.x, ball.y, relativeX, relativeY, rect, radius + rules.dashReach);
@@ -272,14 +303,11 @@ function advanceBall(ball, dt, field, players, onImpact, scoredGoal = null) {
           const hit = sweepCircle(ball.x, ball.y, nx * reach, ny * reach, rect, radius);
           if (hit && faceBlocks(rect, hit, ball)) {
             clearance = Math.min(clearance, reach * hit.t);
-            pinned = true;
           }
         }
-        // Once squeezed, the player can overlap the ball. Switching to the
-        // opposite body face mid-contact would pull it back out of the corner.
-        if (pinned || !raisedHead) push = Math.min(push, rules.bodySeparationSpeed * dt);
+        if (clearance < Infinity || !raisedHead) push = Math.min(push, rules.bodySeparationSpeed * dt);
         push = Math.min(push, clearance);
-        if (clearance <= push + EPSILON) ball.pinnedBodies.add(source.id);
+        pinned = clearance <= push + EPSILON;
       }
       ball.x += nx * push;
       ball.y += ny * push;
@@ -309,6 +337,12 @@ function advanceBall(ball, dt, field, players, onImpact, scoredGoal = null) {
           const lift = Math.min(rules.bodyLiftMax, rules.bodyLift + impactStrength * 0.15);
           ball.vy = Math.min(ball.vy, -lift);
         }
+      } else if (pinned && approach < 0) {
+        impactStrength = -approach;
+        releasePinnedBall(ball, source, nx, ny, impactStrength, dt - remaining, dt, colliders);
+        // Ignore this body until it clears the ball so an escape can pass
+        // across the player's feet without producing a second squeeze.
+        ball.pinnedBodies.add(source.id);
       }
       // Standing up can pop a ball that overlaps the newly raised head even
       // when the player was already touching it while crouched.
@@ -322,6 +356,7 @@ function advanceBall(ball, dt, field, players, onImpact, scoredGoal = null) {
         ball.vy = 0;
       }
     }
+    if (kind !== 'wall' && impactStrength > 0) ball.lastTouch = { id: source.id, team: source.team, name: source.name };
     limitSpeed(ball);
     if (impactStrength > (kind === 'body' ? 28 : rules.settleSpeed)) {
       if (kind === 'wall' && /crossbar|goal-base/.test(source.id)) effect = 'post';
@@ -329,7 +364,10 @@ function advanceBall(ball, dt, field, players, onImpact, scoredGoal = null) {
         x: ball.x, y: ball.y, angle: kind === 'wall' ? Math.atan2(ny, nx) : Math.atan2(ball.vy, ball.vx),
         strength: impactStrength,
         ...(kind !== 'wall' && {
-          contact: { x: ball.x - nx * radius, y: ball.y - ny * radius, nx, ny },
+          contact: {
+            x: ball.x - nx * radius, y: ball.y - ny * radius, nx, ny,
+            ...(kind === 'body' && ny > Math.abs(nx) && source.vy > 0 && { foot: true }),
+          },
         }),
       });
     }

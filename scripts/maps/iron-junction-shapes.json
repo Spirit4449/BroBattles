@@ -1,6 +1,7 @@
 {
   "world": {
     "width": 5000,
+    "top": -468,
     "mid": 252,
     "bottom": 1140,
     "shadeBottom": 1000
@@ -82,6 +83,22 @@
   ],
   "shelf": 716,
   "shapes": [
+    {
+      "id": "ceiling",
+      "kind": "ceiling",
+      "left": 92,
+      "top": -540,
+      "width": 2408,
+      "height": 224
+    },
+    {
+      "id": "ceiling-right",
+      "kind": "ceiling",
+      "left": 2500,
+      "top": -540,
+      "width": 2408,
+      "height": 224
+    },
     {
       "id": "side-wall",
       "kind": "wall",

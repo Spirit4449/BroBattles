@@ -73,7 +73,6 @@ class BankBustGameMode extends BaseGameMode {
       endsAt: null,
       matchDurationMs: settings.matchDurationMs,
       respawnDelayMs: settings.respawnDelayMs,
-      respawnShieldMs: settings.respawnShieldMs,
       purchaseFloorCoins: settings.purchaseFloorCoins,
       lowCoinsRatio: settings.lowCoinsRatio,
       objects: createBankBustObjects(layout),
@@ -126,7 +125,6 @@ class BankBustGameMode extends BaseGameMode {
     return {
       enabled: true,
       delayMs: state?.respawnDelayMs ?? DEFAULT_SETTINGS.respawnDelayMs,
-      shieldMs: state?.respawnShieldMs ?? DEFAULT_SETTINGS.respawnShieldMs,
       spawn: "team-base",
       team: playerData?.team || null,
       position: geometry ? (this.room?.spawnStateFor?.(playerData) ||

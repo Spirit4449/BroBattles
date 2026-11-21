@@ -351,7 +351,7 @@ function createRouteSearch(graph, from, poisonY = Infinity, options = {}) {
         if (blocked.has(rec.key) || blocked.has(rec.pair)) continue;
       }
       if (!rec.target) continue;
-      const penalty = Math.max(0, Number(edgeCost?.(edge, item.id, rec.pair)) || 0);
+      const penalty = Math.max(0, Number(edgeCost?.(edge, item.id, rec.pair, item.x)) || 0);
       const approach = hasX ? Math.abs(edge.takeoffX - item.x) / movement.maxSpeed * 1000 : 0;
       let exposure = 0;
       if (poisoned) {
@@ -374,28 +374,37 @@ function createRouteSearch(graph, from, poisonY = Infinity, options = {}) {
   // frames) and still return what an uninterrupted one would.
   function* steps(to, goalX) {
     if (!from || !to) return null;
-    if (to === from && walkable(from, options.startX, goalX)) return [];
-    let checked = 0;
+    const priceWalk = Number.isFinite(goalX) && options.goalWalkCost;
+    if (!priceWalk && to === from && walkable(from, options.startX, goalX)) return [];
+    let checked = 0, best = null, bestTotal = Infinity;
+    const consider = (item) => {
+      if (item.id !== to || !walkable(to, item.x, goalX)) return;
+      const total = item.cost + (priceWalk ? priceWalk(surfaces.get(to), item.x, goalX) : 0);
+      if (total < bestTotal) { best = item; bestTotal = total; }
+    };
     for (;;) {
       const done = settled.get(to) || [];
-      for (; checked < done.length; checked++) if (walkable(to, done[checked].x, goalX)) return routeOf(done[checked]);
-      if (!queue.size) return null;
+      for (; checked < done.length; checked++) {
+        consider(done[checked]);
+        if (best && done[checked].cost >= bestTotal) return routeOf(best);
+      }
+      if (!queue.size) return best ? routeOf(best) : null;
       for (let n = 0; n < SEARCH_SLICE && queue.size; n++) {
         const item = queue.pop();
         let list = settled.get(item.id);
         if (!list) settled.set(item.id, list = []);
         list.push(item);
-        const found = item.id === to && walkable(to, item.x, goalX);
+        consider(item);
         // Reaching the same platform on the other side of a wall is a different
         // navigation state. Collapsing both landings prevents routes around blocks.
-        if (visited[item.k] || item.cost > bestCost[item.k]) { if (found) return routeOf(item); continue; }
+        if (visited[item.k] || item.cost > bestCost[item.k]) continue;
         visited[item.k] = 1;
         const fromSurface = surfaces.get(item.id);
         const hasX = Number.isFinite(item.x);
         // Standing still on the takeoff surface is the same for every edge.
         const standing = relax(item, tables.adjacency.get(item.id) || [], fromSurface, hasX, null);
         if (options.allowDash && !item.dashUsed) relax(item, tables.dashAdjacency.get(item.id) || [], fromSurface, hasX, standing);
-        if (found) return routeOf(item);
+        if (best && item.cost >= bestTotal) return routeOf(best);
       }
       yield;
     }

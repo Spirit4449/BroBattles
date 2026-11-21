@@ -5,6 +5,7 @@ const { shotTerrain } = require('./attackRuntimes/geometry.js');
 const { exposeDamageHitbox } = require('./damageHitboxes.js');
 const { snapshotEpoch } = require('./clock');
 const model = require('../../characters/sparrowProjectile');
+const lightBolt = require('../../characters/sparrowLightBolt');
 const { participantId, getParticipant } = require('./participants');
 const { characterBody } = require('../../physics/characterBody');
 const { clampDeliveryRewind } = require('../attackDelivery');
@@ -15,7 +16,7 @@ function initialize(room) {
   // Protocol version protects joins from stale clients; combat is always authoritative.
   room.sparrowCombatVersion = model.VERSION;
   snapshotEpoch(room);
-  room.sparrowCombatState = { active: new Map(), pending: [], requests: new Map(), terminals: [], metrics: [] };
+  room.sparrowCombatState = { active: new Map(), bolts: new Map(), pending: [], requests: new Map(), terminals: [], metrics: [] };
 }
 function timing(room) {
   return { epoch: room.snapshotEpoch, sentMono: room.combatClock?.mono?.() ?? performance.now(), simMono: room.simulationMono ?? performance.now() };
@@ -32,26 +33,31 @@ function result(room, p, id, accepted, reason, extra = {}) {
   emit(room, p, action);
   return action;
 }
-function request(room, p, data, special = false) {
+// True while Sparrow's Seraph aim phase holds her: no arrows until the bolt flies.
+function inSeraph(p, now) {
+  return (Number(p?.effects?.sparrowSeraphUntil) || 0) > 0 && !p.effects.sparrowSeraphFired &&
+    Number(p.effects.sparrowSeraphStartedAt) <= now;
+}
+function request(room, p, data) {
   const state = room.sparrowCombatState, now = combatNow(room);
   const { id, key } = requestIdentity(p, data);
   const previous = state.requests.get(key);
   if (previous) { emit(room, p, previous.action); return previous.action.accepted; }
   if (!withinRequestRate(p, '_sparrowRequestWindow', now)) return false;
   if (!id) { result(room, p, id, false, 'invalid-request'); return false; }
-  const shot = model.resolveShot(special ? data.aim : data, special);
-  const reason = unavailableReason(room, p, now) || (!shot ? 'invalid-aim' : !isCharged(p, special) ? 'not-ready' : null);
+  const shot = model.resolveShot(data);
+  const reason = unavailableReason(room, p, now) || (inSeraph(p, now) ? 'locked' : null) ||
+    (!shot ? 'invalid-aim' : !isCharged(p, false) ? 'not-ready' : null);
   const accepted = !reason;
   if (accepted) {
-    spendShot(room, p, special, now);
-    room.gameMode?.onAttackAccepted?.(p, data, special);
-    if (special) room.broadcast(SOCKET_EVENTS.PLAYER_SPECIAL, { username: p.name, character: 'sparrow', aim: data.aim });
-    const startup = model.attackConfig(special).castDelayMs || 0;
+    spendShot(room, p, false, now);
+    room.gameMode?.onAttackAccepted?.(p, data, false);
+    const startup = model.attackConfig().castDelayMs || 0;
     state.pending.push({ ownerId: participantId(p), id, shot, dueTick: room.tickId + Math.ceil(startup / model.STEP_MS),
       viewRewindMs: clampDeliveryRewind('released', data?.viewRewindMs), viewRewindRequestedMs: Number(data?.viewRewindMs) || 0 });
     // Keep public windups available to existing animations and bot perception.
     require('./characterActionRegistry.js').broadcastAction(room, p, {
-      type: special ? 'sparrow-windup-special' : 'sparrow-arrow', id, angle: shot.angle, startup,
+      type: 'sparrow-arrow', id, angle: shot.angle, startup,
     }, now);
   }
   const action = result(room, p, id, accepted, reason || 'accepted');
@@ -82,7 +88,7 @@ function finish(room, attack, contact) {
   const terminal = { type: 'sparrow-terminal', id: attack.projectile.id, requestId: attack.clientRequestId,
     ...contact, rotation: Math.atan2(attack.vy, attack.vx),
     targetOffset: target ? { x: attachment.x - anchor.x, y: attachment.y - anchor.y } : null,
-    visual: { scale: attack.projectile.scale, embedMs: attack.projectile.embedMs, special: attack.projectile.special },
+    visual: { scale: attack.projectile.scale, embedMs: attack.projectile.embedMs },
     movementReportAgeMs: target && !target.isBot && target._lastPositionPacketAt > 0 ? Math.max(0, combatNow(room) - target._lastPositionPacketAt) : null,
     ...timing(room), ownerName: attack.attackerName };
   if (contact.reason === 'target') {
@@ -97,6 +103,49 @@ function finish(room, attack, contact) {
   room.sparrowCombatState.terminals.push(terminal);
   if (room.sparrowCombatState.terminals.length > 256) room.sparrowCombatState.terminals.shift();
   if (owner) emit(room, owner, terminal);
+}
+// The Seraph light bolt: fired once per super, it flies straight at very high
+// speed and pierces everything, striking each enemy, vault and crate on its
+// path once. Targets are tested where the shooter saw them, like arrows.
+function fireBolt(room, p, { requestId, angle, viewRewindMs = 0, auto = false }) {
+  const state = room.sparrowCombatState;
+  const id = `${p.name}:bolt:${requestId}`;
+  const bolt = lightBolt.createBolt({ ...pose(p), flip: p.flip }, angle, id, room.simulationMono);
+  const attack = { projectile: bolt, bolt: true, clientRequestId: requestId, attackerName: p.name,
+    attackerParticipantId: participantId(p), attackType: 'sparrow-light-bolt', x: bolt.x, y: bolt.y,
+    collisionRadius: bolt.radius, age: 0, struck: new Set(), viewRewindMs: clampDeliveryRewind('released', viewRewindMs) };
+  state.bolts.set(id, attack);
+  emit(room, p, { type: 'sparrow-bolt', requestId, auto, bolt: { ...bolt, ownerName: p.name } });
+  return attack;
+}
+function strike(room, attack, owner, contact) {
+  const outcome = room.handleHit(attack.attackerParticipantId, {
+    attacker: attack.attackerName, target: contact.target, attackType: attack.attackType, instanceId: attack.projectile.id,
+  }, { server: true, sparrowProjectile: attack });
+  if (owner) emit(room, owner, { type: 'sparrow-bolt-hit', id: attack.projectile.id, requestId: attack.clientRequestId,
+    target: contact.target, x: contact.x, y: contact.y, appliedDamage: outcome?.appliedDamage || 0, ownerName: attack.attackerName });
+}
+function tickBolts(room) {
+  const state = room.sparrowCombatState;
+  if (!state.bolts) return;
+  for (const [id, attack] of state.bolts) {
+    const owner = getParticipant(room, attack.attackerParticipantId);
+    if (!owner || owner.connected === false || room.status !== 'active') { state.bolts.delete(id); continue; }
+    const bolt = attack.projectile;
+    const age = Math.min(bolt.durationMs, Math.max(0, room.simulationMono - bolt.launchMono));
+    const from = { x: attack.x, y: attack.y }, to = lightBolt.sampleBolt(bolt, age);
+    exposeDamageHitbox(room, bolt, { kind: 'sweep', a: from, b: to, radius: attack.collisionRadius });
+    const contacts = [];
+    for (const target of targetList(room, owner, attack.viewRewindMs)) {
+      if (attack.struck.has(target.name)) continue;
+      const t = model.sweep(from, to, target.bounds, attack.collisionRadius);
+      if (t !== null) contacts.push({ t, target: target.name, x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+    }
+    contacts.sort((a, b) => a.t - b.t || a.target.localeCompare(b.target));
+    for (const contact of contacts) { attack.struck.add(contact.target); strike(room, attack, owner, contact); }
+    Object.assign(attack, to, { age });
+    if (age >= bolt.durationMs) state.bolts.delete(id);
+  }
 }
 // Resolved on first use (circular imports); kept out of the per-tick path.
 let botCombat = null;
@@ -118,7 +167,7 @@ function tick(room) {
     const projectiles = model.createVolley(pose(owner), cast.shot, `${owner.name}:${cast.id}`, room.simulationMono);
     for (const projectile of projectiles) state.active.set(projectile.id, {
       projectile, clientRequestId: cast.id, attackerName: owner.name, attackerParticipantId: cast.ownerId,
-      attackType: cast.shot.special ? 'sparrow-burning-arrow' : 'sparrow-arrow',
+      attackType: 'sparrow-arrow',
       x: projectile.x, y: projectile.y, vx: projectile.vx, vy: projectile.vy, gravity: projectile.gravity,
       collisionRadius: projectile.radius, age: 0, viewRewindMs: cast.viewRewindMs || 0, viewRewindRequestedMs: cast.viewRewindRequestedMs || 0,
     });
@@ -142,6 +191,7 @@ function tick(room) {
       finish(room, attack, { reason: 'expired', x: attack.x, y: attack.y });
     }
   }
+  tickBolts(room);
   const wall = combatNow(room);
   for (const [key, entry] of state.requests) if (wall - entry.at > ATTACK_REPLAY_WINDOW_MS) state.requests.delete(key);
   state.metrics.push(performance.now() - started);
@@ -153,15 +203,29 @@ function bootstrap(room) {
     projectiles: [...room.sparrowCombatState.active.values()].map(packetFor), terminals: room.sparrowCombatState.terminals.slice() };
 }
 function isTrustedContact(room, attack, payload) {
-  return attack && room.sparrowCombatState.active.get(attack.projectile.id) === attack &&
+  const state = room.sparrowCombatState;
+  return attack && (attack.bolt ? state.bolts : state.active).get(attack.projectile.id) === attack &&
     payload.instanceId === attack.projectile.id && payload.attacker === attack.attackerName && payload.attackType === attack.attackType;
+}
+function cancelCasts(room, player, { releasedSupers = false } = {}) {
+  const state = room.sparrowCombatState;
+  if (!state) return;
+  const owner = participantId(player);
+  state.pending = state.pending.filter(cast => {
+    if (cast.ownerId !== owner) return true;
+    result(room, player, cast.id, false, 'cancelled');
+    return false;
+  });
+  if (!releasedSupers || !state.bolts) return;
+  for (const [id, attack] of state.bolts) if (attack.attackerParticipantId === owner) state.bolts.delete(id);
 }
 function dispose(room) {
   const state = room.sparrowCombatState;
   if (!state) return;
   state.active.clear();
+  state.bolts?.clear();
   state.pending.length = 0;
   state.terminals.length = 0;
   state.requests.clear();
 }
-module.exports = { dispose, initialize, request, tick, bootstrap, timing, isTrustedContact };
+module.exports = { dispose, cancelCasts, initialize, request, tick, bootstrap, timing, isTrustedContact, fireBolt, emit };

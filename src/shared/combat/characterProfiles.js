@@ -29,7 +29,7 @@ const healthFraction = (player) =>
  * - superRange: preferred spacing while a super is charged (null = none).
  * - buffSuper: self/team buff; usable while retreating, as an emergency, and
  *   without an enemy range limit.
- * - specialRange: { fallback, fromBasicAim } distance limit for casting the
+ * - specialRange: { fallback, fromBasicAim, fixed } distance limit for casting the
  *   special: the special aim's defaultRange/radius (or the basic aim's
  *   defaultRange when `fromBasicAim`), else `fallback`.
  * - specialLockMs: action lock after casting the special.
@@ -102,11 +102,13 @@ const PROFILES = {
     // Her three-arrow spread is already forgiving, so give opponents a
     // readable punish window instead of chaining every available charge.
     hesitation: { min: 360, max: 620, awarenessPenalty: 120 },
-    superRange: 600,
+    // Seraph: she rises and aims for a few seconds (sparrowSeraphAbility), so
+    // take it from range with a target in view, ideally two lined up.
+    superRange: 650,
+    specialRange: { fixed: 1400 },
     shouldUseSuper({ target, enemies, distance }) {
-      const clustered = enemies.filter((enemy) => Math.hypot(enemy.x - target.x, enemy.y - target.y) < 180).length;
-      return distance >= 180 && distance <= 930 &&
-        (clustered >= 2 || target.grounded || Math.abs(target.vy || 0) < 140);
+      const lined = enemies.filter((enemy) => Math.hypot(enemy.x - target.x, enemy.y - target.y) < 260).length;
+      return distance >= 220 && distance <= 1400 && (lined >= 2 || distance >= 300);
     },
   },
   gloop: {

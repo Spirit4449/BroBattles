@@ -13,7 +13,7 @@ function events() {
     count() { return [...handlers.values()].reduce((sum, set) => sum + set.size, 0); },
   };
 }
-function setup({ canCapture } = {}) {
+function setup({ canCapture, canPrepare, getPreferences, onLockedAimMove } = {}) {
   const win = events();
   const bodyClasses = new Set();
   const body = {
@@ -32,7 +32,7 @@ function setup({ canCapture } = {}) {
   let allowed = true, releases = 0;
   const base = { baseX: 10, baseY: 20 };
   const scene = { game: { canvas }, add: { graphics: () => graphic }, events: { on() {}, off() {} }, cameras: { main: { zoom: 1.8 } } };
-  const controller = createCombatMouseController({ scene, canPlay: () => allowed, canCapture, getBase: () => base,
+  const controller = createCombatMouseController({ scene, canPlay: () => allowed, canCapture, canPrepare, getPreferences, getBase: () => base, onLockedAimMove,
     onRelease: () => releases++, depth: 10, config: { ...COMBAT_MOUSE_CONFIG, mouseSensitivity: 0.36 } });
   const capture = () => { assert.equal(controller.beginInput(), false); doc.pointerLockElement = canvas; doc.emit('pointerlockchange'); };
   return { controller, scene, doc, win, canvas, base, capture, block: () => { allowed = false; }, releases: () => releases };
@@ -41,6 +41,28 @@ function move(h, x, y) {
   h.doc.emit('mousemove', { target: h.canvas, movementX: x, movementY: y });
   h.controller.update();
 }
+
+test('a locked follow-up can steer without a drag and consume motion before the reticle', () => {
+  const motions = [];
+  let followUp = true;
+  const h = setup({ onLockedAimMove: (x, y) => {
+    if (!followUp) return false;
+    motions.push([x, y]);
+    return true;
+  } });
+  h.capture();
+  move(h, 50, -25);
+  assert.deepEqual(motions, [[18, -9]]);
+  assert.equal(h.controller.shouldShowReticle(), false);
+  h.controller.beginDrag();
+  move(h, 50, 25);
+  assert.equal(h.controller.shouldShowReticle(), false);
+  followUp = false;
+  move(h, 50, 25);
+  assert.equal(h.controller.shouldShowReticle(), true);
+  h.controller.destroy();
+});
+
 test('gameplay hides cursor before clicking; movement captures and Escape keeps it visible', () => {
   const h = setup();
   let requests = 0;
@@ -75,15 +97,20 @@ test('typing, shortcuts and blocked gameplay do not capture the mouse', () => {
   assert.equal(h.canvas.style.cursor, '');
   h.controller.destroy();
 });
-test('focused arena consumes game keys while capture is disabled for countdown', () => {
-  const h = setup({ canCapture: () => false });
-  let prevented = 0;
-  h.doc.emit('keydown', { key: 'ArrowDown', target: h.canvas, preventDefault() { prevented++; } });
-  h.doc.emit('keydown', { key: ' ', target: h.canvas, preventDefault() { prevented++; } });
-  h.doc.emit('keydown', { key: 'ArrowDown', target: { tagName: 'INPUT' }, preventDefault() { prevented++; } });
-  h.doc.emit('keydown', { key: 'ArrowDown', target: h.canvas, metaKey: true, preventDefault() { prevented++; } });
-  assert.equal(prevented, 2);
+test('the countdown keeps the keyboard available and focused before the fight', () => {
+  let live = false;
+  const h = setup({ canCapture: () => live, canPrepare: () => true,
+    getPreferences: () => ({ autoHideCursor: false }) });
+  let focused = false;
+  h.canvas.focus = () => { focused = true; };
+  assert.equal(h.controller.prepareForBattle(), true);
+  assert.equal(focused, true);
+  assert.equal(h.canvas.style.cursor, '');
+  h.doc.emit('keydown', { key: 'ArrowDown', target: h.canvas,
+    preventDefault() { assert.fail('Phaser still needs the keydown event'); } });
   assert.equal(h.controller.isActive(), false);
+  live = true;
+  assert.equal(h.controller.isActive(), true, 'held keys can be used as soon as FIGHT begins');
   h.controller.destroy();
 });
 test('focused arena leaves game keys to Phaser once the fight is live', () => {
@@ -295,7 +322,7 @@ test('disabling automatic hiding keeps cursor visible until arena activation', (
   controller.release();controller.update();assert.equal(h.canvas.style.cursor,'');
   controller.destroy();
 });
-test('countdown preparation hides the cursor and focuses the arena only when enabled', () => {
+test('countdown preparation focuses the arena and honors the cursor preference', () => {
   const h = setup();
   h.controller.destroy();
   let captureAllowed = false;
@@ -335,10 +362,10 @@ test('countdown preparation hides the cursor and focuses the arena only when ena
   });
   let disabledFocused = 0;
   disabled.canvas.focus = () => { disabledFocused++; };
-  assert.equal(disabledController.prepareForBattle(), false);
+  assert.equal(disabledController.prepareForBattle(), true);
   assert.equal(disabled.canvas.style.cursor, '');
   assert.equal(disabled.doc.body.classList.contains('battle-cursor-hidden'), false);
-  assert.equal(disabledFocused, 0);
+  assert.equal(disabledFocused, 1);
   disabledController.destroy();
 });
 test('sensitivity multiplier changes drag response without changing camera reach', () => {

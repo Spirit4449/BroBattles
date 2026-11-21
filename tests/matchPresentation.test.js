@@ -6,6 +6,54 @@ const path = require('node:path');
 describe("HUD preparation and match cues", () => {
   const root = path.resolve(__dirname, "..");
 
+  test("Bro Ball shows cumulative goal badges on either team after a player scores", () => {
+    const makeNode = () => ({
+      children: [],
+      classList: { add() {}, toggle() {}, contains: () => false },
+      style: { setProperty() {} },
+      append(...children) { this.children.push(...children); },
+      appendChild(child) { this.append(child); },
+      get lastChild() { return this.children.at(-1); },
+      setAttribute() {},
+    });
+    const left = makeNode();
+    const right = makeNode();
+    const nodes = {
+      "team-status-hud": makeNode(),
+      "team-status-left": left,
+      "team-status-right": right,
+    };
+    const { BRO_BALL_MODE } = require("../src/shared/broBall");
+    const { createGameHudController } = loadClientModule(path.join(root, "src/client/game/hud/gameHudController.js"), {
+      require: name => name.endsWith("/broBall") ? { BRO_BALL_MODE }
+        : name.endsWith("/modeHud") ? { createModeHud: () => ({ sync() {} }) }
+        : name.endsWith("/skinAssets.js") ? { bodyDisplayUrl: url => url, buildCharacterSkinBodyUrl: () => "" }
+        : name.endsWith("/characterStats.js") ? { DEFAULT_CHARACTER: "ninja", getCharacterDisplayName: cls => cls }
+        : {},
+      window: { addEventListener() {} },
+      document: { createElement: makeNode, getElementById: id => nodes[id] },
+    });
+    const hud = createGameHudController({
+      getGameData: () => ({ yourTeam: "team1" }),
+      getUsername: () => "Blue",
+    });
+    hud.initTeamStatusHud([{ name: "Blue", team: "team1" }, { name: "Red", team: "team2" }]);
+    const blue = left.lastChild.children[0].lastChild;
+    const red = right.lastChild.children[0].lastChild;
+    assert.equal(blue.hidden, true);
+    assert.equal(red.hidden, true);
+
+    hud.syncModeState({ type: BRO_BALL_MODE, playerGoals: { Red: 1 } }, "team1");
+    assert.equal(red.hidden, false);
+    assert.equal(red.lastChild.textContent, "1");
+    assert.equal(blue.hidden, true);
+
+    hud.syncModeState({ type: BRO_BALL_MODE, playerGoals: { Blue: 1, Red: 2 } }, "team1");
+    assert.equal(blue.hidden, false);
+    assert.equal(blue.lastChild.textContent, "1");
+    assert.equal(red.lastChild.textContent, "2");
+  });
+
   test("controls and spectate actions run once when the HUD is initialized twice", () => {
     const classes = { remove() {} };
     const keybind = { classList: classes, dataset: {}, querySelectorAll: () => [] };
@@ -117,7 +165,9 @@ describe("HUD preparation and match cues", () => {
         timers.sort((a, b) => a.time - b.time);
         const timer = timers.shift(); now = timer.time; timer.fn();
       }
-      assert.deepEqual(calls.map(call => call.key), ['beep', 'beep', 'beep', 'beep', 'beep', cue]);
+      assert.deepEqual(calls.map(({ key, time, display }) => [key, time, display]), [
+        ['beep', 0, 3], ['beep', 1000, 2], ['beep', 2000, 1], [cue, 3000, 'FIGHT!'],
+      ]);
       assert.equal(calls.at(-1).time, COUNTDOWN_MS);
       assert.equal(calls.at(-1).display, 'FIGHT!');
       assert.deepEqual(risers, [{ duration: COUNTDOWN_RISER_MS, time: COUNTDOWN_MS - COUNTDOWN_RISER_MS }]);

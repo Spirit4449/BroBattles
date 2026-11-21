@@ -71,11 +71,12 @@ const common = (f, extra = {}) => name =>
 
 test('requests carry the render time remote actors are drawn at, never an invented one', () => {
   const { shots } = arena();
-  assert.deepEqual({ ...shots.withShotView({ type: 'x' }) }, { type: 'x' });
+  assert.deepEqual({ ...shots.withCombatRequestContext({ type: 'x' }) }, { type: 'x' });
+  assert.deepEqual({ ...shots.withCombatRequestContext({ type: 'x' }, { rally: 0 }) }, { type: 'x', broBallRally: 0 });
   shots.noteRemoteView(4321.5);
-  assert.deepEqual({ ...shots.withShotView({ type: 'x', id: 'a' }) }, { type: 'x', id: 'a', viewMono: 4321.5 });
+  assert.deepEqual({ ...shots.withCombatRequestContext({ type: 'x', id: 'a' }) }, { type: 'x', id: 'a', viewMono: 4321.5 });
   shots.noteRemoteView(NaN);
-  assert.equal(shots.withShotView({}).viewMono, 4321.5);
+  assert.equal(shots.withCombatRequestContext({}).viewMono, 4321.5);
 });
 
 test('displayed targets use the server hit box at the drawn position; dead or hidden enemies are skipped', () => {

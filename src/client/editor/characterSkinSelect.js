@@ -5,7 +5,7 @@ import catalog from '../../shared/catalogs/skinsCatalog.cjs';
 // Keep the character list compact and show its skins beside the hovered row.
 export function createCharacterSkinSelect({ options, value, skinId, onChange, className }) {
   let selectedSkin = skinId;
-  const control = createPixelSelect({ options, value, label: 'Character', className,
+  const control = createPixelSelect({ options, value, label: 'Character', className, blurOnSelect: true,
     onChange(character) {
       selectedSkin = catalog.characters[character].defaultSkinId;
       onChange(character, selectedSkin);

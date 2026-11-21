@@ -13,6 +13,7 @@ const combat=require('../src/shared/combat/runtime/sparrowCombat.js');
 const attackApi={};
 const playerAudio={};
 const flipLock={};
+const projectileComet=loadClientModule(require.resolve('../src/client/game/scene/projectileComet.js'));
 loadClientModule(require.resolve('../src/client/game/characters/shared/flipLock.js'), {exports:flipLock});
 const playedAnimations=[];
 loadClientModule(require.resolve('../src/client/game/audio/playerAudio.js'), {exports:playerAudio});
@@ -25,7 +26,7 @@ loadClientModule(require.resolve('../src/client/game/characters/sparrow/attack.j
   name.includes('animationState')?{playSpriteAnimation:(options)=>playedAnimations.push(options)}:{},
   Phaser:{Physics:{Arcade:{Image:class{}}}}});
 function setup(colliders=[],networkOptions=null){
-  const api={},created=[],sounds=[];let now=0;
+  const api={},created=[],sounds=[],seraphImpacts=[];let now=0;
   const socket={connected:false};
   const serverClock=loadServerClock({performance:{now:()=>now}});
   const shots=loadShotPrediction({serverClock});
@@ -33,19 +34,31 @@ function setup(colliders=[],networkOptions=null){
   loadClientModule(require.resolve('../src/client/game/characters/sparrow/network.js'), {exports:api,require:name=>name.includes('projectileReplication')?replicationHelpers:name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('sparrowProjectile')?model:name.includes('sparrowReplication')?replication:
     name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):
     name.includes('playerAudio')?playerAudio:
+    name === '../../scene/projectileComet' ? projectileComet :
+    name === './seraphFx' ? { playSeraphImpact: (_scene,x,y)=>seraphImpacts.push({x,y}) } :
     name.includes('runtimeId')?{createRuntimeId:()=> 'generated'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:10}}:socket,
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){},window:{}});
   if(networkOptions) Object.assign(api,api.createSparrowNetwork(networkOptions));
-  function sprite(x,y,texture){const s={active:true,x,y,texture,width:200,setPosition(x,y){this.x=x;this.y=y;return this;},setRotation(r){this.rotation=r;return this;},
-    setScale(x,y=x){this.scaleX=x;this.scaleY=y;return this;},setDepth(){return this;},setTint(){return this;},destroy(){this.active=false;}};created.push(s);return s;}
-  const scene={events:new EventEmitter(),add:{sprite,circle(){throw new Error("Sparrow fire must not emit round smoke or halos");},graphics(){const g=sprite(0,0);for(const key of ["setAlpha","fillStyle","fillRect"])g[key]=()=>g;return g;}},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
-  api.configureSparrowNetwork({sparrowCombatVersion:2,epoch:'room',sentMono:0,simMono:0,projectiles:[],terminals:[],collisionGeometry:{colliders}});
+  function sprite(x,y,texture){const s=Object.assign(new EventEmitter(),{active:true,x,y,texture,width:200,setPosition(x,y){this.x=x;this.y=y;return this;},setRotation(r){this.rotation=r;return this;},
+    setScale(x,y=x){this.scaleX=x;this.scaleY=y;this.displayWidth=200*x;this.displayHeight=42*y;return this;},
+    setDepth(depth){this.depth=depth;return this;},setTint(){return this;},destroy(){this.active=false;this.emit('destroy');}});created.push(s);return s;}
+  const scene={events:new EventEmitter(),add:{sprite,circle(){throw new Error("Sparrow fire must not emit round smoke or halos");},graphics(){
+    const g=sprite(0,0);
+    g.rects=[];
+    g.setAlpha=()=>g;
+    g.clear=()=>{g.rects=[];return g;};
+    g.fillStyle=(_color,alpha)=>{g.fillAlpha=alpha;return g;};
+    g.fillRect=(x,y,width,height)=>{g.rects.push({x,y,width,height,alpha:g.fillAlpha});return g;};
+    g.setVisible=v=>{g.visible=v;return g;};
+    return g;
+  }},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
+  api.configureSparrowNetwork({sparrowCombatVersion:model.VERSION,epoch:'room',sentMono:0,simMono:0,projectiles:[],terminals:[],collisionGeometry:{colliders}});
   const owner={active:true,x:100,y:100,displayWidth:150,displayHeight:150,flipX:false};
   scene._localPlayerAudioSprite=owner;
   const frame=time=>{now=time;scene.events.emit('update',time,1000/120);};
   const tick=time=>{now=time;api.observeSparrowSnapshot({snapshotEpoch:'room',sentMono:time,tMono:time});frame(time);};
-  const packet=action=>({playerName:'owner',action:{sparrowCombatVersion:2,epoch:'room',sentMono:now,simMono:now,...action}});
-  return {api,created,sounds,scene,owner,frame,tick,packet,shots};
+  const packet=action=>({playerName:'owner',action:{sparrowCombatVersion:model.VERSION,epoch:'room',sentMono:now,simMono:now,...action}});
+  return {api,created,sounds,seraphImpacts,scene,owner,frame,tick,packet,shots};
 }
 test('predicted arrow appears on the first render frame after windup without a server response',()=>{
   const {api,created,scene,owner,frame}=setup();
@@ -91,27 +104,37 @@ test('terminal before the first render frame embeds at the authoritative point a
   api.resetSparrowNetwork();assert.equal(created[0].active,false);
 });
 
+test('Seraph bursts on the visible fighter and keeps object impacts at the server contact', () => {
+  const { api, scene, packet, seraphImpacts } = setup();
+  const victim = { active: true, visible: true, x: 580, y: 450 };
+  const context = { localUsername: 'owner', opponentPlayersRef: { Ninja: { opponent: victim } } };
+  api.handleSparrowPacket(scene, packet({ type: 'sparrow-bolt-hit', target: 'Ninja', x: 520, y: 410 }), context);
+  api.handleSparrowPacket(scene, packet({ type: 'sparrow-bolt-hit', target: 'vault:team2', x: 800, y: 440 }), context);
+  assert.deepEqual(seraphImpacts, [{ x: 580, y: 450 }, { x: 800, y: 440 }]);
+  api.resetSparrowNetwork();
+});
+
 test('aim preview, predicted request and authoritative flight agree at the selected target',()=>{
-  for (const special of [false,true]) for (const [dx,dy] of [[450,0],[-450,0],[300,-250],[-300,-250],[160,200],[0,-300]]) {
+  for (const [dx,dy] of [[450,0],[-450,0],[300,-250],[-300,-250],[160,200],[0,-300]]) {
     const {api,scene,owner}=setup();
-    const aim=resolveAttackAimContext({character:'sparrow',player:owner,family:special?'special':'basic',
+    const aim=resolveAttackAimContext({character:'sparrow',player:owner,family:'basic',
       pointerWorldX:owner.x+dx,pointerWorldY:owner.y+dy});
     scene.time={delayedCall(){}};
-    const payload=special?{id:'aim',aim}:attackApi.performSparrowArrowSpread({scene,player:owner},aim);
-    const request=api.predictSparrowShot(scene,owner,'owner',payload,special);
-    const shot=model.resolveShot(special?request.aim:request,special);
+    const payload=attackApi.performSparrowArrowSpread({scene,player:owner},aim);
+    const request=api.predictSparrowShot(scene,owner,'owner',payload);
+    const shot=model.resolveShot(request);
     const flight=model.aimAtTarget({x:owner.x,y:owner.y,width:150,height:150},
-      {x:aim.targetX,y:aim.targetY},special?0.5:request.power,special,aim.config.trajectorySamples);
+      {x:aim.targetX,y:aim.targetY},request.power,aim.config.trajectorySamples);
     assert.ok(Math.abs(shot.angle-flight.shot.angle)<1e-9);
     assert.ok(Math.abs(shot.speed-flight.shot.speed)<1e-9);
-    assert.equal(flight.reachable,true,`${special}: ${dx},${dy}`);
+    assert.equal(flight.reachable,true,`${dx},${dy}`);
     assert.ok(Math.hypot(aim.endX-aim.targetX,aim.endY-aim.targetY)<0.001);
     const arrows=model.createVolley({x:owner.x,y:owner.y,width:150,height:150},shot,'owner:aim',0);
     for(let i=0;i<aim.throwPreview.points.length;i++) {
       const ms=flight.durationMs*i/(aim.throwPreview.points.length-1);
       const actual=model.sample(flight.projectile,ms), preview=aim.throwPreview.points[i];
       assert.ok(Math.hypot(actual.x-preview.x,actual.y-preview.y)<0.001);
-      if(!special) assert.ok(Math.hypot(model.sample(arrows[1],ms).x-preview.x,model.sample(arrows[1],ms).y-preview.y)<0.001);
+      assert.ok(Math.hypot(model.sample(arrows[1],ms).x-preview.x,model.sample(arrows[1],ms).y-preview.y)<0.001);
     }
     // Full-range arrows should feel quick, including upward shots.
     if(dx===450&&dy===0) assert.ok(flight.durationMs<650,`${flight.durationMs}ms`);
@@ -154,7 +177,7 @@ test('real steep attack payload reaches the reticle on the server and retains fu
 });
 
 test('unreachable aims display the real flight endpoint rather than a fictitious curve',()=>{
-  const flight=model.aimAtTarget({x:0,y:0,width:150,height:150},{x:0,y:-2000},0,false);
+  const flight=model.aimAtTarget({x:0,y:0,width:150,height:150},{x:0,y:-2000},0);
   assert.equal(flight.reachable,false);
   assert.ok(Number.isFinite(flight.preview.endY));
   assert.notEqual(flight.preview.endY,-2000);
@@ -192,8 +215,19 @@ function shooterView(f,{owner='owner'}={}){
 }
 test('owner arrows stick into the enemy as drawn and stay put when the server confirms',()=>{
   const f=setup(),{enemy,arrow,terminal,box}=shooterView(f);
-  for(let t=0;t<=400;t+=16){f.tick(t);assert.ok(arrow().x<=box.left+1e-6,`arrow passed into the body at ${t}ms`);}
+  f.tick(0);
+  const comet = f.created.find(object => object.visible === true && object.texture === undefined);
+  assert.ok(comet);
+  const backmost = () => comet.rects.reduce((back, rect) => rect.x < back.x ? rect : back);
+  const firstPixel = backmost();
+  f.tick(16);
+  assert.deepEqual([comet.x, comet.y, comet.rotation], [arrow().x, arrow().y, arrow().rotation]);
+  const sweptPixel = backmost();
+  assert.ok(sweptPixel.x < firstPixel.x && sweptPixel.width > firstPixel.width);
+  assert.ok(sweptPixel.alpha < firstPixel.alpha);
+  for(let t=32;t<=400;t+=16){f.tick(t);assert.ok(arrow().x<=box.left+1e-6,`arrow passed into the body at ${t}ms`);}
   assert.ok(Math.abs(arrow().x-box.left)<1e-6,'arrow rests on the body as drawn');
+  assert.equal(comet.visible, false);
   const stuck={x:arrow().x-enemy.x,y:arrow().y-enemy.y};
   enemy.x+=50;f.tick(416);
   assert.ok(Math.abs(arrow().x-(enemy.x+stuck.x))<1e-6,'arrow rides the displayed enemy');
@@ -201,6 +235,7 @@ test('owner arrows stick into the enemy as drawn and stay put when the server co
   terminal({reason:'target',target:'enemy',x:280,y:150,targetOffset:{x:-25,y:30},appliedDamage:850});
   for(const t of [432,800,1500]){f.tick(t);assert.ok(Math.abs(arrow().x-(enemy.x+stuck.x))<1e-6);assert.equal(arrow().active,true);}
   f.api.resetSparrowNetwork();
+  assert.equal(comet.active, false);
 });
 
 test('an unconfirmed predicted hit fades in place instead of flying on or jumping',()=>{

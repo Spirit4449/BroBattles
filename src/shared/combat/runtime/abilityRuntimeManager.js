@@ -2,12 +2,14 @@ const thorgRageAbility = require("./abilities/thorgRageAbility.js");
 const dravenInfernoAbility = require("./abilities/dravenInfernoAbility.js");
 const ozzyArcaneSurgeAbility = require("./abilities/ozzyArcaneSurgeAbility.js");
 const gloopHookAbility = require("./abilities/gloopHookAbility.js");
+const sparrowSeraphAbility = require("./abilities/sparrowSeraphAbility.js");
 
 const abilitiesByCharacter = {
   [thorgRageAbility.key]: thorgRageAbility,
   [dravenInfernoAbility.key]: dravenInfernoAbility,
   [ozzyArcaneSurgeAbility.key]: ozzyArcaneSurgeAbility,
   [gloopHookAbility.key]: gloopHookAbility,
+  [sparrowSeraphAbility.key]: sparrowSeraphAbility,
 };
 
 function getAbility(character) {
@@ -36,6 +38,14 @@ function isMovementSuppressed(player, now) {
     return false;
   }
   return !!ability.isMovementSuppressed(player, now);
+}
+
+// Whether the server ignores this player's reported positions while movement
+// is suppressed (Draven's anchored inferno) or keeps taking them (Sparrow's
+// hover, which her own client flies).
+function holdsReportedPosition(player, now) {
+  const ability = getAbility(player?.char_class);
+  return isMovementSuppressed(player, now) && ability?.acceptsClientPosition !== true;
 }
 
 function applyOutgoingDamageMultiplier(attacker, damage, now) {
@@ -67,6 +77,7 @@ module.exports = {
   activateSpecial,
   tickActiveAbilities,
   isMovementSuppressed,
+  holdsReportedPosition,
   applyOutgoingDamageMultiplier,
   requiresMeleeFacingCheck,
   getKnockback,

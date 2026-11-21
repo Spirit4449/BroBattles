@@ -1,7 +1,11 @@
 import { clamp01 as clamp } from "../../../shared/math.js";
 import { movementSoundKey } from "../../../shared/physics/movementSounds";
 import { playPlayerSound, playerSoundVolume } from './playerAudio';
-import { canPlayTerrainCue, getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound, fallingAirVolume, movementTerrainAt } from './movementAudio';
+import {
+  canPlayTerrainCue, getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound,
+  fallingAirVolume, movementTerrainAt, terrainSampleVolume, jumpVolume, WALL_JUMP_VOLUME, wallSlideVolume,
+  movementPlaybackTime, fallingAirRamp,
+} from './movementAudio';
 import { MOVEMENT_VFX_CONFIG } from '../scene/effects';
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
 
@@ -19,33 +23,36 @@ export function createRemoteMovementAudio(scene, sprite) {
     try { playPlayerSound(scene, sprite, movementSoundKey(scene, key), options); } catch (_) {}
   };
   function step(speed, turning, time, terrain) {
-    const volume = footstepVolume(speed, turning, terrain);
-    if (!canPlayTerrainCue(scene, terrain, { volume, source: sprite })) return;
     const steps = getTerrainSteps(terrain);
-    variant = (variant + 1 + Math.floor(Math.random() * Math.max(1, steps.length - 1))) % steps.length;
-    play(steps[variant].key, {
+    const nextStep = (variant + 1 + Math.floor(Math.random() * Math.max(1, steps.length - 1))) % steps.length;
+    const key = steps[nextStep].key;
+    const volume = terrainSampleVolume(scene, key, footstepVolume(speed, turning, terrain));
+    if (!canPlayTerrainCue(scene, terrain, { volume, source: sprite })) return;
+    variant = nextStep;
+    play(key, {
       volume,
       rate: (turning ? 0.88 : 0.94) + speed * 0.14,
     });
     lastStep = time;
   }
-  function loop(key, baseVolume, rate) {
+  function loop(key, baseVolume, rate, gain = 1) {
     const volume = playerSoundVolume(scene, sprite, baseVolume);
     let sound = loops.get(key);
     if (volume < 0.005 || scene.sound?.locked) {
       if (sound?.isPlaying) sound.stop();
-      return;
+      return false;
     }
     try {
       if (!sound) {
         sound = scene.sound?.add(movementSoundKey(scene, key), { loop: true, volume: 0 });
-        if (!sound) return;
+        if (!sound) return false;
         loops.set(key, sound);
       }
-      sound.setVolume(volume);
+      sound.setVolume(volume * gain);
       sound.setRate(rate);
-      if (!sound.isPlaying) sound.play({ loop: true, volume, rate });
-    } catch (_) {}
+      if (!sound.isPlaying) return sound.play({ loop: true, volume: volume * gain, rate }) !== false;
+      return true;
+    } catch (_) { return false; }
   }
   function reset() {
     previous = motion = null;
@@ -64,16 +71,16 @@ export function createRemoteMovementAudio(scene, sprite) {
       return;
     }
     const speed = clamp(motion.vy / movementPhysics.wallSlideMaxFallSpeed);
-    loop('sfx-sliding', motion.wall ? 0.28 + speed * 0.17 : 0, 0.84 + speed * 0.22);
-    const falling = !motion.grounded && !motion.wall && !motion.dash && motion.vy > 85;
-    if (!falling) fallStarted = null;
-    else if (fallStarted === null) fallStarted = time;
+    loop('sfx-sliding', motion.wall ? wallSlideVolume(speed) : 0, 0.84 + speed * 0.22);
+    const playbackTime = movementPlaybackTime(scene);
+    const falling = playbackTime !== null && !motion.grounded && !motion.wall && !motion.dash && motion.vy > 85;
     const fallSpeed = clamp((motion.vy - 85) / (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity - 85));
-    const elapsed = falling ? time - fallStarted : 0;
-    const ramp = clamp(elapsed / 220);
+    if (!loops.get('sfx-fall-air')?.isPlaying) fallStarted = null;
+    const elapsed = falling && fallStarted !== null ? playbackTime - fallStarted : 0;
     const age = clamp(elapsed / 950);
-    loop('sfx-fall-air', falling ? fallingAirVolume(fallSpeed, age) * ramp : 0,
-      0.72 + fallSpeed * 0.24 + age * 0.04);
+    const playing = loop('sfx-fall-air', falling ? fallingAirVolume(fallSpeed, age) : 0,
+      0.72 + fallSpeed * 0.24 + age * 0.04, fallingAirRamp(elapsed));
+    fallStarted = playing ? fallStarted ?? playbackTime : null;
   }
   function update(state, animationState = state) {
     if (destroyed) return;
@@ -104,8 +111,8 @@ export function createRemoteMovementAudio(scene, sprite) {
       else if (!previous.grounded && grounded) event = 'land';
       else if (walking && previous.walking && Math.sign(vx) !== Math.sign(previous.vx)) event = 'turn';
     }
-    if (event === 'jump') play('sfx-jump', { volume: 0.36 + speed * 0.1, rate: 0.96 + speed * 0.08 });
-    if (event === 'wall-jump') play('sfx-walljump', { volume: 0.5, rate: 0.96 + Math.min(0.08, Math.abs(vx) / 720) });
+    if (event === 'jump') play('sfx-jump', { volume: jumpVolume(speed), rate: 0.96 + speed * 0.08 });
+    if (event === 'wall-jump') play('sfx-walljump', { volume: WALL_JUMP_VOLUME, rate: 0.96 + Math.min(0.08, Math.abs(vx) / 720) });
     if (event === 'land' && previous && playLandingSound) {
       const impact = Number(state.movementFxImpactVelocity) || Math.max(previous.vy, vy);
       const distance = Number(state.movementFxFallDistance) || Math.max(0, y - previous.peak);

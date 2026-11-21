@@ -49,7 +49,7 @@ function writeWalletCount(counter, value) {
   if (counter) counter.textContent = formatCount(value);
 }
 
-function burstWalletTarget(target, counter, type, impactIndex, totalImpacts) {
+function burstWalletTarget(target, counter, type, impactIndex, totalImpacts, playRewardSound) {
   const color =
     type === "gems"
       ? "86,216,255"
@@ -110,11 +110,8 @@ function burstWalletTarget(target, counter, type, impactIndex, totalImpacts) {
   const currencyImpact = type === "coins" || type === "gems";
   const sound = type === "coins" ? "rewardCoinImpact"
     : type === "gems" ? "rewardGemImpact" : "shopCurrencyImpact";
-  playSound(sound, currencyImpact ? 0.22 : 0.12, {
-    overlap: true,
-    maxVoices: currencyImpact ? 8 : 16,
-    playbackRate: 0.88 + pitchRange * (currencyImpact ? 0.3 : 0.28) + (type === "gems" ? 0.08 : 0),
-  });
+  const rate = 0.88 + pitchRange * (currencyImpact ? 0.3 : 0.28) + (type === "gems" ? 0.08 : 0);
+  playRewardSound(sound, currencyImpact ? 0.22 : 0.12, rate);
 }
 
 function flyRewardParticle({
@@ -201,6 +198,8 @@ export function createGameOverScreenController({
   getGameData,
   getUsername,
   rewardStorageKey,
+  onExit,
+  playRewardSound = () => {},
   getMessage = getEndBattleMessage,
 }) {
   function isMobileDevice() {
@@ -282,7 +281,7 @@ export function createGameOverScreenController({
         burst.remove();
       }
       if (!root.isConnected) return;
-      playSound(type === 'coins' ? 'streakDingCoin' : 'streakDingGem', 0.56, { overlap: true, maxVoices: 3 });
+      playRewardSound(type === 'coins' ? 'streakDingCoin' : 'streakDingGem', 0.56);
       card.classList.add('is-streak-boosted');
       const base = reward.winStreakBaseRewards[type];
       const final = readRewardAmount(reward, type);
@@ -327,7 +326,7 @@ export function createGameOverScreenController({
 
     walletPanel.classList.add("is-active");
     walletPanel.setAttribute("aria-hidden", "false");
-    playSound("shopReveal", 0.3);
+    playRewardSound("shopReveal", 0.3);
     await delay(prefersReducedMotion() ? 1 : 280);
 
     if (prefersReducedMotion()) {
@@ -369,7 +368,7 @@ export function createGameOverScreenController({
             counter,
             starts[type] + (wallet[type] - starts[type]) * eased,
           );
-          burstWalletTarget(target, counter, type, impacts - 1, count);
+          burstWalletTarget(target, counter, type, impacts - 1, count, playRewardSound);
           if (impacts === count) source.classList.remove("is-collecting");
         };
         for (let index = 0; index < count; index += 1) {
@@ -529,6 +528,7 @@ export function createGameOverScreenController({
     const score = payload?.meta?.broBallScore;
     const scoreLine = Number.isSafeInteger(score?.team1) && Number.isSafeInteger(score?.team2)
       ? `<p>Bro Ball · ${score.team1}–${score.team2}</p>` : "";
+    const exitLabel = onExit ? "Return to Map Studio" : "Exit";
     div.innerHTML = `
       <div class="bb-game-over-backdrop">
         <aside class="bb-game-over-wallet" aria-label="Updated balances" aria-hidden="true">
@@ -549,7 +549,7 @@ export function createGameOverScreenController({
             ${personalSummaryHtml}
             ${rewardSectionHtml}
           </div>
-          <button id="go-lobby" class="bb-game-over-action pixel-menu-button" type="button" data-sound="cursor4" data-volume="0.28">Exit (10)</button>
+          <button id="go-lobby" class="bb-game-over-action pixel-menu-button" type="button" data-sound="cursor4" data-volume="0.28">${exitLabel} (10)</button>
         </section>
         </div>
       </div>`;
@@ -557,16 +557,13 @@ export function createGameOverScreenController({
     document.body.appendChild(div);
     const focus = createModalFocus(div.querySelector('[role="dialog"]'));
     focus.activate();
-    getNavigation()?.warmLobby?.();
+    if (!onExit) getNavigation()?.warmLobby?.();
     void (async () => {
       const streakBadge = div.querySelector('.bb-game-over-streak');
       const streakCue = myReward?.winStreakAfter === 0 ? 'streakLost' : 'streakIncrease';
-      if (streakBadge) {
-        [streakCue, 'streakDingCoin', 'streakDingGem'].forEach(preloadSound);
-      }
       await animateGameOverWinStreak(streakBadge, {
         reducedMotion: prefersReducedMotion(), wait: delay,
-        onCountChanged: () => playSound(streakCue, streakCue === 'streakIncrease' ? 1 : 0.35),
+        onCountChanged: () => playRewardSound(streakCue, streakCue === 'streakIncrease' ? 1 : 0.35),
       });
       await animateStreakBonuses(div, myReward);
       await animateRewardsIntoWallet(div, myReward);
@@ -585,11 +582,12 @@ export function createGameOverScreenController({
     };
     window.addEventListener("keydown", onExitKey, true);
 
-    const goToLobby = async () => {
+    const exitMatch = async () => {
       if (leaving) return;
       leaving = true;
       focus.deactivate({ restoreFocus: false });
       window.removeEventListener("keydown", onExitKey, true);
+      if (onExit) return onExit();
       try {
         sessionStorage.removeItem(MATCH_ID_KEY);
         sessionStorage.setItem(POST_BATTLE_LOBBY_RETURN_KEY, "1");
@@ -600,10 +598,10 @@ export function createGameOverScreenController({
     const timer = setInterval(() => {
       countdown -= 1;
       if (button)
-        button.textContent = `Exit (${Math.max(0, countdown)})`;
+        button.textContent = `${exitLabel} (${Math.max(0, countdown)})`;
       if (countdown <= 0) {
         clearInterval(timer);
-        goToLobby();
+        exitMatch();
       }
     }, 1000);
 
@@ -611,7 +609,7 @@ export function createGameOverScreenController({
       if (leaving) return;
       playSound("cursor4", 0.28);
       clearInterval(timer);
-      await goToLobby();
+      await exitMatch();
     });
   }
 

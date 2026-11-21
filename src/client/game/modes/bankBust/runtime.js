@@ -21,6 +21,13 @@ import { createCoinFx } from "./coinFx";
 import { createVaultEffects } from "./vaultEffects";
 
 const DEFAULT_PURCHASE_FLOOR = resolveBankBustSettings().purchaseFloorCoins;
+const modeSoundTrim = {
+  "sfx-bankbust-turret-shoot": 0.65,
+  "sfx-bankbust-turret-claim": 0.88,
+  "sfx-bankbust-wall-claim": 0.27,
+  "sfx-bankbust-mine-collect": 0.52,
+  "sfx-bankbust-crate-incoming": 0.33,
+};
 
 function cloneJson(v) {
   try {
@@ -162,7 +169,8 @@ export function createBankBustRuntime({
   function safePlaySfx(key, config = {}) {
     try {
       if (!scene.cache?.audio?.exists?.(key)) return;
-      scene.sound?.play?.(key, config);
+      const volume = (config.volume ?? 1) * (modeSoundTrim[key] ?? 1);
+      scene.sound?.play?.(key, { ...config, volume });
     } catch (_) {}
   }
 
@@ -206,6 +214,7 @@ export function createBankBustRuntime({
       }
       hideCrate();
       for (const sprite of turretProjectileSprites.values()) sprite.setVisible(false);
+      for (const visual of turretProjectileVisualState.values()) visual.comet.hide();
       hideUnusedWallBodies(null);
       return;
     }

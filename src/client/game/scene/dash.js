@@ -9,7 +9,7 @@ import { emitPuff, emitWake } from './clouds/cloudEmitters';
 
 export function playDashSound(scene, remote = false, source = null) {
   // A little pitch movement keeps repeat dashes from sounding identical.
-  const options = { volume: 0.7, rate: 0.97 + Math.random() * 0.06 };
+  const options = { volume: 0.23, rate: 0.97 + Math.random() * 0.06 };
   if (remote) playPlayerSound(scene, source, 'sfx-dash', options);
   else scene?.sound?.play?.('sfx-dash', options);
 }
@@ -103,9 +103,17 @@ export function spawnDashEffect(scene, sprite, x, y) {
   const length = Math.hypot(x, y);
   const ux = Number.isFinite(length) && length > 0 ? x / length : (sprite.flipX ? -1 : 1);
   const uy = Number.isFinite(length) && length > 0 ? y / length : 0;
-  const fade = (target, duration, extra = {}) => scene.tweens.add({
-    targets: target, alpha: 0, duration, ...extra, onComplete: () => target.destroy(),
-  });
+  const parts = new Set();
+  const destroyPart = (part) => {
+    if (!parts.delete(part)) return;
+    part.destroy();
+    if (stopped && !parts.size) sprite.off?.('combat:reset', cancel);
+  };
+  const fade = (target, duration, extra = {}) => {
+    parts.add(target);
+    scene.tweens.add({ targets: target, alpha: 0, duration, ...extra,
+      onComplete: () => destroyPart(target) });
+  };
   const halfWidth = (sprite.body?.width || 32) / 2;
   const halfHeight = (sprite.body?.height || 48) / 2;
   const nose = Math.abs(ux) * halfWidth + Math.abs(uy) * halfHeight + 14;
@@ -174,10 +182,19 @@ export function spawnDashEffect(scene, sprite, x, y) {
     timer.remove();
     scene.events?.off('postupdate', followHead);
     scene.tweens.killTweensOf?.(burst);
-    burst.destroy();
+    destroyPart(burst);
+    if (!parts.size) sprite.off?.('combat:reset', cancel);
     sprite.off?.('destroy', stop);
     scene.events?.off('shutdown', stop);
   };
+  const cancel = () => {
+    stop();
+    for (const part of parts) {
+      scene.tweens.killTweensOf?.(part);
+      destroyPart(part);
+    }
+  };
+  sprite.once('combat:reset', cancel);
   sprite.once('destroy', stop);
   scene.events?.once('shutdown', stop);
   scene.time.delayedCall(220, stop);
@@ -201,8 +218,13 @@ function spawnDashScreenEffect(scene, direction) {
     root.appendChild(line);
   }
   (document.fullscreenElement || document.body).appendChild(root);
-  const destroy = () => { root.remove(); scene.events?.off('shutdown', destroy); };
+  const destroy = () => {
+    root.remove();
+    scene.events?.off('shutdown', destroy);
+    scene.events?.off('presentation:reset', destroy);
+  };
   scene.events?.once('shutdown', destroy);
+  scene.events?.once('presentation:reset', destroy);
   scene.time.delayedCall(460, destroy);
 }
 

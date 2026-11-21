@@ -79,3 +79,20 @@ Every pose was inspected enlarged. A skirt/hand ownership error was corrected;
 rigid hood, grip and staff preserve their details, while connected sleeves and
 robe use row-wise warps. Artifact checks and content validation pass. Game tests
 are skipped because this work changes only standalone art scripts and outputs.
+
+## Effect atlases (`fx.cjs`)
+
+`node scripts/art/draven-pixel/fx.cjs [--install]` draws the Inferno overlay
+(`special-bb*`, 24-frame loop designed on a 192px square inside 288px frames) and the splash hit
+explosion (`explosion-bb*`, 10 frames on a 48px grid) in palette keys,
+coloured per team. Previews and GIFs go to `output/draven-pixel/fx/`;
+`--install` writes the atlases into `public/assets/draven/`. Both play at
+24 fps (see `characters/draven/constructor.js`).
+
+## Inferno sound layers (`inferno-sfx.cjs`)
+
+`node scripts/art/draven-pixel/inferno-sfx.cjs [--install] [--check]` synthesises
+`inferno-{ignite,crackle,pulse,hit,end}.mp3` and prints each one's loudest-200 ms
+K-weighted volume for `combatSoundVolumes` in `game/audio/playerAudio.js`
+(`--check` prints the same for the existing Draven sounds). They are played by
+`characters/draven/infernoAudio.js`.

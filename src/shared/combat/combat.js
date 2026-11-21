@@ -256,9 +256,9 @@ function requestSpecial(room, p, target, now) {
   const distance = Math.hypot(target.x - p.x, target.y - p.y);
   const kit = botProfile(p.char_class);
   const specialRange = kit.specialRange || {};
-  const range = specialRange.fromBasicAim
+  const range = specialRange.fixed ?? (specialRange.fromBasicAim
     ? getResolvedCharacterAimConfig(p.char_class)?.defaultRange || specialRange.fallback
-    : aim.defaultRange || aim.radius || specialRange.fallback || DEFAULT_SPECIAL_RANGE;
+    : aim.defaultRange || aim.radius || specialRange.fallback || DEFAULT_SPECIAL_RANGE);
   // These supers buff the caster/allies; their visual radius is not an enemy
   // targeting limit. The tactical evaluator decides when the buff is useful.
   if (!kit.buffSuper && distance > range + 40) return false;

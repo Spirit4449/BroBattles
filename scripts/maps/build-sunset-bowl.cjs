@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Builds Sunset Bowl (map 6), the Bro Ball arena.
+// Builds Rumble Stadium (map 6), the Bro Ball arena.
 //
 //   node scripts/art/install-bro-ball-art.cjs    <- art + measurements (sunset-bowl-art.json)
 //   node scripts/maps/build-sunset-bowl.cjs      <- this: geometry + art placement -> src/shared/maps/6.json
@@ -187,7 +187,7 @@ function scenery() {
 
 function build() {
   const document = JSON.parse(fs.readFileSync(OUT, "utf8"));
-  document.label = "Sunset Bowl";
+  document.label = "Rumble Stadium";
   document.metadata = { ...document.metadata, key: "sunset-bowl" };
   document.assets = assetsFor(TEXTURES);
   document.textureSizes = sizesFor(TEXTURES);
@@ -219,7 +219,7 @@ function build() {
   // Validation loads the arena bounds just written above.
   const { validateDocument } = require("../../src/shared/maps/mapDocument");
   const errors = validateDocument(document);
-  if (errors.length) throw new Error(`Sunset Bowl is invalid:\n${errors.join("\n")}`);
+  if (errors.length) throw new Error(`Rumble Stadium is invalid:\n${errors.join("\n")}`);
   fs.writeFileSync(OUT, `${JSON.stringify(document, null, 2)}\n`);
   console.log(`Wrote ${path.relative(ROOT, OUT)}: goals ${GOAL_BACK}-${GOAL_FACE}, mouth ${MOUTH_TOP}-${MOUTH_BOTTOM}`);
 }

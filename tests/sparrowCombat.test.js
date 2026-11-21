@@ -130,44 +130,104 @@ test('flight matches iterative 60 Hz simulation at every tick and is independent
   }
 });
 
-test('burning arrows consume charge once, apply burn once, and publish precise terminal metadata', t => {
-  const { room,players:[p,target],step,actions }=fixture(t);
-  p.superCharge=p.maxSuperCharge;
-  assert.equal(room.requestSpecial(p.participantId,{id:'burn',aim:{angle:0}}),true);
-  step(14);
-  const arrow=[...room.sparrowCombatState.active.values()][2];
-  for(const [id,a] of room.sparrowCombatState.active) if(a!==arrow) room.sparrowCombatState.active.delete(id);
-  target.x=arrow.x+40;target.y=arrow.y;
-  step(10);
-  assert.equal(p.superCharge,1);
-  const terminal=actions('sparrow-terminal')[0];
-  assert.equal(terminal.appliedDamage,model.attackConfig(true).damagePerArrow); assert.ok(terminal.targetOffset);
-  assert.ok(Math.abs(terminal.targetOffset.x) <= target._bodyHalfWidth);
-  assert.ok(target.effects.sparrowBurn || target.activeEffects.sparrowBurn);
+const seraph = require('../src/shared/combat/runtime/abilities/sparrowSeraphAbility.js');
+const { SERAPH, BOLT } = require('../src/shared/characters/sparrowLightBolt');
+const effectManager = require('../src/shared/combat/runtime/effects/effectManager.js');
+const abilities = require('../src/shared/combat/runtime/abilityRuntimeManager.js');
+
+test('Seraph spends the super on the tap and holds her, shielded and unable to shoot arrows, until she releases', t => {
+  const { room, players: [p], actions } = fixture(t);
+  p.superCharge = p.maxSuperCharge;
+  assert.equal(room.requestSpecial(p.participantId, { aim: {} }), true);
+  const now = Date.now();
+  assert.equal(p.superCharge, 0);
+  assert.equal(seraph.isAiming(p, now), true);
+  assert.equal(effectManager.getModifiers(p, now).damageTakenMult, SERAPH.damageTakenMult);
+  assert.equal(room.handlePlayerAction(p.participantId, { type: 'sparrow-arrow', id: 'held', angle: 0 }), false);
+  assert.equal(actions('sparrow-bolt').length, 0, 'activation alone fires nothing');
+  assert.equal(room.handlePlayerAction(p.participantId, { type: 'sparrow-light-bolt', id: 'bolt', angle: -0.4 }), true);
+  assert.equal(room.handlePlayerAction(p.participantId, { type: 'sparrow-light-bolt', id: 'again', angle: 0 }), false);
+  assert.equal(seraph.isAiming(p, Date.now()), false);
+  assert.equal(effectManager.getModifiers(p, Date.now()).damageTakenMult, 1);
+  const [fired] = actions('sparrow-bolt');
+  assert.equal(fired.bolt.angle, -0.4);
+  assert.equal(fired.auto, false);
 });
 
-test('released basic and burning arrows survive owner death, damage and remain in reconnect state', t => {
-  for (const special of [false,true]) {
-    const {room,players:[p,target],step,actions}=fixture(t);
-    p.superCharge=p.maxSuperCharge;
-    assert.equal(combat.request(room,p,{id:'death',angle:0,aim:{angle:0}},special),true);
-    step(special?14:6);
-    const arrow=[...room.sparrowCombatState.active.values()][special?2:1];
-    for(const [id,a]of room.sparrowCombatState.active)if(a!==arrow)room.sparrowCombatState.active.delete(id);
-    target.x=arrow.x+150;target.y=arrow.y;
-    const hp=target.health,startX=arrow.x;
-    room.handlePlayerDeath(p);step();
-    assert.ok(arrow.x>startX);
-    assert.equal(combat.bootstrap(room).projectiles.length,1);
-    step(20);
-    assert.equal(target.health,hp-model.attackConfig(special).damagePerArrow);
-    assert.equal(combat.bootstrap(room).projectiles.length,0);
-    assert.equal(actions('sparrow-terminal')[0].accepted,true);
-    assert.equal(actions('sparrow-terminal')[0].reason,'target');
-    if(special)assert.ok(target.effects.sparrowBurn||target.activeEffects.sparrowBurn);
-    assert.equal(combat.request(room,p,{id:'dead',angle:0,aim:{angle:0}},special),false);
-  }
+test('the light bolt pierces terrain and strikes every enemy on its path once for her special damage', t => {
+  const { room, players: [p, target], step, actions } = fixture(t);
+  const vault = { x: 1400, y: 0, width: 100, height: 100, coins: 10000 };
+  room.gameMode = { getVaultState: team => team === target.team ? vault : null,
+    damageVault(_team, damage) { vault.coins -= damage; return vault; } };
+  p.superCharge = p.maxSuperCharge;
+  room.requestSpecial(p.participantId, { aim: {} });
+  room.handlePlayerAction(p.participantId, { type: 'sparrow-light-bolt', id: 'pierce', angle: 0 });
+  const bolt = actions('sparrow-bolt')[0].bolt;
+  // A wall between them, and the target and vault on the bolt's line.
+  room.geometry = { ...room.geometry, colliders: [{ id: 'wall', left: 300, right: 340, top: -400, bottom: 800 }] };
+  Object.assign(target, { x: 700, y: bolt.y }); vault.y = bolt.y;
+  const hp = target.health;
+  step(Math.ceil(bolt.durationMs / model.STEP_MS) + 2);
+  assert.equal(target.health, hp - p.specialDamage);
+  assert.equal(vault.coins, 10000 - p.specialDamage);
+  assert.deepEqual(actions('sparrow-bolt-hit').map(hit => hit.target).sort(), [target.name, `vault:${target.team}`].sort());
+  assert.equal(room.sparrowCombatState.bolts.size, 0);
 });
+
+test('Seraph stops before players beyond the light bolt range', t => {
+  const { room, players: [caster, target], step, actions } = fixture(t, 4);
+  caster.superCharge = caster.maxSuperCharge;
+  assert.equal(room.requestSpecial(caster.participantId, {}), true);
+  assert.equal(room.handlePlayerAction(caster.participantId, { type: 'sparrow-light-bolt', id: 'max-range', angle: 0 }), true);
+  const [{ bolt }] = actions('sparrow-bolt');
+  assert.equal(bolt.range, BOLT.range);
+  Object.assign(target, { x: bolt.x + bolt.range + bolt.radius + target._bodyHalfWidth + 1, y: bolt.y });
+  const health = target.health;
+  step(Math.ceil(bolt.durationMs / model.STEP_MS) + 2);
+  assert.equal(target.health, health);
+  assert.ok(!actions('sparrow-bolt-hit').some(hit => hit.target === target.name));
+  assert.equal(room.sparrowCombatState.bolts.size, 0);
+});
+
+test('an unreleased Seraph looses the bolt the way she faces when the aim phase runs out', t => {
+  const { room, players: [p], actions } = fixture(t);
+  p.superCharge = p.maxSuperCharge; p.flip = true;
+  room.requestSpecial(p.participantId, { aim: {} });
+  const start = p.effects.sparrowSeraphStartedAt;
+  abilities.tickActiveAbilities(room, start + SERAPH.aimMs);
+  assert.equal(actions('sparrow-bolt').length, 0, 'the grace window still takes a late release');
+  abilities.tickActiveAbilities(room, start + SERAPH.aimMs + SERAPH.releaseGraceMs);
+  const [fired] = actions('sparrow-bolt');
+  assert.equal(fired.auto, true);
+  assert.equal(fired.bolt.angle, Math.PI);
+});
+
+test('Seraph uses the last reported aim pose when a held shot times out', t => {
+  const { room, players: [p], actions } = fixture(t);
+  p.superCharge = p.maxSuperCharge;
+  room.requestSpecial(p.participantId, {});
+  p.animation = 'seraph-aim-03';
+  p.flip = true;
+  const deadline = p.effects.sparrowSeraphUntil + SERAPH.releaseGraceMs;
+  abilities.tickActiveAbilities(room, deadline);
+  assert.equal(seraph.requestFire(room, p, { id: 'late', angle: 0 }, deadline), false);
+  const [shot] = actions('sparrow-bolt');
+  assert.equal(shot.auto, true);
+  assert.ok(shot.bolt.vx < 0 && shot.bolt.vy < 0);
+  assert.ok(Math.abs(shot.bolt.vx - shot.bolt.vy) < 1e-9);
+  assert.equal(actions('sparrow-bolt').length, 1);
+});
+
+test('death during Seraph ends the aim phase without a bolt', t => {
+  const { room, players: [p], actions } = fixture(t);
+  p.superCharge = p.maxSuperCharge;
+  room.requestSpecial(p.participantId, { aim: {} });
+  room.handlePlayerDeath(p);
+  abilities.tickActiveAbilities(room, Date.now() + SERAPH.aimMs * 2);
+  assert.equal(room.handlePlayerAction(p.participantId, { type: 'sparrow-light-bolt', id: 'late', angle: 0 }), false);
+  assert.equal(actions('sparrow-bolt').length, 0);
+});
+
 test('death during sparrow windup cancels unreleased arrows', t => {
   const {room,players:[p],step,actions}=fixture(t);
   room.handlePlayerAction(p.participantId,{type:'sparrow-arrow',id:'windup',angle:0});
@@ -213,7 +273,7 @@ test('authoritative combat is the default and incompatible clients must reload',
   let ack;
   await handlers.get('game:join')({matchId:1},a=>{ack=a;});
   assert.equal(ack.error,'client_update_required');assert.equal(joined,0);
-  await handlers.get('game:join')({matchId:1,sparrowCombatVersion:2,ninjaCombatVersion:1,networkWireVersion:1},a=>{ack=a;});
+  await handlers.get('game:join')({matchId:1,sparrowCombatVersion:model.VERSION,ninjaCombatVersion:require("../src/shared/characters/ninjaProjectile").VERSION,networkWireVersion:1},a=>{ack=a;});
   assert.equal(ack.ok,true);assert.equal(joined,1);
   assert.equal(room.sparrowCombatVersion, model.VERSION);
 });

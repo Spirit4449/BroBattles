@@ -11,19 +11,28 @@ const PLAYTEST_KEY = "bb-map-studio-playtest",
     skin: $("playtest-skin"),
     debugHitboxes: $("debug-hitboxes"),
     infiniteSupers: $("infinite-supers"),
+    fullBattle: $("playtest-full-battle"),
   };
 
 function syncPlaytestSummary() {
+  const { fullBattle, kind, infiniteSupers } = playtestInputs;
+  kind.hidden = fullBattle.checked;
+  infiniteSupers.closest("label").hidden = fullBattle.checked;
+  syncToolbarSelect("playtest-kind");
+  $("playtest-label").textContent = fullBattle.checked ? "Full Battle" : "Playtest";
+  $("playtest-quick-option").setAttribute("aria-pressed", String(!fullBattle.checked));
+  $("playtest-full-option").setAttribute("aria-pressed", String(fullBattle.checked));
   $("playtest-summary").textContent = [
+    fullBattle.checked ? "Full Battle" : "Quick Playtest",
     mapArena(map())?.modeId === "duels" && playtestInputs.formation.selectedOptions[0]?.text,
-    playtestInputs.kind.selectedOptions[0]?.text,
+    fullBattle.checked ? "With bots" : kind.selectedOptions[0]?.text,
     playtestInputs.character.selectedOptions[0]?.text,
     playtestInputs.debugHitboxes.checked && "hitboxes",
-    playtestInputs.infiniteSupers.checked && "infinite supers",
+    !fullBattle.checked && infiniteSupers.checked && "infinite supers",
   ]
     .filter(Boolean)
     .join(" · ");
-  $("preview").title = `Playtest this draft (Esc) · ${$("playtest-summary").textContent}`;
+  $("preview").title = $("playtest-summary").textContent;
 }
 
 // Bank Bust objects only exist on Bank Bust maps.

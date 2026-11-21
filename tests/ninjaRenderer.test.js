@@ -9,6 +9,60 @@ const playerAudio={};
 loadClientModule(require.resolve('../src/client/game/audio/playerAudio.js'), {exports:playerAudio});
 const projectileTexture={};
 loadClientModule(require.resolve('../src/client/game/characters/ninja/projectileTexture'), {exports:projectileTexture,require:()=>require('../src/shared/projectilePresentation')});
+
+test('shuriken effects render before the flight audio is ready and release the loop when hidden', () => {
+  const { createShurikenEffects, FLIGHT_SOUND } = loadClientModule(
+    require.resolve('../src/client/game/characters/ninja/effects'), {
+      require: name => {
+        if (name.includes('projectilePresentation')) return require('../src/shared/projectilePresentation');
+        if (name.includes('renderLayers')) return { RENDER_LAYERS: { ATTACKS: 20 } };
+        if (name.includes('playerAudio')) return playerAudio;
+        return { createSwarmAura: () => null };
+      },
+    },
+  );
+  let cached = false;
+  let drawn = 0;
+  const loops = [];
+  const manager = {
+    add(key, config) {
+      assert.ok(cached);
+      assert.equal(key, FLIGHT_SOUND);
+      assert.equal(config.loop, true);
+      const loop = {
+        manager,
+        play() { return true; },
+        destroy() { this.manager = null; },
+      };
+      loops.push(loop);
+      return loop;
+    },
+  };
+  const graphics = {
+    setDepth() { return this; }, setBlendMode() { return this; }, setVisible() { return this; },
+    setAlpha() { return this; }, setRotation() { return this; },
+    setPosition() { return this; }, clear() { drawn++; return this; },
+    fillStyle() { return this; }, fillRect() { return this; }, destroy() {},
+  };
+  const scene = { sound: manager, cache: { audio: { exists: () => cached } }, add: { graphics: () => graphics } };
+  const sprite = Object.assign(new EventEmitter(), { x: 0, y: 0, depth: 20, displayWidth: 32, displayHeight: 32 });
+  const effects = createShurikenEffects(scene, sprite, { launch: false });
+
+  effects.update(0, true);
+  assert.equal(drawn, 1);
+  assert.equal(loops.length, 0);
+  cached = true;
+  effects.update(16, true);
+  effects.update(32, true);
+  assert.equal(loops.length, 1);
+  effects.update(48, false);
+  assert.equal(loops[0].manager, null);
+  effects.update(64, true);
+  assert.equal(loops.length, 2);
+  effects.destroy();
+  assert.equal(loops[1].manager, null);
+});
+
 function setup(initial={}){
   let now=0;const api={},images=[],sounds=[],ammo=[],releases=[],animation={};
   const flipLock={},timers=[];
@@ -17,17 +71,17 @@ function setup(initial={}){
   const serverClock=loadServerClock({performance:{now:()=>now}});
   const shots=loadShotPrediction({serverClock});
   const replicationHelpers=loadProjectileReplication({performance:{now:()=>now}});
-  loadClientModule(require.resolve('../src/client/game/characters/ninja/network'), {exports:api,require:name=>name.includes('projectileReplication')?replicationHelpers:name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./throwPresentation'?require('../src/client/game/characters/ninja/throwPresentation'):name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('sparrowReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:name.includes('flipLock')?flipLock:{connected:false},
+  loadClientModule(require.resolve('../src/client/game/characters/ninja/network'), {exports:api,require:name=>name.includes('projectileReplication')?replicationHelpers:name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote}),presentSwarmTurn(){},presentSwarmImpact(){},presentSwarmShardEnd(){}}:name==='./projectileTexture'?projectileTexture:name==='./throwPresentation'?require('../src/client/game/characters/ninja/throwPresentation'):name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}}),HIT_SOUND:'ninja-shuriken-hit'}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('sparrowReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:name.includes('flipLock')?flipLock:{connected:false},
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){}});
   const sprite=(x,y,texture)=>{const s={x,y,texture,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
   const flashes=[];
   const scene={events:new EventEmitter(),add:{image:sprite,circle:(x,y)=>{const c={x,y,setDepth(){return c;},destroy(){}};flashes.push(c);return c;}},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
   const owner={active:true,x:100,y:200,flipX:false};
   scene._localPlayerAudioSprite=owner;
-  api.configureNinjaNetwork({ninjaCombatVersion:1,epoch:'room',sentMono:0,simMono:0,colliders:[],active:[],terminals:[],...initial});
+  api.configureNinjaNetwork({ninjaCombatVersion:model.VERSION,epoch:'room',sentMono:0,simMono:0,colliders:[],active:[],terminals:[],...initial});
   api.attachNinjaScene(scene,{localUsername:'owner',localPlayer:owner,onAmmo:a=>ammo.push(a)});
   const frame=t=>{now=t;api.observeNinjaSnapshot({snapshotEpoch:'room',sentMono:t,tMono:t});scene.events.emit('update');};
-  const packet=(a,name='owner')=>api.handleNinjaPacket(scene,{playerName:name,action:{ninjaCombatVersion:1,epoch:'room',simMono:now,sentMono:now,...a}},{localUsername:'owner',localPlayer:owner});
+  const packet=(a,name='owner')=>api.handleNinjaPacket(scene,{playerName:name,action:{ninjaCombatVersion:model.VERSION,epoch:'room',simMono:now,sentMono:now,...a}},{localUsername:'owner',localPlayer:owner});
   scene.time={delayedCall:(ms,fn)=>timers.push({ms,fn})};
   return {api,scene,owner,frame,packet,images,sounds,ammo,releases,animation,shots,flashes,flipLock,timers};
 }
@@ -152,14 +206,22 @@ test('two remote clients converge despite asymmetric launch delay and duplicate 
   clients.forEach(f=>f.api.resetNinjaNetwork());
 });
 
-test('dedicated Ninja special continues across releases without accelerating normal attacks',()=>{
-  const api={},plays=[],locks=[];
-  loadClientModule(require.resolve('../src/client/game/characters/ninja/swarmPresentation'), {exports:api,require:name=>name.includes('playerAudio')?playerAudio:{resolveSpriteAnimationKey:()=> 'ninja-special',markOneShotAnimation:(...args)=>locks.push(args)}});
-  const player={active:true,anims:{play:(...args)=>plays.push(args)}};
-  api.presentSwarmRelease({},player,36);api.presentSwarmRelease({},player,36);
-  assert.equal(plays[0][0].frameRate,30);assert.equal(plays[0][0].repeat,-1);
-  assert.equal(plays[1][1],true);assert.equal(plays[0][0].duration,undefined);
-  assert.equal(locks[0][1],'special');
+test('the Ninja super plays its aimed clip once through the barrage; other skins keep looping theirs',()=>{
+  const load=(plays,locks)=>{const api={};loadClientModule(require.resolve('../src/client/game/characters/ninja/swarmPresentation'), {exports:api,performance:{now:()=>0},
+    require:name=>name.includes('playerAudio')?playerAudio:name==='./swarmFx'?{beginSwarm:()=>null,swarmThrowSound(){}}:name.includes('aimPose')?require('../src/client/game/characters/shared/aimPose'):name.endsWith('animation-settings.json')?require('../public/assets/ninja/animation-settings.json'):{resolveSpriteAnimationKey:()=> 'ninja-special',markOneShotAnimation:(...args)=>locks.push(args)}});return api;};
+  const anims=new Set(['ninja-special','ninja-special-up','ninja-special-low']);
+  const scene={anims:{exists:key=>anims.has(key),get:()=>({msPerFrame:40,frames:Array.from({length:16},()=>({duration:0}))})}};
+  let plays=[],locks=[];const api=load(plays,locks);
+  const player={active:true,texture:{key:'ninja'},anims:{play:(...args)=>plays.push(args)}};
+  // Aimed up and ahead: the `up` clip, started once for the whole barrage.
+  api.presentSwarmRelease(scene,player,36,false,{x:0,y:0,angle:-0.6});api.presentSwarmRelease(scene,player,36,false,{x:0,y:0,angle:-0.6});
+  assert.deepEqual(plays,[['ninja-special-up',false]]);
+  assert.equal(locks.length,1);assert.equal(locks[0][1],'special');assert.equal(locks[0][2],16*40);
+  // A skin with its own special row keeps looping it, never restarting.
+  plays=[];locks=[];const skinned=load(plays,locks);
+  const skin={active:true,texture:{key:'ninja-arena-sovereign'},anims:{play:(...args)=>plays.push(args)}};
+  skinned.presentSwarmRelease(scene,skin,36,true,{x:0,y:0,angle:0});
+  assert.equal(plays[0][0].repeat,-1);assert.equal(plays[0][1],true);assert.equal(locks[0][1],'special');
 });
 
 test('owner shuriken keep their predicted pace when the later server launch confirms them',()=>{
@@ -295,4 +357,49 @@ test('an enemy shuriken is drawn ahead by its rewind so it reaches this player w
   const flown=age=>{const q=model.launch({x:600,y:200},Math.PI,'x');for(let i=0;i<Math.round(age/model.STEP_MS);i++)model.step(q,{x:600,y:200},[]);return q.x;};
   assert.ok(Math.abs(positions.ally-flown(300))<1,`ally at ${positions.ally}`);
   assert.ok(Math.abs(positions.foe-flown(400))<1,`enemy at ${positions.foe}`);
+});
+
+test('an enemy Ninja\'s shuriken take his team colour, not the return point\'s',()=>{
+  const f=setup();
+  const foe={active:true,x:400,y:200,flipX:true,_bbTeamColor:require('../src/shared/projectilePresentation').TEAM_RED,anims:{play(){}}};
+  f.scene.textures={exists:key=>key==='shuriken'||key==='shuriken-red'};
+  f.api.attachNinjaScene(f.scene,{opponentPlayersRef:{foe:{opponent:foe}}});
+  const q=model.launch(foe,Math.PI,'foe:r:0');q.ownerName='foe';
+  f.packet({type:'ninja-launch',requestId:'r',projectile:q,viewRewindMs:0},'foe');
+  for(let t=16;t<=400;t+=16)f.frame(t);
+  const drawn=f.images.find(image=>String(image.texture).startsWith('shuriken'));
+  assert.equal(drawn?.texture,'shuriken-red');
+});
+
+test('a swarm casts once per barrage, pockets each shuriken that returns, and closes with the last',()=>{
+  const api={},played=[],objects=[];let now=0;
+  loadClientModule(require.resolve('../src/client/game/characters/ninja/swarmFx'), {exports:api,performance:{now:()=>now},
+    require:name=>name.includes('characterTuning')?require('../src/shared/characters/characterTuning.js'):name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('renderLayers')?{RENDER_LAYERS:{PLAYER:10,ATTACKS:20}}:name.includes('playerAudio')?{playPlayerSound:(scene,source,key)=>played.push(key)}:name==='./projectileTexture'?{ninjaProjectileTexture:(scene,owner)=>owner.texture.key==='ninja'?'shuriken':`${owner.texture.key}-weapon-spin`}:{}});
+  const sprite=()=>{const s={active:true,anims:{play(){},setProgress(){}},once(){},destroy(){s.active=false;}};
+    for(const m of ['setDepth','setScale','setFlipX','setAlpha','setTint','setTexture','setOrigin','setPosition','setRotation','setBlendMode','setVisible'])s[m]=()=>s;
+    objects.push(s);return s;};
+  const delayed=[];
+  const scene={add:{sprite},textures:{exists:()=>true},anims:{exists:()=>true},events:new EventEmitter(),tweens:{add(){},killTweensOf(){}},
+    time:{get now(){return now;},delayedCall:(ms,fn)=>delayed.push(fn)}};
+  const player={active:true,visible:true,x:0,y:0,flipX:false,texture:{key:'ninja'},frame:{name:'special00'}};
+  const cfg=model.swarmConfig();
+  for(let i=0;i<cfg.count;i++){now=i*cfg.releaseMs;assert.ok(api.beginSwarm(scene,player));scene.events.emit('update');}
+  assert.deepEqual(played,[api.SWARM_SOUNDS.cast]);
+  // One lost (blocked) shuriken; every other one is pocketed with its own sound.
+  for(let i=0;i<cfg.count;i++)api.swarmShardEnded(scene,player,{returned:i>0});
+  assert.equal(played.filter(key=>key===api.SWARM_SOUNDS.pocket).length,cfg.count-1);
+  // The crown skin pockets with its own sound.
+  const crowned={...player,texture:{key:'ninja-arena-sovereign'}};
+  api.swarmShardEnded(scene,crowned,{returned:true});
+  assert.equal(played.at(-1),api.SWARM_SOUNDS.pocketCrown);
+  delayed.forEach(fn=>fn());
+  assert.equal(player._ninjaSwarm,undefined);
+  assert.equal(scene.events.listenerCount('update'),0);
+});
+
+test('a shuriken striking a wall plays the hit sound once',()=>{
+  const f=setup({colliders:[{left:260,right:270,top:-500,bottom:500}]});
+  f.api.predictNinja(f.scene,f.owner,'owner',{id:'wall',angle:0});
+  for(let t=16;t<=600;t+=16)f.frame(t);
+  assert.equal(f.sounds.filter(key=>key==='ninja-shuriken-hit').length,1);
 });

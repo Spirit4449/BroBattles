@@ -59,7 +59,7 @@
           "anchorForwardOffset": 34,
           "anchorOffsetY": -10,
           "reticleThickness": 124,
-          "angleMode": "horizontal-only"
+          "angleMode": "free"
         },
         "swarm": {
           "count": 15,

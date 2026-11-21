@@ -51,7 +51,7 @@ import { applyMatchBackground } from "../game/scene/matchBackground.js";
 import { installAmbientBezels } from "../game/scene/ambientBezels.js";
 import { releaseRendererContext, rendererContextOf } from "../game/scene/releaseRenderer.js";
 import { GAME_VIEW, fitGameSize, installViewportFit, viewportSize } from "../game/scene/gameViewport.js";
-import { playMatchEndSound, startSuddenDeathMusic, stopSuddenDeathMusic } from "../game/audio/matchAudio.js";
+import { playMatchEndSound, playMatchRewardSound, preloadMatchRewardSounds, startSuddenDeathMusic, stopSuddenDeathMusic } from "../game/audio/matchAudio.js";
 import { createGameHudController } from "../game/hud/gameHudController";
 import { createGameOverScreenController } from "../game/hud/gameOverScreenController";
 import { createBattleTutorialController } from "../game/hud/battleTutorialController";
@@ -89,6 +89,7 @@ import { RENDER_LAYERS } from "../game/scene/renderLayers";
 import { createPlayer, syncLocalUiPosition, player, handlePlayerMovement, dead, setSuperStats, setPowerupMobility, setPowerupInvisible, applyAuthoritativeState, getAmmoSyncState, getNetworkInputState, getPlayerTutorialState, setLocalNetStateFlusher, setExternalControlLockUntil, destroyMobileControls } from "../game/players/localPlayer";
 import { preloadForRoster, handleLocalAuthoritativeAttack, handleRemoteAttack, setupAll, setupVariantAnimationsForRoster, applyCharacterPowerupFx, drawCharacterPowerupAura, getCharacterEffectTickSounds } from "../game/characters";
 import { clearAction } from "../game/characters/shared/animationState.js";
+import { cancelHookPull } from "../game/players/fighterCombatCleanup";
 import socket, { waitForConnect } from "../lib/socket";
 import { netFlagSearch, readNetFlags } from "../lib/netFlags";
 import RemotePlayer from "../game/players/RemotePlayer";
@@ -175,7 +176,7 @@ const matchId = getMatchIdFromUrl();
 if (!matchId) {
   console.error("No match ID found, redirecting to lobby");
   window.location.href = "/";
-} else {
+} else if (!editorSession) {
   // Mark every battle session, not only completed ones. If the player leaves
   // early or uses browser Back, the lobby can discard its cached match-found
   // state instead of restoring it from the back/forward cache.
@@ -188,6 +189,15 @@ if (!matchId) {
 // Use server-sent identity (from /gamedata) rather than client cookies
 let username = null;
 let gameData = null; // Will be fetched from /gamedata endpoint
+const isQuickPlaytest = () => editorSession && !gameData?.editorFullBattle;
+
+function exitMapPlaytest() {
+  if (window.parent === window) {
+    window.location.replace("/map-editor");
+    return;
+  }
+  window.parent.postMessage({ type: "bb-map-playtest-exit" }, window.location.origin);
+}
 // Expose current match session details (level, per-character damages) for character modules
 window[BROWSER_GLOBALS.matchSession] = window[BROWSER_GLOBALS.matchSession] || {};
 
@@ -324,13 +334,6 @@ const hud = createGameHudController({
     gameScene?._bgmEnvelope?.fade(0.3, 450);
     focusBattleInput();
   },
-  onEnableInput: () => {
-    try {
-      if (gameScene && gameScene.input?.keyboard) {
-        gameScene.input.keyboard.enabled = true;
-      }
-    } catch (_) {}
-  },
   onSpectatePrevious: () => gameScene?._spectatorCamera?.cycleSpectatedPlayer?.(-1),
   onSpectateNext: () => gameScene?._spectatorCamera?.cycleSpectatedPlayer?.(1),
 });
@@ -367,7 +370,7 @@ function onGameRevealed() {
   gameScene?.cameras?.main?.fadeIn(600, 0, 0, 0);
   trySendReadyAck();
   const skipPregame =
-    isLiveGame || gameEnded || editorSession || gameData?.editorPlaytest ||
+    isLiveGame || gameEnded || isQuickPlaytest() ||
     hud.isBattleIntroActive?.();
   if (!skipPregame) matchIntro.beginPregame();
 }
@@ -393,6 +396,8 @@ const gameOverScreenController = createGameOverScreenController({
   getGameData: () => gameData,
   getUsername: () => username,
   rewardStorageKey: POST_MATCH_REWARD_STORAGE_KEY,
+  onExit: editorSession ? exitMapPlaytest : undefined,
+  playRewardSound: (...args) => playMatchRewardSound(gameScene, ...args),
 });
 
 // Wire all server socket event handling for the live match.
@@ -488,6 +493,29 @@ matchCoordinator = createMatchCoordinator({
   powerupTickSounds: POWERUP_TICK_SOUNDS,
   onInitializePlayers: initializePlayers,
   onTrySendReadyAck: trySendReadyAck,
+  onLocalSpawnReset: ({ kickoff }) => {
+    clearTransientPresentation({ stopAudio: !kickoff });
+    gameScene?._powerupRenderer?.resetEffects();
+    latestPlayerEffects = {};
+    latestEffectMovement = {};
+    for (const name of Object.keys(LAST_SHIELD_ACTIVE_AT)) delete LAST_SHIELD_ACTIVE_AT[name];
+  },
+  onFighterDeath: (name) => {
+    delete latestPlayerEffects[name];
+    delete latestEffectMovement[name];
+    delete LAST_SHIELD_ACTIVE_AT[name];
+    for (const queue of [POWERUP_COLLECT_QUEUE, SHIELD_IMPACT_QUEUE]) {
+      for (let i = queue.length - 1; i >= 0; i--) {
+        if (queue[i]?.username === name) queue.splice(i, 1);
+      }
+    }
+    gameScene?._powerupRenderer?.resetEffects(name);
+    if (player?._gloopHookPullSource === name) {
+      cancelHookPull(player);
+      delete latestPlayerEffects[username]?.stun;
+      delete latestEffectMovement[username];
+    }
+  },
   onTrackShieldEffects: trackShieldEffectsPresence,
   onStartSuddenDeathMusic: () => startSuddenDeathMusic(gameScene),
   onStopSuddenDeathMusic: () => stopSuddenDeathMusic(gameScene),
@@ -499,14 +527,16 @@ matchCoordinator = createMatchCoordinator({
   isPresentationSuppressed: () => document.hidden,
 });
 
-function clearTransientPresentation() {
+function clearTransientPresentation({ stopAudio = true } = {}) {
   PENDING_ACTIONS.length = 0;
   POWERUP_COLLECT_QUEUE.length = 0;
   DEATHDROP_COLLECT_QUEUE.length = 0;
   SHIELD_IMPACT_QUEUE.length = 0;
   discardCharacterPresentation();
   try { gameScene?.events?.emit?.("presentation:reset"); } catch (_) {}
-  try { gameScene?.sound?.stopAll?.(); } catch (_) {}
+  if (stopAudio) {
+    try { gameScene?.sound?.stopAll?.(); } catch (_) {}
+  }
 }
 
 function snapRemotePlayersToLatestState() {
@@ -827,7 +857,7 @@ class GameScene extends Phaser.Scene {
     deferSceneAudio(this, { holdDownloads: () => getNavigation()?.holdGameplayDownloads?.() });
     // Prepare cached roster media throughout visual loading. The HUD pauses
     // unfinished decoder work and optional downloads during the flythrough.
-    if (!isLiveGame && !gameEnded && !editorSession && !gameData?.editorPlaytest) hud.prepareBattleCards();
+    if (!isLiveGame && !gameEnded && !isQuickPlaytest()) hud.prepareBattleCards();
     const onVisualProgress = (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
@@ -847,6 +877,7 @@ class GameScene extends Phaser.Scene {
       gameData?.mapSnapshot?.map || getDefaultMapDocument(gameData?.map),
     );
     preloadScenery(this, gameData?.mapSnapshot?.map || getDefaultMapDocument(gameData?.map));
+    hud.prepareCountdownAudio();
     preloadModeAssets(this, gameData?.modeId, staticPath);
     preloadGameAssets({
       scene: this,
@@ -860,6 +891,7 @@ class GameScene extends Phaser.Scene {
           activeStaticPath,
         ),
     });
+    preloadMatchRewardSounds(this);
   }
 
   create() {
@@ -867,8 +899,8 @@ class GameScene extends Phaser.Scene {
     // Store scene reference
     gameScene = this;
     this._topPlayfieldPadding = getTopPlayfieldPadding();
-    // Don't let players move until game is fully ready (unless late-joining a live game)
-    this.input.keyboard.enabled = false;
+    // Track keys during the intro. Movement and attacks wait for FIGHT.
+    this._canPlayBattle = () => isLiveGame && !hud.isCountdownRunning() && !gameEnded;
     this.physics.world.setBoundsCollision(false, false, false, false);
     // One physics step per rendered frame, so the local fighter moves smoothly
     // on high-refresh displays instead of on alternate frames.
@@ -943,11 +975,6 @@ class GameScene extends Phaser.Scene {
     }
 
     this.initializeGameWorld();
-
-    // If joining a live game, enable controls right away (no overlay/countdown)
-    if (isLiveGame) {
-      this.input.keyboard.enabled = true;
-    }
 
     // Scene is now ready; if server is in starting phase, ack readiness
     trySendReadyAck();
@@ -1089,7 +1116,6 @@ class GameScene extends Phaser.Scene {
         Phaser,
         getGameData: () => gameData,
         getModeState: () => latestModeState,
-        onGoal: discardCharacterPresentation,
         getMapObjects: () => mapObjects,
         getLocalPlayer: () => player,
       });
@@ -1171,7 +1197,7 @@ class GameScene extends Phaser.Scene {
     // The pregame flythrough (and its hand-back blend) owns the camera.
     // Before FIGHT, fighters stand at their spawns: no input or movement sync.
     const introCamera = matchIntro.updateCamera();
-    if (!isLiveGame) {
+    if (!isLiveGame || hud.isCountdownRunning()) {
       syncLocalUiPosition();
       if (!introCamera) updateDynamicCamera(this, player);
       updateHealthBars({ opponentPlayers, teamPlayers, syncPositions: true });
@@ -1333,7 +1359,7 @@ if (editorSession) {
   window.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       event.preventDefault();event.stopImmediatePropagation();
-      window.parent.postMessage({type:'bb-map-playtest-exit'},window.location.origin);
+      exitMapPlaytest();
     } else if (event.code === 'KeyQ' && !event.repeat && gameData?.editorSoloPlaytest && !isChatInputActive()) {
       event.preventDefault();event.stopImmediatePropagation();
       socket.emit(SOCKET_EVENTS.EDITOR_SELF_KILL);

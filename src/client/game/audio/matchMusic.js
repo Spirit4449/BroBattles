@@ -1,6 +1,14 @@
 import { getNavigation } from "../../lib/globals.cjs";
 import { bindMusicEnvelope } from "../../lib/musicEnvelope";
 
+// Keep the published tracks in a similar range under combat while retaining
+// each map's authored volume and the player's music setting.
+const MAP_MUSIC_GAIN = 0.68;
+const trackGain = {
+  "/assets/bank-bust/bankbust-main.mp3": 0.49,
+  "/assets/bro-ball/sunset-bowl-music.mp3": 0.32,
+};
+
 // Sudden-death audio uses the scene's envelope to fade the map track.
 export function installMatchMusic(scene, { src, volume, isLive }) {
   let audio;
@@ -25,7 +33,7 @@ export function installMatchMusic(scene, { src, volume, isLive }) {
       audio = new Audio(src);
       audio.preload = "auto";
       audio.loop = true;
-      envelope = bindMusicEnvelope(audio, volume, 0);
+      envelope = bindMusicEnvelope(audio, volume * (trackGain[src] ?? MAP_MUSIC_GAIN), 0);
       audio.addEventListener("playing", () => {
         envelope.fade(scene._bgmIntensity ?? (isLive() ? 1 : 0.3), 1200);
       }, { once: true });

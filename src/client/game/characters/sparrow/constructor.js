@@ -1,5 +1,7 @@
 import { characterDefinitions } from "../../../../shared/characters/index.js";
-import { perform as performSpecial } from "./special";
+import { perform as performSpecial, updateSeraphHover, isSeraphAiming, releaseSeraph, setSeraphAim, getSeraphAim, SERAPH_AIM_SOUND, SERAPH_RELEASE_SOUND } from "./special";
+import { SERAPH_FX_KEY } from "./seraphFx";
+import { chooseRemoteAnimationState } from "../shared/animationState";
 import { predictSparrowShot } from './network';
 import { animations } from "./anim";
 import { performSparrowArrowSpread } from "./attack";
@@ -16,9 +18,9 @@ class Sparrow extends CharacterEntityBase {
   static performSpecial = performSpecial;
 
   static sounds = {
-    attack: { key: "sparrow-attack", volume: 0.48 },
-    hit: { key: "sparrow-hit", volume: 0.48 },
-    special: { key: "sparrow-special", volume: 0.56 },
+    attack: { key: "sparrow-attack" },
+    hit: { key: "sparrow-hit" },
+    special: { key: "sparrow-special" },
   };
 
   static attackFlow = { attackResetMs: 520, cooldownFallbackMs: 1000 };
@@ -32,9 +34,12 @@ class Sparrow extends CharacterEntityBase {
         [`${NAME}-attack`]: "attack.mp3",
         [`${NAME}-hit`]: "hit.mp3",
         [`${NAME}-special`]: "special.mp3",
-        [`${NAME}-burn-tick`]: "tick.mp3",
+        [SERAPH_AIM_SOUND]: "seraph-aim.mp3",
+        [SERAPH_RELEASE_SOUND]: "seraph-release.mp3",
       },
     });
+    scene.load.atlas(SERAPH_FX_KEY, this.characterAssetPath(staticPath, "seraph-fx.webp"),
+      this.characterAssetPath(staticPath, "seraph-fx.json"));
   }
 
   static setupAnimations(scene) {
@@ -46,7 +51,7 @@ class Sparrow extends CharacterEntityBase {
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     const type = String(data.type || "").toLowerCase();
     if (type === `${NAME}-arrow`) {
-      playPlayerSound(scene, ownerSprite, "sparrow-attack", { volume: 0.48 });
+      playPlayerSound(scene, ownerSprite, "sparrow-attack");
       playSpriteAnimation({
         scene,
         sprite: ownerSprite,
@@ -61,26 +66,31 @@ class Sparrow extends CharacterEntityBase {
     return false;
   }
 
-  static getEffectTickSounds() {
-    return {
-      sparrowBurn: {
-        key: "sparrow-burn-tick",
-        options: { volume: 0.28 },
-      },
-    };
+  // Seraph poses (`seraph-aim-NN`) are shown as sent: they carry her aim.
+  static chooseRemoteAnimation(context = {}) {
+    if (/^(sparrow-)?seraph-/.test(String(context.animation || ""))) {
+      return String(context.animation).replace(/^sparrow-/, "");
+    }
+    return chooseRemoteAnimationState({ ...context, character: NAME });
   }
 
-  static drawPowerupAura({ graphics, frame, effects, nowSec, colors } = {}) {
-    if (!graphics || !frame || !effects || (effects.sparrowBurn || 0) <= 0) {
-      return false;
-    }
-    const pulse = 0.72 + 0.28 * Math.sin(nowSec * 10 + frame.x * 0.01);
-    const color = colors?.sparrowBurn || 0xff7a1f;
-    graphics.fillStyle(color, 0.12 + 0.06 * pulse);
-    graphics.fillCircle(frame.x, frame.y, frame.radius + 5 * pulse);
-    graphics.lineStyle(3, color, 0.7 * pulse);
-    graphics.strokeCircle(frame.x, frame.y, frame.radius + 7 * pulse);
-    return true;
+  // Called each frame by the local movement loop while an ability lock holds.
+  static updateMovementLock(scene, player, { now } = {}) {
+    updateSeraphHover(scene, player, now);
+  }
+
+  // Seraph's aim phase takes the attack inputs: they aim and loose the bolt.
+  static followUpActive(player) {
+    return isSeraphAiming(player);
+  }
+  static aimFollowUp(player, angle) {
+    setSeraphAim(player, angle);
+  }
+  static getFollowUpAngle(player) {
+    return getSeraphAim(player);
+  }
+  static releaseFollowUp(scene, player, angle) {
+    return releaseSeraph(scene, player, angle);
   }
 
   static applyPowerupFx(context) {

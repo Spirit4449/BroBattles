@@ -28,6 +28,10 @@ export function drawSuperChargeBar(graphics, background, {
       until: Number(player?._dravenInfernoUntil) || 0,
       startedAt: Number(player?._dravenInfernoStartedAt) || 0,
     },
+    {
+      until: Number(player?._sparrowSeraphUntil) || 0,
+      startedAt: Number(player?._sparrowSeraphStartedAt) || 0,
+    },
   ].find(({ until }) => until > wallNow);
   let state = states.get(graphics);
   if (!state || graphics.visible === false) {

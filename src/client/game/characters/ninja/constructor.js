@@ -1,3 +1,4 @@
+import { combatSoundVolume } from "../../audio/playerAudio";
 import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { perform as performSpecial } from "./special";
 import { predictNinja } from './network';
@@ -9,6 +10,8 @@ import { playSpriteAnimation } from "../shared/animationState";
 import { createRuntimeId } from "../shared/runtimeId";
 import { aimAngle, aimFacesLeft, faceAttack } from "../shared/flipLock";
 import { beginThrow } from "./throwPresentation";
+import { SWARM_FX_KEY, SWARM_SOUND_FILES } from "./swarmFx";
+import { FLIGHT_SOUND, HIT_SOUND } from "./effects";
 
 // Single source of truth for this character's name/key
 
@@ -25,9 +28,9 @@ class Ninja extends CharacterEntityBase {
   static performSpecial = performSpecial;
 
   static sounds = {
-    attack: { key: "shurikenThrow", volume: 0.5, rate: 1.3 },
-    hit: { key: "shurikenHit", volume: 1.25, rate: 1.0 },
-    hitWood: { key: "shurikenHitWood", volume: 0.7 },
+    attack: { key: "shurikenThrow", rate: 1.3 },
+    hit: { key: HIT_SOUND },
+    hitWood: { key: "shurikenHitWood" },
   };
 
   static attackFlow = { attackResetMs: 300 };
@@ -41,10 +44,14 @@ class Ninja extends CharacterEntityBase {
       image: { shuriken: "shuriken.webp", "shuriken-red": "shuriken-red.webp" },
       audio: {
         shurikenThrow: "shurikenThrow.mp3",
-        shurikenHit: "hit.mp3",
         shurikenHitWood: "woodhit.mp3",
+        [FLIGHT_SOUND]: "shuriken-flight.mp3",
+        [HIT_SOUND]: "shuriken-hit.mp3",
+        ...SWARM_SOUND_FILES,
       },
     });
+    scene.load.atlas(SWARM_FX_KEY, this.characterAssetPath(staticPath, "swarm-fx.webp"),
+      this.characterAssetPath(staticPath, "swarm-fx.json"));
   }
 
   static setupAnimations(scene) {
@@ -70,7 +77,7 @@ class Ninja extends CharacterEntityBase {
       // Face the throw and hold it through the throw, so running the other
       // way does not turn him back mid-throw.
       faceAttack(this.scene, p, direction < 0, RETURNING_SHURIKEN.flipLockMs);
-      this.scene.sound.play("shurikenThrow", { volume: 1, rate: 1.3 });
+      this.scene.sound.play("shurikenThrow", { volume: combatSoundVolume("shurikenThrow"), rate: 1.3 });
       playSpriteAnimation({
         scene: this.scene,
         sprite: p,

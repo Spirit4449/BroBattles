@@ -31,7 +31,17 @@
         <label class="check playtest-toggle" title="Show map, player and attack collision shapes"><input type="checkbox" id="debug-hitboxes"><span>Hitboxes</span></label>
         <label class="check playtest-toggle" title="Infinite supers"><input type="checkbox" id="infinite-supers" checked><span>∞ Supers</span></label>
       </div>
-      <button id="preview" class="playtest-button" title="Playtest this draft (Esc)"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M7 4h3v2h3v2h3v2h2v4h-2v2h-3v2h-3v2H7z"/></svg>Playtest<kbd>Esc</kbd></button>
+      <div class="playtest-split">
+        <button id="preview" class="playtest-button" title="Playtest this draft"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M7 4h3v2h3v2h3v2h2v4h-2v2h-3v2h-3v2H7z"/></svg><span id="playtest-label">Playtest</span></button>
+        <details class="menu" id="playtest-menu">
+          <summary class="icon-button" title="Playtest mode" aria-label="Playtest mode"><svg viewBox="0 0 16 16" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M3 5h10v2h-2v2H9v2H7V9H5V7H3z"/></svg></summary>
+          <div class="menu-panel menu-actions" role="group" aria-label="Playtest modes">
+            <button type="button" id="playtest-quick-option" aria-pressed="true">Quick Playtest</button>
+            <button type="button" id="playtest-full-option" aria-pressed="false">Full Battle</button>
+          </div>
+        </details>
+        <input type="checkbox" id="playtest-full-battle" hidden>
+      </div>
       <span id="playtest-summary" hidden></span>
     </div>
     <button id="studio-settings" type="button" class="icon-button" title="Settings" aria-label="Settings"><img src="/assets/icons/settings.webp" width="24" height="24" alt=""></button>

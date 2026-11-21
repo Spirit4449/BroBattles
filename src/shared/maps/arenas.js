@@ -4,7 +4,7 @@ const { DUEL_DEFAULT_VARIANT, isDuelFormation } = require("./duelVariants.js");
 // Legacy variant arenas remain readable for existing documents and snapshots.
 //
 // Arenas share a default gameplay zoom range. A map profile can override
-// it to fit its layout, as Sunset Bowl does.
+// it to fit its layout, as Rumble Stadium does.
 const FOLLOW_ZOOM = Object.freeze({ minZoom: 1.4, maxZoom: 1.5 });
 const ARENAS = require('./arenas.json');
 const { modes } = require('../catalogs/gameModes.catalog.cjs');

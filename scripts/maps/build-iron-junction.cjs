@@ -39,6 +39,7 @@
 const fs = require("fs");
 const path = require("path");
 const { validateDocument } = require("../../src/shared/maps/mapDocument");
+const bankArena = require("../../src/shared/maps/arenas.json")["bank-bust-3v3"];
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const ASSET_DIR = path.join(ROOT, "public", "assets", "bank-bust");
@@ -47,17 +48,17 @@ const SHAPE_MANIFEST = path.join(__dirname, "iron-junction-shapes.json");
 // ---------------------------------------------------------------------------
 // World frame
 // ---------------------------------------------------------------------------
-const WIDTH = 5000;
+const { width: WIDTH, y: TOP, height: WORLD_HEIGHT } = bankArena.world;
 const CX = WIDTH / 2;
 const mx = (x) => WIDTH - x;
 
-const TOP = -420;
-const BOTTOM = 1000;
+const BOTTOM = TOP + WORLD_HEIGHT;
 // Art runs past the world into the camera's margins, so the level has no edge:
 // there is solid wall out to the side of the screen and solid ground below it.
 const ART_TOP = -540;
 const ART_BOTTOM = 1140;
 const ART_SIDE = 240;
+const SIDE_WALL = 96;
 
 const STEP = 96;
 const LEDGE_STEP = 100;
@@ -82,7 +83,7 @@ const LEDGE_ART_HEIGHT = 44;
 // Shapes
 // ---------------------------------------------------------------------------
 // Every platform registers the image it needs here. The bake reads this list,
-// writes shape-<id>.webp at exactly that size, and the next run measures the
+// writes shape-<id>.webp, and the next run measures the
 // file off disk to confirm.
 const shapes = new Map();
 const platforms = [];
@@ -127,9 +128,12 @@ const missing = [];
  */
 function shape(id, kind, instance, left, right, top, height, flipX = false) {
   const width = Math.round(right - left);
+  // Ceiling art is stored on its native grid and scaled by Phaser.
+  const textureScale = kind === "ceiling" ? 4 : 1;
+  const file = `shape-${id}${textureScale > 1 ? "-native" : ""}.webp`;
   if (!shapes.has(id)) {
-    const size = measure(`shape-${id}.webp`);
-    const fits = size && size.width === width && size.height === Math.round(height);
+    const size = measure(file);
+    const fits = size && size.width * textureScale === width && size.height * textureScale === Math.round(height);
     if (!fits) missing.push(id);
     shapes.set(id, { id, kind, left, top, width, height: Math.round(height), baked: !!fits });
   } else {
@@ -143,7 +147,7 @@ function shape(id, kind, instance, left, right, top, height, flipX = false) {
     textureKey: `bank-bust-shape-${id}`,
     x: round(left + width / 2),
     y: round(top + height / 2),
-    scaleX: 1, scaleY: 1,
+    scaleX: textureScale, scaleY: textureScale,
     flipX,
     body: { width: 1, height: 1, offsetX: 0, offsetY: 0 },
     collisionEnabled: false,
@@ -192,19 +196,24 @@ function walkway(kind, id, a, b, top) {
 // ---------------------------------------------------------------------------
 // Containment
 // ---------------------------------------------------------------------------
-// The strips just outside the world box. The visible sides of the level are the
-// side walls below.
+// The strips just outside the world box.
 const BOUNDS = new Set(["wall-l-body", "wall-r-body", "ceiling-body"]);
 box("wall-l-body", -160, 0, TOP - 200, BOTTOM);
 box("wall-r-body", WIDTH, WIDTH + 160, TOP - 200, BOTTOM);
 box("ceiling-body", 0, WIDTH, TOP - 200, TOP);
+
+// The solid roof ends at TOP. Trusses and pipework hang into the arena as art.
+const ceilingEdge = SIDE_WALL - 4;
+for (const [side, flip] of [["l", false], ["r", true]]) {
+  shape(flip ? "ceiling-right" : "ceiling", "ceiling", `ceiling-${side}`,
+    flip ? CX : ceilingEdge, flip ? mx(ceilingEdge) : CX, ART_TOP, TOP - ART_TOP + 152, flip);
+}
 
 // ---------------------------------------------------------------------------
 // The side walls
 // ---------------------------------------------------------------------------
 // Solid from the playable edge all the way off the side of the screen, with a
 // finished column on the face you can touch.
-const SIDE_WALL = 96;
 for (const [side, flip] of [["l", false], ["r", true]]) {
   const left = flip ? WIDTH - SIDE_WALL : 0;
   const artLeft = flip ? left : -ART_SIDE;
@@ -480,7 +489,7 @@ const spawns = {
 // Scenery layers and atmosphere
 // ---------------------------------------------------------------------------
 const installed = (file) => fs.existsSync(path.join(ASSET_DIR, file));
-const ARENA_CAMERA = require("../../src/shared/maps/arenas.json")["bank-bust-3v3"].camera;
+const ARENA_CAMERA = bankArena.camera;
 const CAMERA_CENTER = { x: ARENA_CAMERA.x + ARENA_CAMERA.width / 2, y: ARENA_CAMERA.y + ARENA_CAMERA.height / 2 };
 const FRAMED_SHIFT = CAMERA_CENTER.y - 140;
 const hasFarBg = installed("bg-far.webp");
@@ -601,12 +610,11 @@ for (const group of ["glows", "mist", "rays"]) {
 // ---------------------------------------------------------------------------
 const usedTextures = [...new Set(platforms.map((p) => p.textureKey))];
 const decoOf = (key) => (key.startsWith("bank-bust-deco-") ? key.slice("bank-bust-deco-".length) : null);
-const textureUrl = (key) => (key === BACKDROP.key
-  ? `/assets/bank-bust/${BACKDROP.file}`
-  : `/assets/bank-bust/shape-${key.replace("bank-bust-shape-", "")}.webp`);
-const textureSize = (key) => (key === BACKDROP.key
-  ? backdropSize
-  : shapes.get(key.replace("bank-bust-shape-", "")));
+const textureFiles = new Map(usedTextures.filter(key => !decoOf(key)).map(key => {
+  if (key === BACKDROP.key) return [key, BACKDROP.file];
+  const id = key.replace("bank-bust-shape-", "");
+  return [key, `shape-${id}${shapes.get(id).kind === "ceiling" ? "-native" : ""}.webp`];
+}));
 
 const document = {
   schemaVersion: 2,
@@ -619,12 +627,13 @@ const document = {
     musicAsset: "/assets/bank-bust/bankbust-main.mp3",
     musicVolume: 0.22,
     mapSelectPreviewAsset: "/assets/bank-bust/preview.webp",
+    mapFullPreviewAsset: "/assets/bank-bust/full-preview.webp",
     lobbyBgAsset: "/assets/bank-bust/lobbyBg.webp",
     lobbyPlatformAsset: "/assets/bank-bust/lobbyPlatform.webp",
   },
   assets: Object.fromEntries(usedTextures.map((key) => {
     const deco = decoOf(key);
-    if (!deco) return [key, { type: "image", url: textureUrl(key) }];
+    if (!deco) return [key, { type: "image", url: `/assets/bank-bust/${textureFiles.get(key)}` }];
     const { rate, sequence } = DECO[deco];
     const { width, height } = decoSize(deco);
     return [key, {
@@ -634,7 +643,7 @@ const document = {
     }];
   })),
   textureSizes: Object.fromEntries(usedTextures.map((key) => {
-    const size = decoOf(key) ? decoSize(decoOf(key)) : textureSize(key);
+    const size = decoOf(key) ? decoSize(decoOf(key)) : measure(textureFiles.get(key));
     return [key, { width: size.width, height: size.height }];
   })),
   layout: { platforms, hitboxes },
@@ -659,7 +668,7 @@ if (require.main === module) {
   // The shape list first, so a fresh checkout can bake before it validates.
   fs.writeFileSync(SHAPE_MANIFEST,
     JSON.stringify({
-      world: { width: WIDTH, mid: MID, bottom: ART_BOTTOM, shadeBottom: BOTTOM },
+      world: { width: WIDTH, top: TOP, mid: MID, bottom: ART_BOTTOM, shadeBottom: BOTTOM },
       tunnelShade: TUNNEL_SHADE,
       tunnelLamps: TUNNEL_LAMPS,
       passageRoof: PASSAGE_ROOF,

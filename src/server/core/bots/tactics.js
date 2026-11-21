@@ -7,6 +7,7 @@ const effects = require('../../../shared/combat/runtime/effects/effectManager.js
 const { botProfile } = require('../../../shared/combat/characterProfiles.js');
 const { POWERUP_SHOCKWAVE_RADIUS, DEATH_DROP_PICKUP_RADIUS } = require('../../../shared/combat/matchConfig.js');
 const { powerupGap, powerupReachX } = require('../../../shared/physics/powerupContact');
+const { fireLaneExposure, edgeExposure, walkExposure } = require('./perception');
 
 const style = (player) => botProfile(player.char_class).spacing;
 const healthFraction = (p) => Math.max(0, Math.min(1, p.health / Math.max(1, p.maxHealth)));
@@ -165,6 +166,25 @@ function retreatExposure(player, point, route, enemies) {
   return exposure * (4 + (1 - healthFraction(player)) * 4);
 }
 
+// Standing in a sustained stream of shots costs far more than crossing it, and
+// a hurt bot values the same exposure more. Remembered lanes come from what the
+// bot has seen of the room (see updateFireLanes).
+const FIRE_LANE_STAND_COST = 95;
+const FIRE_LANE_TRAVEL_COST = 420;
+function fireLaneCost(brain, point, route, now) {
+  const lanes = brain.fireLanes, p = brain.player;
+  if (!lanes?.size) return 0;
+  let travel = 0;
+  let fromX = p.x;
+  for (const edge of route || []) {
+    travel += edgeExposure(lanes, p.char_class, fromX, edge, now);
+    fromX = edge.landingX;
+  }
+  travel += walkExposure(lanes, p.char_class, fromX, point, now);
+  const stand = fireLaneExposure(lanes, p.char_class, point, now);
+  return (stand * FIRE_LANE_STAND_COST + travel * FIRE_LANE_TRAVEL_COST) * (2 - healthFraction(p));
+}
+
 function* chooseDecisionSteps(brain, context, target, enemies, now) {
   const p = brain.player, { graph, current, poisonY, routeTo, routeSteps } = context;
   const spacing = style(p);
@@ -175,8 +195,13 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
   const clearOfPoison = (top) => top < poisonY - 100;
   const hazard = !clearOfPoison(bounds(p).bottom);
   // Optional trips (patrol, search) must keep the whole route out of the gas.
-  const safeTrip = (surface, route) => !suddenDeath || (clearOfPoison(surface.top) &&
-    routePoisonDamage(p, { x: surface.x, y: surface.top - graph.body.offsetY - graph.body.halfHeight }, route, poisonY, context.poisonAt) === 0);
+  const safeTrip = (surface, route) => {
+    const point = { x: surface.x, y: surface.top - graph.body.offsetY - graph.body.halfHeight };
+    // Optional trips also stay out of remembered enemy fire.
+    if (fireLaneCost(brain, point, route, now) > 0) return false;
+    return !suddenDeath || (clearOfPoison(surface.top) &&
+      routePoisonDamage(p, point, route, poisonY, context.poisonAt) === 0);
+  };
   const near = enemies.filter((e) => distance(e, p) < 320).length;
   const friends = [...brain.room.players.values()].filter((ally) => ally !== p && ally.team === p.team && ally.isAlive && distance(ally, p) < 500).length;
   const healthLead = target ? healthFraction(p) - healthFraction(target) : 0;
@@ -302,6 +327,13 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
       const side = target && p.x < target.x ? -1 : 1;
       const xs = [clampX(p.x), clampX(surface.x)];
       const previous = brain.decision?.mode === mode && brain.decision.goal?.surfaceId === surface.id ? brain.decision.goal : null;
+      if (target && brain.fireLanes?.size) {
+        xs.push(limits.left, limits.right);
+        for (const lane of brain.fireLanes.values()) {
+          xs.push(clampX(lane.left - graph.body.halfWidth - graph.body.offsetX - 1),
+            clampX(lane.right + graph.body.halfWidth - graph.body.offsetX + 1));
+        }
+      }
       if (previous) xs.push(clampX(previous.x));
       if (formation) xs.push(clampX(formation.x));
       if (target && !wantsSpace) xs.push(clampX(p.x - 160), clampX(p.x + 160));
@@ -311,14 +343,14 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
         yield;
         if (!canStandAt(movementGeometry(brain.room), surface, p.char_class, x)) continue;
         const landingX = route.length ? route.at(-1).landingX : p.x;
-        const pointRoute = !Number.isFinite(landingX) || canWalkBetween(movementGeometry(brain.room), surface, p.char_class, landingX, x)
+        const pointRoute = !brain.fireLanes?.size && (!Number.isFinite(landingX) || canWalkBetween(movementGeometry(brain.room), surface, p.char_class, landingX, x))
           ? route : yield* routeSteps(surface.id, x);
         if (pointRoute === null) continue;
         const point = { x, y: surface.top - graph.body.offsetY - graph.body.halfHeight };
         const travel = pointRoute.reduce((sum, e) => sum + e.duration, 0) * 0.045 + Math.abs(p.x - x) * 0.13;
         const nearestEnemy = enemies.length ? Math.min(...enemies.map((e) => distance(point, e))) : Infinity;
         const crowding = enemies.reduce((sum, e) => sum + Math.max(0, (wantsSpace ? 500 : spacing.clearance) - distance(point, e)), 0);
-        let score = travel + crowding * (wantsSpace ? 1.5 : 0.85);
+        let score = travel + crowding * (wantsSpace ? 1.5 : 0.85) + fireLaneCost(brain, point, pointRoute, now);
         if (formation && !hazard && !brain.retreating) score += distance(point, formation) * formation.weight;
         if (brain.teamPlan && !hazard) {
           for (const ally of brain.room.players.values()) {

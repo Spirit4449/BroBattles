@@ -29,6 +29,8 @@ const EXTRA = {
   ...Object.fromEntries(Object.entries(require('./attack.cjs').SETS).filter(([prefix]) => prefix !== 'attack')),
   // Directional dashes (dash.cjs), named as the shared dash animations.
   ...require('./dash.cjs').FRAMES,
+  // Seraph super: the rise and the aim directions with their wing flutter (seraph.cjs).
+  ...require('./seraph.cjs').SETS,
 };
 
 // Square cell, centred on the hitbox: wide enough for the legacy dying pose, which

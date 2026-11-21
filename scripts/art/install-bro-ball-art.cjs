@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Installs Sunset Bowl's art (map 6, Bro Ball) as one coherent pixel finish.
+// Installs Rumble Stadium's art (map 6, Bro Ball) as one coherent pixel finish.
 //
 //   node scripts/art/install-bro-ball-art.cjs     <- this: art + manifest
 //   node scripts/maps/build-sunset-bowl.cjs       <- reads the manifest, writes the map

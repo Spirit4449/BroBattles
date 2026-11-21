@@ -33,6 +33,7 @@ function syncToolbarSelect(id, { rebuild = false } = {}) {
         })),
       value: input.value,
       label: input.getAttribute("aria-label"),
+      blurOnSelect: true,
       className: `studio-toolbar-select ${id === "map-select" ? "studio-map-select" : "is-compact"}`,
       onChange(value, skinId) {
         input.value = value;

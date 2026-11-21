@@ -65,8 +65,7 @@ function buildModeState(mode) {
     endsAt: state?.endsAt || null,
     respawns: true,
     respawnDelayMs: state?.respawnDelayMs ?? settings.respawnDelayMs,
-    respawnShieldMs:
-      state?.respawnShieldMs ?? settings.respawnShieldMs,
+    respawnShieldMs: 0,
     // The only spendable number in the mode is each vault's own coins.
     purchaseFloorCoins: state?.purchaseFloorCoins ?? settings.purchaseFloorCoins,
     lowCoinsRatio: state?.lowCoinsRatio ?? settings.lowCoinsRatio,

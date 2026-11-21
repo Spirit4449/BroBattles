@@ -116,6 +116,7 @@ function createHookVisual(scene, owner, angle, start, id) {
     scene.events.off("shutdown", visual.destroy);
     owner.off?.("destroy", visual.destroy);
     owner.off?.("attack:interrupted", visual.destroy);
+    visual.target?.off?.("combat:reset", visual.destroy);
     hand.destroy(); tether.destroy(); fx.destroy();
     if (ACTIVE_HOOK_VISUALS.get(owner) === visual) ACTIVE_HOOK_VISUALS.delete(owner);
   };
@@ -335,7 +336,7 @@ export function playHookAction(scene, player, specialData = null, isOwner = fals
     visual.enemy = isEnemyShooter(player.username);
   }
   visual.burst(start.x, start.y, 5, 90);
-  try { playPlayerSound(scene, player, "gloop-special", { volume: 0.68 }); } catch (_) {}
+  try { playPlayerSound(scene, player, "gloop-special"); } catch (_) {}
 }
 
 export function playHookCatchAction(scene, ownerPlayer, actionData = null, isOwner = false) {
@@ -366,12 +367,13 @@ export function playHookCatchAction(scene, ownerPlayer, actionData = null, isOwn
   if (visual.target) visual.targetOffset = {
     x: start.x - visual.target.x, y: start.y - visual.target.y,
   };
+  visual.target?.once?.("combat:reset", visual.destroy);
   visual.returnMs = resolveHookPullDuration(actionData);
   visual.hand.setPosition(start.x, start.y);
   const closed = resolveHandTextureKey(scene, "closed");
   if (closed && !visual.hand._gripAnimated) visual.hand.setTexture?.(closed);
   visual.burst(start.x, start.y, 14, 170);
-  try { playPlayerSound(scene, ownerPlayer, "gloop-pull", { volume: 0.62 }); } catch (_) {}
+  try { playPlayerSound(scene, ownerPlayer, "gloop-pull"); } catch (_) {}
 }
 
 // The caster's hook leaves on press rather than a round trip later. The

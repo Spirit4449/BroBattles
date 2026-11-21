@@ -36,10 +36,10 @@ class Gloop extends CharacterEntityBase {
   static performSpecial = performSpecial;
 
   static sounds = {
-    attack: { key: `${NAME}-attack`, volume: 0.5 },
-    hit: { key: `${NAME}-hit`, volume: 0.5 },
-    special: { key: `${NAME}-special`, volume: 0.62 },
-    pull: { key: `${NAME}-pull`, volume: 0.54 },
+    attack: { key: `${NAME}-attack` },
+    hit: { key: `${NAME}-hit` },
+    special: { key: `${NAME}-special` },
+    pull: { key: `${NAME}-pull` },
   };
 
   static attackFlow = { attackResetMs: 760, cooldownFallbackMs: 400 };
@@ -72,7 +72,7 @@ class Gloop extends CharacterEntityBase {
     const type = String(data.type || "").toLowerCase();
     if (type === `${NAME}-slimeball`) {
       playOwnerThrow(scene, ownerSprite, data.id ?? null);
-      playPlayerSound(scene, ownerSprite, "gloop-attack", { volume: 0.5 });
+      playPlayerSound(scene, ownerSprite, "gloop-attack");
       spawnGloopSlimeBud(scene, ownerSprite, data);
       return true;
     }

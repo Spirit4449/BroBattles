@@ -42,11 +42,17 @@ export function noteRemoteView(targetMono, delayMs = null) {
   viewDelayMs = Number.isFinite(delayMs) ? delayMs : null;
 }
 
-// `viewDelayMs` lets the server honour the render-buffer part of the rewind
-// whatever the delivery's cap on the network part (attackDelivery.js).
-export function withShotView(request) {
-  if (!request || typeof request !== "object" || !Number.isFinite(viewMono)) return request;
-  return viewDelayMs == null ? { ...request, viewMono } : { ...request, viewMono, viewDelayMs };
+// `viewDelayMs` lets the server honour the render-buffer part of the rewind.
+// Bro Ball uses the rally ID to discard inputs from before the last kickoff.
+export function withCombatRequestContext(request, mode = null) {
+  if (!request || typeof request !== "object") return request;
+  const payload = { ...request };
+  if (Number.isFinite(viewMono)) {
+    payload.viewMono = viewMono;
+    if (viewDelayMs != null) payload.viewDelayMs = viewDelayMs;
+  }
+  if (mode?.rally != null) payload.broBallRally = mode.rally;
+  return payload;
 }
 
 export function trackShotTargets(context = {}) {

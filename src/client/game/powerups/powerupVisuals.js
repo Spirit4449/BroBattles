@@ -1,13 +1,10 @@
 import { POWERUP_CATALOG } from "../../../shared/powerups";
-import { applyBurnTint, drawBurnAura } from "../characters/sparrow/burnStatus";
 import { drawSlowAura } from "../characters/gloop/slowStatus";
 
 const collectibleStyles = Object.entries(POWERUP_CATALOG).map(([type, item]) => ({
   type, color: item.color, ...item.visual,
 }));
-const primaryStyles = [...collectibleStyles.filter(style => style.priority != null),
-  { type: "sparrowBurn", priority: 50, apply: applyBurnTint },
-].sort((a, b) => a.priority - b.priority);
+const primaryStyles = [...collectibleStyles.filter(style => style.priority != null)].sort((a, b) => a.priority - b.priority);
 const bubbles = collectibleStyles.filter(style => style.bubbleStrength > 0)
   .sort((a, b) => a.bubbleOrder - b.bubbleOrder);
 
@@ -113,7 +110,6 @@ export function drawFreezeAura({ graphics: g, frame, colors, x, y, r, pulse, now
 
 // Character-inflicted auras follow the affected fighter, regardless of their kit.
 const auraStyles = [
-  { effects: ["sparrowBurn"], draw: drawBurnAura },
   { effects: ["gloopHookSlow", "gloopSlimeSlow"], draw: drawSlowAura },
   { effects: ["gravityBoots"], draw: drawBootsAura },
   { effects: ["freeze"], draw: drawFreezeAura },

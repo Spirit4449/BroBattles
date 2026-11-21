@@ -1,14 +1,16 @@
 {
   "schemaVersion": 2,
   "id": 6,
-  "label": "Sunset Bowl",
+  "label": "Rumble Stadium",
   "modeVariantId": "soccer-2v2",
   "metadata": {
     "key": "sunset-bowl",
     "terrain": "grass",
     "musicAsset": "/assets/bro-ball/sunset-bowl-music.mp3",
     "musicVolume": 0.13,
-    "mapSelectPreviewAsset": "/assets/map-banners/soccer.webp"
+    "lobbyBgAsset": "/assets/bro-ball/lobby-background.webp",
+    "mapSelectPreviewAsset": "/assets/bro-ball/rumble-stadium-card.webp",
+    "mapFullPreviewAsset": "/assets/bro-ball/rumble-stadium-crowd-preview.webp"
   },
   "assets": {
     "bro-ball-pitch": {

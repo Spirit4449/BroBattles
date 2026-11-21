@@ -1,6 +1,6 @@
 Bro Ball audio credits
 
-Sunset Bowl music
+Rumble Stadium music
 “Go Cart - Loop Mix” by Kevin MacLeod (incompetech.com)
 https://www.incompetech.com/music/royalty-free/index.html?isrc=USUAN1300008
 Creative Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/
@@ -13,7 +13,7 @@ https://freesound.org/s/654084/
 https://freesound.org/s/654083/
 Creative Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/
 Excerpted, equalized, and crossfaded with the CC0 recordings below into
-the continuous Sunset Bowl crowd loop. The goal celebration layers the Wimbledon
+the continuous Rumble Stadium crowd loop. The goal celebration layers the Wimbledon
 cheer, Eightmate's nearer crowd recording, and cognito perceptu's applause.
 
 Sound recordings (CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/)
@@ -27,7 +27,10 @@ Sound recordings (CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/)
   https://freesound.org/s/496736/
 - Soccer net by Luisa_Sanchez (goal net)
   https://freesound.org/s/813410/
-- Referee whistle sound.wav by Rosa-Orenes256 (kickoff and three-part final whistle)
+- Referee whistle blow, gymnasium.wav by SpliceSound (opening kickoff)
+  https://freesound.org/s/218318/
+  Trimmed and level-matched, with the held note extended by crossfading at its original pitch and speed.
+- Referee whistle sound.wav by Rosa-Orenes256 (restart after a goal and three-part final whistle)
   https://freesound.org/s/538422/
 - Local Football Crowd Cheering by Eightmate (stadium ambience and goal reaction)
   https://freesound.org/s/752672/

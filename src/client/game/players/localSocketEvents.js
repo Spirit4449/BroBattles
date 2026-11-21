@@ -1,9 +1,10 @@
 import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import { spawnRespawnEffect } from '../scene/respawnEffect';
 import { endDash } from '../scene/dash';
+import { cancelFighterCombat } from './fighterCombatCleanup';
 import { spawnKnockbackTrail } from '../scene/knockbackTrail';
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
-import { playPlayerSound } from '../audio/playerAudio';
+import { combatSoundVolume, playPlayerSound } from '../audio/playerAudio';
 import { localMovementCorrector } from './localMovementCorrector';
 import { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } from "../../../shared/physics/shockwaveImpulse";
 import { performSpecial } from "../characters/special";
@@ -69,7 +70,7 @@ export function bindLocalSocketEvents({
 
     if (scene && scene.sound && !stats.dead) {
       if (delta < 0) {
-        scene.sound.play("sfx-damage", { volume: 5 });
+        scene.sound.play("sfx-damage", { volume: combatSoundVolume("sfx-damage") });
         if (data.duckBlocked === true || player._ducking === true) {
           onDuckBlocked?.();
           spawnDuckGuardImpact(scene, player);
@@ -110,6 +111,7 @@ export function bindLocalSocketEvents({
     player._deathPresentationActive = true;
     player._deathPresentationAt = Number(payload?.at) || Date.now();
     stats.dead = true;
+    try { cancelFighterCombat(player, { local: true }); } catch (_) {}
     try {
       onLocalDeath?.();
     } catch (_) {}
@@ -117,7 +119,7 @@ export function bindLocalSocketEvents({
     stopWallSlideAudio?.();
 
     try {
-      scene.sound.play("sfx-you-death", { volume: 0.55 });
+      scene.sound.play("sfx-you-death", { volume: 0.23 });
     } catch (_) {}
     spawnDeathBurst(scene, player, { color: 0xff7394, glowColor: 0xffd4de });
     try {
@@ -130,10 +132,6 @@ export function bindLocalSocketEvents({
         logical: "dying",
         fallback: "idle",
       });
-    } catch (_) {}
-    try {
-      scene.input.enabled = false;
-      if (scene.input?.keyboard) scene.input.keyboard.enabled = false;
     } catch (_) {}
     try {
       player.setAcceleration(0, 0);
@@ -228,6 +226,12 @@ export function bindLocalSocketEvents({
     }
 
     try {
+      cancelFighterCombat(player, { local: true });
+      if (payload.spawnReset) player.flipX = false;
+      onAttackInterrupted?.();
+    } catch (_) {}
+
+    try {
       player._deathPresentationActive = false;
       player._deathPresentationAt = 0;
       player.alpha = 1;
@@ -251,16 +255,14 @@ export function bindLocalSocketEvents({
       // Animation frames can change the display origin; refresh the body before
       // drawing UI anchored to its top edge.
       player.body?.updateFromGameObject?.();
-      spawnRespawnEffect(scene, player, { silent: payload.kickoff === true });
-    } catch (_) {}
-
-    try {
-      scene.input.enabled = true;
-      if (scene.input?.keyboard) scene.input.keyboard.enabled = true;
     } catch (_) {}
 
     try {
       onLocalRespawn?.();
+    } catch (_) {}
+
+    try {
+      spawnRespawnEffect(scene, player, { silent: payload.kickoff === true });
     } catch (_) {}
 
     updateHealthBar();
@@ -276,8 +278,8 @@ export function bindLocalSocketEvents({
     if (predicted) scene._localStompPredictedAt = 0;
     else {
       spawnStompImpact(scene, data.x, data.y, { cameraShake: local, fallDistance: data.fallDistance });
-      if (local) scene.sound?.play('sfx-stomp', { volume: 1 });
-      else playPlayerSound(scene, { x: data.x, y: data.y }, 'sfx-stomp', { volume: 1 });
+      if (local) scene.sound?.play('sfx-stomp', { volume: combatSoundVolume('sfx-stomp') });
+      else playPlayerSound(scene, { x: data.x, y: data.y }, 'sfx-stomp');
     }
     for (const name of data.interrupted || []) {
       const wrapper = Object.values(getOpponentPlayersRef() || {}).find(op =>

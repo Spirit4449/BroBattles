@@ -82,6 +82,8 @@ const ROSTER_OWNED_FIELDS = new Set([
  * @property {(v: number) => void} setSpawnVersion
  * @property {object}              serverSpawnIndex
  * @property {(spawns: Record<string, {x: number, y: number}>) => void} onServerSpawns
+ * @property {(payload: {kickoff?: boolean}) => void} [onLocalSpawnReset]
+ * @property {(username: string) => void} [onFighterDeath]
  * // ---- live state (set via setter, read externally via closure var) ----
  * @property {(v: Array) => void}  setLatestPowerups
  * @property {(v: object|null) => void} setLatestModeState
@@ -346,10 +348,7 @@ export function createMatchCoordinator(config) {
     try {
       setIsLiveGame(true);
       hud.hideTopHudFade?.();
-      hud.hideBattleStartOverlay();
-      const scene = getGameScene();
-      if (scene?.input) scene.input.enabled = true;
-      if (scene?.input?.keyboard) scene.input.keyboard.enabled = true;
+      if (!hud.isCountdownRunning?.()) hud.hideBattleStartOverlay();
     } catch (_) {}
   }
 
@@ -581,7 +580,7 @@ export function createMatchCoordinator(config) {
     }
   }
 
-  /** Server started the pre-fight countdown: cards, 5..1, FIGHT. */
+  /** Server started the pre-fight countdown: cards, 3..1, FIGHT. */
   function _onGameStart(data) {
     const countdownMs = Math.max(0, Number(data?.countdownMs) || COUNTDOWN_MS);
     logLifecycle("start", `countdownMs=${countdownMs}`, "log", "Game starting:", data);
@@ -635,7 +634,8 @@ export function createMatchCoordinator(config) {
       // Use the same match-level audio path as health power-up ticks. This
       // remains reliable when the local player has already synced its health.
       if (payload.username === getUsername() && payload.health > 0 &&
-          (payload.cause === "heal" || (typeof prev === "number" && payload.health > prev))) {
+          (payload.cause === "heal" || (payload.cause !== "respawn" &&
+            typeof prev === "number" && payload.health > prev))) {
         _onPowerupTick({ type: "health", username: payload.username });
       }
       if (
@@ -674,6 +674,7 @@ export function createMatchCoordinator(config) {
 
   function _onPlayerDead(payload) {
     if (!payload?.username) return;
+    config.onFighterDeath?.(payload.username);
     const dyingPlayer = payload.username === getUsername()
       ? getPlayer()
       : playerLookup.sprite(payload.username);
@@ -707,6 +708,9 @@ export function createMatchCoordinator(config) {
   function _onPlayerRespawn(payload) {
     if (!payload?.username) return;
     hud.setTeamHudPlayerAlive(payload.username, true);
+    if ((payload.spawnReset || payload.kickoff) && payload.username === getUsername()) {
+      config.onLocalSpawnReset?.(payload);
+    }
     if (payload.username === getUsername() || presentationSuppressed()) return;
     const wrapper =
       playerLookup.wrapper(payload.username);

@@ -1,5 +1,6 @@
 import { clamp01, lerp } from "../../../shared/math.js";
 import { movementSoundKey } from "../../../shared/physics/movementSounds";
+import { combatSoundVolume } from "../audio/playerAudio";
 // Per-frame movement presentation for the local fighter: footstep cadence,
 // turn bursts, wall-slide clouds, fast-fall trails, landing impacts and run
 // dust. Gameplay never reads this state; it only follows the physics body.
@@ -183,7 +184,7 @@ export function createLocalMovementFx({ audio, noteEvent }) {
       const impactX = Number(body?.center?.x) || player.x;
       if (stomp) {
         scene._localStompPredictedAt = Date.now();
-        scene.sound?.play?.("sfx-stomp", { volume: 1 });
+        scene.sound?.play?.("sfx-stomp", { volume: combatSoundVolume("sfx-stomp") });
         if (!hidden) spawnStompImpact(scene, impactX, bodyBottom(player) - 2, { cameraShake: true,
           fallDistance: Number.isFinite(player._stompStartBottom)
             ? Math.max(0, currentBottom - player._stompStartBottom) : fallDistance });

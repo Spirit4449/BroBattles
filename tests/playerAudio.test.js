@@ -35,6 +35,49 @@ test("retiring a fighter detaches its pending movement sound loaders", () => {
   assert.equal(created.length, 1);
 });
 
+test("the first local fall fades in from silence once the audio context is running", () => {
+  const { EventEmitter } = require("node:events");
+  const { createClientModuleGraph } = require("./helpers/clientModule");
+  const graph = createClientModuleGraph();
+  const { createLocalMovementAudio } = graph.load("src/client/game/players/localMovementAudio.js");
+  const audio = createLocalMovementAudio();
+  const starts = [];
+  const loop = {
+    isPlaying: false,
+    // Web Audio can report unity gain while the first volume update is pending.
+    get volume() { return 1; },
+    setVolume(volume) { this.appliedVolume = volume; },
+    setRate() {},
+    play({ volume }) { starts.push(volume); this.isPlaying = true; return true; },
+    stop() { this.isPlaying = false; },
+  };
+  const context = { state: "suspended", currentTime: 0 };
+  const scene = {
+    events: new EventEmitter(),
+    cache: { audio: { events: new EventEmitter(), exists: key => key === "sfx-fall-air" } },
+    sound: { locked: false, context, add: () => loop },
+  };
+  audio.attach(scene);
+  audio.updateFallingAir(scene, true, 760);
+  assert.deepEqual(starts, []);
+
+  context.state = "running";
+  audio.updateFallingAir(scene, true, 760);
+  assert.deepEqual(starts, [0]);
+  assert.equal(loop.appliedVolume, 0);
+  context.currentTime += 0.1;
+  audio.updateFallingAir(scene, true, 760);
+  assert.ok(loop.appliedVolume > 0 && loop.appliedVolume < 0.18);
+  context.state = "suspended";
+  audio.updateFallingAir(scene, true, 760);
+  assert.equal(loop.isPlaying, false);
+  context.state = "running";
+  audio.updateFallingAir(scene, true, 760);
+  assert.deepEqual(starts, [0, 0]);
+  assert.equal(loop.appliedVolume, 0);
+  audio.dispose();
+});
+
 describe("Spatial mix and spectating", () => {
   const audio = {};
   loadClientModule('src/client/game/audio/playerAudio.js', { exports: audio });
@@ -47,6 +90,26 @@ describe("Spatial mix and spectating", () => {
         worldView: { x: 0, y: 0, width: 1000, height: 700 } } },
       sound: { play: (...args) => { calls.push(args); return true; } } };
   }
+
+  test('per-sample combat gains apply before distance attenuation and allow playback overrides', () => {
+    const s = scene();
+    const remote = { active: true, x: 480, y: 320 };
+    const playVolume = (source, key, options) => {
+      assert.equal(audio.playPlayerSound(s, source, key, options), true);
+      return s.calls.at(-1)[1].volume;
+    };
+    for (const source of [s.local, remote]) {
+      const sparrowHit = playVolume(source, 'sparrow-hit');
+      const ninjaHit = playVolume(source, 'shurikenHit');
+      const stockGain = playVolume(source, 'sfx-death');
+      assert.ok(sparrowHit < stockGain && ninjaHit > stockGain);
+      assert.equal(sparrowHit, audio.playerSoundVolume(s, source, audio.combatSoundVolume('sparrow-hit')));
+      assert.equal(ninjaHit, audio.playerSoundVolume(s, source, audio.combatSoundVolume('shurikenHit')));
+      const bounceVolume = audio.combatSoundVolume('gloop-hit') / 2;
+      assert.equal(playVolume(source, 'gloop-hit', { volume: bounceVolume }),
+        audio.playerSoundVolume(s, source, bounceVolume));
+    }
+  });
 
   test('spectating makes the watched fighter the full-volume listener and follows switches', () => {
     const s = scene();
@@ -125,7 +188,8 @@ describe("Replicated movement cues", () => {
     const scene = { events: new EventEmitter(), _terrainType: 'grass',
       _localPlayerAudioSprite: { active: true, x: 200, y: 200 },
       cameras: { main: { worldView: { x: 0, y: 0, width: 1000, height: 700 } } },
-      sound: { play(key, options) { calls.push({ key, ...options }); return true; },
+      sound: { context: { state: 'running', get currentTime() { return time / 1000; } },
+        play(key, options) { calls.push({ key, ...options }); return true; },
         add(key) {
           const sound = { key, isPlaying: false, destroyed: 0,
             setVolume(v) { this.volume = v; }, setRate(v) { this.rate = v; },
@@ -176,6 +240,27 @@ describe("Replicated movement cues", () => {
       assert.equal(f.scene.events.listenerCount('presentation:reset'), 0);
       assert.equal(f.sprite.listenerCount('destroy'), 0);
     }
+  });
+
+  test('a remote fall starts its fade when the deferred wind sample becomes playable', () => {
+    const f = fixture();
+    const add = f.scene.sound.add;
+    f.scene.sound.add = () => { throw new Error('audio still loading'); };
+    const falling = { grounded: false, vy: 700 };
+    f.update(falling);
+    f.update(falling, 250);
+    assert.equal(f.sounds.length, 0);
+    f.scene.sound.add = add;
+    f.update(falling);
+    const wind = f.sounds[0];
+    assert.equal(wind.key, 'sfx-fall-air');
+    assert.equal(wind.volume, 0);
+    f.update(falling, 40);
+    assert.ok(wind.volume > 0);
+    const earlyVolume = wind.volume;
+    f.update(falling, 200);
+    assert.ok(wind.volume > earlyVolume);
+    f.controller.destroy();
   });
 
   test('locked audio stays silent; invisible fighters still produce movement cues', () => {

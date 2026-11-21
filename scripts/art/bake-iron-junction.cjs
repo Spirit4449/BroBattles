@@ -74,7 +74,12 @@ class Pix {
     }
     return out;
   }
-  async save(name) {
+  async save(name, { native = false } = {}) {
+    if (native) {
+      await sharp(this.d, { raw: { width: this.w, height: this.h, channels: 4 } })
+        .webp({ lossless: true, effort: 6 }).toFile(path.join(OUT, name));
+      return;
+    }
     const big = Buffer.alloc(this.w * PX * this.h * PX * 4);
     for (let y = 0; y < this.h * PX; y++) for (let x = 0; x < this.w * PX; x++) {
       const s = (Math.floor(y / PX) * this.w + Math.floor(x / PX)) * 4;
@@ -631,6 +636,103 @@ function paintWalkway(img, rows) {
 }
 
 /** A catwalk: the same top edge as the ground, on a truss that is only decoration. */
+function bakeCeiling(shape, worldTop) {
+  const img = new Pix(shape.width / PX, shape.height / PX);
+  const { w } = img;
+  const lip = (worldTop - shape.top) / PX;
+  img.rect(0, 0, w, lip, C.d3);
+
+  // The steel bays match across the hall, with different gold plates on each
+  // half. Some bays have staggered pairs or upright plates and one is bare.
+  for (const [x, span] of [[5, 100], [115, 116], [241, 100], [357, 116], [483, 100]]) {
+    img.rect(x, 0, span, lip - 4, C.ink);
+    img.rect(x + 2, 0, span - 4, lip - 6, C.d2);
+    img.rect(x + 2, lip - 7, span - 4, 1, C.d1);
+  }
+  const plates = shape.id === "ceiling-right"
+    ? [[38, -13, 9, 7], [154, -9, 25, 4], [190, -12, 12, 5], [289, -11, 33, 5], [392, -12, 17, 6], [539, -10, 15, 4], [561, -12, 8, 6]]
+    : [[24, -11, 31, 5], [80, -13, 12, 6], [168, -12, 19, 6], [265, -9, 22, 4], [308, -13, 10, 7], [509, -12, 24, 5], [542, -9, 14, 4]];
+  for (const [x, offset, width, height] of plates) {
+    const y = lip + offset;
+    img.rect(x - 1, y - 1, width + 2, height + 2, C.ink);
+    img.rect(x, y, width, height, C.b0);
+    img.rect(x + 1, y + 1, width - 2, height - 2, C.b1);
+    img.rect(x + 1, y, width - 2, 1, C.b2);
+    img.set(x + 2, y + height - 2, C.b3);
+    img.set(x + width - 3, y + height - 2, C.b2);
+  }
+  img.rect(0, lip - 5, w, 5, C.ink);
+  img.rect(0, lip - 4, w, 1, C.l1);
+  img.rect(0, lip - 3, w, 2, C.d1);
+  for (let x = 8; x < w - 5; x += 20) img.set(x, lip - 3, C.l2);
+
+  // Open steel trusses. The dark spaces between the braces reveal the hall.
+  for (const [start, count, pitch, depth] of [[16, 4, 23, 15], [139, 3, 26, 12], [278, 5, 24, 18], [443, 4, 29, 14]]) {
+    const end = start + count * pitch;
+    const rail = lip + depth;
+    img.rect(start, rail, end - start + 1, 4, C.ink);
+    img.rect(start + 1, rail + 1, end - start - 1, 1, C.l1);
+    img.rect(start + 1, rail + 2, end - start - 1, 1, C.d1);
+    for (let i = 0; i <= count; i++) {
+      const x = start + i * pitch;
+      img.rect(x - 1, lip - 1, 4, depth + 3, C.ink);
+      img.rect(x, lip, 2, depth + 1, C.mid);
+      if (i === count) continue;
+      const next = x + pitch;
+      const [a, b] = i % 2 === 0 ? [x, next] : [next, x];
+      for (let row = 0; row < 4; row++) {
+        img.line(a, lip + row, b, rail - 3 + row, row === 1 ? C.l1 : row === 2 ? C.d1 : C.ink);
+      }
+    }
+  }
+
+  // Flanged service pipes, with a second run that drops under the middle bay.
+  function pipeRun(points, tones) {
+    const path = points.map(([x, offset]) => [x, lip + offset]);
+    for (const [i, [x, y]] of path.entries()) {
+      if (i === 0) continue;
+      const [prevX, prevY] = path[i - 1];
+      const horizontal = y === prevY;
+      img.rect(Math.min(x, prevX) - 4, Math.min(y, prevY) - 4,
+        Math.abs(x - prevX) + 8, Math.abs(y - prevY) + 8, C.ink);
+      for (let band = 0; band < tones.length; band++) {
+        const offset = band - 3;
+        img.line(prevX + (horizontal ? 0 : offset), prevY + (horizontal ? offset : 0),
+          x + (horizontal ? 0 : offset), y + (horizontal ? offset : 0), tones[band]);
+      }
+    }
+    // A collar covers each elbow and gives long straight lengths a joint.
+    for (const [x, y] of path.slice(1, -1)) {
+      img.rect(x - 3, y - 5, 7, 10, C.ink);
+      img.rect(x - 2, y - 4, 5, 8, tones[2]);
+      img.rect(x - 1, y - 3, 1, 6, tones[1]);
+      img.rect(x + 2, y + 2, 1, 2, tones[4]);
+    }
+  }
+  pipeRun([[0, 3], [88, 3], [88, 10], [187, 10], [256, 10], [256, 3], [404, 3], [517, 3], [w, 3]],
+    [C.mid, C.l2, C.l1, C.mid, C.d1, C.d3]);
+  pipeRun([[289, -3], [289, 23], [352, 23], [417, 23], [417, 11], [488, 11], [488, -3]],
+    [C.b0, C.b2, C.b1, C.b1, C.b0, C.d3]);
+
+  // Downlights at the bay joints and a steel bulkhead across the seam.
+  for (const [x, offset] of [[62, 19], [177, 16], [327, 28], [511, 19]]) {
+    const y = lip + offset;
+    img.rect(x - 7, y - 5, 14, 9, C.ink);
+    img.rect(x - 5, y - 4, 10, 6, C.b0);
+    img.rect(x - 4, y - 1, 8, 2, C.b3);
+    img.rect(x - 3, y + 1, 6, 1, C.glow);
+  }
+  img.rect(w - 20, 0, 20, lip + 11, C.ink);
+  img.rect(w - 17, 0, 17, lip + 8, C.d1);
+  img.rect(w - 13, 0, 13, lip + 5, C.mid);
+  img.rect(w - 10, lip - 9, 10, 9, C.b0);
+  img.rect(w - 8, lip - 8, 8, 7, C.b1);
+  img.rect(w - 8, lip - 8, 8, 1, C.b2);
+  img.rect(w - 5, lip - 7, 5, 5, C.ink);
+  img.rect(w - 4, lip - 6, 4, 2, C.glow);
+  return img;
+}
+
 function bakeDeck(shape) {
   const img = new Pix(Math.round(shape.width / PX), Math.round(shape.height / PX));
   paintWalkway(img, LIP_ROWS);
@@ -1189,13 +1291,20 @@ async function saveTunnelShade(region, paint, lamps, shaft, shelf) {
 async function main() {
   if (!fs.existsSync(MANIFEST)) throw new Error(`${MANIFEST} is missing -- run scripts/maps/build-iron-junction.cjs first`);
   const { shapes, solids, world, tunnelShade, tunnelLamps, tunnelCeiling, shaft, shelf } = JSON.parse(fs.readFileSync(MANIFEST, "utf8"));
+  if (process.argv.includes("--ceiling")) {
+    const ceiling = shapes.filter(({ kind }) => kind === "ceiling");
+    if (!ceiling.length) throw new Error("Build the Iron Junction shape list before baking the ceiling.");
+    for (const shape of ceiling) await bakeCeiling(shape, world.top).save(`shape-${shape.id}-native.webp`, { native: true });
+    return;
+  }
   const paint = solidPainter(solids, world.width, Math.round((world.mid + 600) / PX), Math.round((world.bottom + 600) / PX), Math.round((world.shadeBottom + 600) / PX));
-  const bakers = { solid: (s) => bakeSolid(s, paint), wall: bakeWall, deck: bakeDeck, ledge: bakeLedge, tunnel: (s) => bakeTunnelBack(s, tunnelLamps, tunnelCeiling) };
+  const bakers = { solid: (s) => bakeSolid(s, paint), wall: bakeWall, ceiling: (s) => bakeCeiling(s, world.top), deck: bakeDeck, ledge: bakeLedge, tunnel: (s) => bakeTunnelBack(s, tunnelLamps, tunnelCeiling) };
 
   for (const shape of shapes) {
     const bake = bakers[shape.kind];
     if (!bake) throw new Error(`${shape.id}: unknown shape kind ${shape.kind}`);
-    await bake(shape).save(`shape-${shape.id}.webp`);
+    const native = shape.kind === "ceiling";
+    await bake(shape).save(`shape-${shape.id}${native ? "-native" : ""}.webp`, { native });
     console.log(`  shape-${shape.id}.webp ${shape.width}x${shape.height}`);
   }
   await saveTunnelShade(tunnelShade, paint, tunnelLamps, shaft, shelf);

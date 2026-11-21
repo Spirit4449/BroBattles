@@ -143,10 +143,12 @@ test('local stomp interruption restores dash gravity and preserves the outward i
 
 test('a local downward air dash shows its stomp on landing, and the server echo does not repeat it', () => {
   const shown = [], sounds = [];
+  const playerAudio = loadClientModule('src/client/game/audio/playerAudio.js');
   const effectsStub = { MOVEMENT_VFX_CONFIG: { landingMaxVelocity: 796, landingShockwaveMinFallPx: 163 },
     spawnLandingImpact: () => shown.push('landing'), spawnStompImpact: () => shown.push('stomp') };
   const fx = loadClientModule('src/client/game/players/localMovementFx.js', { Date, require: (path) =>
     path.includes('scene/effects') ? effectsStub :
+    path.includes('audio/playerAudio') ? playerAudio :
     path.includes('movementAudio') ? { shouldPlayLandingSound: () => false,
       movementTerrainAt: () => 'hard', terrainLandingSound: () => ({}) } :
     path.includes('movementSounds') ? { movementSoundKey: (_s, key) => key } : {} });
@@ -172,6 +174,7 @@ test('a local downward air dash shows its stomp on landing, and the server echo 
   const exports = {}, handlers = {};
   loadClientModule(require.resolve('../src/client/game/players/localSocketEvents'), { exports, Date, window: {},
     require: (path) => path.includes('movementPhysics') ? require('../src/shared/physics/movementPhysics.json') :
+      path.includes('audio/playerAudio') ? playerAudio :
       path.includes('scene/effects') ? effectsStub : { playSpriteAnimation() {}, playPlayerSound() {} } });
   const dispose = exports.bindLocalSocketEvents({ socket: { on: (e, fn) => handlers[e] = fn, off() {} },
     getPlayer: () => player, stats: { dead: false }, getScene: () => scene, getUsername: () => 'me',

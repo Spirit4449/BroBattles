@@ -3,6 +3,7 @@
 const GOLD = [0xfff7cf, 0xffe36b, 0xffc93d, 0xffa21f];
 const FLAME = [0xfff3b0, 0xffcf4a, 0xff9124, 0xf2581c];
 const GLOW_KEY = 'bro-ball-glow';
+export const BALL_HALO_TEXTURE = 'bro-ball-halo';
 const snap = value => Math.round(value / 2) * 2;
 const pick = list => list[Math.floor(Math.random() * list.length)];
 const CONTACT_ARC_MS = 240;
@@ -47,22 +48,23 @@ function drawContactRing(graphics, x, y, radius, width) {
   }
 }
 
-function ensureGlow(scene) {
-  if (scene.textures.exists(GLOW_KEY)) return;
+function ensureGlow(scene, key, rgb) {
+  if (scene.textures.exists(key)) return;
   const size = 128;
-  const texture = scene.textures.createCanvas(GLOW_KEY, size, size);
+  const texture = scene.textures.createCanvas(key, size, size);
   const context = texture.getContext();
   const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, 'rgba(255,255,255,1)');
-  gradient.addColorStop(0.35, 'rgba(255,255,255,0.45)');
-  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  gradient.addColorStop(0, `rgba(${rgb},1)`);
+  gradient.addColorStop(0.35, `rgba(${rgb},0.45)`);
+  gradient.addColorStop(1, `rgba(${rgb},0)`);
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
   texture.refresh();
 }
 
 export function createBallEffects(scene, Phaser, { depth, reduced, floor }) {
-  ensureGlow(scene);
+  ensureGlow(scene, GLOW_KEY, '255,255,255');
+  ensureGlow(scene, BALL_HALO_TEXTURE, '255,213,107');
   const back = scene.add.graphics().setDepth(depth - 0.5).setBlendMode(Phaser.BlendModes.ADD);
   const front = scene.add.graphics().setDepth(depth + 0.5);
   const glows = [];

@@ -4,9 +4,11 @@ import { perform as performSpecial } from "./special";
 import { animations } from "./anim";
 import DravenEffects from "./effects";
 import { updateInfernoHover } from "./infernoHover";
+import { INFERNO_SOUND_KEYS } from "./infernoAudio";
 import {
   performDravenSplashAttack,
   spawnExplosion,
+  spawnInfernoExplosion,
 } from "./attack";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
@@ -14,6 +16,9 @@ import { playPlayerSound } from "../../audio/playerAudio";
 import { takePredictedHit } from "../shared/shotPrediction";
 
 const { key: NAME } = characterDefinitions.draven;
+
+// Inferno impact ids are "inferno:<caster>:<target>:<time>".
+const infernoTarget = (data) => String(data?.id || "").split(":")[2] || null;
 
 class Draven extends CharacterEntityBase {
   static key = NAME;
@@ -23,9 +28,9 @@ class Draven extends CharacterEntityBase {
   static Effects = DravenEffects;
 
   static sounds = {
-    attack: { key: "draven-fireball", volume: 0.4 },
-    hit: { key: "draven-hit", volume: 0.5 },
-    special: { key: "draven-special", volume: 0.6, rate: 0.8 },
+    attack: { key: "draven-fireball" },
+    hit: { key: "draven-hit" },
+    special: { key: "draven-special", rate: 0.8 },
   };
 
   // The attack flag clears when the throw animation completes.
@@ -66,6 +71,10 @@ class Draven extends CharacterEntityBase {
       `${NAME}-special`,
       this.characterAssetPath(staticPath, "special.mp3"),
     );
+    // Inferno's event layers: draven-inferno-* -> inferno-*.mp3.
+    for (const key of INFERNO_SOUND_KEYS) {
+      scene.load.audio(key, this.characterAssetPath(staticPath, `${key.slice(NAME.length + 1)}.mp3`));
+    }
 
     // Ensure nearest-neighbor sampling for crisp pixel art (renderer-agnostic)
     scene.load.once(Phaser.Loader.Events.COMPLETE, () => {
@@ -80,7 +89,7 @@ class Draven extends CharacterEntityBase {
 
   static setupAnimations(scene) {
     animations(scene);
-    for (const [base, rate, repeat] of [["draven-explosion", 28, 0], ["draven-special-fx", 14, -1]]) {
+    for (const [base, rate, repeat] of [["draven-explosion", 24, 0], ["draven-special-fx", 24, -1]]) {
       for (const key of [base, base + "-red"]) {
         if (scene.textures.exists(key)) createAnimationBuilder(scene, key).make(key, "", rate, repeat);
       }
@@ -100,12 +109,7 @@ class Draven extends CharacterEntityBase {
       return true;
     }
     if (data.type === "draven-inferno-explode") {
-      spawnExplosion(
-        scene,
-        Number(data.x) || 0,
-        Number(data.y) || 0,
-        ownerWrapper?.opponent,
-      );
+      spawnInfernoExplosion(scene, Number(data.x) || 0, Number(data.y) || 0, ownerWrapper?.opponent, infernoTarget(data));
       return true;
     }
     if (data.type !== "draven-splash") return false;
@@ -121,7 +125,7 @@ class Draven extends CharacterEntityBase {
     });
     // Play remote attack start SFX (mirror owner's throw)
     try {
-      playPlayerSound(scene, ownerSprite, "draven-fireball", { volume: 0.4 });
+      playPlayerSound(scene, ownerSprite, "draven-fireball");
     } catch (_) {}
     // Impact presentation is owned by the authoritative hit event. A delayed
     // caster-position copy duplicates the target impact and can fire on misses.
@@ -130,7 +134,7 @@ class Draven extends CharacterEntityBase {
 
   static handleLocalAuthoritativeAttack(scene, data) {
     if (data?.type === "draven-inferno-explode") {
-      spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
+      spawnInfernoExplosion(scene, Number(data.x) || 0, Number(data.y) || 0, null, infernoTarget(data));
       return true;
     }
     if (!data || data.type !== "draven-splash-explode") return false;

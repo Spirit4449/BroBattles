@@ -4,7 +4,7 @@
 // game: a goalie stint, pushing up to attack, or hunting opponents. Human
 // teammates count when roles are chosen. Bots read the public ball state and
 // predict its flight with the server's own physics.
-const { advanceBall, shotFor } = require('../gameModes/broBall/physics');
+const { advanceBall, shotFor, sweepCircle } = require('../gameModes/broBall/physics');
 const { ballRules: rules } = require('../../../shared/broBall');
 const { requestBasic, requestSpecial } = require('../../../shared/combat/combat.js');
 const movement = require('../../../shared/physics/movementPhysics.json');
@@ -56,8 +56,12 @@ const riseFor = (body, ball) => body.top - (ball.y + rules.radius + rules.kickRe
 function predictBall(ball, field, steps = PREDICT_STEPS) {
   const copy = { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy };
   const points = [];
+  let settled = false;
   for (let i = 1; i <= steps; i++) {
-    const goal = advanceBall(copy, DT, field, [], () => {});
+    const goal = settled ? null : advanceBall(copy, DT, field, [], () => {});
+    settled ||= copy.vx === 0 && copy.vy === 0 && field.colliders.some(rect =>
+      rect.collision?.up !== false && Math.abs(rect.top - copy.y - rules.radius) < 0.05 &&
+      copy.x >= rect.left && copy.x <= rect.right);
     points.push({ x: copy.x, y: copy.y, vx: copy.vx, vy: copy.vy, t: i * DT, goal });
     if (goal) break;
   }
@@ -66,39 +70,96 @@ function predictBall(ball, field, steps = PREDICT_STEPS) {
 
 const scores = (flight, team) => flight.at(-1)?.goal === other(team);
 
-function interceptPoint(flight, body) {
-  for (const point of flight) {
-    if (riseFor(body, point) > JUMP_REACH) continue;
-    const run = Math.max(0, Math.abs(point.x - body.x) - body.halfWidth - rules.radius) / movement.maxSpeed;
-    if (run <= point.t + 0.05) return point;
-  }
-  return flight.at(-1);
+// Running and rising happen together. Account for both before committing to a touch.
+function reachableAt(point, body) {
+  const rise = jumpTime(riseFor(body, point));
+  if (rise === null) return false;
+  const run = Math.max(0, Math.abs(point.x - body.x) - body.halfWidth - rules.radius) / movement.maxSpeed;
+  const drop = Math.max(0, point.y - body.bottom - rules.radius - rules.kickReach);
+  return Math.max(rise, run, Math.sqrt(2 * drop / movement.gravity)) <= point.t + DT;
 }
 
-// A dash through the ball sends it along the dash. Only take one the server's
-// physics says goes in, past every opponent.
-function tryDashShot(brain, ball, body, ctx, now) {
+function interceptPoint(flight, body) {
+  return flight.find(point => reachableAt(point, body)) || flight.at(-1);
+}
+
+function liveFlight(room, ball, field) {
+  const cached = room._broBallForecast;
+  if (cached?.tick === room.tickId && cached.ball === ball && cached.field === field) return cached.points;
+  const points = predictBall(ball, field);
+  room._broBallForecast = { tick: room.tickId, ball, field, points };
+  return points;
+}
+
+// Check touches in flight order. A player can collect a pass before a defender
+// further downfield, even when the same shot would never reach the goal.
+function readDelivery(flight, ball, ctx) {
+  for (let i = 0; i < flight.length; i += 2) {
+    const point = flight[i];
+    if (ctx.enemies.some(enemy => gapTo(enemy, point) <= rules.radius + Math.min(75, point.t * movement.maxSpeed))) break;
+    if ((point.x - ball.x) * ctx.forward < 170) continue;
+    const receiver = ctx.mates.find(mate => (mate.x - ball.x) * ctx.forward > 160 &&
+      Math.abs(mate.x - point.x) < 110 && reachableAt(point, mate));
+    if (receiver) return { player: receiver.player, x: point.x, t: point.t };
+  }
+  return null;
+}
+
+function* tryDelivery(brain, ball, body, ctx, plan, now) {
   const p = brain.player;
   const { field, team, forward } = ctx;
-  if (now < (p._dashReadyAt || 0) || now < (p._botActionUntil || 0) || now < (brain.broBall.nextDashAt || 0)) return false;
   const ahead = (ball.x - body.x) * forward;
-  if (ahead < body.halfWidth + rules.radius - 4 || ahead > 200) return false;
-  for (const lift of [0, 0.35, 0.6]) {
-    const length = Math.hypot(1, lift);
-    const dash = { x: forward / length, y: -lift / length, facing: forward };
-    if (Math.abs(ball.y - (body.y + dash.y * ahead)) > body.halfHeight + rules.radius + rules.dashReach) continue;
-    const shot = shotFor('super', { dash }, { x: forward, y: 0 }, field.floor, ball);
-    const flight = predictBall({ x: ball.x, y: ball.y, vx: shot.direction.x * shot.speed, vy: shot.direction.y * shot.speed }, field, 90);
-    if (!scores(flight, team)) continue;
-    const blocked = ctx.enemies.some(enemy => flight.some(point =>
-      Math.abs(point.x - enemy.x) < enemy.halfWidth + rules.radius && point.y > enemy.top - rules.radius && point.y < enemy.bottom + rules.radius));
-    if (blocked) continue;
-    brain.intent = { direction: forward, jumpPressed: false, dash: { x: dash.x, y: dash.y } };
-    brain.broBall.nextDashAt = now + 1500;
-    brain.metrics.dashes++;
-    return true;
+  if (ahead < 0 || ahead > body.halfWidth + rules.radius + 100) return false;
+  const canDash = now >= Math.max(p._dashReadyAt || 0, p._botActionUntil || 0, brain.broBall.nextDashAt || 0);
+  let pass;
+  const options = [null, ...(canDash ? [0, 0.35, 0.6] : [])];
+  for (const lift of options) {
+    let contact, source, dash;
+    if (lift === null) {
+      if (now < (p._broBallKickAt || 0) + rules.botKickCooldownMs) continue;
+      contact = sweepCircle(ball.x, ball.y, 0, 0, body, rules.radius + rules.kickReach);
+      if (!contact) continue;
+      source = { kick: { special: false } };
+    } else {
+      const length = Math.hypot(1, lift);
+      dash = { x: forward / length, y: -lift / length };
+      const reach = rules.radius + rules.dashReach;
+      const duration = movement.dashDurationMs / 1000;
+      contact = sweepCircle(ball.x, ball.y, (ball.vx - dash.x * movement.dashHorizontalSpeed) * duration,
+        (ball.vy - dash.y * movement.dashHorizontalSpeed) * duration, body, reach);
+      if (!contact || dash.x * contact.x + dash.y * contact.y <= 0.12) continue;
+      source = { dash };
+    }
+    const shot = shotFor(dash ? 'super' : 'kick', source, contact, field.floor, ball);
+    const flight = predictBall({ x: ball.x, y: ball.y, vx: shot.direction.x * shot.speed,
+      vy: shot.direction.y * shot.speed }, field, 90);
+    const blocked = scores(flight, team) && ctx.enemies.some(enemy =>
+      flight.some(point => gapTo(enemy, point) < rules.radius));
+    if (scores(flight, team) && !blocked) {
+      pass = { dash };
+      break;
+    }
+    const receiver = !pass && readDelivery(flight, ball, ctx);
+    if (receiver) pass = { dash, receiver };
+    yield;
   }
-  return false;
+  if (!pass) return false;
+  if (pass.dash) {
+    brain.intent = { direction: forward, dash: pass.dash };
+    brain.broBall.nextDashAt = now + brain.room.FIXED_DT_MS + movement.dashDurationMs;
+    brain.metrics.dashes++;
+  } else if (brain.room.gameMode.botKick(p)) {
+    brain.metrics.kicks = (brain.metrics.kicks || 0) + 1;
+  } else return false;
+  plan.receiver = null;
+  if (pass.receiver) {
+    plan.receiver = pass.receiver.player.participantId;
+    plan.receiveX = pass.receiver.x;
+    plan.passUntil = now + (pass.receiver.t + movement.dashDurationMs / 1000 + 0.25) * 1000;
+    plan.launchedAt = now;
+    plan.reset = brain.room.gameMode.getModeState().reset;
+  }
+  return true;
 }
 
 // The team's plan: one ball chaser, and a support strategy for the other bot.
@@ -106,13 +167,21 @@ function teamPlan(brain, ball, ctx, now) {
   const room = brain.room, team = brain.player.team;
   room._broBallPlans ||= {};
   const plan = room._broBallPlans[team] ||= { chaser: null, chaserUntil: 0, support: new Map() };
-  const mates = [...room.players.values()].filter(a => a.team === team && a.isAlive);
+  const mates = [...room.players.values()].filter(a => a.team === team && a.isAlive && a.connected !== false);
   const reach = player => {
     const body = bodyOf(player);
     // Being behind the ball (between it and our goal) is worth a head start.
     const behind = (ball.x - body.x) * ctx.forward > 0 ? -90 : 90;
     return Math.abs(body.x - ball.x) + Math.max(0, body.bottom - ball.y - 160) * 0.4 + behind;
   };
+  const receiver = mates.find(a => a.participantId === plan.receiver);
+  if (receiver && now < plan.passUntil && plan.reset === room.gameMode.getModeState().reset &&
+      (ball.vx * ctx.forward > 80 || now <= plan.launchedAt + movement.dashDurationMs)) {
+    plan.chaser = receiver.participantId;
+    plan.chaserUntil = plan.passUntil;
+    return plan;
+  }
+  plan.receiver = null;
   const current = mates.find(a => a.participantId === plan.chaser);
   const best = mates.slice().sort((a, b) => reach(a) - reach(b) || String(a.participantId).localeCompare(String(b.participantId)))[0];
   if (!current || now > plan.chaserUntil || (best && reach(best) < reach(current) - 220)) {
@@ -187,13 +256,14 @@ function tryKick(brain, ball, body, ctx) {
 }
 
 /** One think for a Bro Ball bot. Sets brain.intent, kicks, dashes and fights. */
-function* broBallThinkSteps(brain, now) {
+function* broBallThinkSteps(brain, now, context) {
   const p = brain.player, room = brain.room, mode = room.gameMode;
   const state = mode.getModeState();
-  brain.clearTravel();
   brain.wantsProgress = false;
   brain.broBall ||= { targetX: p.x };
   if (!state || state.goal) {
+    brain.clearTravel();
+    brain.broBall.deck = null;
     brain.intent = { direction: 0 };
     brain.broBall.targetX = p.x;
     return;
@@ -206,34 +276,60 @@ function* broBallThinkSteps(brain, now) {
   const awareness = brain.profile.tacticalAwareness ?? 0.5;
   const enemies = [...room.players.values()].filter(e => e.team !== team && e.isAlive)
     .map(e => ({ ...bodyOf(e), player: e }));
-  const ctx = { field, team, own, attack, forward, enemies };
+  const mates = [...room.players.values()].filter(m => m !== p && m.team === team && m.isAlive && m.connected !== false)
+    .map(m => ({ ...bodyOf(m), player: m }));
+  const ctx = { field, team, own, attack, forward, enemies, mates };
   const ball = state.ball;
-  const flight = predictBall(ball, field);
+  const flight = liveFlight(room, ball, field);
   yield;
 
   const plan = teamPlan(brain, ball, ctx, now);
-  const role = plan.chaser === p.participantId ? 'chaser' : supportRole(brain, plan, ball, ctx, now);
+  let role = 'chaser';
+  if (plan.chaser !== p.participantId) {
+    const danger = flight.some(point => point.goal === team);
+    const chaser = mates.find(m => m.player.participantId === plan.chaser);
+    const buildingAttack = chaser && gapTo(chaser, ball) < 160 && (ball.x - own.x) * forward > 320;
+    role = danger ? 'keeper' : buildingAttack ? 'advancer' : supportRole(brain, plan, ball, ctx, now);
+  }
   brain.broBall.role = role;
   p._broBallRole = role;
   let targetX = p.x, jump = false;
-  // Any role kicks a ball that comes to it the right way round.
-  tryKick(brain, ball, body, ctx);
+  const last = flight.at(-1);
+  const deck = role === 'chaser' && last.vy === 0 && context.graph.surfaces.find(s =>
+    s.top < field.floor && Math.abs(s.top - last.y - rules.radius) < 1 && last.x >= s.left && last.x <= s.right);
+  if (brain.broBall.deck && brain.broBall.deck !== deck?.id) brain.clearTravel();
+  brain.broBall.deck = deck?.id;
+  if (role !== 'chaser') tryKick(brain, ball, body, ctx);
   const behindBall = point => point.x - forward * (body.halfWidth + rules.radius - 6);
 
   if (role === 'chaser') {
-    const intercept = interceptPoint(flight, body);
-    targetX = behindBall(intercept);
-    if (tryDashShot(brain, ball, body, ctx, now)) {
+    const receiving = plan.receiver === p.participantId && now < plan.passUntil &&
+      plan.reset === state.reset;
+    const delivery = receiving && flight.find(point => (point.x - plan.receiveX) * forward >= 0);
+    const intercept = delivery || interceptPoint(flight, body);
+    targetX = receiving ? behindBall({ x: plan.receiveX }) : behindBall(intercept);
+    if (yield* tryDelivery(brain, ball, body, ctx, plan, now)) {
       brain.broBall.targetX = targetX;
       return;
     }
+    const kicked = tryKick(brain, ball, body, ctx);
+    if (kicked) plan.receiver = null;
+    if (!kicked && deck && deck.id !== p.platformId && (p.grounded || brain.traversal || brain.maneuver)) {
+      const x = Math.max(deck.left, Math.min(deck.right, behindBall(last)));
+      const route = yield* context.routeSteps(deck.id, x);
+      if (route?.length || brain.traversal || brain.maneuver) {
+        brain.decision = { mode: 'bro-ball', goal: { surfaceId: deck.id, x, y: deck.top } };
+        brain.navigate(context, now);
+        return;
+      }
+    }
     const rise = jumpTime(riseFor(body, intercept));
-    const close = Math.abs(intercept.x - body.x) < body.halfWidth + rules.radius + 30;
-    if (rise && close && p.grounded && intercept.t <= rise + 0.07) jump = true;
+    const close = Math.abs(intercept.x - body.x) < body.halfWidth + rules.radius + movement.maxSpeed * (rise || 0);
+    if (rise && (close || delivery) && p.grounded && intercept.t <= rise + 0.14) jump = true;
     // On the wrong side of a low ball: hop over it to get behind.
     const wrongSide = (ball.x - body.x) * forward < 0 && Math.abs(ball.x - body.x) < 110 && ball.y > body.top;
     if (wrongSide && p.grounded) jump = true;
-    fight(brain, ball, ctx, now);
+    if (!kicked) fight(brain, ball, ctx, now);
   } else if (role === 'keeper') {
     // Hold close to the line, where a jump covers most of the raised mouth.
     const distance = Math.abs(ball.x - own.x);
@@ -254,7 +350,8 @@ function* broBallThinkSteps(brain, now) {
     targetX = ball.x + forward * (260 + awareness * 120);
     if ((attack.x - targetX) * forward < 160) targetX = attack.x - forward * 160;
     // Close in when the ball runs loose nearby.
-    if (Math.abs(ball.x - body.x) < 200 && ball.y > body.top - JUMP_REACH) targetX = behindBall(ball);
+    if ((ball.vx * forward > 80 || !mates.some(m => gapTo(m, ball) < 160)) &&
+        Math.abs(ball.x - body.x) < 200 && ball.y > body.top - JUMP_REACH) targetX = behindBall(ball);
     fight(brain, ball, ctx, now);
   } else {
     // Hunter: go after the opponent nearest the ball, and fight.
@@ -277,7 +374,7 @@ function* broBallThinkSteps(brain, now) {
 /** Per-tick walk toward the planned spot, so bots do not overshoot between thinks. */
 function steerBroBall(brain) {
   const plan = brain.broBall;
-  if (!plan || brain.intent.dash) return;
+  if (!plan || brain.intent.dash || brain.traversal || brain.maneuver || brain.approachEdge) return;
   const gap = plan.targetX - brain.player.x;
   brain.intent.direction = Math.abs(gap) > 6 ? Math.sign(gap) : 0;
 }

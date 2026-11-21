@@ -92,13 +92,17 @@ describe("Local respawn", () => {
     const audioExports = {};
 
     loadClientModule(require.resolve('../src/client/game/audio/playerAudio.js'), { exports: audioExports });
-    loadClientModule(require.resolve('../src/client/game/scene/respawnEffect.js'), { exports, require: id => id.includes('playerAudio')
-      ? audioExports : { RENDER_LAYERS: { PLAYER: 30 } } });
+    loadClientModule(require.resolve('../src/client/game/scene/respawnEffect.js'), { exports, require: id => {
+      if (id.includes('playerAudio')) return audioExports;
+      if (id.includes('glowTextures')) return { ensureSoftGlow: () => true };
+      return { RENDER_LAYERS: { PLAYER: 30 } };
+    } });
     for (const end of ['complete', 'shutdown', 'destroy', 'kickoff']) {
       const objects = [];
       const tweens = new Map();
       const shape = (x, y) => {
         const object = { x, y, destroyed: false, setDepth() {}, setStrokeStyle() {},
+          setDisplaySize() { return this; }, setTint() { return this; }, setAlpha() { return this; },
           destroy() { assert.equal(this.destroyed, false); this.destroyed = true; } };
         objects.push(object);
         return object;
@@ -107,7 +111,7 @@ describe("Local respawn", () => {
       const scene = {
         cache: { audio: { exists: () => end !== 'destroy' } },
         sound: { play: (key, options) => sounds.push({ key, options }) },
-        events: new EventEmitter(), add: { rectangle: shape, ellipse: shape },
+        events: new EventEmitter(), add: { rectangle: shape, ellipse: shape, image: shape },
         tweens: { add: config => tweens.set(config.targets, config), killTweensOf: object => tweens.delete(object) },
       };
       const sprite = Object.assign(new EventEmitter(), {
@@ -143,6 +147,27 @@ describe("Local respawn", () => {
       assert.equal(scene.events.listenerCount('shutdown'), 0);
       assert.equal(sprite.listenerCount('destroy'), 0);
     }
+  });
+
+  test('movement held through death or a goal resumes on the next life', () => {
+    const { createLocalPlayerFixture } = require('./helpers/localPlayerFixture');
+    const h = createLocalPlayerFixture();
+    h.press('right');
+    h.scene._modeRuntime = { goalPaused: true };
+    h.frame();
+    assert.equal(h.api.getNetworkInputState().right, false);
+    h.lifeHooks.onLocalRespawn();
+    h.scene._modeRuntime.goalPaused = false;
+    h.frame();
+    assert.equal(h.api.getNetworkInputState().right, true);
+    h.lifeHooks.onLocalDeath();
+    h.lifeHooks.onLocalRespawn();
+    h.frame();
+    assert.equal(h.api.getNetworkInputState().right, true);
+    h.release('right');
+    h.frame();
+    assert.equal(h.api.getNetworkInputState().right, false);
+    h.destroy();
   });
 
   test('local respawn survives old death callbacks and refreshes the body before the HUD', () => {
@@ -202,6 +227,58 @@ describe("Local respawn", () => {
     assert.equal(timers[2].removed, true);
     timers[2].callback();
     assert.equal(player.visible, true, 'disposed handlers cannot hide a sprite');
+  });
+
+  test('death and spawn events cancel movement and cast presentation before replacing the pose', () => {
+    const { EventEmitter } = require('node:events');
+    const exports = {};
+    const socket = new EventEmitter();
+    const order = [];
+    const noop = () => {};
+    const cleanup = {};
+    loadClientModule(require.resolve('../src/client/game/players/fighterCombatCleanup.js'), {
+      exports: cleanup, require: () => ({ endDash: () => order.push('dash') }),
+    });
+    loadClientModule(require.resolve('../src/client/game/players/localSocketEvents.js'), {
+      exports, require: path => path === './fighterCombatCleanup' ? cleanup : ({
+        playSpriteAnimation: ({ logical }) => order.push(logical),
+        spawnDeathBurst: noop,
+        spawnRespawnEffect: () => order.push('arrival'),
+      }),
+    });
+    const player = Object.assign(new EventEmitter(), {
+      body: { allowGravity: false, reset(x, y) { order.push(['teleport', x, y]); } },
+      setVisible: noop, setVelocity: noop,
+      _movementLockedUntil: Infinity, _specialCastLockUntil: Infinity,
+      _externalControlLockUntil: Infinity, _stompArmedUntil: Infinity,
+      _gloopHookPullTween: { stop: () => order.push('hook') },
+    });
+    const binding = exports.bindLocalSocketEvents({
+      socket, getUsername: () => 'self', getPlayer: () => player,
+      getScene: () => ({ time: { delayedCall: () => ({ remove: noop }) } }),
+      getCurrentCharacter: () => 'draven', stats: {}, updateHealthBar: noop,
+    });
+    for (const [event, payload, tail] of [
+      ['player:dead', {}, ['dying']],
+      ['player:respawn', { x: 100, y: 200 }, [['teleport', 100, 200], 'idle', 'arrival']],
+      ['player:respawn', { kickoff: true, x: 100, y: 200 }, [['teleport', 100, 200], 'idle', 'arrival']],
+      ['player:respawn', { spawnReset: true, x: 100, y: 200 }, [['teleport', 100, 200], 'idle', 'arrival']],
+    ]) {
+      order.length = 0;
+      player.once('combat:reset', () => order.push('rage'));
+      player.once('attack:interrupted', () => order.push('cast'));
+      player._movementLockedUntil = Infinity;
+      player._gloopHookPullTween = { stop: () => order.push('hook') };
+      socket.emit(event, { username: 'self', ...payload });
+      assert.deepEqual(order, ['rage', 'cast', 'dash', 'hook', ...tail]);
+    }
+    assert.equal(player.body.allowGravity, true);
+    assert.equal(player._movementLockedUntil, 0);
+    assert.equal(player._specialCastLockUntil, 0);
+    assert.equal(player._externalControlLockUntil, 0);
+    assert.equal(player._stompArmedUntil, 0);
+    assert.equal(player._gloopHookPullTween, null);
+    binding.dispose();
   });
 
   test('match healing uses the health power-up tick once even when health was already synced', () => {
@@ -341,13 +418,16 @@ test('one match listener dispatches fighter updates to the active roster by name
     presentSpecial: p => actual.push([name, 'special', p.character]),
   });
   const self = fighter('self'), opponentPlayers = { other: fighter('other') };
+  const spawnResets = [];
   const { createMatchCoordinator } = loadClientModule('src/client/game/match/matchCoordinator.js', {
     require: () => ({ getCharacterSocketEvents: () => [], startServerClockSync: noop, stopServerClockSync: noop,
       resyncServerClock: noop, resetCharacterNetworks: noop, createSnapshotDecoder: () => ({ reset: noop }) }),
     window: {}, setInterval, clearInterval, setTimeout, clearTimeout,
   });
   const room = createMatchCoordinator({ socket: events, getUsername: () => 'self', getPlayer: () => null,
-    getLocalFighterEvents: () => self, hud: {}, opponentPlayers, teamPlayers: {},
+    getLocalFighterEvents: () => self, hud: { setTeamHudPlayerAlive: noop }, opponentPlayers, teamPlayers: {},
+    getGameData: () => ({}), setLatestModeState: noop,
+    onLocalSpawnReset: payload => spawnResets.push(payload),
     getGameEnded: () => true, getIsLiveGame: () => true, getLatestPlayerEffects: () => ({}), lastHealthByPlayer: {}, lastShieldActiveAt: {} });
   room.register();
   try {
@@ -358,6 +438,12 @@ test('one match listener dispatches fighter updates to the active roster by name
     opponentPlayers.late = fighter('late');
     events.emit('player:special', { username: 'late', character: 'ninja' });
     assert.deepEqual(actual, [['other', 'health', 10], ['self', 'super', 0.5], ['late', 'special', 'ninja']]);
+    events.emit('game:state', { modeState: { type: 'soccer', goal: 'team1' } });
+    events.emit('player:respawn', { username: 'other', kickoff: true });
+    assert.equal(spawnResets.length, 0);
+    const kickoff = { username: 'self', kickoff: true };
+    events.emit('player:respawn', kickoff);
+    assert.deepEqual(spawnResets, [kickoff]);
   } finally { room.dispose(); }
   for (const event of ['health-update', 'super-update', 'player:special']) assert.equal(events.listenerCount(event), 0);
 });
