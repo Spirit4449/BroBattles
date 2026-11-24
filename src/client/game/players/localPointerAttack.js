@@ -1,5 +1,5 @@
 import { getSettings } from "../../site/preferences";
-import { getPlayerAimBasePoint, resolveAttackAimContext, getNearestOpponentDirection } from "../characters/shared/attackAim";
+import { getPlayerAimBasePoint, resolveAttackAimContext } from "../characters/shared/attackAim";
 import { createAttackAimReticleController } from "../scene/attackAimReticle";
 import { createCombatMouseController } from "../scene/combatMouse";
 
@@ -135,7 +135,7 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
       player,
       family,
       quick: true,
-      quickFacingDirection: getNearestOpponentDirection(player, opponentPlayersRef),
+      opponents: opponentPlayersRef,
     });
   }
 
@@ -151,10 +151,6 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
 
   function resolveDirectionalAttackContext(family = "basic") {
     if (!player || !combatMouseController) return null;
-    if (combatMouseController.isDefaultAim()) {
-      return resolveAttackAimContext({ character: currentCharacter, player, family, quick: true,
-        quickFacingDirection: getNearestOpponentDirection(player, opponentPlayersRef) });
-    }
     const base = getAimBasePoint(family);
     const direction = combatMouseController.getDirection();
     const defaultRange = Number(base.config?.defaultRange) || 120;

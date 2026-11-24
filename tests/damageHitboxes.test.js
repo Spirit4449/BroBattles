@@ -25,7 +25,7 @@ test('shared target queries expose damage shapes even when there are no enemies'
   const room = { matchData: { editorDebugHitboxes: true }, players: new Map([['a', player]]) };
   const attack = { attackerParticipantId: 'a', attackerName: 'A', instanceId: 'one' };
   hitCircleTargets(room, attack, {}, 40, 50, 12, 100);
-  assert.deepEqual(damageHitboxSnapshot(room, 100)[0], { id: 'A:one:body', kind: 'circle', x: 40, y: 50, radius: 12, expiresAt: 220 });
+  assert.deepEqual(damageHitboxSnapshot(room, 100)[0], { id: 'A:one:body', owner: 'A', kind: 'circle', x: 40, y: 50, radius: 12, expiresAt: 220 });
   hitRectTargets(room, { ...attack, instanceId: 'two' }, {}, { left: 1, right: 9, top: 2, bottom: 10 }, 100);
   assert.equal(damageHitboxSnapshot(room, 100)[1].kind, 'rect');
 });

@@ -101,6 +101,27 @@
   },
   "offers": [
     {
+      "id": "skin-pocket-ace-ozzy",
+      "section": "skins",
+      "kind": "item",
+      "name": "Pocket Ace Ozzy",
+      "description": "An Ozzy skin for the pool shark who always calls his shot. Equip it on Ozzy.",
+      "rarity": "epic",
+      "banner": "/assets/shop/banners/pocket-ace-ozzy.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 100
+      },
+      "purchaseLimit": "lifetime",
+      "grants": [
+        {
+          "kind": "skin",
+          "id": "ozzy-pocket-ace"
+        }
+      ]
+    },
+    {
       "id": "bundle-sky-adventure",
       "section": "profile",
       "kind": "bundle",

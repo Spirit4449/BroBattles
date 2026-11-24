@@ -112,8 +112,10 @@ function withClouds(scene, draw) {
   if (system) draw(system.sim, system);
 }
 
-/** Paces wall-slide clouds by distance slid, so density follows speed. */
-const WALL_SCRAPE_SPACING_PX = 9;
+// Sample once per mark so the trail's spacing is independent of frame rate.
+function wallScrapeGap() {
+  return Phaser.Math.Between(5, 24);
+}
 
 /** A compact, directional burst at the instant the player leaves the floor. */
 export function spawnJumpTakeoff(scene, x, y, opts = {}) {
@@ -250,16 +252,7 @@ export function spawnLandingImpact(scene, x, y, opts = {}) {
 export function spawnWallSlideBurst(scene, x, y, side = "left") {
   if (!scene?.add) return;
   const away = side === "left" ? 1 : -1;
-  // Still travelling down on contact, so the downward streak is longer.
-  withClouds(scene, (sim) => emitSurfaceBurst(sim, {
-    x,
-    y,
-    nx: away,
-    ny: 0,
-    strength: 0.12,
-    bias: away * 0.5,
-    surfaceOffset: -0.35,
-  }));
+  withClouds(scene, (sim) => emitWallScrape(sim, { x, y, awayX: away, speedRatio: 1 }));
 }
 
 /**
@@ -277,27 +270,25 @@ export function spawnWallSlideTrail(scene, x, y, side = "left", opts = {}) {
   const fresh = !last || last.side !== side || now - last.at > 160 ||
     Math.abs(last.x - x) > 12 || Math.abs(y - last.y) > 80;
   if (fresh) {
-    owner._cloudScrape = { x, y, side, at: now };
+    owner._cloudScrape = { x, y, side, at: now, gap: wallScrapeGap() };
     return;
   }
   last.at = now;
   last.x = x;
-  const travelled = y - last.y;
-  if (travelled < WALL_SCRAPE_SPACING_PX) return;
+  if (y - last.y < last.gap) return;
   withClouds(scene, (sim) => {
-    const speedRatio = Phaser.Math.Clamp(Number(opts.speedRatio) || 0.6, 0, 1);
-    const steps = Math.min(6, Math.floor(travelled / WALL_SCRAPE_SPACING_PX));
-    for (let i = 1; i <= steps; i++) {
+    while (y - last.y >= last.gap) {
+      last.y += last.gap;
       emitWallScrape(sim, {
         x,
-        y: last.y + i * WALL_SCRAPE_SPACING_PX,
+        y: last.y,
         awayX: away,
-        speedRatio,
-        slideVelocity: Number(opts.velocityY) || 0,
+        speedRatio: opts.speedRatio,
+        slideVelocity: opts.velocityY,
       });
+      last.gap = wallScrapeGap();
     }
   });
-  last.y += Math.floor(travelled / WALL_SCRAPE_SPACING_PX) * WALL_SCRAPE_SPACING_PX;
 }
 
 /** Velocity-scaled clouds kicked behind a grounded runner. */

@@ -29,7 +29,15 @@ describe("Draven confirmed impacts", () => {
     const { EventEmitter } = require('node:events');
     const tuning = require('../src/shared/characters/characterTuning');
     const audio = [];
+    const transitions = { enter: 0, exits: [] };
     const api = load('src/client/game/characters/draven/special.js', {
+      './infernoTransitions': {
+        INFERNO_SHIELD_POP_MS: 360, infernoPopScale: () => 1, infernoBurnoutAlpha: () => 1,
+        infernoEnterBeats: () => ({ gatherMs: 100, crownMs: 450, doneMs: 800 }),
+        playInfernoEnter: () => { transitions.enter += 1; },
+        playInfernoExit: (_scene, _player, options) => transitions.exits.push(options),
+      },
+      '../../../../shared/combat/runtime/abilities/dravenInfernoLift.js': require('../src/shared/combat/runtime/abilities/dravenInfernoLift.js'),
       './infernoAudio': { startInfernoAudio: () => { const run = { stops: [] }; audio.push(run); return released => run.stops.push(released); } },
       '../../../../shared/characters/characterTuning.js': tuning,
       '../../../../shared/projectilePresentation': require('../src/shared/projectilePresentation'),
@@ -59,6 +67,7 @@ describe("Draven confirmed impacts", () => {
       const player = Object.assign(new EventEmitter(), { active: true, x: 100, y: 200 });
       const scene = { events: new EventEmitter(), time: { now: 0, delayedCall(delay, callback) { timers.push({ delay, callback }); } },
         textures: { exists: () => false }, add: { graphics: shape, circle: shape }, tweens: { add() {} } };
+      const exitsBefore = transitions.exits.length;
       api.perform({ scene, player, isOwner });
       const shield = player._dravenInfernoShield;
       assert.ok(shield.active);
@@ -91,8 +100,13 @@ describe("Draven confirmed impacts", () => {
       assert.equal(player._dravenInfernoShield, undefined);
       // The sound stops with the super; only a completed channel plays its release.
       assert.deepEqual(audio.at(-1).stops, [ending === 'complete']);
+      // A finished or stunned channel bursts at Draven; teardown and match end don't.
+      const burst = ending === 'complete' || ending === 'interrupt';
+      assert.equal(transitions.exits.length - exitsBefore, burst ? 1 : 0);
+      if (burst) assert.deepEqual({ x: transitions.exits.at(-1).x, y: transitions.exits.at(-1).y }, { x: player.x, y: player.y });
       assert.equal(scene.events.listenerCount('shutdown'), 0);
     }
+    assert.equal(transitions.enter, 10);
   });
 
   test('Inferno impacts show at most one smaller explosion per target per pulse', () => {

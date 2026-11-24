@@ -1,12 +1,13 @@
 import { characterDefinitions } from "../../../../shared/characters/index.js";
-import { actionElapsedMs, playSpriteAnimation } from "../shared/animationState.js";
+import { playSpriteAnimation } from "../shared/animationState.js";
 import { playPlayerSound } from "../../audio/playerAudio";
-import { playOzzySuperCast } from "./superCast";
+import { playSurgeOrbit } from "./surgeFusion";
 
 // Runs on every client for the caster (local owner and remote viewers alike);
 // the teammate beams arrive separately with `ozzy:arcane-surge`. The owner's
 // pose already started on the key press, so this continues it rather than
-// restarting it, and the cast effect joins at the pose's current frame.
+// restarting it. The cast's flames are drawn into the pose itself
+// (characters/ozzy/anim.js).
 
 const { key: NAME } = characterDefinitions.ozzy;
 
@@ -20,8 +21,10 @@ export function perform({ scene, player, isOwner = false }) {
     fallback: "throw",
     remote: !isOwner,
   });
+  // Every powerup the surge can grant circles him from the book strike until
+  // they fuse on the staff (surgeFusion.js).
+  playSurgeOrbit(scene, player);
   try {
     playPlayerSound(scene, player, "ozzy-special");
   } catch (_) {}
-  playOzzySuperCast(scene, player, { elapsedMs: actionElapsedMs(player, "special") });
 }

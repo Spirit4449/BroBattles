@@ -450,6 +450,9 @@ for (const [name, elevation] of Object.entries(DIRECTIONS)) {
 //           to the other on a matching pose
 //   ease    from that pose on, the head travels in even steps from where it is
 //           drawn to where `endsOn` has it, so the hand-over is one movement
+//   startsOn  with `endsOn`, a tween between two clips: the head travels in even
+//           steps from where that clip's first frame has it to where `endsOn`'s
+//           does, so the in-betweens carry one pose into the other
 //   sink    px per drawn frame (after `wind`) that the body sinks onto its legs:
 //           the feet stay planted, everything above the hips drops (or rises,
 //           when negative) and the legs bend (or straighten) to meet it
@@ -475,6 +478,10 @@ const JUMP_FACES = JUMP_POSES.map((name) => (name.includes('@') ? 'drawn' : 'sha
 // The spin goes by quicker than the poses around it, so the whole jump (about
 // 460 ms) still reaches the fall pose by the top of a full jump (about 500 ms).
 const JUMP_MS = [...JUMP_POSES.map((name) => (name.includes('@') ? 22 : 38)), 38];
+// In-betweens into and out of the wall slide (wallIn / wallOut strips).
+const WALL_IN = numbered('wall-in', 3);
+const WALL_OUT = numbered('wall-out', 3);
+const WALL_TWEEN_MS = 40;
 const MOVES = [
   { key: 'falling', prefix: 'falling', loop: true, face: 'shared',
     ms: 1000 / 6, wind: 2, waves: 2, poses: ['fall-0', 'fall-1', 'fall-2', 'fall-1'] },
@@ -487,6 +494,10 @@ const MOVES = [
   { key: 'jumping', prefix: 'jumping', face: JUMP_FACES, endsOn: 'falling', ease: JUMP_POSES.indexOf('jump-7'),
     centre: 'jump-2', centred: [...CURL, ...UNCURL], ms: 38, msEach: JUMP_MS, poses: JUMP_POSES },
   { key: 'wall', prefix: 'wall', loop: true, face: 'shared', ms: 1000, poses: [has('wall') ? 'wall' : 'wall-first'] },
+  // Catching the wall out of the fall, and letting go of it back into the fall.
+  // The client plays these between the two clips (animationState.js).
+  { key: 'wall-in', prefix: 'wallIn', face: 'shared', startsOn: 'falling', endsOn: 'wall', ms: WALL_TWEEN_MS, poses: WALL_IN },
+  { key: 'wall-out', prefix: 'wallOut', face: 'shared', startsOn: 'wall', endsOn: 'falling', ms: WALL_TWEEN_MS, poses: WALL_OUT },
   // A redraw of the old crouch; the first generated one (`duck`) is the fallback.
   has('crouch') ? { key: 'ducking', prefix: 'duck', loop: true, face: 'shared', grounded: 'clip', ms: 1000, poses: ['crouch'] }
     : { key: 'ducking', prefix: 'duck', loop: true, ms: 1000, poses: ['duck'] },
@@ -498,7 +509,7 @@ const MOVES = [
   { key: 'dying', prefix: 'dying', face: 'drawn', ms: 100, poses: ['die-0', 'die-1', 'die-2'] },
 ];
 const HEAD_AT = new Map(); // clip key -> where its first frame's head sits, for `steady` and `endsOn`
-const ORDER = ['running', 'jumping', 'falling', 'wall', 'ducking', 'dashing', 'dashright', 'dashdiagonal', 'dashup', 'dying'];
+const ORDER = ['running', 'jumping', 'falling', 'wall', 'wall-in', 'wall-out', 'ducking', 'dashing', 'dashright', 'dashdiagonal', 'dashup', 'dying'];
 const built = new Map();
 for (const move of MOVES) {
   if (!move.poses.every((spec) => has(spec.split('@')[0]))) continue;
@@ -522,8 +533,13 @@ for (const move of MOVES) {
   // Where each frame's head should sit.
   const first = made.find((m) => m.at)?.at;
   const end = move.endsOn && HEAD_AT.get(move.endsOn);
+  const start = move.startsOn && HEAD_AT.get(move.startsOn);
   const want = made.map((m, i) => {
     if (!m.at) return null;
+    if (start && end) {
+      const f = (i + 1) / (made.length + 1);
+      return { dx: start.dx + (end.dx - start.dx) * f, dy: start.dy + (end.dy - start.dy) * f };
+    }
     if (move.ease !== undefined && end && i >= move.ease) {
       const from = made[move.ease].at; const f = (i - move.ease) / (made.length - move.ease);
       return { dx: from.dx + (end.dx - from.dx) * f, dy: from.dy + (end.dy - from.dy) * f };

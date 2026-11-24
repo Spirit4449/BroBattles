@@ -560,7 +560,8 @@ a.site-tile:active { translate: 0 1px; box-shadow: var(--bb-card-shadow-pressed)
 .about-basics-grid h3 { font-size: 16px; line-height: 1.4; }
 .about-basics-grid p { font-size: 16px; }
 .about-keys { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; color: var(--bb-text-muted); font: 8px var(--bb-font-display); text-transform: uppercase; }
-.about-mouse { width: auto; height: 40px; }
+.about-mouse { width: auto; height: 40px; image-rendering: pixelated; }
+.about-mouse--right { transform: scaleX(-1); }
 .about-keys kbd { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border: 2px solid var(--bb-ink); color: #fff; background: linear-gradient(#2c4870, #1b304d); box-shadow: 0 3px 0 var(--bb-ink), inset 0 2px #6b85a2; font: 9px/1 var(--bb-font-display); }
 .about-keys kbd.is-wide { min-width: 72px; }
 

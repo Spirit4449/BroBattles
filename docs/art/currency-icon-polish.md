@@ -1,5 +1,19 @@
 # Currency icon polish
 
+On 2026-11-24, the shared coin's oversized `BB` mark was replaced with two
+smaller, flatter pixel `B` letters. The quieter mint mark leaves more orange
+space on the face without changing the circular rim, dark outline, canvas size,
+or URL.
+
+On 2026-11-23, both shared icons were simplified for 16–20px use. The blank
+coin face and gem facet layout remain recognizable, while their shading is
+simplified and the near-black contour is continuous. The gem's upper shoulders
+use finer staircase steps to keep their rounded shape at small sizes. The coin's
+outer edge and inner rim use finer, concentric steps for a rounder silhouette.
+The existing 171×171 coin and 187×153 gem canvases, transparent margins, and public URLs are
+unchanged. The installed images are lossless WebP exports of the revised pixel
+art, fitted with nearest-neighbor sampling.
+
 On 2026-10-09, the standard `public/assets/icons/coin.webp` and `gem.webp` were refined with stronger dark outlines and deeper stepped edge shading. Shared currency URLs remain unchanged. Coin canvas remains 171×171; gem canvas remains 187×153. These are transparent lossless WebP exports, trimmed and fitted with nearest-neighbor resizing and 8px transparent margins.
 
 Generated with the built-in image generation tool, using each previous installed icon as its edit target. Original colors, blank coin face and gem facet design are preserved.

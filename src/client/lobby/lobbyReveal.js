@@ -1,5 +1,7 @@
 import { BROWSER_EVENTS } from "../lib/browserEvents.js";
 import { getNavigation, getPageScope } from "../lib/globals.cjs";
+import { setLobbyLoadingProgress } from "./lobbyLoadingBar.js";
+export { setLobbyLoadingProgress };
 const MIN_LOADING_DISPLAY_MS = 500;
 const LOADING_EXIT_MS = 320;
 let loadingStartedAt;
@@ -28,6 +30,7 @@ export function dismissLobbyLoading(onReveal) {
 
   return loadingHold.then(() => {
     if (scope?.active === false || !loading.isConnected) return;
+    setLobbyLoadingProgress(100);
     loading.dataset.leaving = "";
     onReveal();
     if (!loadingExit) {
@@ -47,13 +50,13 @@ export function dismissLobbyLoading(onReveal) {
 
 export function watchLobbyLoading() {
   loadingStartedAt = performance.now();
+  setLobbyLoadingProgress(35, 55);
   failureTimer = window.setTimeout(showLobbyLoadError, 12000);
 }
 
 export function showLobbyLoadError() {
   const loading = document.getElementById("lobby-loading");
   if (!loading || loading.hidden) return;
-  loading.querySelector(".bb-loading-rune")?.setAttribute("hidden", "");
   const label = loading.querySelector(".lobby-loading-label");
   if (label) label.textContent = "Taking longer to load your lobby…";
   loading.querySelector("button").hidden = false;
@@ -64,11 +67,17 @@ export async function revealLobby() {
   if (!lobby?.hasAttribute("data-loading") || revealPending) return;
   revealPending = true;
   getNavigation()?.progress(94);
+  setLobbyLoadingProgress(80, 84);
   // Allow cached sprites to decode without holding the lobby on a slow asset.
   const images = [...lobby.querySelectorAll("img")].filter(img => img.getAttribute("src"));
+  let decoded = 0;
+  const countDecoded = () => {
+    decoded += 1;
+    setLobbyLoadingProgress(80 + 18 * decoded / images.length);
+  };
   let assetTimer;
   await Promise.race([
-    Promise.allSettled(images.map(img => img.decode?.())),
+    Promise.allSettled(images.map(img => Promise.resolve(img.decode?.()).finally(countDecoded))),
     new Promise(resolve => { assetTimer = window.setTimeout(resolve, 450); }),
   ]);
   if (getPageScope() && !getPageScope().active) return;

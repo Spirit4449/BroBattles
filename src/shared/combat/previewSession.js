@@ -54,7 +54,7 @@ class PreviewSession {
   }
   onCombatError(error) { throw error; }
   broadcast(type, payload) { this.onEvent(type, payload); }
-  scheduleAction(callback, delayMs, now = this.now) { this._scheduledActions.push({ callback, at: now + delayMs }); }
+  scheduleAction(callback, delayMs, now = this.now, release = null) { this._scheduledActions.push({ callback, at: now + delayMs, release }); }
   handlePlayerAction(id, action) {
     const player = this.players.get(id);
     if (!player?.isAlive || this.status !== 'active') return false;

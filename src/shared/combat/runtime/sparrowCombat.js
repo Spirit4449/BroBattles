@@ -134,7 +134,7 @@ function tickBolts(room) {
     const bolt = attack.projectile;
     const age = Math.min(bolt.durationMs, Math.max(0, room.simulationMono - bolt.launchMono));
     const from = { x: attack.x, y: attack.y }, to = lightBolt.sampleBolt(bolt, age);
-    exposeDamageHitbox(room, bolt, { kind: 'sweep', a: from, b: to, radius: attack.collisionRadius });
+    exposeDamageHitbox(room, { attackerName: attack.attackerName, id: bolt.id }, { kind: 'sweep', a: from, b: to, radius: attack.collisionRadius });
     const contacts = [];
     for (const target of targetList(room, owner, attack.viewRewindMs)) {
       if (attack.struck.has(target.name)) continue;
@@ -180,7 +180,7 @@ function tick(room) {
     }
     const nextAge = Math.min(attack.projectile.maxLifetimeMs, Math.max(0, room.simulationMono - attack.projectile.launchMono));
     const next = model.sample(attack.projectile, nextAge);
-    exposeDamageHitbox(room, attack.projectile, { kind: 'sweep', a: { x: attack.x, y: attack.y }, b: { x: next.x, y: next.y }, radius: attack.collisionRadius });
+    exposeDamageHitbox(room, { attackerName: attack.attackerName, id: attack.projectile.id }, { kind: 'sweep', a: { x: attack.x, y: attack.y }, b: { x: next.x, y: next.y }, radius: attack.collisionRadius });
     const targets = targetList(room, owner, attack.viewRewindMs);
     if (room.netTrace) traceShotGaps(room, { pid: attack.projectile.id, attacker: owner, a: { x: attack.x, y: attack.y }, b: next,
       radius: attack.collisionRadius, age: nextAge, rewindMs: attack.viewRewindMs, targets });

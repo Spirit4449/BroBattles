@@ -7,7 +7,16 @@ describe("Bot behavior and routes", () => {
   const { standOn } = require('../src/server/core/bots/navigation');
   const { observe, incomingThreat } = require('../src/server/core/bots/perception');
   const { preferredRange } = require('../src/server/core/bots/tactics');
-  const { basicAim, hasClearShot } = require('../src/shared/combat/combat.js');
+  const { basicAim, hasClearShot, requestBasic } = require('../src/shared/combat/combat.js');
+  const { botProfile } = require('../src/shared/combat/characterProfiles.js');
+  // A real basic attack from `enemy` aimed level with the bot at `x`.
+  // Sparrow's arrows fly straight enough for a hop to clear them.
+  const enemyFires = (h, enemy, x) => {
+    // Only the bot under test has a controller to reload, so ready the shot.
+    Object.assign(enemy, { connected: true, loaded: true, flip: x < enemy.x });
+    Object.assign(enemy.ammoState, { charges: enemy.ammoState.capacity, nextFireInMs: 0 });
+    assert.ok(requestBasic(h.room, enemy, { ...h.p, x, y: h.p.y }, botProfile(enemy.char_class), () => 0.5, h.now()));
+  };
   const { SUPER_RANGES, updateSuperPlan, shouldUseSuper } = require('../src/server/core/bots/supers');
   const { difficultyForTrophies } = require('../src/server/core/bots/config');
   const { registerAttackFromAction, tickActiveAttacks } = require('../src/shared/combat/runtime/attackRuntimeManager.js');
@@ -367,27 +376,21 @@ describe("Bot behavior and routes", () => {
     });
   }
 
-  test('perception distinguishes approaching, departing, friendly, and curved projectiles', (t) => {
-    const h = setup(t), enemy = h.players[1], body = bounds(h.p);
-    const shot = { attackerParticipantId: enemy.participantId, x: h.p.x + 280, y: h.p.y + body.offsetY, vx: -600, vy: 0 };
-    h.room.activeAttacks = [shot];
-    assert.ok(incomingThreat(h.snapshot(), h.p, h.now()));
-    shot.vx = 600;
-    assert.equal(incomingThreat(h.snapshot(), h.p, h.now()), null);
-    shot.attackerParticipantId = h.p.participantId;
-    assert.equal(h.snapshot().projectiles.length, 0);
-    shot.attackerParticipantId = enemy.participantId;
-    delete shot.vx; delete shot.vy;
-    h.brain.projectileSamples.set(shot, { x: shot.x + 60, y: shot.y, at: h.now() - 100 });
-    assert.equal(h.snapshot().projectiles[0].vx, -600);
+  test('perception sees approaching enemy shots, not departing or friendly ones', (t) => {
+    const h = setup(t, ['ninja', 'sparrow']), enemy = h.players[1];
+    enemyFires(h, enemy, h.p.x);
+    assert.ok(incomingThreat(h.snapshot(), h.p, h.now()), 'an enemy shot at the bot, still in its windup');
+    assert.equal(observe(h.room, enemy, h.now()).projectiles.length, 0, 'its own team does not dodge it');
+    h.advance(90);
+    enemyFires(h, enemy, enemy.x + 300);
+    assert.equal(incomingThreat(h.snapshot(), h.p, h.now()), null, 'a shot fired away from the bot');
   });
 
   for (const trophies of [0, 2000]) {
     test(`a ${trophies}-trophy bot can choose a safe dodge for an incoming ranged attack`, (t) => {
-      const h = setup(t, ['ninja', 'ozzy'], trophies), enemy = h.players[1];
+      const h = setup(t, ['ninja', 'sparrow'], trophies), enemy = h.players[1];
       h.brain.random = () => 0.2;
-      h.room.activeAttacks = [{ attackerParticipantId: enemy.participantId,
-        x: h.p.x + 240, y: h.p.y + bounds(h.p).offsetY, vx: -450, vy: 0, collisionRadius: 12 }];
+      enemyFires(h, enemy, h.p.x);
       const observed = h.snapshot();
       assert.ok(incomingThreat(observed, h.p, h.now()));
       assert.equal(h.brain.tryDodge(observed, {}, h.now(), Infinity), true);
@@ -397,19 +400,12 @@ describe("Bot behavior and routes", () => {
   }
 
   test('bots duck an imminent hit only when no safer dodge exists', (t) => {
-    const h = setup(t, ['ninja', 'ozzy'], 1250), enemy = h.players[1];
+    const h = setup(t, ['ninja', 'sparrow'], 1250), enemy = h.players[1];
     h.p._dashReadyAt = h.now() + 5000; // Neither a dash nor an ordinary dodge is available.
     h.brain.random = () => 0;
     h.brain.openingUntil = 0;
     h.brain.findDodgeSteps = function* () { return { best: null, baseDanger: 100, bestScore: 100 }; };
-    h.room.activeAttacks = [{
-      attackerParticipantId: enemy.participantId,
-      x: h.p.x + 100,
-      y: h.p.y + bounds(h.p).offsetY,
-      vx: -500,
-      vy: 0,
-      collisionRadius: 14,
-    }];
+    enemyFires(h, enemy, h.p.x);
     h.think();
     assert.equal(h.p.ducking, true);
     assert.equal(h.brain.metrics.strategicDucks, 1);
@@ -418,16 +414,9 @@ describe("Bot behavior and routes", () => {
   });
 
   test('bots prefer an available dodge instead of stacking a duck', (t) => {
-    const h = setup(t, ['ninja', 'ozzy'], 2000), enemy = h.players[1];
+    const h = setup(t, ['ninja', 'sparrow'], 2000), enemy = h.players[1];
     h.brain.random = () => 0;
-    h.room.activeAttacks = [{
-      attackerParticipantId: enemy.participantId,
-      x: h.p.x + 240,
-      y: h.p.y + bounds(h.p).offsetY,
-      vx: -450,
-      vy: 0,
-      collisionRadius: 12,
-    }];
+    enemyFires(h, enemy, h.p.x);
     const observed = h.snapshot();
     const threat = incomingThreat(observed, h.p, h.now());
     const dodge = h.brain.findDodgeManeuver(observed, {}, h.now(), Infinity);
@@ -702,6 +691,29 @@ describe("Bot behavior and routes", () => {
     assert.equal(chooseDecision(h.brain, context, enemy, [enemy], h.now() + 400).goal.surfaceId, ledge.id);
     h.brain.fireLanes = updateFireLanes(h.brain.fireLanes, null, h.now() + 5000);
     assert.equal(h.brain.fireLanes.size, 0);
+  });
+
+  test('a bot stays out of the curved path of repeated Ninja swarms on Lushy Peaks', (t) => {
+    const ninjaCombat = require('../src/shared/combat/runtime/ninjaCombat.js');
+    const h = setup(t, ['sparrow', 'ninja']), ninja = h.players[1];
+    const surface = (id) => h.room.geometry.colliders.find((collider) => collider.id === id);
+    // Sparrow starts on the right pillar; the Ninja sweeps the main floor below it.
+    h.place(h.p, surface('p3').x, surface('p3'));
+    h.place(ninja, surface('p0').left + 150, surface('p0'));
+    Object.assign(ninja, { health: 1e9, maxHealth: 1e9, connected: true, loaded: true });
+    // A fixed sequence of choices that took the drop into the stream before.
+    let state = 9301;
+    Object.assign(h.brain, { openingUntil: 0, random: () => (state = (state * 9301 + 49297) % 233280) / 233280 });
+    for (let frame = 0; frame < 600; frame++) {
+      if (frame % 50 === 0) {
+        ninja.superCharge = ninja.maxSuperCharge;
+        ninjaCombat.request(h.room, ninja, { id: `swarm-${frame}`, angle: 0, aim: { angle: 0 } }, true);
+      }
+      h.advance(1);
+    }
+    assert.ok(h.p.isAlive);
+    assert.ok(h.p.health > h.p.maxHealth / 2, `took ${h.p.maxHealth - h.p.health} damage`);
+    assert.ok(ninja.health < ninja.maxHealth, 'still fights from outside the stream');
   });
 
   test('Sparrow takes the far exit to attack a Ninja firing under the platform', (t) => {

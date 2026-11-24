@@ -1,51 +1,57 @@
 import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
-import { FIREBALL_PALETTES, FIREBALL_RADIUS_PX } from "./fireballArt";
+import { EIGHT_BALL_PALETTE, FIREBALL_PALETTES, FIREBALL_RADIUS_PX } from "./fireballArt";
 
-// Trail pixels share the fireball sheet's palette and its 2-screen-pixel art
-// cell. Chips shrink and cool in whole steps (core -> light -> mid -> edge)
-// instead of fading smoothly, so the wake reads as pixel art, not blur.
-// Colours are baked into the texture and stepped by swapping frames, because
-// the Canvas renderer fallback ignores particle tint.
-const CHIP = 6; // three art cells at activeScale 0.5
+// Pixel motes in the fireball's palette, drawn on the same 2-pixel art cell
+// as the ball. Small sparks form a short wake behind it. Size and alpha change in whole
+// steps so the wake stays crisp pixel art. Colours are baked into the texture
+// and stepped by swapping frames, because the Canvas renderer fallback
+// ignores particle tint.
 const BALL_RADIUS = FIREBALL_RADIUS_PX;
-const STEP_MS = 8;
+const STEP_MS = 16;
+const TRAIL_LIFESPAN = { min: 125, max: 250 };
 const TEXTURE = "ozzy-fire-pixels";
-const SHAPES = ["square", "plus", "round"];
-const TONES = ["core", "light", "mid", "edge", "outline", "smoke"];
-const SMOKE = { blue: "#26305e", red: "#3b2a33" };
+const PX = 2; // one art cell in texture pixels
+const MOTE = 6 * PX;
+const SHAPES = ["wisp", "dot", "spark"];
+const TONES = ["core", "light", "mid", "edge", "glow"];
+// Cells set for each shape on a 6x6 grid.
+const SHAPE_CELLS = {
+  wisp: ["..##..", ".####.", "######", "######", ".####.", "..##.."],
+  dot: ["......", "......", "..##..", "..##..", "......", "......"],
+  spark: ["......", "..#...", ".###..", "..#...", "......", "......"],
+};
 
 function getPixelTexture(scene) {
   if (scene.textures.exists(TEXTURE)) return TEXTURE;
-  const texture = scene.textures.createCanvas(TEXTURE, CHIP * SHAPES.length * TONES.length, CHIP * 2);
+  const texture = scene.textures.createCanvas(TEXTURE, MOTE * SHAPES.length * TONES.length, MOTE * 3);
   const ctx = texture.getContext();
-  ["blue", "red"].forEach((team, row) => {
-    const [, outline, edge, mid, light, core] = FIREBALL_PALETTES[team];
-    const colours = { core, light, mid, edge, outline, smoke: SMOKE[team] };
+  ["blue", "red", "gold"].forEach((team, row) => {
+    const [, glow, edge, mid, light, core] = team === 'gold' ? EIGHT_BALL_PALETTE : FIREBALL_PALETTES[team];
+    const colours = { core, light, mid, edge, glow };
     SHAPES.forEach((shape, si) => TONES.forEach((tone, ti) => {
-      const x = (si * TONES.length + ti) * CHIP, y = row * CHIP;
-      ctx.fillStyle = colours[tone];
-      if (shape === "square") ctx.fillRect(x, y, CHIP, CHIP);
-      else {
-        ctx.fillRect(x + 2, y, 2, CHIP);
-        ctx.fillRect(x, y + 2, CHIP, 2);
-        if (shape === "round") { ctx.fillRect(x + 1, y + 1, 4, 4); }
-      }
-      texture.add(`${team}-${shape}-${tone}`, 0, x, y, CHIP, CHIP);
+      const x = (si * TONES.length + ti) * MOTE, y = row * MOTE;
+      SHAPE_CELLS[shape].forEach((line, cy) => [...line].forEach((cell, cx) => {
+        if (cell === ".") return;
+        ctx.fillStyle = colours[tone];
+        ctx.fillRect(x + cx * PX, y + cy * PX, PX, PX);
+      }));
+      texture.add(`${team}-${shape}-${tone}`, 0, x, y, MOTE, MOTE);
     }));
   });
   texture.refresh();
-  texture.setFilter(0);
+  texture.setFilter?.(1);
   return TEXTURE;
 }
 
-const teamOf = owner => (teamColor(owner) === TEAM_RED ? "red" : "blue");
+const teamOf = owner => teamColor(owner) === TEAM_RED ? 'red' : owner?._bbEightBall ? 'gold' : 'blue';
 
-// Picks a chip shape per particle and steps it through `tones` over its life.
+// Picks a shape per particle and steps it through `tones` over its life.
 // Tint stays white; the op is only used for its per-particle callbacks.
 function toneRamp(scene, team, shapes, tones) {
   const frames = scene.textures.get?.(TEXTURE);
   const frame = (shape, tone) => frames?.get?.(`${team}-${shape}-${tone}`);
   const apply = (p, index) => {
+    if (p._bbTone === tones[index]) return;
     const next = frame(p._bbShape, tones[index]);
     if (next) p.frame = next;
     p._bbTone = tones[index];
@@ -53,6 +59,7 @@ function toneRamp(scene, team, shapes, tones) {
   return {
     onEmit: (p) => {
       p._bbShape = shapes[Math.floor(Math.random() * shapes.length)];
+      p._bbTone = null;
       apply(p, 0);
       return 0xffffff;
     },
@@ -68,52 +75,25 @@ const stepped = (values) => ({
   onEmit: () => values[0],
   onUpdate: (_p, _k, t) => values[Math.min(values.length - 1, Math.floor(t * values.length))],
 });
-// Each particle keeps its own starting size and shrinks one third at a time.
-const shrinking = (sizes) => ({
+// Each particle keeps its own starting size and halves once late in life.
+const halving = (sizes, at = 0.6) => ({
   onEmit: (p) => (p._bbSize = sizes[Math.floor(Math.random() * sizes.length)]),
-  onUpdate: (p, _k, t) => Math.max(1 / 3, Math.ceil(p._bbSize * 3 * (1 - t)) / 3),
+  onUpdate: (p, _k, t) => (t < at ? p._bbSize : p._bbSize / 2),
 });
-
-function trailEmitters(scene, texture, sprite, fx, fy) {
-  const team = teamOf(sprite);
-  const back = speed => ({ min: -speed[1], max: -speed[0] });
-  const velocity = (along, side) => {
-    const a = back(along);
-    return {
-      speedX: { min: fx * a.min - Math.abs(fy) * side, max: fx * a.max + Math.abs(fy) * side },
-      speedY: { min: fy * a.min - Math.abs(fx) * side, max: fy * a.max + Math.abs(fx) * side },
-    };
-  };
-  const make = (depth, config) => scene.add.particles(0, 0, texture, { emitting: false, blendMode: "NORMAL", ...config })
-    .setDepth(sprite.depth + depth);
-  return {
-    // Hot licks peeling off the back of the ball.
-    flame: make(-1, {
-      lifespan: { min: 150, max: 290 }, maxParticles: 160,
-      ...velocity([50, 120], 34), gravityY: -50,
-      scale: shrinking([1, 1, 2 / 3]), tint: toneRamp(scene, team, ["square", "round"], ["core", "light", "mid", "edge"]),
-    }),
-    // Embers drift up and sideways, cooling to the outline colour.
-    ember: make(-2, {
-      lifespan: { min: 360, max: 680 }, maxParticles: 90,
-      ...velocity([15, 70], 55), gravityY: -120,
-      scale: shrinking([2 / 3, 1 / 3]), tint: toneRamp(scene, team, ["square", "plus"], ["light", "mid", "edge", "outline"]),
-    }),
-    // A faint smoke wake gives the trail a body without a solid ribbon.
-    smoke: make(-3, {
-      lifespan: { min: 420, max: 620 }, maxParticles: 60,
-      ...velocity([10, 40], 18), gravityY: -45,
-      scale: stepped([1, 4 / 3, 5 / 3]), alpha: stepped([0.45, 0.32, 0.18]), tint: toneRamp(scene, team, ["square"], ["smoke"]),
-    }),
-  };
-}
 
 export function createFireballParticles(scene, sprite, angle) {
   const fx = Math.cos(angle), fy = Math.sin(angle);
-  const texture = getPixelTexture(scene);
-  const emitters = trailEmitters(scene, texture, sprite, fx, fy);
-  const all = Object.values(emitters);
-  let step = 0;
+  const spread = (along, across) => {
+    const drift = -35 * along;
+    const variation = 25 * Math.abs(along) + 45 * Math.abs(across);
+    return { min: drift - variation, max: drift + variation };
+  };
+  const emitter = scene.add.particles(0, 0, getPixelTexture(scene), {
+    emitting: false, blendMode: "NORMAL", lifespan: TRAIL_LIFESPAN,
+    speedX: spread(fx, fy), speedY: spread(fy, fx), gravityY: -30,
+    scale: 0.5, alpha: stepped([1, 0.75, 0.4, 0.15]),
+    tint: toneRamp(scene, teamOf(sprite), ["spark", "dot", "dot"], ["core", "light", "mid", "edge"]),
+  }).setDepth(sprite.depth + 1);
   let previous = { x: sprite.x, y: sprite.y };
   let carry = 0;
   let draining = false;
@@ -125,7 +105,7 @@ export function createFireballParticles(scene, sprite, angle) {
     scene.events.off("postupdate", update);
     scene.events.off("shutdown", destroy);
     scene.events.off("presentation:reset", destroy);
-    all.forEach(emitter => emitter.destroy());
+    emitter.destroy();
   };
   // A random point on the ball's rear half, `depth` of the radius out.
   const rearPoint = (x, y, size, depth, arc) => {
@@ -138,20 +118,17 @@ export function createFireballParticles(scene, sprite, angle) {
     const dt = Math.max(0, Math.min(64, delta));
     if (draining || !sprite.active) {
       drainMs += Math.max(0, delta);
-      if (drainMs > 700) destroy();
+      if (drainMs >= TRAIL_LIFESPAN.max) destroy();
       return;
     }
-    const size = Math.abs(sprite.scaleX || 0.5) / 0.5;
+    const size = Math.abs(sprite.scaleX || 0.5) / 0.5 / (sprite._bbEightBall ? 4 : 1);
     // Emit along the path travelled this frame so spacing stays even at any
     // frame rate; positions are random so no lanes or rails form.
     for (let ms = STEP_MS - carry; ms <= dt; ms += STEP_MS) {
       const t = dt ? ms / dt : 1;
       const x = previous.x + (sprite.x - previous.x) * t;
       const y = previous.y + (sprite.y - previous.y) * t;
-      step++;
-      for (let i = 0; i < 2; i++) emitters.flame.emitParticleAt(...rearPoint(x, y, size, 0.45 + Math.random() * 0.4, 1.3), 1);
-      if (step % 3 === 0) emitters.ember.emitParticleAt(...rearPoint(x, y, size, 0.7 + Math.random() * 0.4, 1.6), 1);
-      if (step % 4 === 0) emitters.smoke.emitParticleAt(...rearPoint(x, y, size, 1, 0.9), 1);
+      emitter.emitParticleAt(...rearPoint(x, y, size, 1 + Math.random() * 0.8, 0.9), 1);
     }
     carry = (carry + dt) % STEP_MS;
     previous = { x: sprite.x, y: sprite.y };
@@ -162,17 +139,17 @@ export function createFireballParticles(scene, sprite, angle) {
   return { destroy, stop() { draining = true; } };
 }
 
-// A one-shot spray of pixel embers where the fireball lands.
+// A one-shot spray of glowing sparks where the fireball lands.
 export function spawnFireballBurst(scene, x, y, owner) {
   if (!scene?.add?.particles || !scene.textures) return;
   const emitter = scene.add.particles(0, 0, getPixelTexture(scene), {
     emitting: false, blendMode: "NORMAL",
     // Biased upward so the spray rises with the flames.
-    lifespan: { min: 260, max: 620 }, speed: { min: 70, max: 230 }, angle: { min: 190, max: 350 },
-    gravityY: -60, scale: shrinking([1, 2 / 3, 2 / 3]),
-    tint: toneRamp(scene, teamOf(owner), SHAPES, ["core", "light", "mid", "edge"]),
+    lifespan: { min: 300, max: 700 }, speed: { min: 70, max: 240 }, angle: { min: 190, max: 350 },
+    gravityY: -40, scale: halving([1, 1, 1.5]), alpha: stepped([1, 1, 0.6]),
+    tint: toneRamp(scene, teamOf(owner), ["spark", "dot", "wisp"], ["core", "light", "mid", "edge"]),
   }).setDepth(owner?.depth ?? 100);
-  emitter.explode(16, Math.round(x), Math.round(y));
+  emitter.explode(18, Math.round(x), Math.round(y));
   let done = false;
   const destroy = () => {
     if (done) return;
@@ -183,5 +160,5 @@ export function spawnFireballBurst(scene, x, y, owner) {
   };
   scene.events?.once?.("shutdown", destroy);
   scene.events?.once?.("presentation:reset", destroy);
-  scene.time?.delayedCall?.(680, destroy);
+  scene.time?.delayedCall?.(760, destroy);
 }

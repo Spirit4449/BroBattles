@@ -1,5 +1,6 @@
 import { SOLO_MAP_STORAGE_KEY } from "../../shared/storageKeys.js";
 import { lobbyBackgroundStorageKey } from "./lobbyBackgroundCache.js";
+import { setLobbyLoadingProgress } from "./lobbyLoadingBar.js";
 
 const backgrounds = {
   1: "/assets/lushy/lobbyBg.webp",
@@ -36,6 +37,8 @@ function restoreBackground() {
 
 const loading = document.getElementById("lobby-loading");
 if (loading && !document.getElementById("bb-route-transition")) {
+  // The lobby bundle downloads next; it reports 35% once it runs.
+  setLobbyLoadingProgress(5, 33);
   requestAnimationFrame(() => {
     loading.dataset.shownAt = String(performance.now());
   });

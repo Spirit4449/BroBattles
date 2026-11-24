@@ -8,7 +8,7 @@
 // with Codex image_gen in BB style on flat #FF00FF (prompts in the art README).
 // Each is keyed, its own pixel grid is detected, and it is resampled one sample
 // per art pixel, so every pixel lands on a true grid. Layers, back to front:
-//   sky-v4.webp         smooth gradient sky, sun glow and blurred distant islands
+//   sky-centered.webp   smooth gradient sky, sun glow and blurred distant islands
 //   far-isles-v4.webp   hazed, half-size islands over a far cloud sea
 //   cloud-sea.webp      back banks of the arena's cloud sea + animated strip
 //   near-isles-v4.webp  hazed framing islands, islets + animated waterfalls
@@ -328,7 +328,7 @@ async function buildSky(isles) {
   const yy = f => yTop + (yBot - yTop) * f;
   // Large, lush islands (dense forest; stacked terraces), softly blurred.
   const [forest, terraces] = isles.lush;
-  await sil(forest, 300, 560, yy(0.34), 0.7, 6, true);     // smallest, farthest, in the middle gap
+  await sil(forest, 300, (W - 300) / 2, yy(0.34), 0.7, 6, true); // smallest, farthest, centered in the middle gap
   await sil(forest, 600, 20, yy(0.36), 0.52, 5);
   await sil(terraces, 500, 990, yy(0.27), 0.52, 5);
   // Soft cloud banks along the horizon.
@@ -356,7 +356,7 @@ async function buildSky(isles) {
     .resize(cv.w * px, cv.h * px, { kernel: 'nearest' }).raw().toBuffer({ resolveWithObject: true })
     .then(({ data, info }) => sharp(data, { raw: info }).extract({ left: 0, top: 0, width: info.width, height: Math.min(h ?? info.height, info.height) }).webp({ lossless: true, effort: 6 }).toFile(path.join(OUT, file)));
 
-  await (await buildSky(isles)).webp({ quality: 92 }).toFile(path.join(OUT, 'sky-v4.webp'));
+  await (await buildSky(isles)).webp({ quality: 92 }).toFile(path.join(OUT, 'sky-centered.webp'));
   await save(await buildFar(isles), FAR_PX, 'far-isles-v4.webp', FULL_H);
   const near = await buildNear(isles);
   await save(near.cv, NEAR_PX, 'near-isles-v4.webp', FULL_H);
@@ -379,12 +379,18 @@ async function buildSky(isles) {
       x: (f.x - 4 + frames[0].w / 2) * NEAR_PX, y: (f.y + frames[0].h / 2) * NEAR_PX });
   }
   // Lobby background: flattened still of every layer.
-  await sharp(path.join(OUT, 'sky-v4.webp')).composite([
+  const lobby = await sharp(path.join(OUT, 'sky-centered.webp')).composite([
     { input: path.join(OUT, 'far-isles-v4.webp') },
     { input: await sharp(path.join(OUT, 'cloud-sea.webp')).resize(FULL_W, FULL_H, { kernel: 'nearest' }).png().toBuffer() },
     { input: path.join(OUT, 'near-isles-v4.webp') },
     { input: await sharp(path.join(OUT, 'cloud-front.webp')).resize(FULL_W, FULL_H, { kernel: 'nearest' }).png().toBuffer() },
-  ]).webp({ quality: 90 }).toFile(path.join(OUT, 'background.webp'));
+  ]).png().toBuffer();
+  // Bridge the one broken lobe in the still without changing the other banks.
+  const join = Buffer.from(`<svg width="1536" height="1024" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <path fill="#c9e7d8" d="M678 526 H682 V522 H686 V520 H694 V522 H698 V524 H702 V526 H706 V522 H710 V520 H720 V522 H724 V524 H728 V528 H732 V532 H738 V536 H744 V544 H678 Z"/>
+    <path fill="#e5f2e0" d="M680 524 H684 V520 H688 V518 H694 V520 H698 V522 H702 V524 H704 V522 H708 V518 H712 V516 H720 V518 H724 V520 H728 V524 H724 V522 H720 V520 H712 V522 H708 V526 H702 V526 H698 V524 H694 V522 H688 V524 H684 V526 H680 Z"/>
+  </svg>`);
+  await sharp(lobby).composite([{ input: join }]).webp({ quality: 90 }).toFile(path.join(OUT, 'background-joined.webp'));
   fs.writeFileSync(path.join(OUT, 'parts.json'), JSON.stringify({ seaParts, fallParts }, null, 2));
   console.log('wrote', OUT);
   if (!INSTALL) return;
@@ -393,7 +399,7 @@ async function buildSky(isles) {
   for (const f of fs.readdirSync(OUT)) if (f.endsWith('.webp')) fs.copyFileSync(path.join(OUT, f), path.join(dest, f));
   updateSkySoil(m => {
     const layers = m.scenery.layers, byId = id => layers.find(l => l.id === id);
-    const sky = byId('sky'); sky.url = '/assets/sky-soil/sky-v4.webp'; delete sky.filter;
+    const sky = byId('sky'); sky.url = '/assets/sky-soil/sky-centered.webp'; delete sky.filter;
     const far = byId('far-peaks'); far.url = '/assets/sky-soil/far-isles-v4.webp'; far.filter = 'nearest';
     const near = byId('forest-ridges'); near.url = '/assets/sky-soil/near-isles-v4.webp'; near.filter = 'nearest'; near.parts = fallParts;
     near.fog = Math.max(near.fog || 0, 0.12);
@@ -402,7 +408,7 @@ async function buildSky(isles) {
     layers.splice(layers.indexOf(near), 0, seaLayer('cloud-sea'));
     layers.splice(layers.indexOf(near) + 1, 0, seaLayer('cloud-front'));
     m.scenery.clouds = { enabled: true, items: SKY_SOIL_CLOUDS };
-    m.metadata.lobbyBgAsset = '/assets/sky-soil/background.webp';
+    m.metadata.lobbyBgAsset = '/assets/sky-soil/background-joined.webp';
   });
   console.log('installed');
 })().catch(e => { console.error(e); process.exit(1); });

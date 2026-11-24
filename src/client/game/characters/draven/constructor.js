@@ -78,12 +78,16 @@ class Draven extends CharacterEntityBase {
 
     // Ensure nearest-neighbor sampling for crisp pixel art (renderer-agnostic)
     scene.load.once(Phaser.Loader.Events.COMPLETE, () => {
-      try {
-        const tex = scene.textures.get(NAME);
-        if (tex && typeof tex.setFilter === "function") {
-          tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
-        }
-      } catch (_) {}
+      // The effect atlases too: the Inferno overlay is scaled, and linear
+      // filtering smears its pixels.
+      for (const key of [NAME, "draven-special-fx", "draven-special-fx-red", "draven-explosion", "draven-explosion-red"]) {
+        try {
+          const tex = scene.textures.exists(key) ? scene.textures.get(key) : null;
+          if (tex && typeof tex.setFilter === "function") {
+            tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+          }
+        } catch (_) {}
+      }
     });
   }
 

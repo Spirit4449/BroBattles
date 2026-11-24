@@ -27,10 +27,7 @@
         position: fixed;
         inset: 0;
         z-index: 2147483646;
-        display: grid;
-        place-items: center;
         box-sizing: border-box;
-        padding: 24px;
         overflow: hidden;
         isolation: isolate;
         background: #111b2b;
@@ -54,9 +51,12 @@
   <body data-bb-screen="lobby">
     <div id="lobby-loading" role="status">
       <img class="lobby-loading-art" src="/assets/loadingscreen.webp" alt="" fetchpriority="high" />
-      <div class="bb-loading-panel">
-        <span class="bb-loading-rune bb-battle-loader" aria-hidden="true"></span>
+      <div id="lobby-loading-wrap">
         <p class="lobby-loading-label">Loading lobby…</p>
+        <div class="loading-shell">
+          <div class="loading-fill" style="width: 5%"></div>
+          <span class="lobby-loading-percent" aria-hidden="true">5%</span>
+        </div>
         <button class="bb-loading-retry" type="button" onclick="window.location.reload()" hidden>Try again</button>
       </div>
     </div>

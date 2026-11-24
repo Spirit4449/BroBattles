@@ -299,6 +299,29 @@ describe("Team powerup grants", () => {
     }
     assert.deepEqual([...seen].sort(), [...surge.SURGE_POWERUPS].sort(), 'the caster can roll any of them, not just rage');
   });
+
+  test('the surge waits for the cast\'s flames, and a caster knocked out first grants nothing', () => {
+    const { getResolvedCharacterSpecialConfig } = require('../src/shared/characters/characterTuning');
+    const surgeMs = getResolvedCharacterSpecialConfig('ozzy', 'arcaneSurge').surgeMs;
+    for (const knockedOut of [false, true]) {
+      const applied = [], emitted = [], scheduled = [];
+      const caster = { name: 'wiz', team: 'team1', isAlive: true, loaded: true };
+      const room = { ...roomTransport, status: 'active',
+        players: new Map([caster, { name: 'ally', team: 'team1', isAlive: true, loaded: true }].map(p => [p.name, p])),
+        applyPowerupToPlayer: (target, type) => applied.push([target.name, type]),
+        scheduleAction: (callback, delayMs) => scheduled.push({ callback, delayMs }),
+        io: { to: () => ({ emit: (event, payload) => emitted.push(payload) }) },
+      };
+      surge.activate(caster, Date.now(), room);
+      assert.deepEqual(applied, [], 'nothing lands on the key press');
+      assert.equal(scheduled.length, 1);
+      assert.equal(scheduled[0].delayMs, surgeMs);
+      if (knockedOut) caster.isAlive = false;
+      scheduled[0].callback();
+      assert.deepEqual(applied.map(([name]) => name).sort(), knockedOut ? [] : ['ally', 'wiz']);
+      assert.equal(emitted.length, knockedOut ? 0 : 1);
+    }
+  });
 });
 
 test('visual priority resolves overlapping status tints independently of bubble layering', () => {

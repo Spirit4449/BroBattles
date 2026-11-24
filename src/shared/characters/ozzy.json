@@ -45,15 +45,15 @@
           "initialScale": 0.1,
           "activeScale": 0.5,
           "glowRadiusMultiplier": 1.35,
-          "bobAmplitude": 5,
-          "castDelayMs": 520,
+          "bobAmplitude": 0,
+          "castDelayMs": 300,
           "charge": {
             "startMs": 60,
             "radius": 24,
             "behind": [-34, -10],
             "above": [8, -46]
           },
-          "flipLockMs": 650,
+          "flipLockMs": 400,
           "bobTweenMs": 220,
           "muzzle": "fireballMuzzle",
           "bobFreqMs": 120,
@@ -74,6 +74,7 @@
           "powerScale": 1.5,
           "durationScale": 1.5,
           "castMs": 2000,
+          "surgeMs": 1000,
           "beamMs": 1000,
           "powerups": [
             "rage",
@@ -137,18 +138,31 @@
     }
   },
   "presentation": {
-    "specialAnimationLockMs": 2100
+    "specialAnimationLockMs": 2100,
+    "hiResArt": {
+      "sourceSize": 128,
+      "scale": 1.3984,
+      "groundY": 104,
+      "hudTopOffset": -33,
+      "requiresFrame": "duck00",
+      "duckFrame": "duck00"
+    }
   },
   "rig": {
-    "feet": [103, 137],
+    "frame": [128, 128],
+    "feet": [42, 104],
     "points": {
-      "chest": [109, 70],
-      "fireballMuzzle": { "pivot": [134, 74], "reach": 0 },
-      "orb": [165, 64],
+      "chest": [47, 78],
+      "fireballMuzzle": { "pivot": [87, 62], "reach": 0 },
       "staffTip": {
-        "default": [88, 62],
-        "attack": [[142, 76], [140, 76], [142, 76], [142, 72], [134, 74], [144, 70], [138, 68], [140, 66]],
-        "special": [[60, 26], [49, 27], [59, 24], [165, 64], [165, 64], [165, 64]]
+        "default": [32, 57],
+        "attack": [[42, 57], [50, 59], [82, 62], [87, 62], [87, 62], [87, 62], [87, 62], [55, 56]],
+        "aimhigh": [[42, 58], [50, 58], [52, 51], [45, 44], [39, 42], [38, 41], [38, 38], [34, 58]],
+        "aimup": [[32, 58], [43, 55], [49, 57], [57, 56], [61, 57], [81, 51], [82, 50], [76, 54]],
+        "aimdown": [[36, 58], [40, 59], [47, 62], [61, 75], [63, 85], [62, 91], [61, 94], [53, 71]],
+        "aimlow": [[41, 59], [45, 59], [53, 67], [56, 77], [53, 93], [46, 97], [44, 98], [50, 89]],
+        "special": [[44, 66], [44, 67], [44, 67], [56, 65], [59, 63], [60, 62], [59, 60], [55, 53], [46, 44], [37, 40], [34, 39], [33, 38], [32, 39], [32, 41], [32, 35], [31, 33], [31, 31], [31, 30], [32, 29], [31, 33], [33, 32]],
+        "surge": [[31, 33], [31, 33], [30, 34], [31, 34], [32, 33], [32, 32]]
       }
     }
   }

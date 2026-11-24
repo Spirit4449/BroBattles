@@ -168,6 +168,10 @@ const STRIPS = {
   jumpT: { poses: ['jump-t0', 'jump-t1', 'jump-t2'], plant: 'centre' },
   // Curling into the somersault and out of it (drawn from the leap, tuck and open-out).
   jumpM: { poses: ['jump-m0', 'jump-m1'], plant: 'centre' },
+  // Catching the wall from the fall, and letting go of it back into the fall
+  // (drawn from fall-0 and wall).
+  wallIn: { poses: ['wall-in-0', 'wall-in-1', 'wall-in-2'], plant: 'centre' },
+  wallOut: { poses: ['wall-out-0', 'wall-out-1', 'wall-out-2'], plant: 'centre' },
   superA: { poses: ['super-0', 'super-1', 'super-2', 'super-3'], plant: 'lead-foot' },
   superB: { poses: ['super-4', 'super-5', 'super-6', 'super-7'], plant: 'lead-foot' },
   move: { poses: ['duck', 'wall-first', 'land'], plant: 'centre' },

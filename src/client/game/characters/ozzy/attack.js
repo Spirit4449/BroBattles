@@ -5,17 +5,19 @@ import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
-import { rigPoint } from "../shared/rig";
+import { rigPoint, spriteArtPoint } from "../shared/rig";
 import rigData from "../../../../shared/characters/characterRig.js";
 
 const { key: NAME } = characterDefinitions.ozzy;
 
 const { launchPoint } = rigData;
 import { attachToPlayer } from "../shared/attachToPlayer";
-import { playSpriteAnimation } from "../shared/animationState";
+import { actionElapsedMs, playSpriteAnimation } from "../shared/animationState";
+import { cueTip, STRIKE_FRAME } from "./pocketAceShot";
+import { ozzyAimVariant } from "./aimPoses";
 
 import { createFireballParticles, spawnFireballBurst } from "./fireballParticles";
-import { ensureFireballTextures, FIREBALL_ORIGIN, EXPLOSION_ORIGIN, EXPLOSION_FRAMES, explosionTextureKey } from "./fireballArt";
+import { eightBallTexture, EIGHT_BALL_SCALE, ensureFireballTextures, FIREBALL_ORIGIN, EXPLOSION_ORIGIN, EXPLOSION_FRAMES, EXPLOSION_TEXTURE_SCALE, FIREBALL_LOOP_FRAMES, FLIGHT_START, RELEASE_FRAMES, explosionTextureKey } from "./fireballArt";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
@@ -32,10 +34,10 @@ const FIREBALL_VISUAL_RADIUS = FIREBALL.visualRadius;
 const FIREBALL_COLLISION_RADIUS = FIREBALL.collisionRadius;
 const FIREBALL_SPLASH_RADIUS = FIREBALL.splashRadius || FIREBALL.collisionRadius;
 const FIREBALL_ACTIVE_SCALE = FIREBALL.activeScale;
+const FLIGHT_GROWTH_MS = 160;
 const FIREBALL_BOB_AMPLITUDE = FIREBALL.bobAmplitude;
 const FIREBALL_CAST_DELAY_MS = FIREBALL.castDelayMs;
 const FIREBALL_FLIP_LOCK_MS = FIREBALL.flipLockMs;
-const FIREBALL_BOB_FREQ_MS = FIREBALL.bobFreqMs;
 const FIREBALL_DEPTH = FIREBALL.depth;
 const FIREBALL_BASE_ANGLE_DEG = FIREBALL.baseAngleDeg;
 // The ball eases off the staff on the same curve the server's hitbox uses.
@@ -81,37 +83,40 @@ function attachDebugFollower(scene, target) {
   };
 }
 
+const isPocketAce = owner => (owner?._bbSkinTextureKey || owner?.texture?.key) === 'ozzy__ozzy-pocket-ace';
 const FIREBALL_TEXTURE = "ozzy-fireball-unified";
-const FIREBALL_FLIGHT_ANIM = "ozzy-fireball-unified:flight";
 
 function createFireballSprite(scene, x, y, direction, owner = null) {
   ensureFireballTextures(scene);
-  const texture = teamColor(owner) === TEAM_RED && scene.textures.exists("ozzy-fireball-red") ? "ozzy-fireball-red" : FIREBALL_TEXTURE;
+  const red = teamColor(owner) === TEAM_RED;
+  const eightBall = isPocketAce(owner);
+  const texture = eightBall ? eightBallTexture(scene, red ? 'red' : 'blue')
+    : red && scene.textures.exists("ozzy-fireball-red") ? "ozzy-fireball-red" : FIREBALL_TEXTURE;
   const flightAnimation = `${texture}:flight`;
   const hasSheet = scene.textures.exists(texture);
   const sprite = hasSheet
-    ? scene.add.sprite(x, y, texture, "fire16")
+    ? scene.add.sprite(x, y, texture, "fire15")
     : scene.add.circle(x, y, FIREBALL_VISUAL_RADIUS, 0x8ae7ff, 0.9);
   sprite.setDepth(Math.max(FIREBALL_DEPTH, RENDER_LAYERS.ATTACKS));
   // Every spawn and flight cell is anchored on the ball's centre.
   if (hasSheet) {
     sprite.setOrigin(FIREBALL_ORIGIN.x, FIREBALL_ORIGIN.y);
-    sprite.texture?.setFilter?.(0);
+    sprite.texture?.setFilter?.(1);
   }
-  sprite.setScale(FIREBALL_ACTIVE_SCALE);
+  sprite._bbEightBall = eightBall;
+  sprite.setScale(FIREBALL_ACTIVE_SCALE * (eightBall ? EIGHT_BALL_SCALE : 1));
   sprite.setAngle(direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG);
   if (hasSheet) {
     if (!scene.anims.exists(flightAnimation)) {
       scene.anims.create({
         key: flightAnimation,
-        frames: Array.from({ length: 16 }, (_, i) => ({ key: texture, frame: `fire${i + 16}` })),
-        frameRate: 24,
+        frames: Array.from({ length: FIREBALL_LOOP_FRAMES }, (_, i) => ({ key: texture, frame: `fire${i + FLIGHT_START}` })),
+        frameRate: 30,
         repeat: -1,
       });
     }
-    sprite.anims.play(flightAnimation, true);
+    sprite._bbFlightAnimation = flightAnimation;
   }
-  sprite._bbFlightAnimation = flightAnimation;
   return sprite;
 }
 
@@ -124,13 +129,13 @@ function spawnExplosion(scene, x, y, owner) {
     scene.anims.create({
       key,
       frames: Array.from({ length: EXPLOSION_FRAMES }, (_, i) => ({ key: texture, frame: `boom${i}` })),
-      frameRate: 20,
+      frameRate: 24,
       repeat: 0,
     });
   }
   const boom = scene.add.sprite(Math.round(x), Math.round(y), texture, "boom0")
     .setOrigin(EXPLOSION_ORIGIN.x, EXPLOSION_ORIGIN.y)
-    .setScale(FIREBALL_ACTIVE_SCALE)
+    .setScale(FIREBALL_ACTIVE_SCALE * (EXPLOSION_TEXTURE_SCALE || 1))
     .setDepth(Math.max(FIREBALL_DEPTH, RENDER_LAYERS.ATTACKS) + 1);
   const destroy = () => {
     scene.events.off("presentation:reset", destroy);
@@ -176,15 +181,19 @@ function spawnImpact(scene, x, y, playSound = true, owner = null) {
 }
 
 // Each fireball id is its own cast, so a new fireball starts the throw over
-// while a repeated packet for the same fireball leaves it alone.
-export function playOzzyCastWindup(scene, ownerSprite, id = null) {
-  playSpriteAnimation({
+// while a repeated packet for the same fireball leaves it alone. The throw is
+// drawn toward the aim (`angle`, see aimPoses.js).
+export function playOzzyCastWindup(scene, ownerSprite, id = null, angle = null) {
+  // A throw during the super keeps the cast on screen (its flames carry the
+  // surge, ozzy.json arcaneSurge.surgeMs): the ball forms on the burning staff.
+  if (!(actionElapsedMs(ownerSprite, "special") > 0)) playSpriteAnimation({
     scene,
     sprite: ownerSprite,
     character: NAME,
     logical: "throw",
     fallback: "idle",
     id,
+    variant: ozzyAimVariant(angle),
   });
 
   try {
@@ -220,7 +229,7 @@ function resolveProjectileStart(payload, ownerSprite, angle, direction) {
 }
 
 // The server's damage circle for a fireball `travel` px along its line, which
-// has no bob and starts at the unsettled muzzle point.
+// starts at the release muzzle.
 function fireballDamageCenter(start, angle, travel) {
   return attackCollisionCenter({
     x: start.x + Math.cos(angle) * travel, y: start.y + Math.sin(angle) * travel, angle, traveled: travel,
@@ -243,23 +252,18 @@ function spawnOzzyFireballProjectile(
       : 0;
   const forwardX = Math.cos(angle);
   const forwardY = Math.sin(angle);
-  const normalX = -forwardY;
-  const normalY = forwardX;
   const start = resolveProjectileStart(payload, ownerSprite, angle, direction);
   const range = payload?.range || FIREBALL_RANGE;
   const travelDuration =
     payload?.duration || Math.round(launchDurationMs(range, FIREBALL));
   const startup = Math.max(0, Number(payload?.startup) || 0);
-  const bob = payload?.bob ?? FIREBALL_BOB_AMPLITUDE;
   const scale = Number(payload?.scale) || FIREBALL_ACTIVE_SCALE;
   const attackId = String(payload?.id || createRuntimeId("ozzyFireball"));
 
   const charged = scene._ozzyCharges?.get(payload?.id || ownerSprite);
   const sprite = charged?.release() || createFireballSprite(scene, start.x, start.y, direction, ownerSprite);
   applyTeamVisual(sprite, ownerSprite);
-  const offsetX = charged ? sprite.x - start.x : 0;
-  const offsetY = charged ? sprite.y - start.y : 0;
-  sprite.setScale(scale);
+  sprite.setScale(scale * (sprite._bbEightBall ? EIGHT_BALL_SCALE : 1));
   if (!charged) {
     sprite.alpha = 0;
     scene.tweens.add({ targets: sprite, alpha: 1, duration: 90 });
@@ -320,8 +324,19 @@ function spawnOzzyFireballProjectile(
   const launch = () => {
     if (!sprite.active) return;
     if (startupFollower) startupFollower();
-    const launchX = sprite.x - offsetX;
-    const launchY = sprite.y - offsetY;
+    if (sprite._bbFlightAnimation) sprite.setFrame("fire16");
+    let growing = Boolean(sprite._bbFlightAnimation);
+    if (sprite._bbEightBall && ownerSprite) {
+      const tip = pocketAceTip(ownerSprite, angle, true);
+      sprite.x = tip.x;
+      sprite.y = tip.y;
+    }
+    const visualStartX = sprite.x;
+    const visualStartY = sprite.y;
+    // A remote release can arrive with a newer caster position than the charge.
+    // Trace collisions from its reported origin while drawing from the visible core.
+    const launchX = followOwnerDuringStartup ? visualStartX : start.x;
+    const launchY = followOwnerDuringStartup ? visualStartY : start.y;
     trail = createFireballParticles(scene, sprite, angle);
     // The fireball stops on the first thing it touches and bursts there. The
     // caster predicts that contact; every flight also stops where the server
@@ -349,7 +364,7 @@ function spawnOzzyFireballProjectile(
     const enemy = hasLaunch && isEnemyShooter(shooter);
     const aged = hasLaunch && releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) !== null;
     let victimFrom = enemy ? fireballDamageCenter({ x: launchX, y: launchY }, angle, 0) : null, victimFromAge = 0;
-    let victimHold = null, victimReleased = false, resume = null;
+    let victimHold = null, victimReleased = false;
 
     travelTween = scene.tweens.add({
       targets: { t: 0 },
@@ -384,18 +399,16 @@ function spawnOzzyFireballProjectile(
           { x: launchX + forwardX * travel, y: launchY + forwardY * travel }, FIREBALL_COLLISION_RADIUS);
         if (blockedAt !== null) travel = lastTravel + (travel - lastTravel) * blockedAt;
         lastTravel = travel;
-        // The bob grows in with the launch so the ball leaves the staff level.
-        const bobIn = Math.min(1, flown / Math.max(1, FIREBALL.launchEaseMs || 1));
-        const bobOffset = Math.sin(flown / FIREBALL_BOB_FREQ_MS) * bob * bobIn * bobIn;
-        const correction = Math.min(1, flown / 240);
-        const settle = 1 - correction * correction * (3 - 2 * correction);
-        sprite.x = launchX + forwardX * travel + normalX * bobOffset + offsetX * settle;
-        sprite.y = launchY + forwardY * travel + normalY * bobOffset + offsetY * settle;
-        if (resume) {
-          const k = Math.min(1, (performance.now() - resume.at) / 150), keep = 1 - k * k * (3 - 2 * k);
-          sprite.x += (resume.x - sprite.x) * keep; sprite.y += (resume.y - sprite.y) * keep;
-          if (k >= 1) resume = null;
+        if (growing) {
+          const index = Math.floor(flown / FLIGHT_GROWTH_MS * RELEASE_FRAMES);
+          if (index < RELEASE_FRAMES) sprite.setFrame(`fire${FLIGHT_START - RELEASE_FRAMES + index}`);
+          else {
+            growing = false;
+            sprite.anims.play(sprite._bbFlightAnimation, true);
+          }
         }
+        sprite.x = visualStartX + forwardX * travel;
+        sprite.y = visualStartY + forwardY * travel;
         if (enemy && enemyShotTraced()) {
           const drawn = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
           traceEnemyShot(attackId, shooter, NAME, drawn.x, drawn.y, FIREBALL_COLLISION_RADIUS, ageState.shown || 0, payload.viewRewindMs, 0, age);
@@ -460,7 +473,7 @@ export function performOzzyFireball(instance, attackContext = null) {
   const attackId = createRuntimeId("ozzyFireball");
 
   const unlockFlip = lockPlayerFlip(p);
-  playOzzyCastWindup(scene, p, attackId);
+  playOzzyCastWindup(scene, p, attackId, angle);
   chargeOzzyFireball(scene, p, { id: attackId, angle, direction, predict: true });
   scene.time.delayedCall(FIREBALL_FLIP_LOCK_MS, () => {
     try {
@@ -537,6 +550,13 @@ export function spawnOzzyFireballAuthoritative(
 }
 
 
+function pocketAceTip(owner, angle, release = false) {
+  const variant = ozzyAimVariant(angle);
+  const action = variant ? `aim${variant}` : 'attack';
+  const point = (!release && cueTip(owner.frame?.name)) || cueTip(action + (release ? STRIKE_FRAME : '00'));
+  return spriteArtPoint(owner, point, NAME);
+}
+
 // The staff tip on the frame being shown (ozzy.json `rig.points.staffTip`).
 export function getOzzyStaffTip(owner) {
   return rigPoint(owner, "staffTip", NAME) || { x: owner.x, y: owner.y };
@@ -551,10 +571,10 @@ export function chargeOzzyFireball(scene, owner, payload = {}) {
   charges.get(key)?.destroy();
   const direction = payload.direction || (owner.flipX ? -1 : 1);
   const angle = Number.isFinite(Number(payload.angle)) ? Number(payload.angle) : direction < 0 ? Math.PI : 0;
-  const start = getOzzyStaffTip(owner);
+  const start = isPocketAce(owner) ? pocketAceTip(owner, angle) : getOzzyStaffTip(owner);
   const sprite = createFireballSprite(scene, start.x, start.y, direction, owner);
   applyTeamVisual(sprite, owner);
-  const hasSheet = scene.textures.exists(FIREBALL_TEXTURE);
+  const hasSheet = Boolean(sprite._bbFlightAnimation);
   sprite.setAngle(Phaser.Math.RadToDeg(angle) + FIREBALL_BASE_ANGLE_DEG);
   if (hasSheet) {
     sprite.anims.stop();
@@ -566,6 +586,7 @@ export function chargeOzzyFireball(scene, owner, payload = {}) {
   const flights = scene._ozzyFlights ||= new Map();
   const flightId = payload.id != null ? String(payload.id) : null;
   let burst = null;
+
   const attachment = attachToPlayer(scene, owner, {
     key: `ozzy-charge:${key === owner ? "owner" : key}`,
     objects: [sprite],
@@ -583,8 +604,14 @@ export function chargeOzzyFireball(scene, owner, payload = {}) {
           return false;
         }
       }
-      Object.assign(sprite, getOzzyStaffTip(owner));
-      const t = Math.min(1, elapsed / FIREBALL_CAST_DELAY_MS);
+      // A late remote release can arrive during the recovery pose. Hold the
+      // last charging position until the packet hands this sprite to flight.
+      if (elapsed < FIREBALL_CAST_DELAY_MS) {
+        const tip = sprite._bbEightBall ? pocketAceTip(owner, angle) : getOzzyStaffTip(owner);
+        sprite.x = tip.x;
+        sprite.y = tip.y;
+      }
+      const t = Math.min(1, elapsed / Math.max(1, FIREBALL_CAST_DELAY_MS));
       if (hasSheet) sprite.setFrame(`fire${String(Math.min(15, Math.floor(t * 16))).padStart(2, "0")}`);
       else sprite.setScale(FIREBALL_ACTIVE_SCALE * (0.025 + 0.975 * t));
       return true;
@@ -600,8 +627,8 @@ export function chargeOzzyFireball(scene, owner, payload = {}) {
   sprite.once?.("destroy", () => { if (flightId && flights.get(flightId) === burst) flights.delete(flightId); });
   const entry = { destroy, release() {
     attachment.detach();
-    sprite.setScale(FIREBALL_ACTIVE_SCALE);
-    if (hasSheet) sprite.anims.play(sprite._bbFlightAnimation || FIREBALL_FLIGHT_ANIM, true);
+    sprite.setVisible?.(true);
+    if (hasSheet) sprite.setFrame("fire15");
     return sprite;
   } };
   charges.set(key, entry);

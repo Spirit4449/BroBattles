@@ -81,7 +81,7 @@ function activate(caster, now, room, payload = null, shot = null) {
     broadcastAction(room, caster, stampRelease(room, caster, { ...action }, launchMono), combatNow(room));
   };
 
-  if (startup > 0) room.scheduleAction(release, startup);
+  if (startup > 0) room.scheduleAction(release, startup, undefined, { player: caster, action: () => action });
   else release();
 }
 

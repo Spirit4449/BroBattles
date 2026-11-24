@@ -38,7 +38,6 @@ class BotController {
     this.spacing = this.between(0.85, 1.1);
     this.openingDelay = this.between(350, 800);
     this.observations = [];
-    this.projectileSamples = new WeakMap();
     this.nextThink = 0;
     this.nextSample = 0;
     this.nextOpportunity = 0;
@@ -90,7 +89,7 @@ class BotController {
     if (this.superPlan?.charged) this.metrics.superThreatMs += dt;
     if (now >= this.nextSample) {
       this.nextSample = now + 100;
-      this.observations.push(observe(room, p, now, this.projectileSamples));
+      this.observations.push(observe(room, p, now));
       while (this.observations.length > 12) this.observations.shift();
     }
     const mods = effects.getModifiers(p, now);
@@ -352,7 +351,19 @@ class BotController {
     const landing = this.approachEdge?.frames?.at(-1);
     const approachUnderFire = !!landing && (fireLaneExposure(this.fireLanes, p.char_class, landing, now) > 0 ||
       edgeExposure(this.fireLanes, p.char_class, p.x, this.approachEdge, now) > 0);
-    const goalUnsafe = p.grounded && !this.traversal && this.decision?.goal && (approachUnderFire ||
+    // A walk off a ledge is still on the ground until it drops, so it can be
+    // called off when fire is seen across the rest of its path. A jump cannot.
+    const walkOff = this.traversal;
+    const walkOffUnderFire = !!walkOff && p.grounded && !!this.fireLanes?.size &&
+      walkOff.frames.slice(0, walkOff.cursor).every((frame) => !frame.jumpPressed && !frame.dash) &&
+      (fireLaneExposure(this.fireLanes, p.char_class, walkOff.frames.at(-1), now) > 0 ||
+        edgeExposure(this.fireLanes, p.char_class, p.x, { takeoffX: p.x, frames: walkOff.frames.slice(walkOff.cursor) }, now) > 0);
+    if (walkOffUnderFire) {
+      this.traversal = null;
+      this.intent = { direction: safeWalkDirection(p, 0, this.movementGeometry()) };
+      this.metrics.fireAborts = (this.metrics.fireAborts || 0) + 1;
+    }
+    const goalUnsafe = p.grounded && !this.traversal && this.decision?.goal && (approachUnderFire || walkOffUnderFire ||
       context.routeTo(this.decision.goal.surfaceId, this.decision.goal.x) === null);
     const committedRoute = !bankMode && (this.approachEdge || this.traversal) && !targetChanged && !roleChanged && !recentlyHurt && !threatened &&
       !newRetreatHit && !goalUnsafe && !(this.retreating && enemies.some((enemy) => Math.hypot(enemy.x - p.x, enemy.y - p.y) < 320)) && wasRetreating === this.retreating && bounds(p).bottom < context.poisonY - 100;
@@ -572,7 +583,6 @@ class BotController {
     this.ineffectivePositions.length = 0;
     this.combatProgress = null;
     this.fireLanes = null;
-    this.projectileSamples = new WeakMap();
     this.decision = null;
     this.objective = null;
     this.duckDirection = 0;

@@ -43,7 +43,6 @@ import { createLocalStateSync } from "./localStateSync";
 import {
   getPlayerAimBasePoint,
   resolveAttackAimContext,
-  getNearestOpponentDirection,
 } from "../characters/shared/attackAim";
 import {
   deriveMovementAnimation,
@@ -303,7 +302,6 @@ export function createPlayer(sceneParam, {
           pointerWorldX,
           pointerWorldY,
           quick,
-          quickFacingDirection: quick && !followUp ? getNearestOpponentDirection(player, opponentPlayersRef) : null,
         });
         if (followUp && !quick) aimFollowUp(context?.angle);
         return context;

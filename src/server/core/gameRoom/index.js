@@ -171,8 +171,10 @@ class GameRoom {
     return membership.addPlayer(this, socket, user);
   }
 
-  scheduleAction(callback, delayMs, now = Date.now()) {
-    this._scheduledActions.push({ callback, at: now + Math.max(0, delayMs) });
+  // `release`, when given, describes the attack the callback will register
+  // ({ player, action() }), so bots can forecast a windup before it lands.
+  scheduleAction(callback, delayMs, now = Date.now(), release = null) {
+    this._scheduledActions.push({ callback, at: now + Math.max(0, delayMs), release });
   }
 
   applyKnockback(player, impulse) {

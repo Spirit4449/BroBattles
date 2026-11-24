@@ -61,43 +61,32 @@
           "damageTakenMult": 0.4,
           "riseMs": 650,
           "liftPx": 125,
+          "riseDipPx": 10,
+          "riseOvershoot": 0.14,
           "bobPx": 8,
           "firePulseMs": 120,
           "explosionPulseMs": 450,
           "bobWaveMs": 120,
           "firstDamageDelayMs": 80,
           "damageTickMs": 220,
-          "damageScale": 0.22,
+          "damageScale": 0.27,
           "minDamagePerTick": 20
         }
       },
       "effects": {
-        "fireTrail": {
-          "intervalMs": 45,
-          "poolMax": 60,
-          "baseSizeMin": 5,
-          "baseSizeMax": 9,
-          "outerColor": 3221569,
-          "outerAlpha": 0.35,
-          "midColor": 12213538,
-          "midAlpha": 0.55,
-          "innerColorMin": 30,
-          "innerColorMax": 60,
-          "innerAlpha": 0.9,
-          "jitterMin": -3,
-          "jitterMax": 3,
-          "driftXMin": -12,
-          "driftXMax": 12,
-          "driftYMin": -18,
-          "driftYMax": -4,
-          "scaleTargetMin": 0.15,
-          "scaleTargetMax": 0.35,
-          "durationMinMs": 260,
-          "durationMaxMs": 420,
-          "spawnOffsetX": 14,
-          "spawnOffsetY": 8,
-          "spawnCountMin": 1,
-          "spawnCountMax": 2
+        "staffSmoke": {
+          "minSpeedPx": 60,
+          "intervalMs": 30,
+          "maxPuffs": 48,
+          "radiusMinPx": 3,
+          "radiusMaxPx": 5,
+          "lifeMinMs": 140,
+          "lifeMaxMs": 220,
+          "spreadPx": 20,
+          "riseMinPx": 25,
+          "riseMaxPx": 65,
+          "warmth": 0.75,
+          "alpha": 0.5
         }
       }
     },
@@ -140,9 +129,36 @@
     }
   },
   "presentation": {
-    "abilityLockAnimation": "special"
+    "abilityLockAnimation": "special",
+    "hiResArt": {
+      "sourceSize": 207,
+      "scale": 1.4493,
+      "groundY": 150,
+      "requiresFrame": "duck00",
+      "duckFrame": "duck00"
+    }
   },
   "rig": {
-    "feet": [123, 167]
+    "frame": [207, 207],
+    "feet": [103.5, 150],
+    "points": {
+      "staffTip": {
+        "default": [121, 112],
+        "idle": [[121, 112], [121, 111], [121, 110], [121, 110], [121, 110], [121, 111], [121, 112], [121, 112]],
+        "run": [[125, 114], [126, 114], [127, 113], [126, 114], [125, 114], [124, 113], [123, 113], [124, 114]],
+        "attack": [[92, 135], [101, 114], [115, 98], [135, 108], [143, 124], [143, 128], [143, 127], [142, 122]],
+        "jump": [[123, 110], [121, 109]],
+        "fall": [[124, 108], [124, 107], [124, 108], [124, 109]],
+        "sliding": [[94, 106], [94, 106]],
+        "special": [[112, 100], [112, 99], [112, 99], [112, 99], [112, 100], [112, 101], [112, 101], [112, 101]],
+        "dying": [[120, 112], [121, 112], [132, 121], [146, 149], [152, 150], [156, 150], [155, 149]],
+        "duck": [[133, 150]],
+        "dashright": [[100, 119], [94, 132], [96, 125]],
+        "dashdiagonal": [[133, 115], [136, 118], [135, 116]],
+        "dashup": [[121, 104], [120, 102], [121, 103]],
+        "dashdowndiagonal": [[141, 139], [134, 156], [139, 148]],
+        "dashdown": [[134, 141], [120, 151], [128, 148]]
+      }
+    }
   }
 }

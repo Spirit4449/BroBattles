@@ -1,5 +1,9 @@
 # Gameplay
 
+## Quick attacks
+
+Mouse clicks, keyboard quick attacks, and touch taps select the nearest living, visible opponent when the attack fires. Auto-aim uses the center of that opponent’s hitbox as the manual aim point, including for lobbed shots. Each attack keeps its own range and trajectory. With no target, the character uses its default attack in its facing direction.
+
 ## Bro Ball
 
 Rumble Stadium (map 6) is the Bro Ball arena: an open-air stadium at golden hour. Each goal is a timber cage on a raised stone step. A rolling ball bounces off the step and has to be lifted in, and players can walk into the cage. The roof beam over each mouth can be stood on, and a ball resting on it rolls back toward the pitch. Two raised one-way platforms flank the open midfield. A rising ball must clear the deck with its bottom edge to land on it. Goals are credited to the scoring team’s most recent player to touch the ball; an own goal or a goal without a known touch has no individual scorer. Player goal counts appear beside their team HUD portraits. After scoring, the ball keeps its momentum and disappears when it stops or the pitch resets. The back net catches shots that reach it. Players and the ball pass up through them and land on top. Each rally starts with the ball dropping freely from high over the centre with a little sideways drift. Map validation checks that each goal's floor, step, roof beam and back wall line up.
@@ -152,7 +156,7 @@ Death clears the fallen fighter’s status effects, attached attacks and unrelea
 
 ## Draven's Inferno
 
-Draven takes 60% less incoming damage while channeling Inferno. A translucent,
+Short pixel sparks rise beside Draven as Inferno lifts him. Draven takes 60% less incoming damage while channeling Inferno. A translucent,
 circular shield with the same shaded shell and reflections as spawn protection
 surrounds him for the channel and disappears when it ends or is interrupted. The incoming damage multiplier lives in
 `stats.tuning.special.inferno.damageTakenMult` in his shared character definition
@@ -319,7 +323,9 @@ Navigation simulates movement and verifies stable landings, including jump/dash 
 Difficulty scales through trophy anchors up to 4,000, retaining reaction delay, aim error and missed opportunities.
 Invisible opponents are not tracked by reading their live positions.
 
-All fighters use the map’s movement graph to compare exposure to observed streams of straight projectiles. Route costs cover the walk to takeoff, the flight, the landing and the final walk to the goal. Combat positioning also checks platform edges and positions beside the stream for a firing angle.
+Bots see attacks through `core/bots/threatForecast.js`. It copies the room's attack state (runtime attacks, Ninja and Sparrow projectiles, abilities, and windups queued with `room.scheduleAction(..., release)`) into a sandbox where nobody is an enemy, steps it through the real runtimes for one second in the room's own tick order, and records the shapes they publish with `exposeDamageHitbox`. Every basic attack, projectile and super is forecast from the code that deals its damage, curves and returns included; nothing in the bots describes how an attack moves. The forecast is shared by every bot and recomputed when an attack starts or ends. Mode hazards without an owner, such as Bank Bust turret shots, come from the mode's `getBotThreats()`.
+
+Dodging, incoming-hit checks and fire lanes all read that forecast. A fire lane is the set of cells a stream of shots (or one lasting area, such as an inferno) covers, remembered for a moment between volleys. All fighters use the map’s movement graph to compare exposure to those lanes. Route costs cover the walk to takeoff, the flight, the landing and the final walk to the goal; a destination is priced as holding position there. A walk off a ledge is called off while still on the ground when fire appears across the rest of its path. Combat positioning also checks platform edges and positions beside the stream for a firing angle.
 
 Sudden-death routing treats poison exposure as a cost, preserving necessary submerged routes. Ordinary combat positioning continues away from danger; near full coverage, bots stop treating gas as a routing constraint. Headless tests do not establish production balance or browser smoothness.
 
@@ -341,8 +347,9 @@ Blue/green outlines show map and physics bodies; pink outlines show server damag
 volumes. Ctrl+M hides/shows the overlay during a debug playtest.
 
 `src/shared/combat/runtime/damageHitboxes.js` is the common damage-shape publisher.
-It runs only in editor rooms with debug enabled. Normal matches send no additional
-hitbox data. The debug transport itself does not alter damage rules; attack
+It records only in editor rooms with debug enabled, and in the bots' forecast
+sandbox. Normal matches send no additional hitbox data. A published shape is also
+how bots see an attack: an attack that does not publish one cannot be dodged. The debug transport itself does not alter damage rules; attack
 geometry remains controlled by the shared character tuning and collision helpers.
 
 For new attacks:
@@ -363,7 +370,10 @@ For new attacks:
   same damage and splash, and the release is cancelled. Its flow kind is
   `server-internal`, so a client cannot start it on its own. The caster's
   client predicts it with the same shape; other clients burst the charging
-  ball from the impact broadcast.
+  ball from the impact broadcast. The first spark appears on the staff tip as the throw
+  begins. It follows the animated tip throughout the windup, then
+  flies straight along the cast angle. Baked pixel frames draw thin lightning feeding the
+  bright core at the staff tip during charge, then fill out the flame and tail in flight.
 - Straight projectiles can declare `collisionForwardOffset` in character tuning
   when the damaging part of asymmetric artwork is ahead of or behind its motion
   origin. The shared runtime rotates that offset with the attack angle.
@@ -381,8 +391,15 @@ For new attacks:
 - Supported shapes are `circle` (`x`, `y`, `radius`), `rect` (`left`, `right`,
   `top`, `bottom`), `sweep` (`a`, `b`, `radius`), and `sector` (`x`, `y`, `radius`,
   `innerRadius`, `angle`, `halfSpread`). Angles are radians.
-- A new shape kind needs support in `src/client/game/scene/damageHitboxDebug.js` and a test.
+- A new shape kind needs support in `src/client/game/scene/damageHitboxDebug.js`,
+  in `shapeGap` and `shapeBounds` in `src/server/core/bots/threatForecast.js`, and a test.
   Extend `tests/damageHitboxes.test.js` when adding a new collision protocol.
+- Delayed releases should pass `{ player, action }` as the fourth argument to
+  `room.scheduleAction` so bots see the windup coming. State a new combat protocol
+  keeps outside `room.activeAttacks`, `ninjaCombatState`, `sparrowCombatState` and
+  player effects needs copying in `threatForecast.js`.
+  `tests/botThreatForecast.test.js` checks every character's basic and super against
+  the shapes the real runtimes publish.
 
 Generic projectiles, splash rectangles, Thorg's hammer,
 hooks, cones, Ninja shurikens, Sparrow arrows, Inferno, turret shots, and sudden

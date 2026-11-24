@@ -3,6 +3,7 @@ import { addPixelCircle, addPixelEllipse, fillPixelBlob, fillPixelEllipse, raste
 import { POWERUP_CATALOG } from "../../../shared/powerups";
 import { RENDER_LAYERS } from "../scene/renderLayers";
 import { pickupVisualParts, destroyVisualParts } from "./pickupVisualParts";
+import { spawnClaimSoak } from "./claimSoakFx";
 export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getLatestPowerups, getLocalPlayer, powerupCollectQueue, fxG, prepareClaim, primeClaimedBubble, spriteFrameForAura }) {
   const visuals = Object.create(null);
   const claimEffects = new Map();
@@ -223,44 +224,18 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
       return true;
     }
     const shouldForm = prepareClaim(evt, collector, color);
-    const stream = [
-      addPixelEllipse(scene, sx, sy, 25, 12, color, 0.68),
-      addPixelEllipse(scene, sx, sy, 19, 8, 0xffffff, 0.42),
-      addPixelEllipse(scene, sx, sy, 13, 6, color, 0.28),
-    ];
-    stream.forEach((part, i) => {
-      part.setBlendMode(Phaser.BlendModes.ADD);
-      part.setDepth(RENDER_LAYERS.PLAYER_HUD + 2 - i * 0.01);
+    spawnClaimSoak({
+      scene,
+      Phaser,
+      tweenClaimEffect,
+      username: evt.username,
+      collector,
+      frameFor: spriteFrameForAura,
+      from: { x: sx, y: sy },
+      color,
+      iconKey: powerupTextureFor(evt.type),
+      onArrive: () => primeClaimedBubble(evt?.username, collector, color, shouldForm),
     });
-    const travel = { t: 0 };
-    const side = Phaser.Math.Between(0, 1) === 0 ? -1 : 1;
-    tweenClaimEffect(evt.username, stream, {
-      targets: travel,
-      t: 1,
-      duration: 235,
-      ease: "Cubic.easeIn",
-      onUpdate: () => {
-        if (!stream[0].active) return;
-        const frame = spriteFrameForAura(collector);
-        stream.forEach((part, i) => {
-          const t = Phaser.Math.Clamp(travel.t - i * 0.035, 0, 1);
-          const bend = Math.sin(t * Math.PI) * 22 * side;
-          const x = Phaser.Math.Linear(sx, frame.x, t) + bend * (1 - t * 0.5);
-          const y = Phaser.Math.Linear(sy, frame.y, t) - Math.sin(t * Math.PI) * 20;
-          const nextT = Math.min(1, t + 0.025);
-          const nextX =
-            Phaser.Math.Linear(sx, frame.x, nextT) +
-            Math.sin(nextT * Math.PI) * 22 * side * (1 - nextT * 0.5);
-          const nextY =
-            Phaser.Math.Linear(sy, frame.y, nextT) -
-            Math.sin(nextT * Math.PI) * 20;
-          part.setPosition(x, y);
-          part.setRotation(Math.atan2(nextY - y, nextX - x));
-          part.setScale(1 + Math.sin(t * Math.PI) * 0.7, 0.85 - t * 0.35);
-          part.setAlpha((0.68 - i * 0.16) * Math.min(1, t * 8) * (1 - t * 0.45));
-        });
-      },
-    }, () => primeClaimedBubble(evt?.username, collector, color, shouldForm));
     return true;
   }
 
@@ -287,10 +262,9 @@ export function createPickupRenderer({ scene, Phaser, colors, playerLookup, getL
         scene.tweens.add({
           targets: pickupVisualParts(visual),
           alpha: 0,
-          scaleX: 0.45,
-          scaleY: 0.12,
-          angle: 70,
-          duration: 170,
+          scaleX: 0.3,
+          scaleY: 0.3,
+          duration: hasClaimFx ? 90 : 170,
           ease: "Cubic.easeIn",
           onComplete: () => cleanupPowerupVisual(id, visual),
         });

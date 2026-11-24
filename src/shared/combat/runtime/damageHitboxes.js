@@ -3,9 +3,10 @@
 const SAMPLE_TTL_MS = 120;
 function exposeDamageHitbox(room, source, shape, now = Date.now(), part = 'body') {
   if (!room?.matchData?.editorDebugHitboxes) return;
-  const id = `${source.attackerName || source.ownerName || ''}:${source.instanceId || source.id}:${part}`;
+  const owner = source.attackerName || source.ownerName || '';
+  const id = `${owner}:${source.instanceId || source.id}:${part}`;
   room.damageHitboxes ||= new Map();
-  room.damageHitboxes.set(id, { id, ...shape, expiresAt: now + SAMPLE_TTL_MS });
+  room.damageHitboxes.set(id, { id, owner, ...shape, expiresAt: now + SAMPLE_TTL_MS });
 }
 function damageHitboxSnapshot(room, now = Date.now()) {
   if (!room?.matchData?.editorDebugHitboxes) return undefined;

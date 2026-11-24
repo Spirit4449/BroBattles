@@ -404,8 +404,8 @@ function renderAboutPage(modes) {
     <header class="about-heading"><h2 id="basics-title">Easy to pick up. Hard to put down.</h2></header>
     <div class="about-basics-grid">
       <article class="site-tile"><span class="about-step">01</span><h3>Move</h3><p>Jump, wall-slide and dash out of trouble.</p><div class="about-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd class="is-wide">Space</kbd></div></article>
-      <article class="site-tile"><span class="about-step">02</span><h3>Aim</h3><p>Your mouse aims every shot. Make them count.</p><div class="about-keys"><img class="about-mouse" src="/assets/icons/mouse_left.webp" width="60" height="91" alt="Left click"/><span>Attack</span></div></article>
-      <article class="site-tile"><span class="about-step">03</span><h3>Unleash</h3><p>Hits charge your super. Save it for the big moment.</p><div class="about-keys"><img class="about-mouse" src="/assets/icons/mouse_right.webp" width="60" height="91" alt="Right click"/><span>Super</span></div></article>
+      <article class="site-tile"><span class="about-step">02</span><h3>Aim</h3><p>Your mouse aims every shot. Make them count.</p><div class="about-keys"><img class="about-mouse" src="/assets/icons/about-mouse-pixel.webp" width="117" height="180" alt="Left click"/><span>Attack</span></div></article>
+      <article class="site-tile"><span class="about-step">03</span><h3>Unleash</h3><p>Hits charge your super. Save it for the big moment.</p><div class="about-keys"><img class="about-mouse about-mouse--right" src="/assets/icons/about-mouse-pixel.webp" width="117" height="180" alt="Right click"/><span>Super</span></div></article>
     </div>
     <a class="site-link" href="/help/controls">All controls ${arrow("right", "sm")}</a>
   </section>

@@ -249,10 +249,46 @@
       ]
     },
     {
+      "key": "wall-in",
+      "fps": 25,
+      "loop": false,
+      "row": 10,
+      "frames": [
+        "wallIn00",
+        "wallIn01",
+        "wallIn02",
+        "wallIn03"
+      ],
+      "frameDurationsMs": [
+        40,
+        40,
+        40,
+        40
+      ]
+    },
+    {
+      "key": "wall-out",
+      "fps": 25,
+      "loop": false,
+      "row": 11,
+      "frames": [
+        "wallOut00",
+        "wallOut01",
+        "wallOut02",
+        "wallOut03"
+      ],
+      "frameDurationsMs": [
+        40,
+        40,
+        40,
+        40
+      ]
+    },
+    {
       "key": "ducking",
       "fps": 1,
       "loop": true,
-      "row": 10,
+      "row": 12,
       "frames": [
         "duck00"
       ],
@@ -264,7 +300,7 @@
       "key": "dashing",
       "fps": 25,
       "loop": false,
-      "row": 11,
+      "row": 13,
       "frames": [
         "dash00",
         "dash01",
@@ -282,7 +318,7 @@
       "key": "dashright",
       "fps": 25,
       "loop": false,
-      "row": 12,
+      "row": 14,
       "frames": [
         "dashRight00",
         "dashRight01",
@@ -300,7 +336,7 @@
       "key": "dashdiagonal",
       "fps": 25,
       "loop": false,
-      "row": 13,
+      "row": 15,
       "frames": [
         "dashDiagonal00",
         "dashDiagonal01",
@@ -318,7 +354,7 @@
       "key": "dashup",
       "fps": 25,
       "loop": false,
-      "row": 14,
+      "row": 16,
       "frames": [
         "dashUp00",
         "dashUp01",
@@ -336,7 +372,7 @@
       "key": "dying",
       "fps": 10,
       "loop": false,
-      "row": 15,
+      "row": 17,
       "frames": [
         "dying00",
         "dying01",
@@ -352,7 +388,7 @@
       "key": "special-high",
       "fps": 25,
       "loop": false,
-      "row": 16,
+      "row": 18,
       "frames": [
         "specialHigh00",
         "specialHigh01",
@@ -394,7 +430,7 @@
       "key": "special-up",
       "fps": 25,
       "loop": false,
-      "row": 17,
+      "row": 19,
       "frames": [
         "specialUp00",
         "specialUp01",
@@ -436,7 +472,7 @@
       "key": "special",
       "fps": 25,
       "loop": false,
-      "row": 18,
+      "row": 20,
       "frames": [
         "special00",
         "special01",
@@ -478,7 +514,7 @@
       "key": "special-down",
       "fps": 25,
       "loop": false,
-      "row": 19,
+      "row": 21,
       "frames": [
         "specialDown00",
         "specialDown01",
@@ -520,7 +556,7 @@
       "key": "special-low",
       "fps": 25,
       "loop": false,
-      "row": 20,
+      "row": 22,
       "frames": [
         "specialLow00",
         "specialLow01",

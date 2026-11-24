@@ -3,7 +3,7 @@ const DEFAULT_SPECIAL_MS = 900;
 const ACTION_PATTERN = /throw|attack|slash|special/i;
 const WALL_JUMP_ANIMATION_MS = 450;
 const WALL_SLIDE_POSE_HOLD_MS = 120;
-const DASH_ANIMATIONS = new Set(["dashing", "dashright", "dashdiagonal", "dashup"]);
+const DASH_ANIMATIONS = new Set(["dashing", "dashright", "dashdiagonal", "dashup", "dashdowndiagonal", "dashdown"]);
 // Dash art plays at burst speed, then its last frame holds through the fast
 // part of the coast (burst + time for coast drag to return to run speed).
 export const DASH_POSE_HOLD_MS = 520;
@@ -344,10 +344,41 @@ export function holdWallSlidePose(sprite, { sliding = false, grounded = false, n
 // Dash directions use screen coordinates (negative Y points upward).
 export function directionalDashAnimation(character, direction) {
   if (direction?.x === 0 && direction?.y > 0) return "ducking";
-  if (!["thorg", "gloop", "ninja", "sparrow"].includes(String(character).toLowerCase()) ||
+  if (!["thorg", "gloop", "ninja", "sparrow", "draven", "ozzy"].includes(String(character).toLowerCase()) ||
       !Number.isFinite(direction?.x) || !Number.isFinite(direction?.y)) return "dashing";
   if (direction.y < 0) return direction.x ? "dashdiagonal" : "dashup";
   return direction.x ? "dashright" : "falling";
+}
+
+// Optional clips bridge specific pose changes. New input interrupts a bridge
+// immediately, and each skin only plays transitions included in its own atlas.
+const MOVEMENT_TRANSITIONS = [
+  { from: new Set(["falling"]), to: "idle", suffix: "landing" },
+  { from: new Set(["falling", "jumping"]), to: "sliding", suffix: "sliding-in" },
+  { from: new Set(["sliding"]), to: "falling", suffix: "sliding-out" },
+];
+function playMovementTransition({ scene, sprite, character, skinId, resolveAnimKey, wanted, currentKey }) {
+  const state = sprite._bbAnimationState ||= {};
+  const showing = state.movementTransition;
+  if (showing) {
+    if (currentKey === showing.key && sprite.anims.isPlaying && wanted === showing.to) {
+      noteAnimationPlayed(sprite, wanted);
+      return showing.key;
+    }
+    state.movementTransition = null;
+  }
+  const transition = MOVEMENT_TRANSITIONS.find((t) => t.to === wanted && t.from.has(state.currentLogical));
+  if (!transition) return null;
+  // Only the art's own transition: a skin without one goes straight to its pose.
+  const key = resolveAnimKey(scene, character, transition.suffix, wanted, skinId);
+  if (transition.suffix === "landing" && !scene.anims?.exists?.(key)) return null;
+  const texture = sprite._bbSkinTextureKey || sprite.texture?.key;
+  if (!key?.endsWith(`-${transition.suffix}`) || key === currentKey ||
+      (texture && key !== `${texture}-${transition.suffix}`)) return null;
+  sprite.anims.play(key, false);
+  state.movementTransition = { key, to: wanted };
+  noteAnimationPlayed(sprite, wanted);
+  return key;
 }
 
 export function playCharacterAnimation({
@@ -379,6 +410,11 @@ export function playCharacterAnimation({
   if (wanted === "falling" && poseState.stompPose) wanted = "ducking";
   if (wanted === "dashing") {
     wanted = directionalDashAnimation(character, direction);
+    // Art with downward dashes plays them; other art keeps the forward dash
+    // (diagonal) or the crouch (straight down).
+    const down = direction?.y > 0 && ["dashright", "ducking"].includes(wanted)
+      ? (direction.x ? "dashdowndiagonal" : "dashdown") : null;
+    if (down && resolveAnimKey(scene, character, down, fallback, skinId)?.endsWith(`-${down}`)) wanted = down;
   }
   let key = resolveAnimKey(scene, character, wanted, fallback, skinId);
   // Art drawn before a character had directional dashes (its skins) keeps the single dash.
@@ -399,12 +435,22 @@ export function playCharacterAnimation({
       sprite.anims.timeScale = 1;
       motionState.speedScaled = false;
     }
-    if ((motion?.kind === 'jumping' || motion?.kind === 'falling') &&
+    // A held dash pose outlasts the dash itself (DASH_POSE_HOLD_MS); speed-scrubbed
+    // jump/fall art must not cut it short, so it waits for the hold to end.
+    const dashHeld = !!motionState.dashKey && sprite.anims.currentAnim?.key === motionState.dashKey &&
+      nowMs() < motionState.dashUntil &&
+      (wanted === "falling" || (wanted === "jumping" && motionState.dashUpward && !motionState.restartJump));
+    if (!dashHeld && (motion?.kind === 'jumping' || motion?.kind === 'falling') &&
         Number.isFinite(velocity?.y) && typeof sprite.anims.setCurrentFrame === 'function') {
       const animation = scene.anims.get(key);
       const progress = motion.kind === 'jumping'
         ? 1 - Math.min(1, Math.max(0, -velocity.y / motion.speed))
         : Math.min(1, Math.max(0, velocity.y / motion.speed));
+      if (progress >= 1 && motion.loopKey && scene.anims.exists(motion.loopKey)) {
+        sprite.anims.play(motion.loopKey, true);
+        noteAnimationPlayed(sprite, wanted);
+        return motion.loopKey;
+      }
       if (sprite.anims.currentAnim?.key !== key) sprite.anims.play(key, true);
       sprite.anims.pause();
       sprite.anims.setCurrentFrame(animation.frames[Math.round(progress * (animation.frames.length - 1))]);
@@ -447,6 +493,8 @@ export function playCharacterAnimation({
         state.dashUntil = 0;
       }
     }
+    const transitionKey = playMovementTransition({ scene, sprite, character, skinId, resolveAnimKey, wanted, currentKey });
+    if (transitionKey) return transitionKey;
     if (
       (wanted === "throw" || wanted === "special") &&
       currentKey === key &&

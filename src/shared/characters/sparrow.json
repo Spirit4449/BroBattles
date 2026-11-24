@@ -67,7 +67,7 @@
           "visualScale": 0.22,
           "visualThickness": 1.7,
           "castDelayMs": 100,
-          "flipLockMs": 600,
+          "flipLockMs": 320,
           "muzzle": "bow",
           "embedMs": 2000,
           "gravity": 460,
@@ -93,9 +93,19 @@
           "bobWaveMs": 340,
           "hoverDragPerSec": 4.5,
           "damageTakenMult": 0.7,
+          "botAimDelayMs": 350,
+          "botTurnDegPerSec": 85,
+          "botTurnEasePerSec": 2.6,
+          "botLookMs": [
+            260,
+            520
+          ],
+          "botMissDeg": 12,
+          "botSwayDeg": 2,
+          "botSwayWaveMs": 520,
           "botFireDelayMs": [
-            1100,
-            2600
+            1700,
+            3300
           ]
         },
         "lightBolt": {

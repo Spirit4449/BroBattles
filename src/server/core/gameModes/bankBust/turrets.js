@@ -56,6 +56,19 @@ function tickClaimedTurrets(mode, now, players = mode._eligiblePlayers()) {
   }
 }
 
+// Players are hit when their origin comes this close to a turret shot.
+function turretContactRadius(shot) {
+  return Math.max(8, Number(shot?.radius) || TURRET_PROJECTILE_RADIUS) + 26;
+}
+
+// Turret shots fly straight; bots read them as threats owned by a team.
+function turretThreats(mode) {
+  return (mode.getModeState()?.turretProjectiles || []).map((shot) => ({
+    x: Number(shot.x) || 0, y: Number(shot.y) || 0, vx: Number(shot.vx) || 0, vy: Number(shot.vy) || 0,
+    radius: turretContactRadius(shot), team: shot.ownerTeam, ownerId: `${shot.ownerTeam}-turret`,
+  }));
+}
+
 function tickTurretProjectiles(mode, now, players = mode._eligiblePlayers()) {
   const state = mode.getModeState();
   if (
@@ -83,11 +96,7 @@ function tickTurretProjectiles(mode, now, players = mode._eligiblePlayers()) {
       );
     if (expired) continue;
 
-    const hitRadius = Math.max(
-      8,
-      Number(shot?.radius) || TURRET_PROJECTILE_RADIUS,
-    );
-    const contactRadius = hitRadius + 26;
+    const contactRadius = turretContactRadius(shot);
     exposeDamageHitbox(mode.room, shot, { kind: 'circle', x: shot.x, y: shot.y, radius: contactRadius }, now);
     const target = players.find((player) => {
       if (!player.isAlive || player.team === shot.ownerTeam) return false;
@@ -106,4 +115,4 @@ function tickTurretProjectiles(mode, now, players = mode._eligiblePlayers()) {
   state.lastProjectileTickAt = now;
 }
 
-module.exports = { tickClaimedTurrets, tickTurretProjectiles };
+module.exports = { tickClaimedTurrets, tickTurretProjectiles, turretThreats };

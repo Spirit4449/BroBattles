@@ -29,4 +29,19 @@ function ozzyChargeShapes(pose, elapsedMs, config = chargeConfig()) {
   return [{ kind: 'capsule', a: point(config.behind), b: point(config.above), radius: config.radius }];
 }
 
-module.exports = { chargeConfig, ozzyChargeShapes };
+// The throw animation is timed to the cast: its frames up to the release
+// share castDelayMs, and the strike and follow-through end
+// exactly when the turn lock lifts (flipLockMs), so the cast never plays on
+// after he can turn. Returns each frame's duration in ms.
+function ozzyThrowFrameMs(frameCount, strikeFrame = frameCount - 2) {
+  const fireball = getResolvedCharacterAttackConfig('ozzy', 'fireball') || {};
+  const release = Math.max(0, Number(fireball.castDelayMs) || 0);
+  const end = Math.max(release, Number(fireball.flipLockMs) || release);
+  const before = Math.max(1, strikeFrame);
+  return Array.from({ length: frameCount }, (_, i) => (i < before ? release / before : (end - release) / Math.max(1, frameCount - before)));
+}
+
+// The frame on screen when the fireball is released.
+const ozzyThrowReleaseFrame = (frameCount) => Math.max(1, frameCount - 2);
+
+module.exports = { chargeConfig, ozzyChargeShapes, ozzyThrowFrameMs, ozzyThrowReleaseFrame };

@@ -58,12 +58,17 @@ class Ozzy extends CharacterEntityBase {
     ensureFireballTextures(scene);
   }
 
+  static setupSkinAnimations(scene, textureKey) {
+    animations(scene, textureKey);
+    return true;
+  }
+
   static handleRemoteAttack(scene, data, ownerWrapper) {
     if (!data) return false;
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     if (data.type === `${NAME}-fireball`) {
+      playOzzyCastWindup(scene, ownerSprite, data.id ?? null, data.angle);
       chargeOzzyFireball(scene, ownerSprite, data);
-      playOzzyCastWindup(scene, ownerSprite, data.id ?? null);
       return true;
     }
     if (data.type === `${NAME}-fireball-release`) {

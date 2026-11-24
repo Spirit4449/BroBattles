@@ -47,14 +47,15 @@ export function createStatusAuraRenderer({ scene, Phaser, colors, getLatestPlaye
     }
     state.arrivalPendingUntil = 0;
     if (shouldForm) {
-      state.alpha = 0.08;
-      state.scale = 0.62;
-      state.scaleVelocity = 4.8;
-      state.wobble = 0.72;
+      // The membrane seeps out from inside the body after the soak.
+      state.alpha = 0.02;
+      state.scale = 0.34;
+      state.scaleVelocity = 1.4;
+      state.wobble = 0.9;
     } else {
       state.wobble = Math.min(1.2, (state.wobble || 0) + 0.42);
     }
-    state.claimedUntil = scene.time.now + 520;
+    state.claimedUntil = scene.time.now + 600;
     auraBubbleStates.set(username, state);
   }
 
@@ -71,8 +72,8 @@ export function createStatusAuraRenderer({ scene, Phaser, colors, getLatestPlaye
         scale: 0.48,
         scaleVelocity: 0,
         wobble: 0.2,
-        arrivalPendingUntil: scene.time.now + 270,
-        claimedUntil: scene.time.now + 620,
+        arrivalPendingUntil: scene.time.now + 340,
+        claimedUntil: scene.time.now + 700,
       }));
     }
 
@@ -375,7 +376,7 @@ export function createStatusAuraRenderer({ scene, Phaser, colors, getLatestPlaye
 
     // Rasterize one membrane per active powerup so it reads as pixel art.
     // The oldest powerup is the core; each newer one wraps it a step wider.
-    const layerStep = PIXEL_FX_SIZE * 5;
+    const layerStep = PIXEL_FX_SIZE * 3;
     const layers = bubbleStyles.map((bubbleStyle, i) => {
       const scale = 1 + (i * layerStep) / radius;
       const layerPoints = points.map((p) => ({

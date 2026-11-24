@@ -11,6 +11,15 @@ import {
 } from "../shared/animationState.js";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { startInfernoAudio } from "./infernoAudio";
+import { infernoLiftAt } from "../../../../shared/combat/runtime/abilities/dravenInfernoLift.js";
+import {
+  INFERNO_SHIELD_POP_MS,
+  infernoEnterBeats,
+  infernoBurnoutAlpha,
+  infernoPopScale,
+  playInfernoEnter,
+  playInfernoExit,
+} from "./infernoTransitions";
 
 const { key: NAME } = characterDefinitions.draven;
 
@@ -22,8 +31,6 @@ const INFERNO_AIM = getResolvedCharacterSpecialAimConfig(NAME);
 // Tuning lives in src/shared/characters/draven.json (special.inferno / special.aim).
 const DRAVEN_INFERNO_DURATION_MS = INFERNO.durationMs;
 const DRAVEN_INFERNO_RISE_MS = INFERNO.riseMs;
-const DRAVEN_INFERNO_LIFT_PX = INFERNO.liftPx;
-const DRAVEN_INFERNO_BOB_PX = INFERNO.bobPx;
 const DRAVEN_INFERNO_RADIUS = INFERNO_AIM.radius; // same radius the server damages
 const DRAVEN_FIRE_PULSE_MS = INFERNO.firePulseMs;
 const DRAVEN_SPECIAL_FX_TEXTURE_KEY = "draven-special-fx";
@@ -37,11 +44,14 @@ const INFERNO_FX_ART_PX = 192;
 const INFERNO_FX_GROWTH = 1.3;
 
 const FIRE_COLORS = [0xff5a2f, 0xff8a00, 0xb13cff, 0xff2f5d];
+const INFERNO_SHIELD_RADIUS = 46;
 
 function syncInfernoOverlay(player, overlay) {
   if (!player || !overlay || !overlay.active) return;
-  overlay.x = player.x;
-  overlay.y = player.y;
+  // While igniting, the circle grows out of the staff head (playInfernoEnter).
+  const at = overlay._infernoAnchor?.() || player;
+  overlay.x = at.x;
+  overlay.y = at.y;
   overlay.flipX = !!player.flipX;
   overlay.setDepth(RENDER_LAYERS.PLAYER - 1);
 }
@@ -73,17 +83,12 @@ function ensureInfernoOverlay(scene, player) {
   // Normal blending keeps the pixel-art palette (and the team colour) intact on
   // bright maps; additive washed it out to white.
   const scaleBase = player.displayWidth || player.width || 72;
-  overlay.setScale(Math.max(0.45, (scaleBase / 92) * 1.7) * INFERNO_FX_GROWTH * 72 / INFERNO_FX_ART_PX);
+  overlay._infernoScale = Math.max(0.45, (scaleBase / 92) * 1.7) * INFERNO_FX_GROWTH * 72 / INFERNO_FX_ART_PX;
+  overlay.setScale(overlay._infernoScale);
   syncInfernoOverlay(player, overlay);
   try {
     overlay.anims.play(fxKey, true);
   } catch (_) {}
-  scene.tweens.add({
-    targets: overlay,
-    alpha: 1,
-    duration: DRAVEN_INFERNO_RISE_MS,
-    ease: "Sine.easeInOut",
-  });
   player._dravenInfernoOverlay = overlay;
   return overlay;
 }
@@ -140,7 +145,10 @@ function spawnInfernoPulse(scene, cx, cy, owner, particles) {
 }
 
 function startInfernoVisualLoop(scene, player, token, isOwner, particles) {
-  let nextFireAt = scene.time.now;
+  // The first pulse waits for the ignite, which comes from the staff.
+  // The ignite owns the stage until the circle has bloomed at the crown.
+  const { doneMs: igniteDoneMs } = infernoEnterBeats(DRAVEN_INFERNO_RISE_MS);
+  let nextFireAt = scene.time.now + igniteDoneMs;
   let timer;
 
   const tick = () => {
@@ -155,10 +163,8 @@ function startInfernoVisualLoop(scene, player, token, isOwner, particles) {
       0,
       Date.now() - Number(player._dravenInfernoStartedAt || Date.now()),
     );
-    const riseT = Phaser.Math.Clamp(elapsed / DRAVEN_INFERNO_RISE_MS, 0, 1);
-    const liftNow =
-      DRAVEN_INFERNO_LIFT_PX * Phaser.Math.Easing.Cubic.Out(riseT);
-    const bob = Math.sin(elapsed / INFERNO.bobWaveMs) * DRAVEN_INFERNO_BOB_PX;
+    // Same rise as the server: crouch, surge past the hover, settle, bob.
+    const liftNow = infernoLiftAt(elapsed);
 
     const baseX = Number.isFinite(player._dravenInfernoBaseX)
       ? player._dravenInfernoBaseX
@@ -197,19 +203,25 @@ function startInfernoVisualLoop(scene, player, token, isOwner, particles) {
     // Keep the owner fully anchored while channeling.
     if (isOwner) {
       player.x = baseX;
-      player.y = baseY - liftNow + bob;
+      player.y = baseY - liftNow;
       if (player.body) {
         player.body.allowGravity = false;
         player.setVelocity(0, 0);
       }
     }
 
-    syncInfernoOverlay(player, player._dravenInfernoOverlay);
+    const remaining = until - Date.now();
+    const overlay = player._dravenInfernoOverlay;
+    syncInfernoOverlay(player, overlay);
+    // The ignite tween owns the overlay's alpha until the burnout flicker.
+    if (overlay && elapsed > igniteDoneMs) overlay.setAlpha(infernoBurnoutAlpha(remaining));
     const shield = player._dravenInfernoShield;
     if (shield) {
       shield.clear();
-      drawShieldBubble(shield, player, { x: player.x, y: player.y, radius: 46 },
-        now / 1000, until - Date.now(), shieldReflections);
+      // Pops in with an overshoot and stays solid: the exit shatters it.
+      const radius = INFERNO_SHIELD_RADIUS * infernoPopScale(elapsed / INFERNO_SHIELD_POP_MS);
+      drawShieldBubble(shield, player, { x: player.x, y: player.y, radius },
+        now / 1000, Math.max(remaining, 1000), shieldReflections);
     }
 
     timer = scene.time.delayedCall(16, tick);
@@ -232,8 +244,6 @@ export function perform({ scene, player, isOwner = false }) {
   player._dravenInfernoUntil = now + DRAVEN_INFERNO_DURATION_MS;
   player._dravenInfernoBaseX = baseX;
   player._dravenInfernoBaseY = baseY;
-  player._dravenInfernoLift = DRAVEN_INFERNO_LIFT_PX;
-  player._dravenInfernoRiseMs = DRAVEN_INFERNO_RISE_MS;
   player._movementLockedUntil = now + DRAVEN_INFERNO_DURATION_MS;
 
   const unlockFlip = lockPlayerFlip(player);
@@ -256,7 +266,7 @@ export function perform({ scene, player, isOwner = false }) {
   });
 
   destroyInfernoOverlay(player);
-  ensureInfernoOverlay(scene, player);
+  const overlay = ensureInfernoOverlay(scene, player);
   const shield = scene.add.graphics();
   shield.setDepth(RENDER_LAYERS.PLAYER + 1);
   player._dravenInfernoShield = shield;
@@ -267,11 +277,33 @@ export function perform({ scene, player, isOwner = false }) {
   });
 
   const particles = new Set();
-  const interrupt = () => {
+  playInfernoEnter(scene, player, {
+    overlay,
+    particles,
+    radius: DRAVEN_INFERNO_RADIUS,
+    riseMs: DRAVEN_INFERNO_RISE_MS,
+    isOwner,
+  });
+
+  // Hands the overlay to the burnout so it can implode after the channel.
+  const releaseWithExit = () => {
+    const ownOverlay = player._dravenInfernoOverlay;
+    delete player._dravenInfernoOverlay;
+    destroyInfernoOverlay(player);
+    playInfernoExit(scene, player, {
+      overlay: ownOverlay,
+      x: player.x,
+      y: player.y,
+      shieldRadius: INFERNO_SHIELD_RADIUS + 11,
+      radius: DRAVEN_INFERNO_RADIUS,
+    });
+  };
+  // Destroy and shutdown tear down without effects; a stun or hook still bursts.
+  const interrupt = (reason) => {
     if (player._dravenInfernoToken !== token) return;
-    player.off?.("attack:interrupted", interrupt);
-    player.off?.("destroy", interrupt);
-    scene.events?.off("shutdown", interrupt);
+    player.off?.("attack:interrupted", onInterrupted);
+    player.off?.("destroy", onTeardown);
+    scene.events?.off("shutdown", onTeardown);
     endTimer?.remove?.(false);
     stopVisualLoop();
     for (const particle of particles) {
@@ -283,19 +315,22 @@ export function perform({ scene, player, isOwner = false }) {
     player._movementLockedUntil = player._dravenInfernoUntil = 0;
     delete player._dravenInfernoToken;
     unlockFlip();
-    destroyInfernoOverlay(player);
+    if (reason === "interrupted" && player.active && scene.sys?.isActive?.() !== false) releaseWithExit();
+    else destroyInfernoOverlay(player);
     if (player.body) player.body.allowGravity = player._dravenInfernoPrevGravity ?? true;
     delete player._dravenInfernoPrevGravity;
   };
-  player.once?.("attack:interrupted", interrupt);
-  player.once?.("destroy", interrupt);
-  scene.events?.once("shutdown", interrupt);
+  const onInterrupted = () => interrupt("interrupted");
+  const onTeardown = () => interrupt("teardown");
+  player.once?.("attack:interrupted", onInterrupted);
+  player.once?.("destroy", onTeardown);
+  scene.events?.once("shutdown", onTeardown);
   const stopVisualLoop = startInfernoVisualLoop(scene, player, token, isOwner, particles);
 
   const endTimer = scene.time.delayedCall(DRAVEN_INFERNO_DURATION_MS, () => {
-    player.off?.("attack:interrupted", interrupt);
-    player.off?.("destroy", interrupt);
-    scene.events?.off("shutdown", interrupt);
+    player.off?.("attack:interrupted", onInterrupted);
+    player.off?.("destroy", onTeardown);
+    scene.events?.off("shutdown", onTeardown);
     if (!player || !player.active) return;
     if (player._dravenInfernoToken !== token) return;
     stopVisualLoop();
@@ -304,7 +339,8 @@ export function perform({ scene, player, isOwner = false }) {
     player._movementLockedUntil = 0;
     player._dravenInfernoUntil = 0;
     unlockFlip();
-    destroyInfernoOverlay(player);
+    if (player._matchEnded) destroyInfernoOverlay(player);
+    else releaseWithExit();
 
     if (player._matchEnded) {
       delete player._dravenInfernoPrevGravity;

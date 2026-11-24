@@ -1481,6 +1481,10 @@
       #battle-keybind-hud .bs-help-mouse img {
         width: auto;
         height: 26px;
+        image-rendering: pixelated;
+      }
+      #battle-keybind-hud .bs-help-mouse-right {
+        transform: scaleX(-1);
       }
       #battle-keybind-hud .bs-help-action-row.is-pressed .bs-help-mouse {
         border-color: #86efac;

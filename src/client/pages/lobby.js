@@ -8,7 +8,7 @@ import { SOCKET_EVENTS } from "../../shared/net/socketEvents.js";
 import { postJson } from "../lib/http.js";
 import { warmEquippedPlayerCard } from "../views/playerCardAnimation.cjs";
 import { renderReadyWinStreak, wireWinStreakBenefits } from "../views/winStreakView.mjs";
-import { revealLobby, watchLobbyLoading, showLobbyLoadError } from "../lobby/lobbyReveal.js";
+import { revealLobby, watchLobbyLoading, showLobbyLoadError, setLobbyLoadingProgress } from "../lobby/lobbyReveal.js";
 import { setPartyButtonLabel } from "../lobby/party/partyButtonLabel.js";
 import { createLazyInitializer, deferLobbySetup } from "../lobby/deferredSetup.js";
 import { initSiteShell, setNavigationGuard } from "../site/shell.js";
@@ -229,6 +229,7 @@ const statusPromise = (returnStatus ? Promise.resolve(returnStatus) : postJson(A
     throw error;
   }))
   .then(async (data) => {
+    setLobbyLoadingProgress(60, existingPartyId ? 70 : 78);
     if (data?.banned) {
       window.location.href = "/banned";
       return;
@@ -279,6 +280,7 @@ async function bootstrapPartyData(partyId, signal) {
       fallbackMessage: "Failed to fetch party data",
     });
     if (signal?.aborted || String(partyId) !== String(checkIfInParty())) return;
+    setLobbyLoadingProgress(72, 78);
     if (data?.party) {
       const selection = applyLobbySelection(
         data?.selection || {

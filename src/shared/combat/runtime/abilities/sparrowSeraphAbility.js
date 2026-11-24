@@ -1,5 +1,5 @@
 const { SERAPH, facingAngle, validAngle } = require("../../../characters/sparrowLightBolt.js");
-const { seraphPoseAngle } = require("../../../characters/sparrowSeraphAim.js");
+const { seraphAimPose, seraphPoseAngle } = require("../../../characters/sparrowSeraphAim.js");
 const { clampToWorld } = require("../attackRuntimes/geometry.js");
 const { combatRandom } = require("../clock.js");
 
@@ -31,6 +31,7 @@ function activate(player, now, room) {
     const [min, max] = SERAPH.botFireDelayMs;
     e.sparrowSeraphBotFireAt = now + SERAPH.riseMs + min + combatRandom(room) * (max - min);
     e.sparrowSeraphHover = { x: Number(player.x) || 0, y: Number(player.y) || 0, at: now };
+    e.sparrowSeraphBotAim = { angle: facingAngle(player.flip), at: now };
     player.vx = 0; player.vy = 0;
   }
 }
@@ -41,6 +42,7 @@ function end(player) {
   e.sparrowSeraphFired = true;
   delete e.sparrowSeraphHover;
   delete e.sparrowSeraphBotFireAt;
+  delete e.sparrowSeraphBotAim;
 }
 
 function release(room, player, now, { requestId, angle, viewRewindMs = 0, auto = false }) {
@@ -60,18 +62,51 @@ function requestFire(room, player, data, now = Date.now()) {
   return true;
 }
 
-// The nearest living enemy's body centre, for a bot's aim.
-function botAim(room, player) {
+// The angle to the nearest living enemy's body centre, for a bot's aim.
+function botTargetAngle(room, player) {
   let best = null;
   for (const target of room.players.values()) {
     if (target === player || !target.isAlive || (player.team && target.team === player.team)) continue;
     const d = Math.hypot(target.x - player.x, target.y - player.y);
     if (!best || d < best.d) best = { d, target };
   }
-  if (!best) return facingAngle(player.flip);
-  const dx = best.target.x - player.x;
-  player.flip = dx < 0;
-  return Math.atan2(best.target.y - player.y, dx);
+  return best ? Math.atan2(best.target.y - player.y, best.target.x - player.x) : null;
+}
+
+// A bot draws the bow onto its target the way a player drags the aim, not a
+// turret: it re-reads where the target is every SERAPH.botLookMs, carries a
+// fresh aiming error each look, sways a little, and eases toward that point
+// no faster than SERAPH.botTurnDegPerSec. Her pose shows the held angle and
+// the bolt flies along it, so the shot can miss.
+const DEG = Math.PI / 180;
+const wrap = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle));
+const between = (room, [min, max]) => min + combatRandom(room) * (max - min);
+
+function steerBotAim(room, player, e, now) {
+  const aim = e.sparrowSeraphBotAim;
+  const dt = Math.min(0.1, Math.max(0, (now - aim.at) / 1000));
+  aim.at = now;
+  const elapsed = now - e.sparrowSeraphStartedAt;
+  if (elapsed >= SERAPH.botAimDelayMs && now >= (aim.nextLookAt || 0)) {
+    const seen = botTargetAngle(room, player);
+    if (seen !== null) {
+      aim.goal = seen;
+      aim.error = (combatRandom(room) * 2 - 1) * SERAPH.botMissDeg * DEG;
+    }
+    aim.nextLookAt = now + between(room, SERAPH.botLookMs);
+  }
+  if (aim.goal != null) {
+    aim.drift = (aim.drift || 0) + (aim.error - (aim.drift || 0)) * (1 - Math.exp(-4 * dt));
+    const sway = Math.sin(elapsed / SERAPH.botSwayWaveMs) * SERAPH.botSwayDeg * DEG;
+    const diff = wrap(aim.goal + aim.drift + sway - aim.angle);
+    const eased = diff * (1 - Math.exp(-SERAPH.botTurnEasePerSec * dt));
+    const maxStep = SERAPH.botTurnDegPerSec * DEG * dt;
+    aim.angle = validAngle(aim.angle + Math.sign(eased) * Math.min(Math.abs(eased), maxStep));
+  }
+  const { direction, flipX } = seraphAimPose(aim.angle, player.flip);
+  player.flip = flipX;
+  player.animation = direction.logical;
+  return aim.angle;
 }
 
 // A bot hovers where it rose to; knockback velocity carries the hover point
@@ -96,7 +131,6 @@ function flyBotHover(room, player, e, now) {
   player.x = clampToWorld(hover.x, "x", room);
   player.y = clampToWorld(hover.y - lift + bob, "y", room);
   player.grounded = false;
-  player.animation = "seraph-aim-06";
 }
 
 function tick(room, caster, now) {
@@ -107,6 +141,7 @@ function tick(room, caster, now) {
     return;
   }
   if (caster.isBot && e.sparrowSeraphHover) flyBotHover(room, caster, e, now);
+  const botAngle = caster.isBot && e.sparrowSeraphBotAim ? steerBotAim(room, caster, e, now) : null;
   caster.lastCombatAt = now;
   const auto = now >= Number(e.sparrowSeraphUntil) + SERAPH.releaseGraceMs;
   const botReady = caster.isBot && now >= (Number(e.sparrowSeraphBotFireAt) || Infinity) &&
@@ -114,7 +149,7 @@ function tick(room, caster, now) {
   if (!auto && !botReady) return;
   release(room, caster, now, {
     requestId: `seraph:${e.sparrowSeraphSeq}`,
-    angle: auto ? (seraphPoseAngle(caster.animation, caster.flip) ?? facingAngle(caster.flip)) : botAim(room, caster),
+    angle: auto ? (botAngle ?? seraphPoseAngle(caster.animation, caster.flip) ?? facingAngle(caster.flip)) : botAngle ?? facingAngle(caster.flip),
     auto,
   });
 }

@@ -113,17 +113,7 @@ function scheduleWindupRelease(
       ...actionData, type: String(flow.chargeActionType).toLowerCase(), _windup: windup,
     }, actionNow);
   }
-  const emitRelease = () => {
-    if (windup.burst) return;
-    if ((playerData._attackInterruptSeq || 0) !== interruptSeq) return;
-    if (
-      room.status !== "active" ||
-      !playerData?.isAlive ||
-      playerData.connected === false ||
-      playerData.loaded !== true
-    ) {
-      return;
-    }
+  const buildRelease = () => {
     const releaseAction = {
       ...actionData,
       type: String(
@@ -138,6 +128,20 @@ function scheduleWindupRelease(
         y: slimeCast.start.y + playerData.y - castOrigin.y,
       } });
     }
+    return releaseAction;
+  };
+  const emitRelease = () => {
+    if (windup.burst) return;
+    if ((playerData._attackInterruptSeq || 0) !== interruptSeq) return;
+    if (
+      room.status !== "active" ||
+      !playerData?.isAlive ||
+      playerData.connected === false ||
+      playerData.loaded !== true
+    ) {
+      return;
+    }
+    const releaseAction = buildRelease();
     const launchMono = attackRuntimeManager.releaseLaunchMono(room);
     attackRuntimeManager.registerAttackFromAction(
       room,
@@ -150,7 +154,7 @@ function scheduleWindupRelease(
   };
 
   if (startupMs > 0) {
-    room.scheduleAction(emitRelease, startupMs);
+    room.scheduleAction(emitRelease, startupMs, undefined, { player: playerData, action: buildRelease });
   } else {
     emitRelease();
   }

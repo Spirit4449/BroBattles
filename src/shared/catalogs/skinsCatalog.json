@@ -127,6 +127,22 @@
             "spritesheetUrl": "/assets/ozzy/spritesheet.webp",
             "animationsUrl": "/assets/ozzy/animations.json"
           }
+        },
+        {
+          "id": "ozzy-pocket-ace",
+          "name": "Pocket Ace Ozzy",
+          "character": "ozzy",
+          "available": true,
+          "assetUrl": "/assets/ozzy/skins/ozzy-pocket-ace/body.webp",
+          "rarity": "epic",
+          "unlockMethod": {
+            "type": "shop"
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/ozzy/skins/ozzy-pocket-ace/spritesheet.webp",
+            "animationsUrl": "/assets/ozzy/skins/ozzy-pocket-ace/animations.json"
+          }
         }
       ]
     },

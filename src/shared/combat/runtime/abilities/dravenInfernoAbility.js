@@ -5,6 +5,7 @@ const { exposeDamageHitbox } = require('../damageHitboxes.js');
 const { chargeSuperForHit } = require("../superCharge.js");
 const effectManager = require("../effects/effectManager.js");
 const { reduceDuckDamage } = require("../../../physics/ducking");
+const { infernoLiftAt } = require("./dravenInfernoLift.js");
 const {
   getResolvedCharacterSpecialConfig,
   getResolvedCharacterSpecialAimConfig,
@@ -56,15 +57,8 @@ function tick(room, caster, now) {
     ? e.dravenInfernoAnchorY
     : Number(caster.y) || 0;
 
-  const riseT = Math.max(
-    0,
-    Math.min(1, (now - startedAt) / INFERNO.riseMs),
-  );
-  const liftNow = INFERNO.liftPx * (1 - Math.pow(1 - riseT, 3));
-  const bob = Math.sin((now - startedAt) / INFERNO.bobWaveMs) * INFERNO.bobPx;
-
   caster.x = anchorX;
-  caster.y = anchorY - liftNow + bob;
+  caster.y = anchorY - infernoLiftAt(now - startedAt);
   const infernoCenterX = Number(caster.x) || anchorX;
   const infernoCenterY = Number(caster.y) || anchorY;
   caster.animation = "draven-special";

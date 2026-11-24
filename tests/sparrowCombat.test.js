@@ -218,6 +218,31 @@ test('Seraph uses the last reported aim pose when a held shot times out', t => {
   assert.equal(actions('sparrow-bolt').length, 1);
 });
 
+test('a bot Seraph sweeps its drawn bow toward the target and releases near it, not dead on', t => {
+  const misses = [];
+  for (let run = 0; run < 12; run++) {
+    const { room, players: [p, target], actions } = fixture(t);
+    p.isBot = true; p.flip = false;
+    p.superCharge = p.maxSuperCharge;
+    assert.equal(room.requestSpecial(p.participantId, {}), true);
+    const start = p.effects.sparrowSeraphStartedAt;
+    Object.assign(target, { x: p.x + 150, y: p.y - 700 });
+    const poses = [];
+    for (let at = start; !actions('sparrow-bolt').length && at <= start + SERAPH.aimMs; at += 50) {
+      abilities.tickActiveAbilities(room, at);
+      if (!actions('sparrow-bolt').length && poses.at(-1) !== p.animation) poses.push(p.animation);
+    }
+    const [shot] = actions('sparrow-bolt');
+    assert.equal(shot.auto, false);
+    assert.ok(poses.length >= 4, `the pose turns through the directions between: ${poses}`);
+    const want = Math.atan2(target.y - p.y, target.x - p.x);
+    misses.push(Math.abs(Math.atan2(Math.sin(shot.bolt.angle - want), Math.cos(shot.bolt.angle - want))));
+  }
+  const limit = (SERAPH.botMissDeg + SERAPH.botSwayDeg) * Math.PI / 180 + 0.03;
+  assert.ok(misses.every(miss => miss < limit), `every release is near the target: ${misses}`);
+  assert.ok(misses.some(miss => miss > 0.01), 'and not pinned exactly on it');
+});
+
 test('death during Seraph ends the aim phase without a bolt', t => {
   const { room, players: [p], actions } = fixture(t);
   p.superCharge = p.maxSuperCharge;

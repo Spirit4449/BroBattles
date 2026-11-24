@@ -1,142 +1,120 @@
 import { characterDefinitions } from "../../../../shared/characters/index.js";
-import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
-// Draven-specific per-player effects (fire trail)
 import { getResolvedCharacterEffectConfig } from "../../../../shared/characters/characterTuning.js";
+import { RENDER_LAYERS } from "../../scene/renderLayers";
+import { paintStaffSmoke, snapSmoke, staffSmokePalette, staffTip } from "./staffSmoke";
 
 const { key: NAME } = characterDefinitions.draven;
 
-const FIRE_TRAIL = getResolvedCharacterEffectConfig(NAME, "fireTrail");
+// Tuning lives in draven.json `presentation.effects.staffSmoke`.
+const SMOKE = getResolvedCharacterEffectConfig(NAME, "staffSmoke");
 
+const between = (min, max) => min + Math.random() * (max - min);
+
+// Draven's per-player effect: while he moves (runs, jumps, falls, dashes), his staff head leaves a trail of
+// pixel smoke. Puffs stay where they were let go (in world space), so the
+// trail hangs behind him, rises, swells and thins out. The player classes call
+// update() each frame they are visible; the smoke keeps fading on its own when
+// they stop calling it.
 export default class DravenEffects {
   constructor(scene, sprite) {
     this.scene = scene;
     this.sprite = sprite;
-    this._timer = 0;
-    this._interval = FIRE_TRAIL.intervalMs ?? 45;
-    this._pool = [];
-    this._poolMax = FIRE_TRAIL.poolMax ?? 60;
+    this.puffs = [];
+    this._sinceEmit = 0;
+    this._lastTip = null;
+    this._wantsAt = -Infinity;
+    this._lastAt = scene?.time?.now ?? 0;
+    this.layer = scene?.add?.graphics?.() || null;
+    // Behind him, like the flame on the staff in his own art.
+    this.layer?.setDepth?.(RENDER_LAYERS.PLAYER - 1);
+    // A small detail: see-through so it never competes with the fight.
+    this.layer?.setAlpha?.(SMOKE.alpha);
+    this._onUpdate = (time) => this._step(time);
+    this._onShutdown = () => this.destroy();
+    scene?.events?.on?.("update", this._onUpdate);
+    scene?.events?.once?.("shutdown", this._onShutdown);
   }
 
-  // Internal: get a pooled graphics object
-  _acquire() {
-    let g = this._pool.find((o) => !o.active);
-    if (!g) {
-      g = this.scene.add.graphics();
-      this._pool.push(g);
+  // Per frame from the player classes (deltaMs, isMoving, dead). Movement is
+  // measured from the sprite itself: remote sprites are interpolated, so their
+  // body velocity (what isMoving reads) stays near zero.
+  update(deltaMs, _isMoving, dead) {
+    const sprite = this.sprite;
+    const last = this._lastPos;
+    this._lastPos = sprite ? { x: sprite.x, y: sprite.y } : null;
+    const seconds = Math.max(1, deltaMs || 0) / 1000;
+    const speed = last && sprite ? Math.hypot(sprite.x - last.x, sprite.y - last.y) / seconds : 0;
+    if (!sprite || dead || !sprite.visible || sprite._dravenInfernoToken || speed < SMOKE.minSpeedPx) {
+      this._lastTip = null;
+      return;
     }
-    g.active = true;
-    g.clear();
-    g.setDepth(0); // behind player
-    return g;
-  }
-
-  _release(g) {
-    g.active = false;
-    g.alpha = 1;
-    g.scale = 1;
-    g.clear();
-    if (this._pool.length > this._poolMax) {
-      const old = this._pool.find((o) => !o.active);
-      if (old) {
-        old.destroy();
-        const idx = this._pool.indexOf(old);
-        if (idx >= 0) this._pool.splice(idx, 1);
+    this._wantsAt = this.scene?.time?.now ?? 0;
+    const tip = staffTip(sprite);
+    const from = this._lastTip || tip;
+    this._sinceEmit += Math.max(0, deltaMs || 0);
+    // Fill in between frames so a fast staff leaves an unbroken trail.
+    const steps = Math.floor(this._sinceEmit / SMOKE.intervalMs);
+    if (steps > 0) {
+      this._sinceEmit -= steps * SMOKE.intervalMs;
+      for (let i = 1; i <= steps; i++) {
+        const k = i / steps;
+        const jitter = SMOKE.radiusMinPx * 0.6;
+        this._emit({ x: from.x + (tip.x - from.x) * k + between(-jitter, jitter),
+          y: from.y + (tip.y - from.y) * k + between(-jitter, jitter) });
       }
     }
+    this._lastTip = tip;
   }
 
-  _spawnFlame(x, y) {
-    const g = this._acquire();
-    const baseSize = Phaser.Math.Between(
-      FIRE_TRAIL.baseSizeMin ?? 5,
-      FIRE_TRAIL.baseSizeMax ?? 9,
-    );
-    // Glow layers
-    g.fillStyle(
-      teamColor(this.sprite) === TEAM_RED ? 0x752442 : (FIRE_TRAIL.outerColor ?? 0x312841),
-      FIRE_TRAIL.outerAlpha ?? 0.35,
-    );
-    g.fillCircle(0, 0, baseSize);
-    g.fillStyle(teamColor(this.sprite) === TEAM_RED ? 0xff6653 : (FIRE_TRAIL.midColor ?? 0xba5d22), FIRE_TRAIL.midAlpha ?? 0.55);
-    g.fillCircle(0, 0, baseSize * 0.65);
-    g.fillStyle(
-      teamColor(this.sprite) === TEAM_RED ? 0xffbc86 : Phaser.Display.Color.GetColor(
-        49,
-        Phaser.Math.Between(
-          FIRE_TRAIL.innerColorMin ?? 30,
-          FIRE_TRAIL.innerColorMax ?? 60,
-        ),
-        60,
-      ),
-      FIRE_TRAIL.innerAlpha ?? 0.9,
-    );
-    g.fillCircle(0, 0, baseSize * 0.35);
-    g.x =
-      x +
-      Phaser.Math.Between(
-        FIRE_TRAIL.jitterMin ?? -3,
-        FIRE_TRAIL.jitterMax ?? 3,
-      );
-    g.y =
-      y +
-      Phaser.Math.Between(
-        FIRE_TRAIL.jitterMin ?? -3,
-        FIRE_TRAIL.jitterMax ?? 3,
-      );
-    const driftX = Phaser.Math.Between(
-      FIRE_TRAIL.driftXMin ?? -12,
-      FIRE_TRAIL.driftXMax ?? 12,
-    );
-    const driftY = Phaser.Math.Between(
-      FIRE_TRAIL.driftYMin ?? -18,
-      FIRE_TRAIL.driftYMax ?? -4,
-    );
-    const scaleTarget = Phaser.Math.FloatBetween(
-      FIRE_TRAIL.scaleTargetMin ?? 0.15,
-      FIRE_TRAIL.scaleTargetMax ?? 0.35,
-    );
-    const duration = Phaser.Math.Between(
-      FIRE_TRAIL.durationMinMs ?? 260,
-      FIRE_TRAIL.durationMaxMs ?? 420,
-    );
-    g.scale = 1;
-    this.scene.tweens.add({
-      targets: g,
-      x: g.x + driftX,
-      y: g.y + driftY,
-      scale: scaleTarget,
-      alpha: 0,
-      duration,
-      ease: "Cubic.easeOut",
-      onComplete: () => this._release(g),
+  _emit(at) {
+    if (this.puffs.length >= SMOKE.maxPuffs) this.puffs.shift();
+    this.puffs.push({
+      x: at.x, y: at.y, age: 0, life: between(SMOKE.lifeMinMs, SMOKE.lifeMaxMs),
+      vx: between(-SMOKE.spreadPx, SMOKE.spreadPx), vy: -between(SMOKE.riseMinPx, SMOKE.riseMaxPx),
+      r0: between(SMOKE.radiusMinPx, SMOKE.radiusMaxPx), r: 0, h: 1, warm: SMOKE.warmth,
+      wobble: between(0, Math.PI * 2),
     });
   }
 
-  // Update per-frame. isMoving: boolean, dead: boolean
-  update(deltaMs, isMoving, dead) {
-    if (!this.sprite || dead) return;
-    if (!isMoving) return;
-    this._timer += deltaMs;
-    if (this._timer >= this._interval) {
-      this._timer = 0;
-      const offsetX = FIRE_TRAIL.spawnOffsetX ?? 14;
-      const baseX = this.sprite.x - (this.sprite.flipX ? -offsetX : offsetX);
-      const baseY = this.sprite.y + (FIRE_TRAIL.spawnOffsetY ?? 8);
-      const count = Phaser.Math.Between(
-        FIRE_TRAIL.spawnCountMin ?? 1,
-        FIRE_TRAIL.spawnCountMax ?? 2,
-      );
-      for (let i = 0; i < count; i++) this._spawnFlame(baseX, baseY);
+  _step(now) {
+    const layer = this.layer;
+    if (!layer?.active || !this.sprite) return;
+    const dt = Math.min(50, Math.max(0, now - this._lastAt)) / 1000;
+    this._lastAt = now;
+    // The player stopped calling update() (hidden or invisible): stop emitting.
+    if (now - this._wantsAt > 100) this._lastTip = null;
+    const puffs = this.puffs;
+    for (let i = puffs.length - 1; i >= 0; i--) {
+      const p = puffs[i];
+      p.age += dt * 1000;
+      const life = p.age / p.life;
+      if (life >= 1) { puffs.splice(i, 1); continue; }
+      const drag = Math.exp(-dt * 3);
+      // Curls side to side as it rises.
+      p.vx = p.vx * drag + Math.sin(p.wobble + p.age / 90) * SMOKE.spreadPx * 4 * dt;
+      p.vy = p.vy * drag - 20 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      // Swells out of the staff, then thins away.
+      p.r = p.r0 * (0.6 + life * 1.2);
+      p.h = 1 - life ** 1.5;
+      p.warm = Math.max(0, p.warm - dt * 3);
     }
+    // An invisible Draven (powerup) shows no trail.
+    layer.setVisible(!!this.sprite.visible);
+    if (!puffs.length && !this._painted) return;
+    // Snap centres to the smoke grid so puffs step instead of sliding.
+    paintStaffSmoke(layer, puffs.map((p) => ({ ...p, x: snapSmoke(p.x), y: snapSmoke(p.y) })),
+      staffSmokePalette(this.sprite));
+    this._painted = puffs.length > 0;
   }
 
-  // Pooled flames live in the scene's display list until destroyed here.
   destroy() {
-    for (const g of this._pool) {
-      this.scene?.tweens?.killTweensOf(g);
-      g.destroy();
-    }
-    this._pool.length = 0;
+    this.scene?.events?.off?.("update", this._onUpdate);
+    this.scene?.events?.off?.("shutdown", this._onShutdown);
+    this.layer?.destroy?.();
+    this.layer = null;
+    this.puffs.length = 0;
     this.sprite = null;
   }
 }

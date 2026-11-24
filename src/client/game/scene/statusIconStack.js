@@ -1,11 +1,22 @@
 import { RENDER_LAYERS } from "./renderLayers";
+import { addPixelCircle, fillPixelBlob, rasterizePixelBlob } from "./fx/pixelShapes";
 import { POWERUP_TYPES, POWERUP_COLORS, POWERUP_LIGHT_COLORS } from "../powerups/powerupConfig";
 import { EFFECT_RULES } from "../../../shared/effectRules";
 
 // One badge per powerup type, in catalog order (powerups.catalog.json).
 const DISPLAY_EFFECTS = POWERUP_TYPES;
-const BADGE_COLORS = POWERUP_COLORS; // ring + icon tint
+const BADGE_COLORS = POWERUP_COLORS; // countdown ring
 const BADGE_LIGHT_COLORS = POWERUP_LIGHT_COLORS; // badge fill
+const FULL_TURN = Math.PI * 2;
+const BADGE_PIXEL_SIZE = 1;
+const TIMER_RING_THICKNESS = 2;
+const TIMER_RING = rasterizePixelBlob(
+  Array.from({ length: 32 }, (_, index) => {
+    const angle = index / 32 * FULL_TURN;
+    return { x: 12.5 * Math.cos(angle), y: 12.5 * Math.sin(angle) };
+  }),
+  { cell: BADGE_PIXEL_SIZE, grow: 0, ringCount: TIMER_RING_THICKNESS },
+);
 // Full duration of each effect, used to draw the countdown ring. Thorg's rage
 // shares the rage badge but has its own duration (thorg.json).
 const EFFECT_DURATIONS_MS = Object.fromEntries(
@@ -18,12 +29,6 @@ function textureFor(scene, type) {
   if (scene?.textures?.exists?.(webp)) return webp;
   if (scene?.textures?.exists?.(png)) return png;
   return null;
-}
-
-function useSmoothFiltering(scene, texture) {
-  try {
-    scene.textures.get(texture).setFilter(Phaser.Textures.FilterMode.LINEAR);
-  } catch (_) {}
 }
 
 function containImage(image, maxWidth, maxHeight) {
@@ -43,9 +48,10 @@ function activeIconTypes(effects = {}, recentEffects = {}) {
 }
 
 function createBadge(scene) {
-  const shadow = scene.add.circle(1, 1.5, 11, 0x000000, 0.55);
-  const background = scene.add.circle(0, 0, 10.5, 0xffd7b5, 0.97);
-  const glow = scene.add.circle(0, 0, 8.5, 0xffffff, 0.2);
+  const pixelOptions = { cell: BADGE_PIXEL_SIZE };
+  const shadow = addPixelCircle(scene, 1, 1.5, 11, 0x000000, 0.55, pixelOptions);
+  const background = addPixelCircle(scene, 0, 0, 10.5, 0xffd7b5, 0.97, pixelOptions);
+  const glow = addPixelCircle(scene, 0, 0, 8.5, 0xffffff, 0.2, pixelOptions);
   const icon = scene.add.image(0, 0, "pu-icon-shield-webp");
   const timer = scene.add.graphics();
   const container = scene.add.container(0, 0, [shadow, background, glow, icon, timer])
@@ -83,14 +89,14 @@ function drawTimerRing(badge, type, effects = {}, recentEffects = {}) {
 
   badge.timer.clear();
   if (progress <= 0) return;
-  badge.timer.lineStyle(2.2, BADGE_COLORS[type] || 0xffffff, 1);
-  badge.timer.beginPath();
-  badge.timer.arc(0, 0, 11.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress, false);
-  badge.timer.strokePath();
+  fillPixelBlob(badge.timer, TIMER_RING, BADGE_COLORS[type] || 0xffffff, 1, (depth, x, y) => {
+    if (depth > TIMER_RING_THICKNESS) return false;
+    const angleFromTop = (Math.atan2(x, -y) + FULL_TURN) % FULL_TURN;
+    return angleFromTop <= FULL_TURN * progress;
+  });
 }
 
 function showBadge(scene, badge, type, texture) {
-  const color = BADGE_COLORS[type] || 0xffffff;
   const changed = badge.type !== type;
   // Active badges are synchronized every frame. Do not cancel their in-flight
   // entrance animation or reset their opacity/scale on those refreshes.
@@ -101,12 +107,10 @@ function showBadge(scene, badge, type, texture) {
   badge.transitionTween?.remove?.();
   badge.transitionTween = null;
   if (changed) {
-    useSmoothFiltering(scene, texture);
+    scene.textures.get(texture).setFilter(Phaser.Textures.FilterMode.LINEAR);
     badge.icon.setTexture(texture);
     containImage(badge.icon, 16, 16);
-    badge.background
-      .setFillStyle(BADGE_LIGHT_COLORS[type] || 0xf8fafc, 0.97);
-    badge.glow.setFillStyle(0xffffff, 0.3);
+    badge.background.setTint(BADGE_LIGHT_COLORS[type] || 0xf8fafc);
     badge.type = type;
   }
   badge.container.setVisible(true);

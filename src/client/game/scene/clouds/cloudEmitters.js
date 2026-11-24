@@ -9,7 +9,7 @@ import { clamp } from "../../../../shared/math.js";
 //   surface - every contact (floor, wall, skid) as two streaks racing along
 //             the surface plus a small puff off it, scaled by impact strength
 //             and skewed by incoming momentum
-//   scrape  - a single blob laid against a wall during a slide
+//   scrape  - an uneven cluster laid against a wall during a slide
 //   wake    - a single blob left behind a launching body
 //
 // Sizes are world pixels. Randomness comes from the sim so tests can seed it.
@@ -215,34 +215,30 @@ export function emitSurfaceBurst(sim, opts = {}) {
   }
 }
 
-/**
- * One blob scuffed off a wall by a sliding fighter. It sits on the wall face
- * itself (spilling just past the edge) and lingers there, so the slide leaves
- * a scuffed streak down the wall rather than a cloud around the fighter.
- */
+/** Uneven clumps of dust cling to the wall and slide along its face. */
 export function emitWallScrape(sim, opts = {}) {
   const { between } = sim;
   const speedRatio = clamp(Number(opts.speedRatio) || 0, 0, 1);
   const away = Number(opts.awayX) < 0 ? -1 : 1;
-  const radius = (3.5 + speedRatio * 3) * between(0.8, 1.2);
-  sim.add({
-    layer: opts.layer || "back",
-    x: (Number(opts.x) || 0) - away * radius * between(0.2, 0.85),
-    y: (Number(opts.y) || 0) + between(-3, 3),
-    // Dust is dragged a little way down with the hand, then left behind.
-    vx: -away * between(0, 8),
-    vy: (Number(opts.slideVelocity) || 0) * between(0.08, 0.2),
-    radius: radius * 0.7,
-    targetRadius: radius * between(1.2, 1.45),
-    growRate: 7,
-    rise: 8,
-    wobble: 5,
-    drag: 3.2,
-    splitAt: between(170, 270),
-    erodeAt: between(230, 340),
-    erodeRate: 12,
-    opacity: 0.74 + speedRatio * 0.12,
-  });
+  const size = (4 + speedRatio * 3) * between(0.6, 1.45);
+  const lobes = Math.floor(between(1, 4));
+  const alongWall = between(0, 1) < 0.65 ? -1 : 1;
+  let y = Number(opts.y) || 0;
+  for (let i = 0; i < lobes; i++) {
+    const radius = i === 0 ? size : size * between(0.38, 0.82);
+    sim.add({
+      x: (Number(opts.x) || 0) - away * radius * between(0.32, 0.68),
+      y,
+      vy: (Number(opts.slideVelocity) || 0) * between(0.04, 0.16) - between(3, 15),
+      radius: radius * 0.8,
+      targetRadius: radius,
+      wobble: 0,
+      rise: between(6, 18),
+      erodeAt: between(160, 360),
+      opacity: between(0.64, 0.88),
+    });
+    y += alongWall * radius * between(0.6, 1.05);
+  }
 }
 
 /** One blob left in the wake of a launching body; `progress` 0..1 thins it. */

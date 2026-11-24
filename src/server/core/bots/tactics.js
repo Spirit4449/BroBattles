@@ -166,11 +166,12 @@ function retreatExposure(player, point, route, enemies) {
   return exposure * (4 + (1 - healthFraction(player)) * 4);
 }
 
-// Standing in a sustained stream of shots costs far more than crossing it, and
-// a hurt bot values the same exposure more. Remembered lanes come from what the
-// bot has seen of the room (see updateFireLanes).
-const FIRE_LANE_STAND_COST = 95;
+// Exposure is priced in shot-seconds. A destination is somewhere the bot will
+// hold for a while, so standing in a sustained stream costs far more than
+// crossing it, and a hurt bot values the same exposure more. Remembered lanes
+// come from what the bot has seen of the room (see updateFireLanes).
 const FIRE_LANE_TRAVEL_COST = 420;
+const FIRE_LANE_HOLD_S = 2;
 function fireLaneCost(brain, point, route, now) {
   const lanes = brain.fireLanes, p = brain.player;
   if (!lanes?.size) return 0;
@@ -182,7 +183,7 @@ function fireLaneCost(brain, point, route, now) {
   }
   travel += walkExposure(lanes, p.char_class, fromX, point, now);
   const stand = fireLaneExposure(lanes, p.char_class, point, now);
-  return (stand * FIRE_LANE_STAND_COST + travel * FIRE_LANE_TRAVEL_COST) * (2 - healthFraction(p));
+  return (stand * FIRE_LANE_HOLD_S + travel) * FIRE_LANE_TRAVEL_COST * (2 - healthFraction(p));
 }
 
 function* chooseDecisionSteps(brain, context, target, enemies, now) {

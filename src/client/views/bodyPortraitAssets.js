@@ -7,6 +7,7 @@ import body1 from "../../../public/assets/ninja/skins/ninja-arena-sovereign/port
 import body2 from "../../../public/assets/thorg/portrait.webp?portrait";
 import body5 from "../../../public/assets/draven/portrait.webp?portrait";
 import body6 from "../../../public/assets/ozzy/portrait.webp?portrait";
+import pocketAce from "../../../public/assets/ozzy/skins/ozzy-pocket-ace/portrait.webp?portrait";
 import body7 from "../../../public/assets/sparrow/portrait.webp?portrait";
 import body8 from "../../../public/assets/gloop/portrait.webp?portrait";
 import body9 from "../../../public/assets/gloop/skins/gloop-amethyst/portrait.webp?portrait";
@@ -17,6 +18,7 @@ const bodies = {
   "/assets/thorg/body.webp": body2,
   "/assets/draven/body.webp": body5,
   "/assets/ozzy/body.webp": body6,
+  "/assets/ozzy/skins/ozzy-pocket-ace/body.webp": pocketAce,
   "/assets/sparrow/body.webp": body7,
   "/assets/gloop/body.webp": body8,
   "/assets/gloop/skins/gloop-amethyst/body.webp": body9,

@@ -341,6 +341,11 @@ class BankBustGameMode extends BaseGameMode {
     return turrets.tickClaimedTurrets(this, now, players);
   }
 
+  // Threats bots should see that no player owns (see bots/perception.js).
+  getBotThreats() {
+    return turrets.turretThreats(this);
+  }
+
   _tickTurretProjectiles(now, players) {
     return turrets.tickTurretProjectiles(this, now, players);
   }

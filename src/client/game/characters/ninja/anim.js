@@ -7,7 +7,7 @@ import { createSwarmFxAnimations } from './swarmFx';
 const { key: NAME } = characterDefinitions.ninja;
 
 export function animations(scene) {
-  const aliases = { attack: 'throw', wall: 'sliding' };
+  const aliases = { attack: 'throw', wall: 'sliding', 'wall-in': 'sliding-in', 'wall-out': 'sliding-out' };
   for (const row of settings.animations) {
     if (!row.frames.length || row.key === 'unused-original') continue;
     // Directional throws (`attack-up`) become variants of the throw (`ninja-throw-up`).

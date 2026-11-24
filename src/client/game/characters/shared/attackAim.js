@@ -1,4 +1,5 @@
 // CommonJS keeps these mechanics directly loadable by the Node test suite.
+const { characterHitBounds } = require("../../../../shared/combat/shotContact");
 const { lerp: interpolate } = require("../../../../shared/math.js");
 const { slimeLaunch, sampleSlimePath } = require("../../../../shared/characters/gloopProjectile");
 const { aimAtTarget } = require("../../../../shared/characters/sparrowProjectile");
@@ -83,10 +84,9 @@ function getDefaultFacingAngle(player) {
   return player?.flipX ? Math.PI : 0;
 }
 
-// Select a side only: opponent height and distance never steer the trajectory.
-function getNearestOpponentDirection(player, opponents = {}) {
-  let direction = player?.flipX ? -1 : 1;
+function nearestOpponentAimPoint(player, opponents) {
   let nearest = Infinity;
+  let chosen = null;
   for (const entry of Object.values(opponents || {})) {
     const target = entry?.opponent;
     if (!target || target === player || target.active === false || target.visible === false ||
@@ -96,9 +96,14 @@ function getNearestOpponentDirection(player, opponents = {}) {
     const distance = dx * dx + dy * dy;
     if (!Number.isFinite(distance) || distance >= nearest) continue;
     nearest = distance;
-    direction = dx < 0 ? -1 : dx > 0 ? 1 : (player?.flipX ? -1 : 1);
+    chosen = entry;
   }
-  return direction;
+  if (!chosen) return null;
+  const sprite = chosen.opponent;
+  const bounds = characterHitBounds(chosen.character, sprite.x, sprite.y, {
+    flip: !!sprite.flipX, ducking: !!sprite._ducking,
+  });
+  return { x: (bounds.left + bounds.right) / 2, y: (bounds.top + bounds.bottom) / 2 };
 }
 
 function isSpecialFamily(family) {
@@ -311,15 +316,14 @@ function resolveAimAngle(
   targetY,
   baseX,
   baseY,
-  quick,
-  quickUsesPointerAngle = false,
+  useDefaultTrajectory,
 ) {
   let angle = defaultAngle;
   const mode = String(config?.angleMode || "free").toLowerCase();
   if (
     !Number.isFinite(targetX) ||
     !Number.isFinite(targetY) ||
-    (quick && !quickUsesPointerAngle)
+    useDefaultTrajectory
   ) {
     return normalizeAngle(angle, defaultAngle);
   }
@@ -344,33 +348,24 @@ function resolveThrowTarget(
   defaultAngle,
   targetX,
   targetY,
-  quick,
-  quickUsesPointerAngle = false,
+  useDefaultTrajectory,
 ) {
   const { minRange, defaultRange, maxRange } = resolveRangeSettings(
     character,
     config,
     config.family,
   );
-  const hasPointer =
-    Number.isFinite(Number(targetX)) && Number.isFinite(Number(targetY));
-  const facingSign = Math.cos(Number(defaultAngle) || 0) < 0 ? -1 : 1;
-  const fallbackDx =
-    quick && quickUsesPointerAngle && hasPointer
-      ? Math.cos(defaultAngle) * defaultRange
-      : Number.isFinite(Number(config.quickTargetOffsetX))
-        ? Math.abs(Number(config.quickTargetOffsetX)) * facingSign
-        : Math.cos(defaultAngle) * defaultRange;
-  const fallbackDy =
-    quick && quickUsesPointerAngle && hasPointer
-      ? Math.sin(defaultAngle) * defaultRange
-      : Number(config.quickTargetOffsetY) || 0;
+  const facingSign = Math.cos(defaultAngle) < 0 ? -1 : 1;
+  const fallbackDx = Number.isFinite(Number(config.quickTargetOffsetX))
+    ? Math.abs(Number(config.quickTargetOffsetX)) * facingSign
+    : Math.cos(defaultAngle) * defaultRange;
+  const fallbackDy = Number(config.quickTargetOffsetY) || 0;
   let dx =
-    !quick && Number.isFinite(targetX)
+    !useDefaultTrajectory && Number.isFinite(targetX)
       ? Number(targetX) - base.anchorX
       : fallbackDx;
   let dy =
-    !quick && Number.isFinite(targetY)
+    !useDefaultTrajectory && Number.isFinite(targetY)
       ? Number(targetY) - base.anchorY
       : fallbackDy;
 
@@ -436,19 +431,21 @@ function resolveAttackAimContext({
   pointerWorldX = null,
   pointerWorldY = null,
   quick = false,
-  quickUsesPointerAngle = false,
-  quickFacingDirection = null,
+  opponents = null,
 } = {}) {
   const config = getAimConfig(character, family);
-  const defaultAngle = quick && (quickFacingDirection === -1 || quickFacingDirection === 1)
-    ? (quickFacingDirection < 0 ? Math.PI : 0) : getDefaultFacingAngle(player);
+  const targetPoint = quick && player ? nearestOpponentAimPoint(player, opponents) : null;
+  const useDefaultTrajectory = quick && !targetPoint;
+  const defaultAngle = getDefaultFacingAngle(player);
+  const targetX = Number(targetPoint?.x ?? pointerWorldX);
+  const targetY = Number(targetPoint?.y ?? pointerWorldY);
   if (config.trajectory === "slimeLob") {
     const cfg = getAimTuning(character, config, family);
     const x = Number(player?.x) || 0, y = Number(player?.y) || 0;
-    const pointer = pointerWorldX != null && pointerWorldY != null &&
-      Number.isFinite(Number(pointerWorldX)) && Number.isFinite(Number(pointerWorldY));
-    let dx = pointer && (!quick || quickUsesPointerAngle) ? Number(pointerWorldX) - x : Math.cos(defaultAngle) * config.defaultRange;
-    let dy = pointer && (!quick || quickUsesPointerAngle) ? Number(pointerWorldY) - y : 40;
+    const aimed = targetPoint || (!quick && pointerWorldX != null && pointerWorldY != null &&
+      Number.isFinite(targetX) && Number.isFinite(targetY));
+    let dx = aimed ? targetX - x : Math.cos(defaultAngle) * config.defaultRange;
+    let dy = aimed ? targetY - y : 40;
     const distance = Math.hypot(dx, dy) || 1;
     const range = clamp(distance, config.minRange, config.maxRange);
     dx *= range / distance; dy *= range / distance;
@@ -479,8 +476,6 @@ function resolveAttackAimContext({
       endX: throwPreview.endX, endY: throwPreview.endY, throwPreview };
   }
   const initialBase = getPlayerAimBase(player, config, defaultAngle);
-  const targetX = Number(pointerWorldX);
-  const targetY = Number(pointerWorldY);
 
   let angle = resolveAimAngle(
     config,
@@ -489,8 +484,7 @@ function resolveAttackAimContext({
     targetY,
     initialBase.baseX,
     initialBase.baseY,
-    quick,
-    quickUsesPointerAngle,
+    useDefaultTrajectory,
   );
 
   const base = getPlayerAimBase(player, config, angle);
@@ -517,8 +511,7 @@ function resolveAttackAimContext({
       angle,
       targetX,
       targetY,
-      quick,
-      quickUsesPointerAngle,
+      useDefaultTrajectory,
     );
     resolvedTargetX = throwTarget.targetX;
     resolvedTargetY = throwTarget.targetY;
@@ -585,7 +578,7 @@ function resolveAttackAimContext({
         : defaultRange;
     const allowDragRange = kind === "throw" || config.allowDragRange === true;
     appliedRange =
-      !quick && allowDragRange
+      !useDefaultTrajectory && allowDragRange
         ? clamp(rawDistance, minRange, maxRange)
         : defaultRange;
     resolvedTargetX = base.anchorX + Math.cos(angle) * appliedRange;
@@ -668,5 +661,4 @@ module.exports = {
   buildThrowArcGeometry,
   sampleThrowArcPoint,
   resolveAttackAimContext,
-  getNearestOpponentDirection,
 };

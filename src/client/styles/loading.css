@@ -1,6 +1,6 @@
 /* Shared by initial game loading, route transitions, and lobby recovery. */
       /* ===== Loading UI ===== */
-      #loading-wrap, #bb-route-loading-wrap {
+      #loading-wrap, #bb-route-loading-wrap, #lobby-loading-wrap {
         position: fixed;
         box-sizing: border-box;
         margin: 0;
@@ -16,7 +16,7 @@
         pointer-events: none;
       }
 
-      #loading-text, #bb-route-loading-text {
+      #loading-text, #bb-route-loading-text, #lobby-loading-wrap .lobby-loading-label {
         text-align: center;
         font-family: "Press Start 2P", monospace;
         font-size: clamp(10px, 1.6vw, 14px);
@@ -54,7 +54,7 @@
         transition: width 220ms ease-out;
       }
 
-      #loading-percent, #bb-route-loading-percent {
+      #loading-percent, #bb-route-loading-percent, .lobby-loading-percent {
         position: absolute;
         right: 8px;
         top: 50%;
@@ -97,7 +97,7 @@
   border-radius: var(--bb-radius-card);
   box-shadow: 0 0 0 4px var(--bb-ink), 0 8px 0 var(--bb-ink), inset 0 2px var(--bb-surface-raised);
 }
-#bb-route-message, .lobby-loading-label {
+#bb-route-message {
   color: var(--bb-text-soft);
   font-family: var(--bb-font-display);
   font-size: clamp(10px, 1.6vw, 12px);
@@ -130,35 +130,13 @@
   opacity: 1;
   animation: lobby-loading-art-in 480ms cubic-bezier(.2,.7,.2,1) backwards;
 }
-#lobby-loading .bb-loading-panel {
-  position: relative;
-  animation: lobby-loading-panel-in 370ms cubic-bezier(.18,.8,.25,1) backwards;
-  transition: transform 320ms ease;
-}
-#lobby-loading .bb-loading-panel::before {
-  content: "";
-  position: absolute;
-  inset: -3px 6px auto;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #8dc8fc 35%, #ffd487 65%, transparent);
-  animation: lobby-loading-edge-in 460ms ease-out backwards;
-}
-#lobby-loading[data-leaving] .bb-loading-panel { transform: translateY(-12px) scale(.98); }
 @keyframes lobby-loading-art-in {
   from { opacity: 0; transform: scale(1.04); }
 }
-@keyframes lobby-loading-panel-in {
-  from { opacity: 0; transform: translateY(18px) scale(.96); }
-}
-@keyframes lobby-loading-edge-in {
-  from { opacity: 0; transform: scaleX(.2); }
-}
-.lobby-loading-label { margin: 14px 0 0; }
-.bb-loading-rune[hidden] + .lobby-loading-label { margin-top: 0; }
+#lobby-loading-wrap .bb-loading-retry { display: block; margin: 16px auto 0; pointer-events: auto; }
+#lobby-loading-wrap .bb-loading-retry[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  #lobby-loading :is(.lobby-loading-art[data-decoded], .bb-loading-panel),
-  #lobby-loading .bb-loading-panel::before { animation: none; }
-  #lobby-loading .bb-loading-panel { transition: none; }
+  #lobby-loading .lobby-loading-art[data-decoded] { animation: none; }
   .loading-fill { transition: none; }
   .bb-loading-retry:active { transform: none; }
 }

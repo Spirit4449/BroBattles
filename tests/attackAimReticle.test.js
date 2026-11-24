@@ -66,34 +66,47 @@ describe("Aim guides", () => {
 });
 
 describe("Quick attack direction", () => {
-  const { getNearestOpponentDirection, resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim');
-
-  test('quick direction selects the nearest living visible opponent and falls back to facing', () => {
-    const player = { x: 300, y: 300, flipX: false };
-    const enemy = (x, y, extra = {}) => ({ opponent: { x, y, active: true }, opCurrentHealth: 100, ...extra });
-    assert.equal(getNearestOpponentDirection(player, {
-      left: enemy(200, 300), right: enemy(320, 600),
-      dead: enemy(310, 300, { opCurrentHealth: 0 }),
-      hidden: enemy(305, 300, { _powerupInvisible: true }),
-    }), -1);
-    assert.equal(getNearestOpponentDirection(player, {}), 1);
-    assert.equal(getNearestOpponentDirection({ ...player, flipX: true }, {}), -1);
+  const { resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim');
+  const { characterHitBounds } = require('../src/shared/combat/shotContact');
+  const player = { x: 300, y: 300, width: 150, height: 150 };
+  const enemy = (x, y, extra = {}) => ({
+    character: 'ninja', opponent: { x, y, active: true }, opCurrentHealth: 100, ...extra,
   });
 
-  test('quick attacks match the ordinary default trajectory facing the chosen side; aimed attacks ignore it', () => {
-    for (const character of ['sparrow', 'gloop', 'ozzy', 'ninja']) {
+  test('each quick attack picks the currently closest living visible opponent in two dimensions', () => {
+    const opponents = {
+      above: enemy(300, 160), below: enemy(420, 550),
+      dead: enemy(302, 300, { opCurrentHealth: 0 }),
+      hidden: enemy(304, 300, { _powerupInvisible: true }),
+    };
+    const fire = () => resolveAttackAimContext({ character: 'ozzy', player, quick: true, opponents });
+    assert.ok(fire().unitY < -0.99);
+    opponents.above.opponent.y -= 400;
+    const next = fire();
+    assert.ok(next.unitX > 0 && next.unitY > 0);
+    opponents.below.opponent.x = player.x;
+    assert.ok(fire().unitY > 0.99);
+    opponents.below.opponent.visible = false;
+    opponents.above._deathPresentationActive = true;
+    for (const flipX of [false, true]) {
+      const result = resolveAttackAimContext({ character: 'ozzy', player: { ...player, flipX }, quick: true, opponents });
+      assert.equal(result.direction, flipX ? -1 : 1);
+      assert.ok(Math.abs(result.unitY) < 1e-6);
+    }
+  });
+
+  test('auto-aim uses the same character trajectory and range as aiming at the opponent by hand', () => {
+    const target = enemy(170, 165);
+    const bounds = characterHitBounds(target.character, target.opponent.x, target.opponent.y);
+    const pointer = { pointerWorldX: (bounds.left + bounds.right) / 2, pointerWorldY: (bounds.top + bounds.bottom) / 2 };
+    for (const character of ['sparrow', 'gloop', 'ozzy', 'ninja', 'draven']) {
       for (const family of ['basic', 'special']) {
-        const player = { x: 300, y: 300, width: 150, height: 150, flipX: false };
-        const options = { character, family, player, quick: true };
-        const chosen = resolveAttackAimContext({ ...options, quickFacingDirection: -1 });
-        const facing = resolveAttackAimContext({ ...options, player: { ...player, flipX: true } });
-        for (const key of ['angle', 'range', 'targetX', 'targetY', 'direction']) {
-          assert.equal(chosen[key], facing[key], `${character} ${family} ${key}`);
-        }
-        const manual = { ...options, quick: false, pointerWorldX: 600, pointerWorldY: 240 };
-        assert.deepEqual(resolveAttackAimContext({ ...manual, quickFacingDirection: -1 }),
-          resolveAttackAimContext(manual));
-        assert.equal(player.flipX, false);
+        const options = { character, family, player };
+        const auto = resolveAttackAimContext({ ...options, quick: true, opponents: { target } });
+        const aimed = resolveAttackAimContext({ ...options, ...pointer });
+        assert.deepEqual(auto, { ...aimed, quick: true });
+        const manual = { ...options, pointerWorldX: 600, pointerWorldY: 450 };
+        assert.deepEqual(resolveAttackAimContext({ ...manual, opponents: { target } }), resolveAttackAimContext(manual));
       }
     }
   });

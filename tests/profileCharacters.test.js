@@ -382,6 +382,10 @@ test('Ozzy surge grants real expiring modifiers to living allies, excluding dead
   session.players.get('dead').isAlive = false;
   hero.superCharge = hero.maxSuperCharge;
   assert.ok(session.requestSpecial(hero.name));
+  // The surge goes off when the cast's flames burst, not on the press.
+  assert.equal(events.some(e => e.type === 'ozzy:arcane-surge'), false);
+  assert.equal(combatEffects.getModifiers(hero, session.now).damageMult, 1);
+  advance(require('../src/shared/characters/characterTuning').getResolvedCharacterSpecialConfig('ozzy', 'arcaneSurge').surgeMs);
   const surge = events.find(e => e.type === 'ozzy:arcane-surge').payload;
   assert.deepEqual(surge.recipients.map(p => p.username), ['hero', 'ally']);
   for (const id of ['hero', 'ally']) {

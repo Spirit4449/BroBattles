@@ -86,6 +86,33 @@ test('zero slows survive projectile creation, contact and hook expiry', () => {
   assert.equal(effects.getModifiers(target, pullEnd + 100).speedMult, 1);
 });
 
+test('inferno rise crouches, surges past the hover height, then settles onto it', () => {
+  const { infernoLiftAt, INFERNO_RISE_BEATS } = require('../src/shared/combat/runtime/abilities/dravenInfernoLift.js');
+  const INFERNO = require('../src/shared/characters/characterTuning').getResolvedCharacterSpecialConfig('draven', 'inferno');
+  const at = (u) => infernoLiftAt(INFERNO.riseMs * u);
+  assert.equal(at(0), 0);
+  assert.ok(at(INFERNO_RISE_BEATS.gather) < 0, 'sinks into a crouch before launching');
+  assert.ok(at(INFERNO_RISE_BEATS.apex) > INFERNO.liftPx, 'surges past the hover height');
+  assert.ok(Math.abs(at(1) - INFERNO.liftPx) < 1e-6, 'settles exactly on the hover height');
+  // Afterwards only the bob moves him.
+  for (let ms = INFERNO.riseMs + 300; ms < INFERNO.riseMs + 2000; ms += 37) {
+    assert.ok(Math.abs(infernoLiftAt(ms) - INFERNO.liftPx) <= INFERNO.bobPx + 1e-6);
+  }
+});
+
+test('server places a channelling Draven on the shared rise curve', () => {
+  const inferno = require('../src/shared/combat/runtime/abilities/dravenInfernoAbility.js');
+  const { infernoLiftAt } = require('../src/shared/combat/runtime/abilities/dravenInfernoLift.js');
+  const draven = { participantId: 'b', name: 'Draven', char_class: 'draven', x: 400, y: 500, isAlive: true, loaded: true };
+  const room = { ...roomTransport, players: new Map([['b', draven]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
+  inferno.activate(draven, 10000);
+  for (const ms of [50, 300, 600, 1200]) {
+    inferno.tick(room, draven, 10000 + ms);
+    assert.equal(draven.y, 500 - infernoLiftAt(ms));
+    assert.equal(draven.x, 400);
+  }
+});
+
 test('hooking a Draven mid-inferno cancels the channel and pulls him toward Gloop', () => {
   const inferno = require('../src/shared/combat/runtime/abilities/dravenInfernoAbility.js');
   const { buildHookProjectileAttack, applyGloopPull, tickRuntimeControlEffects } = require('../src/shared/combat/runtime/attackRuntimes/hook.js');

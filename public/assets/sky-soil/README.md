@@ -158,10 +158,11 @@ references: `small-platform-sharp.webp`, Candy Land's full preview, then
 
 Layers, back to front:
 
-- `sky-v4.webp`: smooth gradient sky, soft sun glow and three large, lush,
+- `sky-centered.webp`: smooth gradient sky, soft sun glow and three large, lush,
   blurred islands from `lush.png` (a forest island and a terraced one), lightly
   hazed so their greenery shows and padded before blurring so their soft edges
-  are not clipped, plus soft cloud banks. No pixel grid, linear filtering.
+  are not clipped, plus soft cloud banks. The smallest forest island is centered
+  behind the arena. No pixel grid, linear filtering.
 - `far-isles-v4.webp`: the distant silhouettes at double size, hazed, over a
   far cloud sea.
 - `cloud-sea.webp` + `cloud-sea-anim.webp`: the back two banks of the cloud sea
@@ -175,6 +176,8 @@ Layers, back to front:
   right, bobs and swells on its own phases, and each bank sways. No dithering.
 - Sky clouds come only from the scenery clouds feature (library clouds),
   slow, and placed after `cloud-front` so no cloud bank covers them.
+- `background-joined.webp` is the lobby still, with the central broken cloud
+  lobe joined to its neighbor.
 
 `--install` updates the shipped document and saves the effective map through
 the map repository's revision-aware save (`map-install.cjs`).

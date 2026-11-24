@@ -1,5 +1,6 @@
 import { POWERUP_CATALOG } from "../../../shared/powerups";
 import { drawSlowAura } from "../characters/gloop/slowStatus";
+import { fillPixelBlob, rasterizePixelBlob } from "../scene/fx/pixelShapes";
 
 const collectibleStyles = Object.entries(POWERUP_CATALOG).map(([type, item]) => ({
   type, color: item.color, ...item.visual,
@@ -50,7 +51,7 @@ export function drawBootsAura({ graphics: g, frame, colors, x, r, pulse }) {
   g.strokeEllipse(x, bootY, Math.max(28, r + 4), 10);
 }
 
-export function drawFreezeAura({ graphics: g, frame, colors, x, y, r, pulse, nowSec, Phaser }) {
+export function drawFreezeAura({ graphics: g, frame, colors, x, y, r, pulse, nowSec }) {
   const freezeColor = colors.freeze || 0x67e8f9;
   const blobPoints = [];
   for (let i = 0; i < 26; i += 1) {
@@ -59,19 +60,15 @@ export function drawFreezeAura({ graphics: g, frame, colors, x, y, r, pulse, now
       Math.sin(angle * 3 + nowSec * 2.6) * 4.2 +
       Math.sin(angle * 7 - nowSec * 1.8) * 2.1;
     const blobRadius = r + 7 + ripple + pulse * 2;
-    blobPoints.push(
-      new Phaser.Geom.Point(
-        x + Math.cos(angle) * blobRadius,
-        y + Math.sin(angle) * blobRadius * 0.92,
-      ),
-    );
+    blobPoints.push({
+      x: x + Math.cos(angle) * blobRadius,
+      y: y + Math.sin(angle) * blobRadius * 0.92,
+    });
   }
-  g.fillStyle(0x38bdf8, 0.17 + 0.05 * pulse);
-  g.fillPoints(blobPoints, true);
-  g.lineStyle(5, freezeColor, 0.3 + 0.12 * pulse);
-  g.strokePoints(blobPoints, true);
-  g.lineStyle(2, 0xdffaff, 0.75 * pulse);
-  g.strokePoints(blobPoints, true);
+  const shell = rasterizePixelBlob(blobPoints, { ringCount: 2 });
+  fillPixelBlob(g, shell, 0x38bdf8, 0.17 + 0.05 * pulse);
+  fillPixelBlob(g, shell, freezeColor, 0.3 + 0.12 * pulse, (depth) => depth <= 2);
+  fillPixelBlob(g, shell, 0xdffaff, 0.75 * pulse, (depth) => depth === 1);
 
   // Faceted crystals protrude from the frozen blob.
   for (let i = 0; i < 7; i += 1) {
@@ -84,15 +81,12 @@ export function drawFreezeAura({ graphics: g, frame, colors, x, y, r, pulse, now
     const tipY = y + Math.sin(angle) * outer * 0.92;
     const sideX = Math.cos(angle + Math.PI / 2) * 4;
     const sideY = Math.sin(angle + Math.PI / 2) * 4;
-    g.fillStyle(i % 2 === 0 ? 0xe0faff : freezeColor, 0.82);
-    g.fillTriangle(
-      baseX + sideX,
-      baseY + sideY,
-      baseX - sideX,
-      baseY - sideY,
-      tipX,
-      tipY,
-    );
+    const crystal = rasterizePixelBlob([
+      { x: baseX + sideX, y: baseY + sideY },
+      { x: baseX - sideX, y: baseY - sideY },
+      { x: tipX, y: tipY },
+    ], { ringCount: 0, grow: 0 });
+    fillPixelBlob(g, crystal, i % 2 === 0 ? 0xe0faff : freezeColor, 0.82);
   }
 
   // Three descending arrows make the movement penalty readable at a glance.

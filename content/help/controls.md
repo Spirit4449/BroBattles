@@ -2,7 +2,7 @@
 
 - **Move:** {key:A} {key:D}, or {key:Left} {key:Right}. Jump with {key:W} or {key:Up}; duck or drop with {key:S} or {key:Down}.
 - **Dash:** {key:Space} plus a direction. With no direction held, you dash the way you face.
-- **Attack:** {mouse:left} or {key:J}. For aimable attacks, hold the button and move the mouse.
+- **Attack:** {mouse:left} or {key:J}. A quick attack aims at the nearest visible opponent, even above or below you. Hold the mouse button and drag to aim manually.
 - **Special:** {mouse:right} or {key:I} when your ability is ready.
 - **Release the cursor:** {key:Esc}. Click the arena to capture it again.
 

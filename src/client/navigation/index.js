@@ -144,7 +144,7 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     presentation.getNode().dataset.destination = url.href;
     presentation.getNode().dataset.lobbyReturn = 'false';
   } else if (!inLobby) {
-    showTransition('Loading lobby…');
+    showLobbyLoadingBar();
     presentation.getNode().dataset.destination = url.href;
     presentation.getNode().dataset.lobbyReturn = 'false';
   }

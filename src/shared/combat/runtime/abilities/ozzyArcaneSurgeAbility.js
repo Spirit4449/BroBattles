@@ -1,5 +1,5 @@
 const { SOCKET_EVENTS } = require("../../../net/socketEvents.js");
-const { combatRandom } = require("../clock");
+const { combatRandom, combatNow } = require("../clock");
 const { POWERUP_TYPES } = require("../../matchConfig.js");
 const { getResolvedCharacterSpecialConfig } = require("../../../characters/characterTuning.js");
 
@@ -24,8 +24,21 @@ function getAllowedPowerupsForTarget() {
   return SURGE_POWERUPS.length ? SURGE_POWERUPS.slice() : [FALLBACK_POWERUP];
 }
 
+// The surge goes off when the cast's flames burst, surgeMs into the super
+// pose (characters/ozzy/anim.js draws them at that frame): the powerups land
+// as the beams leave the burning staff. A caster knocked out or gone before
+// then casts nothing.
 function activate(caster, now, room) {
   if (!caster || !room) return;
+  const delay = Math.max(0, Number(SURGE.surgeMs) || 0);
+  if (!delay || typeof room.scheduleAction !== "function") return surge(caster, now, room);
+  room.scheduleAction(() => {
+    if (room.status !== "active" || !caster.isAlive || caster.connected === false) return;
+    surge(caster, combatNow(room), room);
+  }, delay);
+}
+
+function surge(caster, now, room) {
 
   const recipients = [];
   for (const target of room.players.values()) {

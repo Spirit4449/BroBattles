@@ -28,6 +28,74 @@ describe("Action playback and locks", () => {
     assert.equal(calls.at(-1).key, 'ninja-jumping');
   });
 
+  test('catching and leaving a wall play the art\'s in-betweens, and a skin without them goes straight to the pose', () => {
+    const run = (clips, texture = 'ninja') => {
+      const calls = [];
+      const sprite = { texture: { key: texture }, body: { touching: { down: false } }, anims: { isPlaying: false,
+        play(key, ignoreIfPlaying) {
+          if (ignoreIfPlaying && this.currentAnim?.key === key) return;
+          calls.push(key); this.currentAnim = { key }; this.isPlaying = true;
+        } } };
+      const play = logical => animation.playCharacterAnimation({ scene: {}, sprite, character: 'ninja', logical,
+        resolveAnimKey: (_scene, char, wanted, fallback) =>
+          `${texture}-${!/-(in|out)$/.test(wanted) || clips.includes(wanted) ? wanted : fallback}` });
+      play('falling');
+      play('sliding');
+      play('sliding'); // the in-between keeps playing while the slide is wanted
+      sprite.anims.isPlaying = false; // ...and the slide takes over once it ends
+      play('sliding');
+      play('falling');
+      sprite.anims.isPlaying = false;
+      play('falling');
+      play('sliding');
+      play('jumping'); // a wall jump cuts straight to the jump
+      return calls;
+    };
+    assert.deepEqual(run(['sliding-in', 'sliding-out']), ['ninja-falling', 'ninja-sliding-in', 'ninja-sliding',
+      'ninja-sliding-out', 'ninja-falling', 'ninja-sliding-in', 'ninja-jumping']);
+    assert.deepEqual(run([], 'ninja-skin'), ['ninja-skin-falling', 'ninja-skin-sliding', 'ninja-skin-falling',
+      'ninja-skin-sliding', 'ninja-skin-jumping']);
+  });
+
+  test('a sustained fall loops, landing settles into idle, and movement can interrupt the landing', () => {
+    const key = 'ozzy__ozzy-pocket-ace';
+    const clip = suffix => `${key}-${suffix}`;
+    const fall = { bbMotion: { kind: 'falling', speed: 300, loopKey: clip('descent') }, frames: [{}, {}] };
+    const scene = { anims: { get: name => name === clip('falling') ? fall : null, exists: () => true } };
+    const sprite = { texture: { key }, body: { velocity: { y: 500 } }, anims: {
+      play(name) { this.currentAnim = { key: name }; this.isPlaying = true; }, pause() {}, setCurrentFrame() {},
+    } };
+    const play = logical => animation.playCharacterAnimation({ scene, sprite, character: 'ozzy', logical,
+      resolveAnimKey: (_scene, _character, suffix) => clip(suffix) });
+    assert.equal(play('falling'), clip('descent'));
+    assert.equal(play('idle'), clip('landing'));
+    assert.equal(play('idle'), clip('landing'));
+    assert.equal(play('running'), clip('running'));
+    play('falling');
+    play('idle');
+    sprite.anims.isPlaying = false;
+    assert.equal(play('idle'), clip('idle'));
+  });
+
+  test('a held dash pose is not cut short by speed-scrubbed fall art', () => {
+    const calls = [];
+    const fall = { bbMotion: { kind: 'falling', speed: 500 }, frames: [{}, {}, {}] };
+    const scene = { anims: { get: key => (key === 'ozzy-falling' ? fall : null) } };
+    const sprite = { body: { touching: { down: false }, velocity: { x: 300, y: 200 } }, anims: {
+      play(key) { calls.push(key); this.currentAnim = { key }; this.isPlaying = true; },
+      pause() {}, setCurrentFrame() {},
+    } };
+    const play = logical => animation.playCharacterAnimation({ scene, sprite, character: 'ozzy', logical,
+      dashDirection: { x: 1, y: 0 }, resolveAnimKey: (_scene, char, wanted) => `${char}-${wanted}` });
+    play('dashing');
+    sprite.anims.isPlaying = false; // the three dash frames have played
+    play('falling');
+    assert.equal(sprite.anims.currentAnim.key, 'ozzy-dashright', 'the dash pose holds while he coasts');
+    sprite._bbAnimationState.dashUntil = 0; // the hold has run out
+    play('falling');
+    assert.equal(sprite.anims.currentAnim.key, 'ozzy-falling');
+  });
+
   test('a dash plays the clip for its direction, and art without one keeps its single dash', () => {
     const played = (clips, direction) => {
       const calls = [];
@@ -43,6 +111,12 @@ describe("Action playback and locks", () => {
     assert.equal(played(['dashing'], { x: 0, y: -1 }), 'ninja-dashing', 'a skin drawn with one dash still dashes');
     assert.equal(animation.directionalDashAnimation('sparrow', { x: 1, y: -1 }), 'dashdiagonal');
     assert.equal(animation.directionalDashAnimation('sparrow', { x: 1, y: 1 }), 'dashright');
+    // Art with downward dashes plays them; art without keeps the forward dash and the crouch.
+    const down = [...all, 'dashdowndiagonal', 'dashdown', 'ducking'];
+    assert.equal(played(down, { x: 1, y: 1 }), 'ninja-dashdowndiagonal');
+    assert.equal(played(down, { x: 0, y: 1 }), 'ninja-dashdown');
+    assert.equal(played([...all, 'ducking'], { x: 1, y: 1 }), 'ninja-dashright');
+    assert.equal(played([...all, 'ducking'], { x: 0, y: 1 }), 'ninja-ducking');
   });
 
   test('remote death wins over residual velocity and dash snapshots reset landed jumps', () => {
@@ -245,7 +319,8 @@ describe("Attached presentation lifecycle", () => {
   const animation = loadClientModule('src/client/game/characters/shared/animationState.js');
   const sprite = { anims: { play(key) { this.currentAnim = { key }; } } };
   const play = logical => animation.playCharacterAnimation({ scene: {}, sprite, character: 'ninja',
-    logical, dashDirection: { x: 0, y: 1 }, resolveAnimKey: (_s, c, a) => `${c}-${a}` });
+    // Art without a straight-down dash: the burst itself is the crouch.
+    logical, dashDirection: { x: 0, y: 1 }, resolveAnimKey: (_s, c, a) => `${c}-${a === 'dashdown' ? 'idle' : a}` });
   assert.equal(play('dashing'), 'ninja-ducking');
   assert.equal(play('falling'), 'ninja-ducking');
   assert.equal(play('falling'), 'ninja-ducking');

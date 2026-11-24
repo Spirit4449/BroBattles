@@ -673,7 +673,8 @@ overlapping blobs into one pixel-art silhouette and shades each lobe from the fi
 `cloudLayer.js` draws them into two world-space canvases per scene (behind and in front
 of fighters) aligned to a fixed cloud pixel grid. `cloudEmitters.js` turns contacts into
 blobs from a contact point, surface normal, impact strength and momentum, so every floor
-and wall collision uses the same rules. `effects.js` calls these emitters; the
+and wall collision uses the same rules. Wall slides leave irregularly spaced clumps of smoke
+along the wall face, behind the fighter. `effects.js` calls these emitters; the
 simulation, rasterizer and emitters are plain modules tested in
 `tests/movementClouds.test.js`.
 

@@ -97,7 +97,9 @@ test('displayed targets use the server hit box at the drawn position; dead or hi
 function ozzy(f) {
   return load('src/client/game/characters/ozzy/attack.js', common(f, {
     fireballParticles: { createFireballParticles: () => ({ stop() {}, destroy() {} }), spawnFireballBurst() {} },
-    fireballArt: { ensureFireballTextures() {}, FIREBALL_ORIGIN: { x: 0.5, y: 0.7 }, explosionTextureKey: team => `ozzy-explosion-${team}` },
+    fireballArt: { ensureFireballTextures() {}, FIREBALL_ORIGIN: { x: 0.5, y: 0.7 }, FIREBALL_LOOP_FRAMES: 24, explosionTextureKey: team => `ozzy-explosion-${team}` },
+    aimPoses: require('../src/client/game/characters/ozzy/aimPoses'),
+    animationState: { playSpriteAnimation() {}, actionElapsedMs: () => 0 },
   }), { Phaser: { Math: { RadToDeg: r => r * 180 / Math.PI }, BlendModes: { ADD: 1 } } });
 }
 const FIREBALL = tuning.getResolvedCharacterAttackConfig('ozzy', 'fireball');

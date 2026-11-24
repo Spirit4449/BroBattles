@@ -95,10 +95,12 @@ describe("Rig anchors and projectile origins", () => {
     const { launchPoint } = require('../src/shared/characters/characterRig');
     const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');
     const fireball = getResolvedCharacterAttackConfig('ozzy', 'fireball');
-    // The throw animation's frame at the release (anim.js timings).
-    const msPerFrame = index => 1000 / 18 + (index >= 6 ? 80 : 58);
+    // The throw animation's frame at the release (anim.js plays ozzyThrowFrameMs).
+    const { ozzyThrowFrameMs } = require('../src/shared/characters/ozzyCharge');
+    const { rigOf } = require('../src/shared/characters/characterRig');
+    const ms = ozzyThrowFrameMs(rigOf('ozzy').points.staffTip.attack.length);
     let frame = 0;
-    for (let t = msPerFrame(0); t <= fireball.castDelayMs; t += msPerFrame(++frame));
+    for (let t = ms[0]; t <= fireball.castDelayMs; t += ms[++frame]);
     for (const flip of [false, true]) {
       const sprite = setup('ozzy', flip);
       sprite.frame.name = `attack${String(frame).padStart(2, '0')}`;
