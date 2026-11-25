@@ -69,6 +69,11 @@ async function main() {
     });
     await page.goto(`${origin}/map-editor?variant=2v2`);
     await page.locator('#canvas canvas').waitFor({ timeout });
+    await page.getByText('Map lines', { exact: true }).click();
+    await page.getByText('Blue-gray · Physics world', { exact: true }).waitFor({ timeout });
+    assert.equal(await page.locator('.boundary-legend').getAttribute('open'), '');
+    await page.getByText('Map lines', { exact: true }).click();
+
     await page.locator('[data-tab="world"]').click({ timeout });
     const label = page.getByLabel('Map name', { exact: true });
     const edited = 'Fixture edited in Map Studio';

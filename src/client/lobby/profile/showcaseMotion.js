@@ -56,3 +56,16 @@ export function showcaseJumpMotion(physics = movementPhysics) {
     },
   };
 }
+
+// Continue the same ballistic descent after a knockback or hovering super.
+export function stepShowcaseGravity(player, dt) {
+  if (player.y < player.groundY || player.vy < 0) {
+    player.vy += movementPhysics.gravity * (player.vy > 0 ? movementPhysics.fallGravityFactor : 1) * dt;
+    player.y += player.vy * dt;
+  }
+  player.grounded = player.y >= player.groundY;
+  if (player.grounded) {
+    player.y = player.groundY;
+    player.vy = 0;
+  }
+}

@@ -19,7 +19,6 @@ export function initializeAboutBros(root = document.querySelector('[data-about-b
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const tabs = [...root.querySelectorAll('[role="tab"]')];
   const stage = root.querySelector('.about-bro-stage');
-  const sky = root.querySelector('[data-bro-sky]');
   const ground = root.querySelector('[data-bro-ground]');
   const platform = root.querySelector('[data-bro-platform]');
   const canvas = root.querySelector('[data-bro-sprite]');
@@ -27,11 +26,10 @@ export function initializeAboutBros(root = document.querySelector('[data-about-b
   const sprite = createSpriteLoop(canvas, { reducedMotion });
   const levelWrap = root.querySelector('.about-bro-level');
   const badge = root.querySelector('[data-level-badge]');
-  const aura = root.querySelector('[data-bro-aura]');
   const statusLine = root.querySelector('[data-upgrade-status]');
   // Tracks compare every Bro against the strongest fully upgraded one, as in the lobby.
   const max = Object.fromEntries(STATS.map(stat => [stat, Math.max(...keys.map(key => fighters[key].levels.at(-1)[STAT_FIELD[stat]]))]));
-  let selected = keys[0], level = 1, auto = !reducedMotion, inView = false, timer = 0, counters = [], token = 0;
+  let selected = keys[0], level = 1, auto = !reducedMotion, inView = false, timer = 0, token = 0;
 
   for (const image of root.querySelectorAll('[data-portrait]')) {
     try { image.src = buildFramedBodyPortrait(image.dataset.portrait, `/assets/${image.dataset.portrait}/body.webp`); } catch (_) { /* keep the plain portrait */ }
@@ -47,74 +45,23 @@ export function initializeAboutBros(root = document.querySelector('[data-about-b
   platform.addEventListener('load', plant);
   new ResizeObserver(plant).observe(platform);
 
-  const preload = src => new Promise(resolve => { const image = new Image(); image.onload = image.onerror = () => resolve(); image.src = src; });
-  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-  // Switching Bros: the old Bro and platform ease out, the next stage's art
-  // loads, then everything is swapped in one go and eases back in while the
-  // sky cross-fades. Nothing moves until the new art is ready.
-  async function changeStage(key, animate) {
-    const mine = ++token;
-    const next = fighters[key].stage;
-    const sheet = loadIdleSheet(`/assets/${key}/spritesheet.webp`, `/assets/${key}/animations.json`).catch(() => null);
-    if (animate) ground.classList.add('is-leaving');
-    await Promise.all([next && preload(next.sky), next && preload(next.platform), sheet, animate && wait(200)]);
-    if (mine !== token) return;
-    if (next) {
-      if (animate) {
-        const layer = sky.cloneNode();
-        layer.classList.add('is-incoming');
-        layer.style.backgroundImage = `url('${next.sky}')`;
-        sky.after(layer);
-        requestAnimationFrame(() => requestAnimationFrame(() => layer.classList.add('is-in')));
-        setTimeout(() => { sky.style.backgroundImage = layer.style.backgroundImage; layer.remove(); }, 520);
-      } else sky.style.backgroundImage = `url('${next.sky}')`;
-      if (!platform.src.endsWith(next.platform)) {
-        platform.src = next.platform;
-        await platform.decode?.().catch(() => {});
-        if (mine !== token) return;
-      }
-      plant();
-    }
-    still.src = `/assets/${key}/body.webp`;
-    const loaded = await sheet;
-    if (mine !== token) return;
-    if (loaded) { sprite.show(loaded, fighters[key]); stage.classList.add('is-live'); }
-    else stage.classList.remove('is-live');
-    ground.classList.remove('is-leaving');
+  function idleSheet(key) {
+    return loadIdleSheet(`/assets/${key}/spritesheet.webp`, `/assets/${key}/animations.json`).catch(() => null);
   }
-
-  function countTo(node, from, to) {
-    if (reducedMotion || from === to) { node.textContent = to; return; }
-    const started = performance.now();
-    const step = now => {
-      const progress = Math.min(1, (now - started) / 620);
-      node.textContent = Math.round(from + (to - from) * (1 - (1 - progress) ** 3));
-      if (progress < 1) counters.push(requestAnimationFrame(step));
-    };
-    counters.push(requestAnimationFrame(step));
+  async function showFighter(key) {
+    const selection = ++token;
+    still.src = `/assets/${key}/body.webp`;
+    stage.classList.remove('is-live');
+    sprite.clear();
+    const sheet = await idleSheet(key);
+    if (selection !== token || !sheet) return;
+    sprite.show(sheet, fighters[key]);
+    stage.classList.add('is-live');
   }
   function panel() { return root.querySelector(`#fighter-${selected}`); }
-  // Level up: pixels gather around the Bro and rise off them.
-  function flare() {
-    if (reducedMotion) return;
-    const pixels = [];
-    for (let i = 0; i < 32; i++) {
-      const angle = (i / 32) * Math.PI * 2;
-      const pixel = document.createElement('i');
-      pixel.style.setProperty('--x', `${Math.round(Math.cos(angle) * 46)}%`);
-      pixel.style.setProperty('--y', `${Math.round(Math.sin(angle) * 12)}%`);
-      pixel.style.setProperty('--rise', `${Math.round(70 + Math.random() * 110)}px`);
-      pixel.style.setProperty('--delay', `${Math.round(Math.random() * 480)}ms`);
-      if (i % 3 === 0) pixel.className = 'is-light';
-      pixels.push(pixel);
-    }
-    aura.replaceChildren(...pixels);
-    aura.classList.remove('is-on'); void aura.offsetWidth; aura.classList.add('is-on');
-  }
   function renderLevel(previous) {
     const levels = fighters[selected].levels;
     const now = levels[level - 1];
-    counters.forEach(cancelAnimationFrame); counters = [];
     renderLevelBadge(badge, level, { className: 'level-badge--framed about-level-badge', ariaLabel: `Level ${level}` });
     for (const stat of STATS) {
       const box = panel().querySelector(`[data-stat="${stat}"]`);
@@ -123,12 +70,11 @@ export function initializeAboutBros(root = document.querySelector('[data-about-b
       const gain = box.querySelector('[data-stat-gain]');
       fill.classList.toggle('is-stat-leveling', !!previous);
       fill.style.width = `${(value / max[stat]) * 100}%`;
+      box.querySelector('[data-stat-value]').textContent = value;
       if (previous) {
-        countTo(box.querySelector('[data-stat-value]'), previous[STAT_FIELD[stat]], value);
         gain.textContent = `+${value - previous[STAT_FIELD[stat]]}`;
         gain.classList.remove('is-shown'); void gain.offsetWidth; gain.classList.add('is-shown');
       } else {
-        box.querySelector('[data-stat-value]').textContent = value;
         gain.classList.remove('is-shown');
       }
     }
@@ -142,13 +88,14 @@ export function initializeAboutBros(root = document.querySelector('[data-about-b
     if (!maxed) price.textContent = now.price.toLocaleString('en-US');
     button.setAttribute('aria-label', maxed ? 'Back to level 1' : `Level up for ${now.price} coins`);
     if (previous) {
-      levelWrap.classList.remove('is-leveling'); void levelWrap.offsetWidth; levelWrap.classList.add('is-leveling');
-      flare();
+      if (!reducedMotion) levelWrap.animate([
+        { transform: 'translateY(0)' }, { transform: 'translateY(-4px)', offset: 0.38 }, { transform: 'translateY(0)' },
+      ], { duration: 280, easing: 'ease-out' });
       statusLine.textContent = `${fighters[selected].name} reached level ${level}.`;
     }
   }
-  function select(key, { focus = false, animate = true } = {}) {
-    if (key === selected && animate) return;
+  function select(key, { focus = false } = {}) {
+    if (key === selected && token) return;
     selected = key; level = 1;
     tabs.forEach(tab => {
       const on = tab.dataset.fighter === key;
@@ -163,7 +110,8 @@ export function initializeAboutBros(root = document.querySelector('[data-about-b
       article.toggleAttribute('inert', !on);
       if (on) article.removeAttribute('aria-hidden'); else article.setAttribute('aria-hidden', 'true');
     }
-    changeStage(key, animate && !reducedMotion);
+    statusLine.textContent = '';
+    showFighter(key);
     renderLevel(null);
   }
   function levelUp() {
@@ -187,6 +135,11 @@ export function initializeAboutBros(root = document.querySelector('[data-about-b
   function takeOver() { auto = false; clearTimeout(timer); }
 
   const tablist = root.querySelector('[role="tablist"]');
+  for (const tab of tabs) {
+    const warm = () => idleSheet(tab.dataset.fighter);
+    tab.addEventListener('pointerenter', warm, { once: true });
+    tab.addEventListener('focus', warm, { once: true });
+  }
   tablist.addEventListener('click', event => {
     const tab = event.target.closest('[role="tab"]');
     if (!tab) return;
@@ -209,5 +162,5 @@ export function initializeAboutBros(root = document.querySelector('[data-about-b
   }, { threshold: 0.35 });
   observer.observe(root);
   document.addEventListener('visibilitychange', () => { sprite.setRunning(inView && !document.hidden); schedule(); });
-  select(selected, { animate: false });
+  select(selected);
 }

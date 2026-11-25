@@ -2,7 +2,8 @@
 // game's chat, the friend comes online and types back (in the chat header, as
 // in game), joins your lobby, both ready up with the lobby's own effects, the
 // party searches and the match is found. Then it loops.
-import { applyLobbyStatusVisualState, playLobbySpawnAnimation } from '../lobby/party/slotEffects.js';
+
+import { previewRoster } from './aboutParty.mjs';
 
 const ME = { name: 'You', icon: '/assets/profile-icons/thorg.webp' };
 const FRIEND = { name: 'ArrowRain', icon: '/assets/profile-icons/sparrow.webp' };
@@ -38,9 +39,22 @@ export function initializeAboutFriends(root = document.querySelector('[data-frie
   const presence = root.querySelector('[data-scene-presence]');
   const chatStatus = root.querySelector('[data-scene-chat-status]');
   const lobby = root.querySelector('[data-scene-lobby]');
-  const slots = { you: root.querySelector('[data-lobby-slot="you"]'), friend: root.querySelector('[data-lobby-slot="friend"]') };
-  const ready = root.querySelector('[data-scene-ready]');
+  const frame = lobby.querySelector('iframe');
+  // Give the game a landscape viewport on desktop and its responsive lobby on phones.
+  new ResizeObserver(([entry]) => {
+    const { width, height } = entry.contentRect;
+    if (!width || !height) return;
+    const scale = Math.min(0.72, width / 570, height / 680);
+    frame.style.width = `${width / scale}px`;
+    frame.style.height = `${height / scale}px`;
+    frame.style.transform = `scale(${scale})`;
+  }).observe(lobby);
   let timers = [], running = false;
+  let scene;
+  function update(patch) {
+    Object.assign(scene, patch);
+    frame.dataset.scene = JSON.stringify(scene);
+  }
 
   const add = node => { log.append(node); log.scrollTop = log.scrollHeight; };
   const setOnline = on => {
@@ -55,18 +69,6 @@ export function initializeAboutFriends(root = document.querySelector('[data-frie
     chatStatus.innerHTML = '<span class="bb-chat-typing-dot" aria-hidden="true"></span><span class="bb-chat-typing-text"></span>';
     chatStatus.querySelector('.bb-chat-typing-text').textContent = `${FRIEND.name} is typing`;
   };
-  const LABELS = { empty: 'Invite', invited: 'Invited', online: 'Online', ready: 'Ready' };
-  // Seats change state the lobby's way: the join beam, then ready bursts.
-  const setSeat = (side, state, { animate = true } = {}) => {
-    const slot = slots[side];
-    const previous = slot.dataset.state;
-    slot.dataset.state = state;
-    slot.querySelector('[data-lobby-status]').textContent = LABELS[state];
-    if (!animate) return;
-    if (state === 'online' && previous === 'invited') playLobbySpawnAnimation(slot, 'enter');
-    if (state === 'ready') applyLobbyStatusVisualState(slot, 'online', 'ready');
-  };
-  const setReady = (state, text) => { ready.dataset.state = state; ready.textContent = text; };
   // Type into the composer, then send.
   const typeOut = (text, then) => {
     input.textContent = '';
@@ -77,22 +79,21 @@ export function initializeAboutFriends(root = document.querySelector('[data-frie
     log.replaceChildren();
     input.textContent = '';
     setOnline(false);
-    setSeat('you', 'online', { animate: false });
-    setSeat('friend', 'empty', { animate: false });
-    setReady('idle', 'Ready');
-    lobby.classList.remove('is-matched');
+    scene = { bro: 'ninja', friend: 'empty', self: 'Online', found: 0 };
+    update({});
+    root.classList.remove('is-resetting');
   }
   const script = [
     [500, () => typeOut('yo hop on', () => add(message(ME, 'yo hop on', true)))],
-    [1800, () => setOnline(true)],
-    [800, setTyping],
-    [1500, () => { setOnline(true); add(message(FRIEND, 'omw. bank bust?', false)); }],
-    [1000, () => typeOut('bet, invite sent', () => { add(message(ME, 'bet, invite sent', true)); setSeat('friend', 'invited'); })],
-    [2200, () => setSeat('friend', 'online')],
-    [1500, () => setSeat('friend', 'ready')],
-    [1100, () => { setReady('pressed', 'Ready'); setSeat('you', 'ready'); }],
-    [700, () => setReady('searching', 'Searching')],
-    [2300, () => { setReady('found', 'Match found'); lobby.classList.add('is-matched'); }],
+    [1800, () => { setOnline(true); update({ self: 'Selecting Character' }); }],
+    [800, () => { setTyping(); update({ bro: 'thorg', self: 'Online' }); }],
+    [1500, () => { setOnline(true); add(message(FRIEND, 'omw. bro ball?', false)); }],
+    [1000, () => typeOut('bet, invite sent', () => { add(message(ME, 'bet, invite sent', true)); update({ friend: 'invited' }); })],
+    [2200, () => update({ friend: 'Online' })],
+    [1500, () => update({ friend: 'Ready' })],
+    [1100, () => update({ self: 'Ready' })],
+    [700, () => update({ found: 2 })],
+    ...previewRoster.slice(2).map((_, i) => [850, () => update({ found: i + 3 })]),
     [3400, () => root.classList.add('is-resetting')],
     [400, () => { root.classList.remove('is-resetting'); reset(); play(); }],
   ];
@@ -104,8 +105,8 @@ export function initializeAboutFriends(root = document.querySelector('[data-frie
   reset();
   // Reduced motion shows the finished moment instead of playing it.
   if (reduced) {
-    add(message(ME, 'yo hop on', true)); setOnline(true); add(message(FRIEND, 'omw. bank bust?', false));
-    setSeat('friend', 'ready', { animate: false }); setSeat('you', 'ready', { animate: false }); setReady('searching', 'Searching');
+    add(message(ME, 'yo hop on', true)); setOnline(true); add(message(FRIEND, 'omw. bro ball?', false));
+    update({ bro: 'thorg', self: 'Ready', friend: 'Ready', found: previewRoster.length });
     return;
   }
   new IntersectionObserver(entries => {

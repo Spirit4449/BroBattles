@@ -11,7 +11,8 @@ export function initializeAboutRoad(root = document.querySelector('[data-trophy-
   let overflow = 0, pinned = false, frameHeight = 0, raf = 0, started = false;
 
   function measure() {
-    overflow = Math.max(0, track.scrollWidth - viewport.clientWidth);
+    const inset = parseFloat(getComputedStyle(viewport).paddingInlineStart);
+    overflow = Math.max(0, track.offsetWidth + 2 * inset - viewport.clientWidth);
     frameHeight = frame.offsetHeight;
     // Pin only when the road is wider than the screen and motion is welcome.
     pinned = !reduced && overflow > 0;
@@ -19,7 +20,7 @@ export function initializeAboutRoad(root = document.querySelector('[data-trophy-
     // Pin it centred in the space under the site header, not jammed against it.
     const header = document.querySelector('.site-header')?.offsetHeight || 64;
     root.style.setProperty('--road-top', `${Math.round(Math.max(header + 16, header + (innerHeight - header - frameHeight) / 2))}px`);
-    root.style.height = pinned ? `${frameHeight + overflow + innerHeight * 0.35}px` : '';
+    root.style.height = pinned ? `${frameHeight + (overflow + innerHeight * 0.35) / 3}px` : '';
     update();
   }
   function progress() {
@@ -38,7 +39,7 @@ export function initializeAboutRoad(root = document.querySelector('[data-trophy-
     track.style.transform = pinned ? `translateX(${-overflow * p}px)` : '';
     // The rail fills to where the screen has travelled, plus a lead so the
     // milestone in view unlocks before it scrolls past.
-    const visibleEdge = (pinned ? overflow * p : 0) + viewport.clientWidth * (pinned ? 0.62 : p);
+    const visibleEdge = p === 1 ? track.scrollWidth : (pinned ? overflow * p : 0) + viewport.clientWidth * (pinned ? 0.62 : p);
     fill.style.width = `${Math.min(track.scrollWidth, visibleEdge)}px`;
     for (const step of steps) {
       const on = step.offsetLeft + step.offsetWidth / 2 <= visibleEdge;

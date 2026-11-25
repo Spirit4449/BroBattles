@@ -1,5 +1,6 @@
 const { getConfig } = require("../../config");
 const { renderHeader } = require("../../../shared/site/siteHeader.cjs");
+const { renderPatchNotes } = require("./patchNotes");
 const fs = require("node:fs");
 const path = require("node:path");
 const MarkdownIt = require("markdown-it");
@@ -176,6 +177,8 @@ function registerSitePages(app) {
     const paths = [
       "/",
       "/about",
+      "/leaderboard",
+      "/patch-notes",
       "/news",
       "/help",
       "/privacy",
@@ -204,13 +207,16 @@ function registerSitePages(app) {
       ),
     ),
   );
+  app.get("/patch-notes", (_req, res) =>
+    res.send(frame("Patch Notes", "Major gameplay updates from Bro Battles.", renderPatchNotes(), "/patch-notes")),
+  );
   app.get("/news", (_req, res) => {
     const stories = newest();
     res.send(
       frame(
         "News",
         "The latest from Bro Battles: beta news, Duels, and Bank Bust.",
-        `<header class="site-intro site-news-heading"><h1>Bro Battles News</h1></header><div class="site-news-board">${stories.length ? card(stories[0], true) : '<p class="site-empty">No stories yet. Check back soon.</p>'}${
+        `<div class="release-heading"><header class="site-intro site-news-heading"><h1>Bro Battles News</h1></header><a class="release-link" href="/patch-notes">Patch Notes ${arrow("right", "sm")}</a></div><div class="site-news-board">${stories.length ? card(stories[0], true) : '<p class="site-empty">No stories yet. Check back soon.</p>'}${
           stories.length > 1
             ? `<section class="site-news-grid" aria-label="More news">${stories
                 .slice(1)

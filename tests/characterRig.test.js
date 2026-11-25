@@ -162,3 +162,39 @@ describe("Trimmed collider parity", () => {
   });
 
 });
+
+test('overhead HUD measures the head without catching a nearby staff plume', (t) => {
+  const { spritePresentation } = require('../src/client/game/characters/shared/spritePresentation');
+  // Draven's idle art has a hood over the standing point and a taller plume
+  // just to its right. Model the alpha sampling performed by the canvas.
+  const frame = { realWidth: 207, realHeight: 207, x: 0, y: 0,
+    cutX: 0, cutY: 207, cutWidth: 207, cutHeight: 207 };
+  let sample;
+  const previousDocument = globalThis.document;
+  t.after(() => {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  });
+  globalThis.document = { createElement: () => ({ getContext: () => ({
+    drawImage(_source, x, y, width, height) { sample = { x, y, width, height }; },
+    getImageData() {
+      const { x, width, height } = sample;
+      const data = new Uint8ClampedArray(width * height * 4);
+      for (let row = 0; row < height; row++) for (let col = 0; col < width; col++) {
+        const artX = x + col;
+        const hood = artX >= 101 && artX <= 110 && row >= 108 && row <= 120;
+        const plume = artX >= 114 && artX <= 124 && row >= 86 && row <= 108;
+        if (hood || plume) data[(row * width + col) * 4 + 3] = 255;
+      }
+      return { data };
+    },
+  }) }) };
+  for (const key of ['draven', 'draven-test-skin']) {
+    const texture = { key, has: () => true, get: () => frame, getSourceImage: () => ({}) };
+    const presentation = spritePresentation('draven', texture);
+    const measuredHead = presentation.hudTopOffset / presentation.scale + frame.realHeight * presentation.originY;
+    assert.ok(Math.abs(measuredHead - 108) < 1e-6, `${key} anchors to the hood, not the plume`);
+    assert.equal(spritePresentation('draven', texture).hudTopOffset, presentation.hudTopOffset,
+      'the idle anchor remains stable on repeated presentation setup');
+  }
+});

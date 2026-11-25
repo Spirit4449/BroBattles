@@ -2,7 +2,7 @@
 
 - **Move:** {key:A} {key:D}, or {key:Left} {key:Right}. Jump with {key:W} or {key:Up}; duck or drop with {key:S} or {key:Down}.
 - **Dash:** {key:Space} plus a direction. With no direction held, you dash the way you face.
-- **Attack:** {mouse:left} or {key:J}. A quick attack aims at the nearest visible opponent, even above or below you. Hold the mouse button and drag to aim manually.
+- **Attack:** {mouse:left} or {key:J}. A quick attack aims at the nearest visible opponent, even above or below you. Hold the mouse button and drag to aim manually. After dragging, bring the dot into the center ring until it fills and shows an X, then release to cancel. This also works for your special.
 - **Special:** {mouse:right} or {key:I} when your ability is ready.
 - **Release the cursor:** {key:Esc}. Click the arena to capture it again.
 
@@ -13,7 +13,7 @@ Open {path:Settings > Controls} to change supported keyboard bindings. Duplicate
 
 ## Touch controls
 
-On a supported touch device, use the stick on the left to move. The buttons on the right control attack, jump, special, dash, and duck. Tap attack or special to aim at the nearest opponent, or drag the button to aim manually. The special button fills as it charges; the dash button shows its cooldown.
+On a supported touch device, use the stick on the left to move. The buttons on the right control attack, jump, special, dash, and duck. Tap attack or special to aim at the nearest opponent, or drag the button to aim manually. After aiming, slide back toward the starting point until the center ring fills and shows an X, then release to cancel. The special button fills as it charges; the dash button shows its cooldown.
 
 Battle chat and the in-game Settings button are hidden on touch devices, so adjust settings in the lobby before playing.
 

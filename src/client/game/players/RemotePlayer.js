@@ -4,8 +4,9 @@ import { standingBodyHeight, applyBodyFlipOffset, hudTopY } from "./playerBodyGe
 import { getHealth, resolveCharacterKey } from "../../../shared/characters/characterStats.js";
 import { spawnRespawnEffect } from '../scene/respawnEffect';
 import { spritePresentation, sizePlayerBody } from '../characters/shared/spritePresentation';
-import { bindPlayerOrigin, playerAnchor } from '../characters/shared/rig';
-import { applyTeamVisual, ENEMY_BODY_OVERLAY_ALPHA, isAllyTeam, TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
+import { bindPlayerOrigin } from '../characters/shared/rig';
+import { attachEnemyBodyVisual } from "./enemyBodyVisual";
+import { isAllyTeam, TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
 import { createPlayerWorldHud } from "../scene/playerWorldHud";
 import { attachTeamFootRing } from "./teamFootRing";
 import {
@@ -16,11 +17,9 @@ import {
 import { performSpecial } from "../characters/special";
 import { clearAction } from "../characters/shared/animationState";
 import {
-  drawSuperChargeBar,
   resetSuperBarAnimation,
 } from "../scene/superBarRenderer";
 import {
-  drawHealthBar,
   resetHealthBarAnimation,
 } from "../scene/healthBarRenderer";
 import {
@@ -33,7 +32,6 @@ import { playPlayerSound } from "../audio/playerAudio.js";
 import { DUCK_HEIGHT_RATIO } from "../../../shared/physics/ducking.js";
 import { INVISIBLE_ALPHA, invisibleAttackAlpha } from "../powerups/invisibilityReveal.js";
 
-const OP_PLAYER_NAME_OFFSET_Y = 42;
 // A fighter still loading (or who never joined) is drawn as a ghost.
 const LOADING_GHOST_ALPHA = 0.6;
 
@@ -49,7 +47,6 @@ export default class RemotePlayer {
     this.opCurrentHealth = maxHealth;
     this.opSuperCharge = 0;
     this.opMaxSuperCharge = 100;
-    this.opHealthBarWidth = 52;
     this.effects = null; // per-opponent effects (e.g., Draven fire)
     this.presenceConnected = true;
     this.presenceLoaded = false;
@@ -62,8 +59,6 @@ export default class RemotePlayer {
     this._corpseRemoved = false;
     this._corpseRemovalTimer = null;
     this.movementFx = createRemoteMovementFx();
-    this._hudAnchorX = null;
-    this._hudAnchorY = null;
     this.createOpPlayer();
   }
 
@@ -78,8 +73,7 @@ export default class RemotePlayer {
     // Enemies carry a slight red body filter: a frame recolor in Canvas, an
     // overlay sprite in WebGL.
     const isEnemy = this.opponent._bbTeamColor === TEAM_RED;
-    applyTeamVisual(this.opponent, this.opponent, isEnemy ? "body" : null);
-    if (isEnemy) this._createEnemyRedOverlay();
+    if (isEnemy) attachEnemyBodyVisual(this.scene, this.opponent);
     this.opponent.username = this.username; // Attach username for collision detection
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
     this.opponent.setVisible(false);
@@ -119,9 +113,8 @@ export default class RemotePlayer {
     this.opponent.setVisible(false);
 
     // Sets the text of the name to username
-    const bodyTop = this.hudTopY();
     this._worldHud = createPlayerWorldHud(this.scene, {
-      username: this.username, getPlayerEffects: this.getPlayerEffects, x: this.opponent.x, y: bodyTop - OP_PLAYER_NAME_OFFSET_Y, nameDepth: 50,
+      username: this.username, getPlayerEffects: this.getPlayerEffects, role: isEnemy ? "enemy" : "ally",
     });
     ({
       playerName: this.opPlayerName, healthText: this.opHealthText, healthBar: this.opHealthBar,
@@ -138,7 +131,6 @@ export default class RemotePlayer {
     this._isSpectated = false;
 
     // Initially updates health bar and name positioning
-    this.updateHealthBar();
     this.updateUIPosition();
     this.setPresenceState(this.presenceConnected, this.presenceLoaded);
 
@@ -159,11 +151,7 @@ export default class RemotePlayer {
       this.opponent &&
       this.opponent.active
     ) {
-      const bodyTop = this.opponent.body
-        ? this.opponent.body.y
-        : this.opponent.y - this.opponent.height / 2;
-      spawnHealthMarker(this.scene, this.opponent.x, bodyTop - 18, delta, {
-        depth: 11,
+      spawnHealthMarker(this.scene, this.opponent.x, this._worldHud.markerY(this.hudTopY()), delta, {
         team: this.team,
       });
     }
@@ -183,36 +171,6 @@ export default class RemotePlayer {
 
   presentSpecial(data) {
     performSpecial(data.character, { scene: this.scene, player: this.opponent, aim: data.aim || null });
-  }
-
-  // WebGL path for the enemy red filter. A tint multiplies, so it
-  // can't redden black pixels; a red-filled copy at low alpha can. Canvas uses
-  // the frame recolor in applyTeamVisual instead.
-  _createEnemyRedOverlay() {
-    if (this.scene.game.renderer?.type !== Phaser.WEBGL) return;
-    const o = this.scene.add.sprite(0, 0, this.opponent.texture.key);
-    o.setTintFill(0xff2020);
-    o.setVisible(false);
-    this._enemyRedOverlay = o;
-    this._syncEnemyRedOverlay = () => {
-      const b = this.opponent;
-      if (!b || !b.scene || !o.scene) return;
-      const show = b.visible && b.alpha > 0;
-      o.setVisible(show);
-      if (!show) return;
-      if (o.texture !== b.texture || o.frame !== b.frame) o.setTexture(b.texture.key, b.frame.name);
-      o.setPosition(b.x, b.y).setOrigin(b.originX, b.originY).setScale(b.scaleX, b.scaleY)
-        .setFlip(b.flipX, b.flipY).setRotation(b.rotation).setScrollFactor(b.scrollFactorX, b.scrollFactorY)
-        .setAlpha(b.alpha * ENEMY_BODY_OVERLAY_ALPHA).setDepth(b.depth + 0.001);
-    };
-    this.scene.events.on("prerender", this._syncEnemyRedOverlay);
-  }
-
-  _destroyEnemyRedOverlay() {
-    if (this._syncEnemyRedOverlay) this.scene?.events?.off("prerender", this._syncEnemyRedOverlay);
-    this._enemyRedOverlay?.destroy();
-    this._enemyRedOverlay = null;
-    this._syncEnemyRedOverlay = null;
   }
 
   _onSceneUpdate() {
@@ -280,26 +238,7 @@ export default class RemotePlayer {
   updateUIPosition({ drawBars = true } = {}) {
     if (!this.opponent) return;
     if (this._worldUiHidden) return;
-    // Anchor straight to the drawn sprite every frame, exactly like the local
-    // player's HUD. Smoothing here made remote bars trail their fighter.
-    this._hudAnchorX = playerAnchor(this.opponent, "top").x;
-    this._hudAnchorY = this.hudTopY();
-    if (this.opPlayerName) {
-      this.opPlayerName.setPosition(
-        this._hudAnchorX,
-        this._hudAnchorY - OP_PLAYER_NAME_OFFSET_Y,
-      );
-    }
-    if (this.spectateIcon) {
-      const nameRight = this.opPlayerName
-        ? this.opPlayerName.x + this.opPlayerName.displayWidth / 2
-        : this._hudAnchorX;
-      this.spectateIcon.setPosition(
-        nameRight + 4,
-        this._hudAnchorY - OP_PLAYER_NAME_OFFSET_Y + 7,
-      );
-    }
-    if (drawBars) this.updateHealthBar(false);
+    if (drawBars) this.updateHealthBar();
   }
 
   setSpectated(active = false) {
@@ -437,7 +376,7 @@ export default class RemotePlayer {
     this.setPresenceState(this.presenceConnected, this.presenceLoaded);
   }
 
-  updateHealthBar(dead = false, healthBarY) {
+  updateHealthBar(dead = false) {
     if (!this.opHealthText || !this.opHealthText.active) return;
     if (this._worldUiHidden) {
       this.opHealthBar?.clear?.();
@@ -449,59 +388,17 @@ export default class RemotePlayer {
       // Prevents health from going negative
       this.opCurrentHealth = 0;
     }
-    // Sets x in the center
-    const hudX = Number.isFinite(Number(this._hudAnchorX))
-      ? Number(this._hudAnchorX)
-      : this.opponent.x;
-    const healthBarX = hudX - this.opHealthBarWidth / 2;
-    // Same anchor and offset as the local player's bar.
-    const hudBodyTop = Number.isFinite(Number(this._hudAnchorY))
-      ? Number(this._hudAnchorY)
-      : this.hudTopY();
-    const y =
-      typeof healthBarY === "number" && !Number.isNaN(healthBarY)
-        ? healthBarY
-        : hudBodyTop - 20;
-    if (dead === false) {
-      this.opHealthText.setText(`${this.opCurrentHealth}`);
-    } else {
-      this.opHealthText.setText(`0`);
-    }
-    // Teammates should be green, opponents red
-    const isTeammate = isAllyTeam(this.team);
-    drawHealthBar(this.opHealthBar, {
-      x: healthBarX,
-      y,
-      width: this.opHealthBarWidth,
-      health: this.opCurrentHealth,
-      maxHealth: this.opMaxHealth,
-      color: isTeammate ? 0x99ab2c : 0xb24035,
-      teamGlowColor: isTeammate ? TEAM_GREEN : 0xe04a4e,
-    });
-    this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-
-    this._worldHud?.layout({
-      x: healthBarX, y, width: this.opHealthBarWidth, sprite: this.opponent,
+    this._worldHud.draw({
+      sprite: this.opponent, headY: this.hudTopY(),
+      health: this.opCurrentHealth, maxHealth: this.opMaxHealth, dead,
+      charge: this.opSuperCharge, maxCharge: this.opMaxSuperCharge,
       visible: !dead && this.opHealthBar.visible !== false &&
         !this._powerupInvisible && !this._deathPresentationActive && !this._corpseRemoved,
     });
-
-    this.opHealthText.setPosition(hudX - this.opHealthText.width / 2, y - 8);
-    this.opHealthText.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
-
-    this.drawSuperBar(healthBarX, y + 11);
-  }
-
-  drawSuperBar(x, y) {
-    if (!this.opSuperBar || !this.opSuperBarBack) return;
-    if (this._worldUiHidden) return;
-    drawSuperChargeBar(this.opSuperBar, this.opSuperBarBack, {
-      x,
-      y,
-      charge: this.opSuperCharge,
-      maxCharge: this.opMaxSuperCharge,
-      player: this.opponent,
-    });
+    if (this.spectateIcon) {
+      const name = this.opPlayerName;
+      this.spectateIcon.setPosition(name.x + name.displayWidth / 2 + 4, name.y + 7);
+    }
   }
 
   hideWorldUi() {
@@ -666,7 +563,6 @@ export default class RemotePlayer {
     this.movementFx.destroy();
     this._corpseRemovalTimer?.remove?.(false);
     this._corpseRemovalTimer = null;
-    this._destroyEnemyRedOverlay();
     if (this.effects) {
       this.scene.events.off("update", this._onSceneUpdate, this);
       this.effects.destroy?.();

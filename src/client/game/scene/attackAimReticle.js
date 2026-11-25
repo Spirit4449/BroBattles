@@ -286,19 +286,7 @@ class ThrowAttackReticleRenderer extends BaseAttackReticleRenderer {
       width,
       state.config?.reticleEndAlpha ?? 0.18,
     );
-    const cue = state.centerCue;
-    if (cue?.proximity > 0) {
-      const palette = getPalette(state);
-      const x = state.baseX;
-      const y = state.baseY + offsetY;
-      const radius = 7 + cue.proximity * 3;
-      this.crosshair.lineStyle(2, palette.accentColor, 0.18 + cue.proximity * 0.42);
-      this.crosshair.strokeEllipse(x, y, radius * 2, radius * 2);
-      if (cue.held) {
-        this.crosshair.fillStyle(palette.accentColor, 0.65);
-        this.crosshair.fillEllipse(x, y, 4, 4);
-      }
-    }
+
   }
 }
 
@@ -515,6 +503,7 @@ function resolveRenderer(kind) {
 
 function createAttackAimReticleController(scene, { getAmmoCharges, getPlayer } = {}) {
   let renderer = null;
+  let cancelGraphic = null;
   let rendererKind = "";
   let shownState = null;
   let opacity = 1;
@@ -532,6 +521,64 @@ function createAttackAimReticleController(scene, { getAmmoCharges, getPlayer } =
   };
 
   return {
+    updateCancelCue(cue) {
+      if (!cue) {
+        cancelGraphic?.setVisible(false);
+        return;
+      }
+      if (!cancelGraphic) {
+        cancelGraphic = scene.add.graphics();
+        cancelGraphic.setDepth(RENDER_LAYERS.RETICLES + 1);
+      }
+      const g = cancelGraphic;
+      const zoom = Number(scene.cameras?.main?.zoom) || 1;
+      const distance = Math.hypot(cue.x, cue.y);
+      const proximity = Math.max(0, 1 - Math.max(0, distance - cue.radius) / cue.radius);
+      const aim = cue.aim;
+      const palette = getPalette(aim);
+      const color = cue.cancelled ? 0xff6b6b : palette.accentColor;
+      // Attach to the visible guide, including character-specific launch sockets
+      // and display offsets, rather than the sprite's unrelated origin.
+      let x = aim?.anchorX ?? cue.baseX;
+      let y = aim?.anchorY ?? cue.baseY;
+      if (aim?.kind === "throw") {
+        const start = aim.throwPreview?.points?.[0];
+        x = start?.x ?? x;
+        y = (start?.y ?? y) + (Number(aim.config?.reticlePathOffsetY) || 0);
+      } else if (aim?.kind === "round") {
+        const anchor = aim.config?.reticleAnchor ? playerAnchor(getPlayer?.(), aim.config.reticleAnchor) : null;
+        const visualScale = Number(aim.visualScale) || 1;
+        x = anchor?.x ?? aim.baseX;
+        y = (anchor?.y ?? aim.baseY) + (Number(aim.config?.reticleOffsetY) || 0) * visualScale -
+          (Number(aim.config?.reticleScaleLiftY) || 0) * (visualScale - 1);
+      }
+      // Keep the generous input hysteresis, but decouple it from visual growth.
+      // Mapping the dot by the same ratio keeps the drawn boundary accurate.
+      const radius = 16 + (cue.cancelled ? 2 : proximity);
+      const dotScale = radius / cue.radius;
+      g.clear();
+      g.setVisible(true);
+      g.setPosition(x, y);
+      g.setScale(1 / zoom);
+      // Screen-pixel dimensions keep the cue readable at every map zoom.
+      g.fillStyle(palette.shadowColor, 0.22);
+      g.fillCircle(0, 0, radius + 2);
+      g.fillStyle(color, cue.cancelled ? 0.18 : 0.025 + proximity * 0.06);
+      g.fillCircle(0, 0, radius);
+      g.lineStyle(cue.cancelled ? 3 : 2, color, 0.35 + proximity * 0.65);
+      g.strokeCircle(0, 0, radius);
+      // Normalize the dot to the visible ring, then limit its outward travel.
+      const scale = Math.min(dotScale, (radius + 24) / Math.max(1, distance));
+      g.lineStyle(2, color, 0.45);
+      g.lineBetween(0, 0, cue.x * scale, cue.y * scale);
+      if (cue.cancelled) {
+        g.lineStyle(3, color, 1);
+        g.lineBetween(-5, -5, 5, 5);
+        g.lineBetween(-5, 5, 5, -5);
+      }
+      g.fillStyle(color, 1);
+      g.fillCircle(cue.x * scale, cue.y * scale, 4);
+    },
     update(aim) {
       if (!aim) {
         this.hide();
@@ -569,12 +616,15 @@ function createAttackAimReticleController(scene, { getAmmoCharges, getPlayer } =
       activeRenderer.setVisible(true);
     },
     hide() {
+      cancelGraphic?.setVisible(false);
       resetTransition();
       if (!renderer) return;
       renderer.clear();
       renderer.setVisible(false);
     },
     destroy() {
+      cancelGraphic?.destroy();
+      cancelGraphic = null;
       resetTransition();
       if (!renderer) return;
       renderer.destroy();

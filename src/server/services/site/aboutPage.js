@@ -50,15 +50,13 @@ const MODE_COPY = {
 const name = (key) => key[0].toUpperCase() + key.slice(1);
 const json = (value) => JSON.stringify(value).replace(/</g, "\\u003c");
 
-// Real stats, prices, idle rate, rig feet and a lobby stage for each Bro.
-function fighterData(key, index, maps) {
+// Real stats, prices, idle rate, and rig feet for each Bro.
+function fighterData(key) {
   const def = characterDefinitions[key];
-  const stage = maps[index % maps.length];
   return {
     name: name(key),
     fps: IDLE_FPS[key] || 6,
     feet: def.rig?.feet ?? [def.frame.w / 2, def.frame.h],
-    stage: stage ? { sky: stage.lobbyBgAsset, platform: stage.lobbyPlatformAsset } : null,
     levels: Array.from({ length: LEVEL_CAP }, (_, i) => ({
       level: i + 1,
       health: getHealth(key, i + 1),
@@ -69,33 +67,17 @@ function fighterData(key, index, maps) {
   };
 }
 
-// The real Trophy Road, trimmed to fit: every milestone whose reward art
-// sits well in a small frame (no player cards, no unplayable modes), with one
-// coin or gem cache between each pair so the road reads like the game's.
+// Show the first reward, playable unlocks, and the final milestone on the About page.
 function roadMilestones() {
   const playable = new Set(
     gameModes.filter((mode) => mode.implemented && mode.queueable).map((mode) => mode.id),
   );
-  const fits = (reward) =>
-    reward.kind !== "card" && (reward.kind !== "mode" || playable.has(reward.itemId));
-  const track = buildTrophyRewardTrack();
-  const majors = track
-    .filter((tier) => tier.rewards.length > 1 || tier.rewards[0].kind !== "currency")
-    .filter((tier) => fits(tier.rewards[0]));
-  const steps = [];
-  let previous = 0;
-  for (const major of majors) {
-    const between = track.filter(
-      (tier) =>
-        tier.trophiesRequired > previous &&
-        tier.trophiesRequired < major.trophiesRequired &&
-        tier.rewards[0].kind === "currency" &&
-        tier.rewards.length === 1,
-    );
-    if (between.length) steps.push(between[Math.floor(between.length / 2)]);
-    steps.push(major);
-    previous = major.trophiesRequired;
-  }
+  const track = buildTrophyRewardTrack().filter(({ rewards: [reward] }) =>
+    reward.kind !== "card" && (reward.kind !== "mode" || playable.has(reward.itemId)),
+  );
+  const steps = track.filter(({ rewards: [reward] }, index) =>
+    index === 0 || index === track.length - 1 || ["mode", "character", "skin"].includes(reward.kind),
+  );
   return steps.map((tier) => {
     const reward = tier.rewards[0];
     const currency = reward.kind === "currency" && tier.rewards.length === 1;
@@ -172,28 +154,11 @@ function cosmeticPools() {
     icon: byRarity(iconItems),
   };
 }
-// The grid's layout: which kind each tile holds (cards are tall, titles wide).
-// A gap-free 6 x 4 collection wall: [kind, column, row, columns spanned, rows spanned].
-// Narrow screens drop the placement and let the grid pack the tiles.
+// Wide titles start in a different column on every desktop row. Tall cards
+// bridge the rows between them; the first twelve tiles also pack on phones.
 const COSMETIC_LAYOUT = [
-  ["card", 1, 1, 1, 2],
-  ["icon", 2, 1],
-  ["title", 3, 1, 2],
-  ["skin", 5, 1],
-  ["icon", 6, 1],
-  ["card", 2, 2, 1, 2],
-  ["icon", 3, 2],
-  ["skin", 4, 2],
-  ["title", 5, 2, 2],
-  ["icon", 1, 3],
-  ["icon", 3, 3],
-  ["card", 4, 3, 1, 2],
-  ["title", 5, 3, 2],
-  ["icon", 1, 4],
-  ["icon", 2, 4],
-  ["icon", 3, 4],
-  ["icon", 5, 4],
-  ["icon", 6, 4],
+  "card", "skin", "title", "icon", "icon", "title", "icon", "card",
+  "title", "skin", "card", "icon", "card", "skin", "title", "icon",
 ];
 
 function cosmeticTile(item) {
@@ -254,45 +219,23 @@ function statBox(kind, label, icon, value, description) {
 }
 
 function renderBros(fighters, catalog) {
-  const maps = catalog.filter((map) => map.lobbyBgAsset && map.lobbyPlatformAsset);
+  const stage = catalog.find((map) => map.lobbyBgAsset && map.lobbyPlatformAsset);
   const data = Object.fromEntries(
-    fighters.map(([key], index) => [key, fighterData(key, index, maps)]),
+    fighters.map(([key]) => [key, fighterData(key)]),
   );
   const [firstKey] = fighters[0];
-  const firstStage = data[firstKey].stage;
   return `
   <section class="about-section about-roster" id="fighters" aria-labelledby="fighters-title">
     <header class="about-heading"><h2 id="fighters-title">Meet the Bros.</h2><p>Every Bro fights differently. Spend coins to level them up.</p></header>
     <div class="site-frame about-bros" data-about-bros>
-      <div class="about-bros-body">
-        <div class="about-bro-stage" aria-hidden="true">
-          <div class="about-bro-sky" data-bro-sky style="background-image:url('${escape(firstStage?.sky || "")}')"></div>
-          <div class="about-bro-ground" data-bro-ground>
-            <span class="about-bro-aura" data-bro-aura></span>
-            <canvas class="about-bro-sprite" width="384" height="384" data-bro-sprite></canvas>
-            <img class="about-bro-still" src="/assets/${escape(firstKey)}/body.webp" width="256" height="256" alt="" data-bro-still/>
-            <img class="about-bro-platform" src="${escape(firstStage?.platform || "")}" alt="" data-bro-platform/>
-          </div>
-          <div class="about-bro-level"><span class="about-level-aura" aria-hidden="true"></span><div data-level-badge></div></div>
+      <div class="about-bro-stage" aria-hidden="true">
+        <div class="about-bro-sky" style="background-image:url('${escape(stage?.lobbyBgAsset || "")}')"></div>
+        <div class="about-bro-ground" data-bro-ground>
+          <canvas class="about-bro-sprite" width="384" height="384" data-bro-sprite></canvas>
+          <img class="about-bro-still" src="/assets/${escape(firstKey)}/body.webp" width="256" height="256" alt="" data-bro-still/>
+          <img class="about-bro-platform" src="${escape(stage?.lobbyPlatformAsset || "")}" alt="" data-bro-platform/>
         </div>
-        <div class="about-bro-panels">${fighters
-          .map(
-            ([key, stats], index) => `
-          <article class="about-bro${index ? "" : " is-active"}" role="tabpanel" id="fighter-${escape(key)}" aria-labelledby="tab-${escape(key)}"${index ? ' aria-hidden="true" inert' : ""}>
-            <header class="about-bro-head"><h3>${escape(name(key))}</h3>${FIGHTER_LINES[key] ? `<p class="about-bro-line">${escape(FIGHTER_LINES[key])}</p>` : ""}</header>
-            <div class="character-details-stats-container about-bro-stats">
-              ${statBox("health", "Health", "/assets/icons/heart.webp", data[key].levels[0].health)}
-              <div class="character-details-stat-boxes-row">
-                ${statBox("attack", "Attack", "/assets/icons/attack.webp", data[key].levels[0].damage, stats.attackDescription)}
-                ${statBox("special", "Super", "/assets/icons/special.webp", data[key].levels[0].special, stats.specialDescription)}
-              </div>
-            </div>
-            <button type="button" class="pixel-menu-button site-btn about-upgrade-btn" data-upgrade-button><span data-upgrade-label>Level up</span><span class="about-upgrade-price" data-upgrade-cost><img src="/assets/icons/coin.webp" width="18" height="18" alt="coins"/><span data-upgrade-price>${data[key].levels[0].price}</span></span></button>
-          </article>`,
-          )
-          .join("")}
-          <p class="bb-visually-hidden" role="status" data-upgrade-status></p>
-        </div>
+        <div class="about-bro-level"><div data-level-badge></div></div>
       </div>
       <div class="about-bros-tabs" role="tablist" aria-label="Fighters">${fighters
         .map(
@@ -300,6 +243,24 @@ function renderBros(fighters, catalog) {
         <button type="button" role="tab" class="character-card about-bro-tab${index ? "" : " selected"}" id="tab-${escape(key)}" data-fighter="${escape(key)}" aria-controls="fighter-${escape(key)}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}"><span class="character-card-image-wrap"><img class="character-profile-icon" src="/assets/${escape(key)}/portrait.webp" width="96" height="96" alt="" data-portrait="${escape(key)}"/></span><span class="character-card-name">${escape(name(key))}</span></button>`,
         )
         .join("")}
+      </div>
+      <div class="about-bro-panels">${fighters
+        .map(
+          ([key, stats], index) => `
+        <article class="about-bro${index ? "" : " is-active"}" role="tabpanel" id="fighter-${escape(key)}" aria-labelledby="tab-${escape(key)}"${index ? ' aria-hidden="true" inert' : ""}>
+          <header class="about-bro-head"><h3>${escape(name(key))}</h3>${FIGHTER_LINES[key] ? `<p class="about-bro-line">${escape(FIGHTER_LINES[key])}</p>` : ""}</header>
+          <div class="character-details-stats-container about-bro-stats">
+            ${statBox("health", "Health", "/assets/icons/heart.webp", data[key].levels[0].health)}
+            <div class="character-details-stat-boxes-row">
+              ${statBox("attack", "Attack", "/assets/icons/attack.webp", data[key].levels[0].damage, stats.attackDescription)}
+              ${statBox("special", "Super", "/assets/icons/special.webp", data[key].levels[0].special, stats.specialDescription)}
+            </div>
+          </div>
+          <button type="button" class="pixel-menu-button site-btn about-upgrade-btn" data-upgrade-button><span data-upgrade-label>Level up</span><span class="about-upgrade-price" data-upgrade-cost><img src="/assets/icons/coin.webp" width="18" height="18" alt="coins"/><span data-upgrade-price>${data[key].levels[0].price}</span></span></button>
+        </article>`,
+        )
+        .join("")}
+        <p class="bb-visually-hidden" role="status" data-upgrade-status></p>
       </div>
     </div>
     <script type="application/json" id="about-fighter-data">${json(data)}</script>
@@ -341,11 +302,11 @@ function renderRoad() {
 function renderCosmetics() {
   const pools = cosmeticPools();
   const used = { card: 0, skin: 0, title: 0, icon: 0 };
-  const tiles = COSMETIC_LAYOUT.map(([kind, column, row, columns = 1, rows = 1]) => {
+  const tiles = COSMETIC_LAYOUT.map((kind) => {
     const pool = pools[kind];
     if (!pool.length) return "";
     const item = pool[used[kind]++ % pool.length];
-    return `<li class="profile-icon-choice-tile about-cosmetic-tile is-${kind} rarity-${escape(item.rarity)}" style="--area:${row} / ${column} / span ${rows} / span ${columns}" data-kind="${kind}" data-name="${escape(item.name)}">${cosmeticTile(item)}</li>`;
+    return `<li class="profile-icon-choice-tile about-cosmetic-tile is-${kind} rarity-${escape(item.rarity)}" data-kind="${kind}" data-name="${escape(item.name)}">${cosmeticTile(item)}</li>`;
   }).join("");
   return `
   <section class="about-section about-cosmetics" id="cosmetics" aria-labelledby="cosmetics-title">
@@ -356,16 +317,6 @@ function renderCosmetics() {
 }
 
 function renderFriends() {
-  // Seats are built like the lobby's: name over a pixel frame standing on the
-  // platform's walkable surface, status pill hanging below the frame.
-  const seat = (side, bro, name, status) => `<div class="about-lobby-seat is-${side}">
-          <div class="about-lobby-slot character-slot" data-lobby-slot="${side}" data-state="${side === "you" ? "online" : "empty"}">
-            <span class="about-lobby-name">${name}</span>
-            <img class="about-lobby-bro character-sprite" src="/assets/${bro}/body.webp" alt=""/>
-            <span class="about-lobby-status" data-lobby-status>${status}</span>
-          </div>
-          <span class="about-lobby-platform"></span>
-        </div>`;
   return `
   <section class="about-section about-friends" id="friends" aria-labelledby="friends-title">
     <header class="about-heading"><h2 id="friends-title">Play with friends.</h2><p>Message a friend, pull them into your party and queue up together.</p></header>
@@ -376,19 +327,7 @@ function renderFriends() {
         <div class="bb-chat-composer"><div class="bb-chat-input-row"><span class="bb-chat-textarea about-scene-input" data-scene-input></span><span class="bb-chat-send">Send</span></div></div>
       </div>
       <div class="site-frame about-lobby" data-scene-lobby>
-        <div class="about-lobby-sky"></div>
-        <div class="about-lobby-floor">
-          ${seat("you", "thorg", "You", "Online")}
-          <div class="about-lobby-versus"><img class="about-lobby-vs" src="/assets/vs.webp" alt=""/></div>
-          ${seat("friend", "sparrow", "ArrowRain", "Invite")}
-        </div>
-        <div class="about-lobby-bar"><span class="about-lobby-chip">Bank Bust · 3v3</span><span class="about-lobby-ready" data-scene-ready>Ready</span><span class="about-lobby-chip">Iron Junction</span></div>
-        <div class="about-match" data-scene-match>
-          <div class="site-frame about-match-card">
-            <div class="site-frame-head"><h2>Match found!</h2></div>
-            <div class="about-match-teams"><img src="/assets/profile-icons/thorg.webp" alt=""/><img src="/assets/profile-icons/sparrow.webp" alt=""/><img class="about-match-vs" src="/assets/vs.webp" alt=""/><img src="/assets/profile-icons/draven.webp" alt=""/><img src="/assets/profile-icons/gloop.webp" alt=""/></div>
-          </div>
-        </div>
+        <iframe class="about-lobby-preview" src="/about-lobby-preview.html" title="Bro Ball party and matchmaking preview" loading="lazy" tabindex="-1" inert></iframe>
       </div>
     </div>
   </section>`;
@@ -398,6 +337,12 @@ function renderAboutPage(modes) {
   const fighters = Object.entries(characterStats);
   const maps = mapRepository.listMetadata();
   const arenas = maps.filter((map) => map.mapFullPreviewAsset);
+  const arenaCards = arenas
+    .map(
+      (map) => `
+    <li class="site-tile"><span class="site-tile-art about-arena-art"><img src="${escape(map.mapFullPreviewAsset)}" width="640" height="312" loading="lazy" alt=""/></span><span class="site-tile-name">${escape(map.label)}</span></li>`,
+    )
+    .join("");
   return `${renderHero(clips[0])}
 
   <section class="about-section about-basics" id="how-to-play" aria-labelledby="basics-title">
@@ -429,14 +374,10 @@ ${renderBros(fighters, maps)}
   </section>
 
   <section class="about-section about-arenas" id="arenas" aria-labelledby="arenas-title">
-    <header class="about-heading"><h2 id="arenas-title">Pick your arena.</h2></header>
-    <ul class="about-arena-strip">${arenas
-      .map(
-        (map) => `
-      <li class="site-tile"><span class="site-tile-art about-arena-art"><img src="${escape(map.mapFullPreviewAsset)}" width="640" height="312" loading="lazy" alt=""/></span><span class="site-tile-name">${escape(map.label)}</span></li>`,
-      )
-      .join("")}
-    </ul>
+    <header class="about-heading about-arena-heading"><h2 id="arenas-title">Pick your arena.</h2><button type="button" class="about-arena-toggle" aria-label="Pause arena scrolling" data-arena-toggle hidden></button></header>
+    <div class="about-arena-window" tabindex="0" role="region" aria-label="Arena previews">
+      <div class="about-arena-track"><ul class="about-arena-strip">${arenaCards}</ul><ul class="about-arena-strip" aria-hidden="true">${arenaCards}</ul></div>
+    </div>
   </section>
 ${renderRoad()}
 ${renderCosmetics()}
@@ -454,7 +395,7 @@ function renderFooter(config) {
   return `<footer class="site-footer">
     <div class="site-footer-inner">
       <div class="site-footer-brand"><a href="/about" class="site-footer-logo"><img src="/assets/logos/wordmark.webp" width="240" height="47" loading="lazy" alt="Bro Battles"/></a><p>Pixel arena battles, right in your browser.</p><a class="pixel-menu-button site-btn site-btn-play" href="/">Play free ${arrow("right")}</a></div>
-      <nav aria-label="The game"><h2>The game</h2><a href="/about">About</a><a href="/about#fighters">Fighters</a><a href="/about#modes">Modes</a><a href="/news">News</a></nav>
+      <nav aria-label="The game"><h2>The game</h2><a href="/about">About</a><a href="/leaderboard">Leaderboard</a><a href="/news">News</a><a href="/patch-notes">Patch Notes</a></nav>
       <nav aria-label="Support"><h2>Support</h2><a href="/help">Help Center</a><a href="/help/contact">Contact us</a><a href="/help/requests">My requests</a><a href="/feedback">Feedback</a></nav>
       <nav aria-label="Legal"><h2>Legal</h2><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:${escape(config.supportEmail)}">Email us</a></nav>
     </div>

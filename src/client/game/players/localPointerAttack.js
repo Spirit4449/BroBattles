@@ -190,15 +190,21 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
     followUpCursor = null;
     followUpPointer = null;
     if (attackAimState.family === "followup") resetPointerAttackAim();
+    const cue = player && !stats.dead ? combatMouseController?.getCenterCue() : null;
+    const cueAim = cue ? resolveDirectionalAttackContext(attackAimState.family) : null;
+    const showCancelCue = () => attackAimReticleController?.updateCancelCue?.(
+      cue && { ...cue, ...getAimBasePoint(), aim: cueAim });
     if (!player || stats.dead || !combatMouseController?.shouldShowReticle()) {
       clearAttackAimReticle();
+      showCancelCue();
       return;
     }
     const family = attackAimState.active ? attackAimState.family : "basic";
-    attackAimState.currentContext = resolveDirectionalAttackContext(family);
+    attackAimState.currentContext = cueAim || resolveDirectionalAttackContext(family);
     attackAimReticleController?.update({ ...attackAimState.currentContext,
       previewStrength: combatMouseController.getStrength(),
       centerCue: combatMouseController.getCenterCue() });
+    showCancelCue();
   }
 
   function updateWorldFollowUpAim(pointer) {
@@ -229,6 +235,10 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
   }
 
   function finishPointerAttackAim() {
+    if (combatMouseController?.isCancelled()) {
+      resetPointerAttackAim();
+      return null;
+    }
     // Resolve from the current player position with the same direction as the preview.
     const context = combatMouseController?.isAiming()
       ? resolveDirectionalAttackContext(attackAimState.family)
@@ -292,8 +302,8 @@ export function createLocalPointerAttack(scene, currentCharacter, opponentPlayer
       // Touches belong to the mobile controls overlay.
       if (options.getMobileControls()?.isEnabled?.() && pointer?.wasTouch) return;
       if (!attackAimState.active || (pointer && pointer.id !== attackAimState.pointerId)) return;
+      if (pointer && pointer.button !== attackAimState.button) return;
       if (attackAimState.family === "followup") {
-        if (pointer && pointer.button !== attackAimState.button) return;
         resetPointerAttackAim();
         if (!stats.dead && options.followUpActive?.()) options.fireFollowUp?.();
         return;

@@ -15,7 +15,8 @@ const DUCK_STICK_MIN_DY = 0.82;
 const DUCK_STICK_MIN_STRENGTH = 0.55;
 const DASH_STICK_MIN_DY = 0.5;
 const DASH_STICK_MIN_STRENGTH = 0.4;
-const AIM_STICK_DEADZONE = 0.25;
+const AIM_STICK_DEADZONE = 0.65;
+const AIM_CANCEL_DEADZONE = 0.45;
 const AIM_STICK_RANGE = 240;
 
 // Sizes and offsets in px at scale 1. Offsets are centre positions measured
@@ -65,6 +66,8 @@ function createStick() {
     dy: 0,
     strength: 0,
     followUp: false,
+    hasAimed: false,
+    cancelled: false,
   };
 }
 
@@ -312,6 +315,10 @@ export function createMobileControlsController({
     const button = state.geometry?.buttons?.[kind];
     const stick = state[kind];
     sampleStick(stick, event.clientX, event.clientY, (button?.size || 80) * 0.5);
+    if (stick.strength >= AIM_STICK_DEADZONE) stick.hasAimed = true;
+    if (stick.hasAimed) {
+      stick.cancelled = stick.strength < (stick.cancelled ? AIM_STICK_DEADZONE : AIM_CANCEL_DEADZONE);
+    }
     resolveStickContext(kind);
   }
 
@@ -411,15 +418,16 @@ export function createMobileControlsController({
     return Number(getSuperChargeRatio()) >= 1;
   }
 
-  function resolveStickContext(kind = "basic") {
+  function resolveStickContext(kind = "basic", preview = false) {
     const player = typeof getPlayer === "function" ? getPlayer() : null;
     if (!player) return null;
     const family = kind === "special" ? "special" : "basic";
     const stick = state[family];
     if (stick.followUp !== !!isFollowUpActive?.()) return null;
+    if (stick.cancelled && !preview) return null;
     // A tap (or a drag that never leaves the deadzone) auto-aims at the
     // nearest opponent, like a keyboard quick attack.
-    if (stick.strength < AIM_STICK_DEADZONE && typeof resolveQuickContext === "function") {
+    if (!stick.hasAimed && typeof resolveQuickContext === "function") {
       return resolveQuickContext(family);
     }
     const base = (typeof getAimBasePoint === "function" ? getAimBasePoint(family) : null) || {
@@ -538,10 +546,23 @@ export function createMobileControlsController({
     for (const kind of ["basic", "special"]) {
       if (!state[kind].active) continue;
       const context = resolveStickContext(kind);
-      if (!context) continue;
+      if (!context && !state[kind].cancelled) continue;
       try {
         if (state[kind].followUp) reticleController?.hide?.();
-        else reticleController?.update?.(context);
+        else {
+          reticleController?.update?.(context);
+          const stick = state[kind];
+          const radius = (state.geometry?.buttons?.[kind]?.size || 80) * 0.5;
+          const base = getAimBasePoint?.(kind) || { baseX: getPlayer?.()?.x || 0, baseY: getPlayer?.()?.y || 0 };
+          reticleController?.updateCancelCue?.(stick.hasAimed ? {
+            ...base,
+            aim: context || resolveStickContext(kind, true),
+            x: stick.dx * stick.strength * radius,
+            y: stick.dy * stick.strength * radius,
+            radius: radius * (stick.cancelled ? AIM_STICK_DEADZONE : AIM_CANCEL_DEADZONE),
+            cancelled: stick.cancelled,
+          } : null);
+        }
       } catch (_) {}
       return;
     }

@@ -320,7 +320,7 @@ describe("Local respawn", () => {
       getDead: () => false,
       setDead: noop,
       stopWallSlideAudio: () => {},
-      spawnHealthMarker: noop,
+      showHealthChange: noop,
       updateHealthBar: noop,
     });
     coordinator.register();

@@ -169,6 +169,7 @@ export function attachTeamFootRing(scene, sprite, { isAlly, isSelf = false, hidd
     if (destroyed) return;
     destroyed = true;
     scene.events?.off("postupdate", sync);
+    scene.events?.off("shutdown", destroy);
     ring.destroy();
   };
   scene.events?.on("postupdate", sync);

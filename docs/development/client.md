@@ -97,16 +97,19 @@ effect immediately rather than queuing. Browsing skins cancels the automatic swi
 to Animations, including when the stage is still loading.
 
 The expanded character panel previews all characters by default (reduced motion
-keeps the portrait). `lobby/profile/showcaseMotion.js` fits opaque idle
-width and height inside a common reference size, independent of atlas padding or
-selected skin. Character kits may override `visual.height`, `visual.maxWidth` and
-`visual.bodyTop` (a fraction excluding an overhead prop). Thorg reads taller than
-the default fighter; Draven is measured below his tall staff plume.
-Both fighters use that same scale reference and the same HUD width; animation
-poses and supers do not resize the camera. Jumping uses the game's launch speed,
-gravity and stronger falling gravity, with room reserved for the full arc.
-Animation demonstrations use normal game speed and animation rate, grass
-footsteps, landing audio and shared dust.
+keeps the portrait). Fighters use the match sprite scale, skin origin, and collision
+body. In Animations, the camera fits the opaque idle art using the character kit's
+framing settings and reserves room for a full jump. Thorg and Draven use taller
+solo framing, including Draven’s staff plume. The solo sequence shows the basic attack and super before movement.
+Buffs persist as the fighter returns to idle or starts running. Fight follows the group and widens for knockback and airborne supers.
+Its closest view keeps at least one showcase world height in frame. Both modes use the match running-dust cadence and movement
+animation controller, character effects, and enemy coloring. The match and showcase both draw the complete overhead
+panel through `game/scene/playerWorldHud.js`. Its bottom edge follows the standing head measured on the selected
+idle atlas, including skins, using a tight center strip that excludes nearby staff plumes. Only the local fighter has an ammo row. The name, HP, super meter, and status badges
+share the same pixel alignment in both scenes.
+Asset loads share one scene loader. Body lets an in-flight batch finish before
+the renderer sleeps. Live views and rounds reuse the loaded roster. Closing the
+character panel releases its textures and renderer before another preview opens.
 
 Fight participants use the panel's level for health and damage. Gloop spars with
 Thorg; higher-damage characters normally face Thorg. Ozzy faces one opponent with a green teammate standing behind him as a
@@ -130,7 +133,7 @@ Supers require earned charge and have a director pacing interval. Effect modifie
 affect movement. The local ammo bar reuses `scene/ammoBarRenderer.js`, including
 its pixel frame, red segments and gradual refill, with super below it as in matches.
 The preview physics world uses the combat arena bounds, and simulation contact boxes
-follow the fitted stage bodies. Thorg’s starting pair is shifted left to reserve room
+follow the grounded match bodies. Thorg’s starting pair is shifted left to reserve room
 for repeated knockback.
 
 `showcaseFight.js` renders events from `shared/combat/previewSession.js`, which hosts
@@ -139,15 +142,15 @@ contacts, Sparrow's burn ticks, Gloop's slows/pull and Ozzy's team grants theref
 need no separate showcase implementation. Animation demonstrations use this host
 too. Projectile network adapters are instantiated with an isolated local clock;
 health feedback, character event handlers, powerup visuals and sounds reuse match
-presentation. Sparrow's isolated renderer accepts compact arrow framing without
-changing its collision or damage.
+presentation. Arrows use their match dimensions. Gloop’s slimeballs and hook and
+Ozzy’s fireballs use the preview clock, and slimeballs bounce against its platform.
 
 Optional `game/characters/<key>/showcase.js` files contain art framing only. New
 characters inherit combat support from their normal runtime registration, with no
 showcase allowlist or attack script. Content validation checks basic/special runtime
 coverage. `tests/profileCharacters.test.js` covers mechanic contracts, roster levels,
 ammo, stable spacing, teardown and identical preview/GameRoom outcomes for all
-registered characters. Renderer tests cover compact embedded arrows and cleanup.
+registered characters. Renderer tests cover projectile framing and cleanup.
 See [Add a character](contributing.md#add-a-character) for the extension contract.
 
 ## Lobby and battle navigation
@@ -580,6 +583,23 @@ another movement/action interrupts them. Stomp impacts use distance from dash
 activation to landing, with two to five cloud bursts for progressively higher drops;
 the server includes that distance for remote impacts.
 
+## Mouse battle controls
+
+`scene/combatMouse.js` owns relative mouse aiming and its sensitivity multiplier.
+Each press starts a new origin. A click auto-aims; once a drag crosses the aim
+threshold, returning inside the center dead zone hides the guide and cancels
+release for both attack and super. Dragging out again resumes manual aim.
+A text-free ring and drag dot join the visible attack guide at its launch point,
+including throw-path display offsets, and share its palette. The ring brightens
+on approach, then fills and shows an X while canceled. The cue stays visible
+even when the attack guide is hidden. Its visual radius grows only slightly;
+the dot is normalized to the active input threshold so the boundary remains
+accurate. The larger re-arm threshold holds cancellation through small corrections.
+Dimensions stay fixed in screen pixels across camera zoom.
+All drags discard displacement beyond the maximum radius, so reversing direction
+and returning to center remain reachable. `players/localPointerAttack.js` only
+releases an action when its matching mouse button is lifted.
+
 ## Gameplay camera
 
 Mouse aiming adds a fixed screen-pixel look-ahead with time-based easing after
@@ -607,7 +627,8 @@ it each frame through `isMovingLeft/Right`, `isJumpHeld`, `isDuckHeld`,
 - The left half is a floating movement stick. Pulling it straight down ducks, and up/down steers a dash.
 - The right-thumb cluster is ordered by use. Attack is largest and nearest the corner,
   then jump, then super and dash, then a small duck button. Tapping attack or super
-  auto-aims at the nearest opponent; dragging aims manually. Super fills from the bottom
+  auto-aims at the nearest opponent; dragging aims manually. Returning to the starting
+  point after aiming cancels release. Super fills from the bottom
   as it charges; dash shows its cooldown as a lifting shutter, so the keyboard dash bar
   is hidden. When either is available its face turns solid, slowly fades brighter, and a
   highlight runs around its outline.

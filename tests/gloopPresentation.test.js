@@ -67,6 +67,38 @@ describe("Slime presentation", () => {
     visual.destroy();
   });
 
+  test('the charging slime follows the drawn Gloop and meets the released ball in both directions', () => {
+    const { createClientModuleGraph } = require('./helpers/clientModule');
+    const graph = createClientModuleGraph({ imports: {
+      '../shared/attackDebugDraw': { trackDebugShape: () => null },
+      '../shared/projectileReplication': { roomTerrain: () => [] },
+    } });
+    const { spawnGloopSlimeBud, spawnGloopSlimeballVisual } = graph.load('src/client/game/characters/gloop/attack.js');
+    const { slimeLaunch } = require('../src/shared/characters/gloopProjectile');
+    const cfg = require('../src/shared/characters/characterTuning').getResolvedCharacterAttackConfig('gloop', 'slimeball');
+    for (const direction of [-1, 1]) {
+      const { scene, objects } = setup();
+      scene.events = new EventEmitter();
+      scene.physics = { world: { bounds: { x: -500, y: -500, width: 1000, height: 1000 } } };
+      scene.add.circle = () => scene.add.graphics();
+      const origin = { x: -100, y: -75 };
+      const owner = Object.assign(new EventEmitter(), { active: true, x: origin.x - 14, y: origin.y + 12 });
+      const launch = slimeLaunch(origin, { x: origin.x + direction * 200, y: -10 }, cfg);
+      spawnGloopSlimeBud(scene, owner, { ...launch, origin, id: 'cast', startup: cfg.castDelayMs });
+      const bud = objects.at(-1);
+      scene.events.emit('postupdate', 0, cfg.castDelayMs);
+      const muzzle = () => ({ x: launch.start.x + owner.x - origin.x, y: launch.start.y + owner.y - origin.y });
+      assert.ok(Math.hypot(bud.x - muzzle().x, bud.y - muzzle().y) < 3, 'fully grown on the visible caster');
+      owner.x += 21;
+      owner.y -= 10;
+      scene.events.emit('postupdate', 0, 0);
+      const ball = spawnGloopSlimeballVisual(scene, { ...launch, id: 'cast', start: muzzle() }, owner);
+      assert.deepEqual([ball.x, ball.y], [bud.x, bud.y], 'release continues from the last drawn bud pixel');
+      assert.equal(bud.destroyed, true);
+      scene.events.emit('shutdown');
+    }
+  });
+
   test('slimeball graphics can be destroyed by Phaser without recursive destruction',()=>{
     const attackApi={};
 

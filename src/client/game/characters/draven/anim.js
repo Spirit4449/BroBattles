@@ -9,7 +9,7 @@ export function animations(scene) {
   const { make } = createAnimationBuilder(scene, NAME);
 
   // Try reasonable prefix variants for robustness across atlases
-  make(`${NAME}-running`, ["running", "run"], 18, 0);
+  make(`${NAME}-running`, ["running", "run"], 18, -1);
   make(`${NAME}-idle`, ["idle", "stand", "idle_"], 6, -1);
   make(`${NAME}-jumping`, ["jumping", "jump"], 15, 0);
   // The wall slide's staff flame keeps flickering while he slides.

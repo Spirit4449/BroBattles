@@ -1,9 +1,20 @@
 import { bindCanvasName } from "../../site/preferences";
 import { RENDER_LAYERS } from "./renderLayers";
 import { syncStatusIconStack, destroyStatusIconStack } from "./statusIconStack";
+import { TEAM_GREEN } from "../../../shared/projectilePresentation";
+import { drawHealthBar } from "./healthBarRenderer";
+import { drawAmmoChargeBar } from "./ammoBarRenderer";
+import { drawSuperChargeBar } from "./superBarRenderer";
 
-export function createPlayerWorldHud(scene, { username, x, y, nameDepth, getPlayerEffects }) {
-  const playerName = scene.add.text(x, y, username);
+export const WORLD_HUD_WIDTH = 52;
+const PLAYER_COLORS = {
+  self: { color: 0xaebb50, teamGlowColor: 0x83dca6 },
+  ally: { color: 0x99ab2c, teamGlowColor: TEAM_GREEN },
+  enemy: { color: 0xb24035, teamGlowColor: 0xe04a4e },
+};
+
+export function createPlayerWorldHud(scene, { username, role, getPlayerEffects }) {
+  const playerName = scene.add.text(0, 0, username);
   bindCanvasName(playerName, username);
   playerName.setStyle({
     fontFamily: "'Press Start 2P', monospace",
@@ -14,16 +25,20 @@ export function createPlayerWorldHud(scene, { username, x, y, nameDepth, getPlay
   });
   playerName.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 0, true, true);
   playerName.setOrigin(0.5, 0);
-  playerName.setDepth(nameDepth);
+  playerName.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
 
   // Health text
   const healthText = scene.add.text(0, 0, "", {
     fontFamily: "'Press Start 2P', monospace",
-    fontSize: "8px",
+    fontSize: "9px",
     color: "#FFFFFF",
     stroke: "#000000",
     strokeThickness: 4,
   });
+
+  healthText.setOrigin(0.5, 0.5);
+  healthText.setShadow(0, 1, "#000000", 0, true, true);
+  healthText.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
 
   // Health bar
   const healthBar = scene.add.graphics();
@@ -53,11 +68,41 @@ export function createPlayerWorldHud(scene, { username, x, y, nameDepth, getPlay
   const superBarBack = scene.add.graphics();
   const superBar = scene.add.graphics();
   const statusIcons = [];
-  const elements = [playerName, healthText, healthBar, duckShieldGlow, duckShieldIcon, superBar, superBarBack];
+  const local = role === "self";
+  const ammoBarBack = local ? scene.add.graphics() : null;
+  const ammoBar = local ? scene.add.graphics() : null;
+  const barsAndLabels = [playerName, healthText, healthBar, superBarBack, superBar];
+  if (local) barsAndLabels.push(ammoBarBack, ammoBar);
+
+  // Attach the bottom of the complete panel just above the head. A remote
+  // fighter has one fewer row, so its health and name move down together.
+  const superOffset = local ? 19 : 11;
+  const superY = headY => Math.round(headY) - 9; // 4px fill, 2px frame, 3px clearance.
+  const nameY = headY => superY(headY) - superOffset - 22;
+  function drawAmmo(sprite, headY, ammo, shakeX = 0) {
+    if (local) drawAmmoChargeBar(ammoBar, ammoBarBack, {
+      x: Math.round(sprite.x) - WORLD_HUD_WIDTH / 2 + shakeX,
+      y: superY(headY) - superOffset + 11, width: WORLD_HUD_WIDTH, ammo,
+    });
+  }
 
   return {
     playerName, healthText, healthBar, duckShieldGlow, duckShieldIcon, superBar, superBarBack, statusIcons,
-    layout({ x, y, width, sprite, visible }) {
+    ammoBar, ammoBarBack, barsAndLabels, drawAmmo,
+    markerY: headY => nameY(headY) - 8,
+    draw({ sprite, headY, health, maxHealth, charge, maxCharge, ammo, shakeX, notReady, dead, visible }) {
+      const centerX = Math.round(sprite.x);
+      const width = WORLD_HUD_WIDTH;
+      const x = centerX - width / 2;
+      const y = superY(headY) - superOffset;
+      playerName.setPosition(centerX, nameY(headY));
+      healthText.setText(String(dead ? 0 : Math.max(0, Math.round(health))));
+      healthText.setPosition(centerX, y);
+      drawHealthBar(healthBar, { x, y, width, health, maxHealth, ...PLAYER_COLORS[role], isLocal: local });
+      drawAmmo(sprite, headY, ammo, shakeX);
+      drawSuperChargeBar(superBar, superBarBack, {
+        x, y: y + superOffset, width, charge, maxCharge, player: sprite, notReady,
+      });
       const shieldX = x + width + 1;
       const shieldY = y + 4.5;
       const showDuckShield = visible && !!sprite?._ducking;
@@ -76,7 +121,9 @@ export function createPlayerWorldHud(scene, { username, x, y, nameDepth, getPlay
     },
     destroy() {
       pulse?.remove?.();
-      for (const element of elements) element.destroy();
+      for (const element of barsAndLabels) element.destroy();
+      duckShieldIcon.destroy();
+      duckShieldGlow.destroy();
       destroyStatusIconStack(statusIcons);
     },
   };

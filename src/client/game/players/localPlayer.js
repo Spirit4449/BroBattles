@@ -559,7 +559,7 @@ export function createPlayer(sceneParam, {
     getPlayer: () => player,
     getCurrentCharacter: () => currentCharacter,
     getOpponentPlayersRef: () => opponentPlayersRef,
-    spawnHealthMarker,
+    showHealthChange: delta => spawnHealthMarker(scene, player.x, localHud.markerY(), delta, { isSelf: true }),
     updateHealthBar,
     stats: localStats,
     stopWallSlideAudio: () => movementAudio.stopWallSlide(),

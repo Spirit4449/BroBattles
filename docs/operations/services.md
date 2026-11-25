@@ -61,22 +61,26 @@ of literal fighter, mode, and arena counts.
   and one Bank Bust 3v3).
 - **Meet the Bros.** `aboutBros.mjs` and `spriteLoop.mjs` use the lobby's
   character cards as tabs and play idle animations from the game atlases.
-  Each Bro stands on the next map's lobby platform and sky. The walkable top
-  is measured from the art. The panel uses the lobby's Health, Attack, and Super
-  boxes and animated level badge with values and costs from `characterStats`.
-  Panels share a grid cell to hold the box size steady. Until the visitor takes
-  over, the demo levels each Bro to the cap and advances. Levelling shows a
-  pixel aura around the badge. Switching Bros eases the stages out and in
-  while the skies cross-fade.
-- **Trophy Road.** `aboutRoad.mjs` pins its heading and road while the visitor scrolls through milestones from `buildTrophyRewardTrack()`. It omits player
-  cards and unplayable modes, and places one coin or gem cache between each pair
-  of milestones using `src/shared/currencyRewardArt.cjs`. Milestone cards switch
-  from Locked to Claimed with the lobby's card burst and pixel sparks.
+  All fighters share one sky and platform. The panel uses the lobby's Health,
+  Attack, and Super boxes and animated level badge with values and costs from
+  `characterStats`. Panels share a grid cell to hold the box size steady.
+  Until the visitor takes over, the demo levels each Bro to the cap and advances.
+- **Pick your arena.** `aboutArenas.mjs` loops the map previews while visible.
+  Visitors can pause the strip or scroll it manually. Reduced motion shows a
+  single, manually scrollable list.
+- **Trophy Road.** The About preview shows the first reward, playable mode,
+  character and skin unlocks, and the final milestone from `buildTrophyRewardTrack()`.
+  When the cards fit, they appear in one centered row. On narrower screens,
+  `aboutRoad.mjs` pins the row briefly as the visitor scrolls through it.
+  Reduced motion supports manual horizontal scrolling.
 - **Make it yours.** `aboutCosmetics.mjs` displays real player cards with a Bro
   in the card window, skins, wide titles, and profile icons. One tile at a time
   swaps to another item of its kind.
 - **Play with friends.** `aboutFriends.mjs` uses the game's chat beside a mini
-  lobby to show a friend coming online, joining, readying up, and finding a match.
+  lobby to show a friend coming online, joining, and readying up. The Bro Ball
+  queue fills four seats on Rumble Stadium before showing Match Found. The embedded
+  preview is built from the lobby HTML and uses the same CSS, slot effects
+  and matchmaking renderer. Its scripted roster runs locally.
 
 #### Recording gameplay clips
 

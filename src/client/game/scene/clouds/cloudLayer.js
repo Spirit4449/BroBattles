@@ -152,6 +152,9 @@ function createCloudSystem(scene) {
     if (destroyed) return;
     destroyed = true;
     scene.events.off("update", update);
+    scene.events.off("presentation:reset", destroy);
+    scene.events.off("shutdown", destroy);
+    scene.events.off("destroy", destroy);
     for (const surface of Object.values(surfaces)) {
       surface.image?.destroy();
       if (surface.texture) scene.textures.remove(surface.key);
@@ -188,6 +191,7 @@ function createCloudSystem(scene) {
   };
 
   scene.events.on("update", update);
+  scene.events.once("presentation:reset", destroy);
   scene.events.once("shutdown", destroy);
   scene.events.once("destroy", destroy);
   return system;

@@ -83,7 +83,7 @@ export function initializeAboutCosmetics(root = document.querySelector('[data-co
   async function swap() {
     // Pick a tile (not the one just changed) whose kind has an item not on show.
     const shown = new Set(tiles.map(tile => tile.dataset.name));
-    const options = tiles.filter(tile => tile !== last && pools[tile.dataset.kind]?.some(item => !shown.has(item.name)));
+    const options = tiles.filter(tile => tile !== last && tile.offsetWidth > 0 && pools[tile.dataset.kind]?.some(item => !shown.has(item.name)));
     if (!options.length) return;
     const tile = options[Math.floor(Math.random() * options.length)];
     const choices = pools[tile.dataset.kind].filter(item => !shown.has(item.name));

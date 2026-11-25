@@ -219,7 +219,7 @@ function drawInspector() {
     mode.append(
       node(
         "div",
-        `World ${w.width} × ${w.height}. The camera shows ${c.width} × ${c.height} of it and zooms ${c.minZoom}–${c.maxZoom}×. This map uses these bounds in every match format.`,
+        `World ${w.width} × ${w.height}. Blue-gray marks the physics world. Yellow marks the camera bounds (${c.width} × ${c.height}), not the visible screen size. The camera zooms ${c.minZoom}–${c.maxZoom}×. Art does not need to end at either outline. This map uses these bounds in every match format.`,
         { class: "notice" },
       ),
     );

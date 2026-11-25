@@ -11,13 +11,56 @@ function hiResArtFor(character, texture) {
   const art = characterPresentation(character).hiResArt;
   if (!art || texture?.key !== character) return null;
   if (art.requiresFrame && !texture.has?.(art.requiresFrame)) return null;
-  return texture.get?.('idle00')?.width === art.sourceSize ? art : null;
+  const idle = texture.get?.('idle00');
+  return (idle?.realWidth ?? idle?.width) === art.sourceSize ? art : null;
 }
 
 // Artwork resolution is independent of the authoritative character geometry.
 // Legacy skins continue to use the original presentation unchanged.
 function spritePresentation(character, texture) {
-  return standOnRigFeet(character, texture, basePresentation(character, texture));
+  const presentation = standOnRigFeet(character, texture, basePresentation(character, texture));
+  const head = idleHeadY(texture, presentation.originX);
+  if (head != null) {
+    const height = texture.get('idle00').realHeight;
+    presentation.hudTopOffset = (head - height * presentation.originY) * presentation.scale;
+  }
+  return presentation;
+}
+
+// Measure the idle silhouette once per atlas, including skins. A narrow strip
+// above the standing point stays inside the head, excluding nearby staff plumes. Using the same idle
+// row throughout a cast keeps the HUD steady as the animation changes frames.
+const idleHeads = new WeakMap();
+function idleHeadY(texture, originX) {
+  if (!texture?.has?.('idle00') || !texture.getSourceImage || typeof document === 'undefined') return null;
+  if (idleHeads.has(texture)) return idleHeads.get(texture);
+  const frame = texture.get('idle00');
+  let head = null;
+  if (!frame.rotated) {
+    const center = frame.realWidth * originX - frame.x;
+    const radius = Math.max(1, frame.realWidth * 0.02);
+    const left = Math.max(0, Math.floor(center - radius));
+    const right = Math.min(frame.cutWidth, Math.ceil(center + radius));
+    if (right > left && frame.cutHeight > 0) {
+      const canvas = document.createElement('canvas');
+      canvas.width = right - left;
+      canvas.height = frame.cutHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (ctx) {
+        ctx.drawImage(texture.getSourceImage('idle00'), frame.cutX + left, frame.cutY, canvas.width, canvas.height,
+          0, 0, canvas.width, canvas.height);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        for (let alpha = 3; alpha < pixels.length; alpha += 4) {
+          if (pixels[alpha] >= 128) {
+            head = frame.y + Math.floor((alpha - 3) / (4 * canvas.width));
+            break;
+          }
+        }
+      }
+    }
+  }
+  idleHeads.set(texture, head);
+  return head;
 }
 
 // Origin and client body before the rig's feet are applied.

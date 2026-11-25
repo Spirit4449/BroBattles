@@ -190,7 +190,7 @@ test('browsing skins cancels showcase autoplay before and after stage preparatio
       require: () => ({ createShowcaseStage: () => ({
         prepare: () => preparation,
         show: options => { shown.push(options); return true; },
-        hide() {},
+        hide() {}, destroy() {},
       }) }),
     });
     const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -216,11 +216,44 @@ test('browsing skins cancels showcase autoplay before and after stage preparatio
   }
 });
 
+test('a rerender during a view switch keeps the portrait until the requested skin is drawn', async () => {
+  const { parseHTML } = require('linkedom');
+  const { loadClientModule } = require('./helpers/clientModule');
+  const { document } = parseHTML('<html><body><div></div><div></div></body></html>');
+  const requests = [];
+  const api = loadClientModule('src/client/lobby/profile/characterShowcase.js', {
+    document, console, performance, setTimeout, clearTimeout,
+    window: { Phaser: {}, matchMedia: () => ({ matches: false }) },
+    require: () => ({ createShowcaseStage: () => ({
+      prepare() {}, hide() {}, destroy() {},
+      show: options => new Promise(resolve => requests.push({ options, resolve })),
+    }) }),
+  });
+  const [first, replacement] = document.querySelectorAll('body > div');
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  api.mountCharacterShowcase(first, { character: 'ninja' });
+  first.querySelectorAll('button')[2].click();
+  await settle();
+  api.mountCharacterShowcase(replacement, { character: 'ninja', skinId: 'ninja-arena-sovereign' });
+  await settle();
+  assert.equal(replacement.dataset.showcaseView, 'body');
+  assert.equal(requests.length, 2);
+  requests[0].resolve(true);
+  await settle();
+  assert.equal(replacement.dataset.showcaseView, 'body');
+  assert.equal(requests[1].options.skinId, 'ninja-arena-sovereign');
+  requests[1].resolve(true);
+  await settle();
+  assert.equal(replacement.dataset.showcaseView, 'fight');
+  api.hideCharacterShowcase();
+});
+
 test('showcase is available without a character allowlist and respects reduced motion', () => {
   const { loadClientModule } = require('./helpers/clientModule');
   let reduced = false;
   const api = loadClientModule('src/client/lobby/profile/characterShowcase.js', {
     window: { matchMedia: () => ({ matches: reduced }) },
+    require: () => ({ loadGameFonts: async () => {} }),
   });
   assert.equal(api.hasCharacterShowcase('future-character'), true);
   assert.equal(api.hasCharacterShowcase('gloop'), true);
@@ -470,6 +503,27 @@ test('every catalog character has an executable combat implementation; missing m
   assert.ok(combatCoverageErrors({ newcomer: { basicAction: 'unimplemented' } }).some(error => error.includes('basic')));
 });
 
+test('Thorg’s enraged showcase hit sends the opponent up and away before landing', () => {
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { createShowcaseDirector } = createClientModuleGraph().load('src/client/lobby/profile/showcaseDirector.js');
+  const { session, hero, enemy, events } = preview('thorg', 'ninja');
+  enemy.x = hero.x + 50;
+  hero.superCharge = hero.maxSuperCharge;
+  assert.ok(session.requestSpecial(hero.name));
+  assert.ok(requestBasic(session, hero, enemy, {}, () => 0.5, session.now));
+  for (let tick = 0; tick < 90 && !events.some(e => e.type === 'player:knockback'); tick++) session.step();
+  assert.ok(enemy.vy < 0);
+  assert.ok(enemy.vx > 0);
+  const start = enemy.x;
+  const direct = createShowcaseDirector(session);
+  session.step(direct);
+  assert.ok(enemy.y < enemy.groundY && enemy.x > start);
+  for (let tick = 0; tick < 90 && !enemy.grounded; tick++) session.step(direct);
+  assert.equal(enemy.grounded, true);
+  assert.equal(enemy.y, enemy.groundY);
+  session.dispose();
+});
+
 test('preview and GameRoom hosts produce identical combat outcomes for every character', () => {
   const { makeRoom } = require('./helpers/botRoom');
   const stats = require('../src/shared/characters/characterStats');
@@ -584,6 +638,10 @@ test('showcase presentation shares centered projectile bounds and displayed cont
   assert.equal(scene._bbSeenPackets.size, 0, 'a new round can render reused action IDs');
   assert.equal(scene._gloopSplats.size, 0, 'the first projectile cannot inherit an old splat');
   const world = fight.session.geometry.world, player = fight.session.players.get('hero');
+  const { characterBody } = require('../src/shared/physics/characterBody');
+  assert.equal(player._lastWidth, characterBody('gloop').displayWidth, 'skin artwork cannot extend combat reach');
+  assert.equal(scene.combatPresentation.colliders, fight.session.geometry.colliders);
+  assert.equal(scene.combatPresentation.clock.now(), fight.session.simulationMono);
   assert.deepEqual(bounds, [world.x, world.y, world.width, world.height]);
   assert.ok(bounds[0] < sprite.x, 'left-side launches remain inside the rendered arena');
   assert.equal(player.y + player._bodyCenterOffsetY + player._bodyHalfHeight, 0);
@@ -591,6 +649,40 @@ test('showcase presentation shares centered projectile bounds and displayed cont
   fight.dispose();
 });
 
+
+test('finished Thorg and Ozzy casts return to idle while their buffs are still active', () => {
+  const { EventEmitter } = require('node:events');
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const graph = createClientModuleGraph({ globals: { window: { Phaser: {} }, performance }, imports: {
+    '../../game/characters/networkRegistry': { createCharacterNetworkAdapters: () => [] },
+    '../../game/characters/special': {},
+    '../../game/characters/shared/hitFeedback': {},
+    '../../game/characters': { getCharacterSocketEvents: () => [], getCharacterEffectTickSounds: () => [] },
+    '../../game/powerups/powerupRenderer': { createPowerupRenderer: () => ({ renderPowerupsAndEffects() {}, destroy() {} }) },
+  } });
+  const { createShowcaseFight } = graph.load('src/client/lobby/profile/showcaseFight.js');
+  const { markOneShotAnimation, activeAction } = graph.load('src/client/game/characters/shared/animationState.js');
+  for (const [character, autoplay] of [['thorg', true], ['ozzy', false]]) {
+    const scene = { events: new EventEmitter(), physics: { world: { setBounds() {} } }, anims: { get() {} } };
+    const sprite = { x: 0, y: -30, setPosition() {},
+      body: { width: 40, height: 60, center: { x: 0, y: -30 }, updateFromGameObject() {} },
+      anims: { currentAnim: { key: character + '-special' }, isPlaying: false } };
+    const fighter = { id: 'hero', character, team: 'team1', homeX: 0, standY: -30, sprite, demonstratingCombat: !autoplay };
+    const fight = createShowcaseFight({ scene, fighters: [fighter], halfWidth: 200, autoplay, face() {},
+      play(_fighter, pose) {
+        if (!activeAction(sprite)) sprite.anims.currentAnim.key = character + '-' + pose;
+        return sprite.anims.currentAnim.key;
+      } });
+    const p = fight.session.players.get('hero');
+    const buff = character === 'thorg' ? 'thorgRage' : 'rage';
+    combatEffects.apply(p, buff, fight.session.now);
+    markOneShotAnimation(sprite, 'special', 1000);
+    scene.events.emit('update', 10, 0);
+    assert.equal(sprite.anims.currentAnim.key, character + '-idle');
+    assert.ok(fighter.status[buff] > 0);
+    fight.dispose();
+  }
+});
 
 test('Gloop earns his hook against a Thorg who approaches then retreats slowed', () => {
   const { createClientModuleGraph } = require('./helpers/clientModule');

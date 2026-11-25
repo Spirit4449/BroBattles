@@ -71,7 +71,7 @@ function createLocalPlayerFixture({ character = 'ninja', characterClass = null }
     [modulePath('game/characters/networkRegistry')]: { predictCharacterSpecial: noop },
     [modulePath('game/scene/attackAimReticle')]: { createAttackAimReticleController: () => ({ hide: noop, destroy: noop }) },
     [modulePath('game/scene/mobileControls')]: { createMobileControlsController: () => ({ ensure: noop, update: noop, destroy: noop, isEnabled: () => false }) },
-    [modulePath('game/scene/combatMouse')]: { createCombatMouseController: () => ({ isActive: () => true, shouldShowReticle: () => false, beginInput: () => true, destroy: noop, endDrag: noop, release: noop }) },
+    [modulePath('game/scene/combatMouse')]: { createCombatMouseController: () => ({ isActive: () => true, getCenterCue: () => null, shouldShowReticle: () => false, beginInput: () => true, destroy: noop, endDrag: noop, release: noop }) },
     [modulePath('game/players/teamFootRing')]: { attachTeamFootRing: noop },
     [modulePath('game/scene/healthBarRenderer')]: { drawHealthBar: noop, resetHealthBarAnimation: noop },
     [modulePath('game/scene/superBarRenderer')]: { drawSuperChargeBar: noop, resetSuperBarAnimation: noop },

@@ -2,7 +2,9 @@ const { API_PATHS } = require("../../../shared/net/apiPaths.js");
 const { asyncRoute, authedRoute } = require("../http");
 const { httpError } = require("../../services/httpError");
 
-const { createLeaderboardService, LEADERBOARD_MAX_PLAYERS } = require("../../services/trophies/leaderboardService");
+const { createLeaderboardService, findLeaderboardPlayer, PUBLIC_STANDINGS_LIMIT, LEADERBOARD_MAX_PLAYERS } = require("../../services/trophies/leaderboardService");
+const { frame } = require("../../services/site/siteContent");
+const { renderLeaderboardPage } = require("../../services/site/leaderboardPage");
 const { adjustWallet, toWallet } = require("../../services/economy/walletService");
 const { parseCharacterLevels } = require("../../../shared/characters/characterStats.js");
 const {
@@ -24,6 +26,18 @@ async function getClaimedTierIds(db, userId) {
 
 function registerTrophyRoutes({ app, db, requireCurrentUser }) {
   const getLeaderboard = createLeaderboardService(db);
+  app.get("/leaderboard", asyncRoute("[trophies] public leaderboard", async (req, res) => {
+    const username = typeof req.query.username === "string" ? req.query.username.trim() : "";
+    let rows;
+    try {
+      rows = username ? await findLeaderboardPlayer(db, username) : await getLeaderboard(PUBLIC_STANDINGS_LIMIT);
+    } catch (error) {
+      console.error("[trophies] Could not load public standings", error);
+      res.status(503);
+    }
+    res.send(frame("Leaderboard", "Bro Battles trophy standings and match wins.", renderLeaderboardPage(rows, username), "/leaderboard"));
+  }));
+
   app.get(API_PATHS.LEADERBOARD_TROPHIES, asyncRoute("[trophies] /leaderboard/trophies", async (req, res) => {
     const limit = parseLeaderboardLimit(req.query?.limit);
     const leaderboard = await getLeaderboard(limit);

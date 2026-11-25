@@ -177,6 +177,43 @@ describe("Ninja collision and playback", () => {
   const { spritePresentation } = require('../src/client/game/characters/shared/spritePresentation');
   const { characterBody } = require('../src/shared/physics/characterBody');
 
+  test('Arena Sovereign plays its own expanded movement and aimed crown clips', () => {
+    const { registerSovereignAnimations, sovereignThrowSettings } =
+      require('../src/client/game/characters/ninja/sovereignAnimations');
+    const { beginThrow, claimThrow } = require('../src/client/game/characters/ninja/throwPresentation');
+    const atlas = require('../public/assets/ninja/skins/ninja-arena-sovereign/animations.json');
+    const names = new Set(atlas.frames.map(({ filename }) => filename));
+    const texture = { key: 'ninja__ninja-arena-sovereign', has: name => names.has(name) };
+    const clips = new Map();
+    const scene = { anims: {
+      exists: key => clips.has(key),
+      create: clip => {
+        for (const { key, frame } of clip.frames) {
+          assert.equal(key, texture.key);
+          assert.ok(texture.has(frame), `${clip.key} references missing frame ${frame}`);
+        }
+        clips.set(clip.key, clip);
+      },
+    } };
+    registerSovereignAnimations(scene, texture);
+    const clip = suffix => clips.get(`${texture.key}-${suffix}`);
+    assert.ok(clip('running').frames.length > 7);
+    assert.equal(clip('running').repeat, -1);
+    assert.ok(clip('jumping').frames.length > 9);
+    for (const suffix of ['landing', 'dashright', 'dashup', 'dashdiagonal', 'dashdown', 'dashdowndiagonal']) {
+      assert.ok(clip(suffix).frames.length > 1);
+    }
+    for (const suffix of ['', '-high', '-up', '-down', '-low']) {
+      assert.ok(clip(`throw${suffix}`));
+      assert.ok(clip(`special${suffix}`));
+    }
+    const sprite = { texture };
+    assert.equal(beginThrow(sprite, -Math.PI / 2, 0), 'high');
+    const flight = claimThrow(sprite);
+    assert.deepEqual(flight.hand, sovereignThrowSettings.hands.high);
+    assert.equal(flight.releaseMs, 1000 / clip('throw-high').frameRate);
+  });
+
   test('standard Ninja preserves authoritative standing and ducking collision geometry', () => {
     // The base atlas's cell size, whatever the installed art uses.
     const cell = require('../src/shared/characters').characterPresentation('ninja').hiResArt.sourceSize;

@@ -1,5 +1,4 @@
 import { getNavigation } from "../../lib/globals.cjs";
-import { drawAmmoChargeBar } from "../../game/scene/ammoBarRenderer";
 import { createShowcaseFight } from "./showcaseFight";
 import { isMovementSuppressed } from "../../../shared/combat/runtime/abilityRuntimeManager";
 import { showcaseRoster } from "./showcaseKit";
@@ -11,22 +10,25 @@ import { POWERUP_CATALOG } from "../../../shared/powerups";
 // through the real character presentation paths (see showcaseKits.js), so
 // what plays here is what plays in a match.
 import {
-  preloadForRoster, setupFor, setupVariantAnimationsForRoster, getTextureKey,
+  preloadForRoster, setupFor, setupVariantAnimationsForRoster, getTextureKey, getEffectsClass, resolveAnimKey,
 } from "../../game/characters/index.js";
-import { spritePresentation } from "../../game/characters/shared/spritePresentation.js";
+import { spritePresentation, sizePlayerBody } from "../../game/characters/shared/spritePresentation.js";
 import { bindPlayerOrigin, bodyBounds, playerAnchor } from "../../game/characters/shared/rig.js";
-import { playSpriteAnimation, clearAction, directionalDashAnimation, resolveSpriteAnimationKey } from "../../game/characters/shared/animationState.js";
+import { activeAction, playCharacterAnimation, clearAction, resetAirborneJumpAnimation, resolveSpriteAnimationKey } from "../../game/characters/shared/animationState.js";
 import { playPlayerSound } from "../../game/audio/playerAudio.js";
 import {
-  spawnHealthMarker, spawnJumpTakeoff, spawnLandingImpact, spawnRunDust, spawnDeathBurst, spawnSpawnBurst,
+  MOVEMENT_VFX_CONFIG, runDustInterval, spawnHealthMarker, spawnJumpTakeoff, spawnLandingImpact, spawnRunDust, spawnDeathBurst, spawnSpawnBurst,
 } from "../../game/scene/effects.js";
 import { spawnDashEffect, playDashSound } from "../../game/scene/dash.js";
+import { applyBodyFlipOffset, hudTopY } from "../../game/players/playerBodyGeometry";
+import { cancelFighterCombat } from "../../game/players/fighterCombatCleanup";
 import { attachTeamFootRing } from "../../game/players/teamFootRing.js";
-import { drawHealthBar } from "../../game/scene/healthBarRenderer.js";
-import { drawSuperChargeBar } from "../../game/scene/superBarRenderer.js";
+import { createPlayerWorldHud, WORLD_HUD_WIDTH } from "../../game/scene/playerWorldHud";
+import { attachEnemyBodyVisual } from "../../game/players/enemyBodyVisual";
+import { releaseRendererContext, rendererContextOf } from "../../game/scene/releaseRenderer.js";
 import { RENDER_LAYERS } from "../../game/scene/renderLayers.js";
-import { bindGameAudio, bindCanvasName } from "../../site/preferences.js";
-import { getHealth, getSuperChargeHits } from "../../../shared/characters/characterStats.js";
+import { bindGameAudio } from "../../site/preferences.js";
+import { getHealth } from "../../../shared/characters/characterStats.js";
 import { TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
 import { getTerrainConfig, footstepVolume, terrainLandingSound } from "../../game/audio/movementAudio.js";
 import { SHOWCASE_WORLD_HEIGHT, showcaseSpriteScale, showcaseOpaqueBounds, showcaseJumpMotion } from "./showcaseMotion.js";
@@ -39,9 +41,8 @@ const PLATFORM_KEY = "showcase-platform";
 const JUMP = showcaseJumpMotion();
 const TERRAIN = "grass";
 const TERRAIN_AUDIO = getTerrainConfig(TERRAIN);
-const HUD_BAR_WIDTH = 52;
 const RUN_SPEED = movementPhysics.maxSpeed;
-const RUN_ANIMATION_RATE = 1;
+const ARENA_WIDTH = 560;
 const CANCELLED = Symbol("cancelled");
 // Match-wide sounds the stage's movement and defeats play (preloadGameAssets).
 const STAGE_SOUNDS = {
@@ -65,14 +66,19 @@ export function createShowcaseStage(host) {
   let fighters = [];
   let current = null;
   let combat = null;
+  let destroyed = false;
+  let loading = 0;
+  let loadQueue = Promise.resolve();
+  const readyVariants = new Set();
+  let finishRender = null;
+  let finishLoad = null;
   let view = null; // world-space layout of the current camera
-  // Teardown for simulation and renderer instances.
-  const cancelHooks = new Set();
 
   class ShowcaseScene extends Phaser.Scene {
     constructor() { super("character-showcase"); }
     preload() {
       for (const [type, config] of Object.entries(POWERUP_CATALOG)) {
+        this.load.image(`pu-icon-${type}-webp`, `/assets/powerups/${config.assetDir}/icon.webp`);
         this.load.audio(`pu-touch-${type}`, `/assets/powerups/${config.assetDir}/touch.mp3`);
         if (config.tickVolume != null) this.load.audio(`pu-tick-${type}`, `/assets/powerups/${config.assetDir}/tick.mp3`);
       }
@@ -88,11 +94,10 @@ export function createShowcaseStage(host) {
       // Painted platform art, not pixel art: filter it smoothly.
       this.textures.get(PLATFORM_KEY).setFilter(Phaser.Textures.FilterMode.LINEAR);
       this.platform = this.add.image(0, 0, PLATFORM_KEY).setOrigin(0.5, 0).setDepth(RENDER_LAYERS.PLAYER - 5);
-      // Same layer the match draws powerup and super auras on.
-      this.auraGraphics = this.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
       bindGameAudio(this);
       this.events.on("postupdate", drawOverlays);
       sceneReady();
+      queueMicrotask(restWhenIdle);
     }
   }
 
@@ -105,7 +110,7 @@ export function createShowcaseStage(host) {
     transparent: true,
     pixelArt: true,
     antialias: false,
-    roundPixels: true,
+    roundPixels: false,
     banner: false,
     // Reuse the lobby's unlocked context so the first super is audible.
     audio: sharedContext ? { context: sharedContext } : {},
@@ -120,51 +125,29 @@ export function createShowcaseStage(host) {
   const resizeObserver = new ResizeObserver(() => layout());
   resizeObserver.observe(host);
 
-  function drawOverlays() {
+  function drawOverlays(_time, delta) {
     if (!scene) return;
-    scene.auraGraphics.clear();
+    if (fighters.length && current?.mode === "fight") frameFight(delta);
     for (const fighter of fighters) {
+      fighter.effects?.update(delta, !!fighter.sprite._bbAnimationVelocity?.x, fighter.defeated);
       drawHud(fighter);
     }
   }
 
   function createHud(fighter, name) {
-    const resolution = Math.max(1, Math.ceil(scene.cameras.main.zoom));
-    const label = scene.add.text(0, 0, name, {
-      fontFamily: "'Press Start 2P', monospace", fontSize: "7px", fill: "#ffffff", stroke: "#000000", strokeThickness: 3,
-    }).setOrigin(0.5, 0).setDepth(RENDER_LAYERS.PLAYER_HUD + 2).setResolution(resolution);
-    label.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 0, true, true);
-    bindCanvasName(label, name);
-    const healthText = scene.add.text(0, 0, "", {
-      fontFamily: "'Press Start 2P', monospace", fontSize: "8px", color: "#FFFFFF", stroke: "#000000", strokeThickness: 4,
-    }).setDepth(RENDER_LAYERS.PLAYER_HUD + 2).setResolution(resolution);
-    const bar = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-    const superBack = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-    const superBar = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-    const ammoBack = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD);
-    const ammo = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-    fighter.hud = { ammo, ammoBack, label, healthText, bar, superBack, superBar, parts: [ammo, ammoBack, label, healthText, bar, superBack, superBar] };
+    fighter.hud = createPlayerWorldHud(scene, {
+      username: name, role: fighter.self ? "self" : fighter.team === "team1" ? "ally" : "enemy",
+      getPlayerEffects: () => fighter.status,
+    });
   }
 
-  // Anchored like RemotePlayer.updateHealthBar / localPlayer.updateHealthBar.
   function drawHud(fighter) {
     const { sprite, hud } = fighter;
-    if (!hud || !sprite.active) return;
-    const hudX = playerAnchor(sprite, "top").x;
-    const top = Number.isFinite(sprite._bbHudTopOffset) ? sprite.y + sprite._bbHudTopOffset
-      : bodyBounds(sprite)?.top ?? sprite.y;
-    const y = top - 20;
-    hud.label.setPosition(hudX, top - (fighter.self ? 40 : 42));
-    hud.healthText.setText(`${Math.max(0, Math.round(fighter.health))}`);
-    hud.healthText.setPosition(hudX - hud.healthText.width / 2, y - 8);
-    drawHealthBar(hud.bar, {
-      x: hudX - HUD_BAR_WIDTH / 2, y, width: HUD_BAR_WIDTH, health: Math.max(0, fighter.health), maxHealth: fighter.maxHealth,
-      color: fighter.team === "team1" ? 0xaebb50 : 0xb24035, teamGlowColor: fighter.team === "team1" ? 0x83dca6 : 0xe04a4e, isLocal: fighter.self,
-    });
-    drawAmmoChargeBar(hud.ammo, hud.ammoBack, { x: hudX - HUD_BAR_WIDTH / 2, y: y + 11, width: HUD_BAR_WIDTH,
-      ammo: fighter.self && !fighter.defeated ? fighter.ammo : null });
-    drawSuperChargeBar(hud.superBar, hud.superBack, {
-      x: hudX - HUD_BAR_WIDTH / 2, y: y + (fighter.self ? 19 : 11), charge: fighter.charge, maxCharge: 1, player: sprite,
+    if (!sprite.active) return;
+    hud.draw({
+      sprite, headY: hudTopY(sprite, fighter.frame, fighter.presentation.body),
+      health: fighter.health, maxHealth: fighter.maxHealth, dead: fighter.defeated,
+      charge: fighter.charge, maxCharge: 1, ammo: fighter.ammo, visible: !fighter.defeated,
     });
   }
 
@@ -176,21 +159,18 @@ export function createShowcaseStage(host) {
     return new Promise((resolve, reject) => {
       const failed = [];
       const onError = file => { if (file.type === "atlas" || file.type === "json" || file.type === "image") failed.push(file.key); };
-      scene.load.on("loaderror", onError);
-      scene.load.once("complete", () => {
+      const complete = () => {
+        finishLoad = null;
+        scene.load.off("complete", complete);
         scene.load.off("loaderror", onError);
-        failed.length ? reject(new Error(`showcase assets failed: ${failed.join(", ")}`)) : resolve();
-      });
+        if (failed.length && !destroyed) reject(new Error(`showcase assets failed: ${failed.join(", ")}`));
+        else resolve();
+      };
+      finishLoad = complete;
+      scene.load.on("loaderror", onError);
+      scene.load.once("complete", complete);
       scene.load.start();
     });
-  }
-
-  function applyBodyOffset(fighter) {
-    const { sprite, bodyConfig } = fighter;
-    const extra = sprite.flipX ? bodyConfig.flipOffset || 0 : 0;
-    const bodyWidth = bodyConfig.sourceUnits ? sprite.body.sourceWidth : sprite.body.width;
-    sprite.body.setOffset(sprite.frame.realWidth / 2 - bodyWidth / 2 + (bodyConfig.offsetXFromHalf ?? 0) + extra,
-      bodyConfig.offsetY);
   }
 
   // Built like RemotePlayer.createOpPlayer: same presentation, origin, body,
@@ -206,48 +186,42 @@ export function createShowcaseStage(host) {
     sprite._bbTeamColor = team === "team1" || self ? TEAM_GREEN : TEAM_RED;
     // Character code finds players by username (Gloop's catch, for one).
     sprite.username = id || name;
+    if (sprite._bbTeamColor === TEAM_RED) attachEnemyBodyVisual(scene, sprite);
     const kit = getShowcaseKit(character);
-    const art = idleArtBounds(sprite.texture);
+    const art = current.mode === "animations" ? idleArtBounds(sprite.texture) : null;
     const visual = kit.visual || {};
-    const matchPresentation = spritePresentation(character, sprite.texture);
-    const body = matchPresentation.body;
-    const bodyFeet = body.offsetY + sprite.frame.realHeight - body.heightShrink;
-    const presentation = { ...matchPresentation,
-      scale: showcaseSpriteScale(art, visual),
-      // Ground the opaque art, including trimmed atlases, rather than leaving
-      // its feet above/below the platform when the match collider differs.
-      body: { ...body, sourceUnits: true, offsetY: body.offsetY + art.bottom - bodyFeet },
-    };
+    const presentation = spritePresentation(character, sprite.texture);
     sprite.setScale(presentation.scale);
-    sprite.setOrigin(presentation.originX, presentation.originY);
     bindPlayerOrigin(sprite, presentation);
-    sprite._bbHudTopOffset = (art.top + art.height * (visual.bodyTop || 0) - sprite.displayOriginY) * presentation.scale;
+    sprite._bbHudTopOffset = presentation.hudTopOffset;
     sprite.body.allowGravity = false;
-    // Tweens place stage fighters; Arcade must never move them itself.
     sprite.body.moves = false;
-    sprite.body.setSize(sprite.frame.realWidth - presentation.body.widthShrink,
-      sprite.frame.realHeight - presentation.body.heightShrink);
+    const frame = sprite.frame;
+    sizePlayerBody(sprite, frame, presentation.body);
     sprite.setDepth(RENDER_LAYERS.PLAYER);
     const maxHealth = getHealth(character, level);
     const fighter = {
-      id, team, role, character, sprite, presentation, self, level, artHeight: art.height * (1 - (visual.bodyTop || 0)) * presentation.scale,
-      artWidth: art.width * presentation.scale, homeX: 0, standY: 0,
-      bodyConfig: presentation.body,
+      id, team, role, character, skinId, sprite, presentation, frame, self, level,
+      // Fit the solo camera to the artwork without changing gameplay units.
+      cameraHeight: art ? Math.max(SHOWCASE_WORLD_HEIGHT, SHOWCASE_WORLD_HEIGHT * presentation.scale / showcaseSpriteScale(art, visual),
+        (JUMP.height + art.height * presentation.scale + 52) / 0.88) : SHOWCASE_WORLD_HEIGHT,
+      homeX: 0, standY: 0,
       maxHealth, health: maxHealth,
       name,
-      chargePerHit: 1 / Math.max(1, getSuperChargeHits(character)),
       charge: 0, defeated: false, nextStepAt: 0, stepCursor: 0,
     };
-    applyBodyOffset(fighter);
-    fighter.ring = attachTeamFootRing(scene, sprite, { isAlly: team === "team1" && !self, isSelf: self });
+    applyBodyFlipOffset(sprite, frame, presentation.body);
+    const Effects = getEffectsClass(character);
+    if (Effects) fighter.effects = new Effects(scene, sprite);
+    attachTeamFootRing(scene, sprite, { isAlly: team === "team1" && !self, isSelf: self, hidden: () => fighter.defeated });
     createHud(fighter, name);
-    playSpriteAnimation({ scene, sprite, character, logical: "idle" });
+    play(fighter, "idle");
     return fighter;
   }
 
   function face(fighter, direction) {
     fighter.sprite.setFlipX(direction < 0);
-    applyBodyOffset(fighter);
+    applyBodyFlipOffset(fighter.sprite, fighter.frame, fighter.presentation.body);
   }
 
   // Put the body's bottom on the platform surface (world y = 0).
@@ -269,16 +243,20 @@ export function createShowcaseStage(host) {
   }
 
   function clearStage() {
-    for (const action of cancelHooks) safely(action);
-    cancelHooks.clear();
+    combat?.dispose();
     combat = null;
     // Let character code drop its listeners (sweeps, casts) before teardown.
+    for (const fighter of fighters) {
+      cancelFighterCombat(fighter.sprite);
+      fighter.effects?.destroy();
+      fighter.hud.destroy();
+    }
+    scene._localPlayerAudioSprite = null;
     scene.events.emit("presentation:reset");
     scene.tweens.killAll();
     scene.time.removeAllEvents();
-    const keep = new Set([scene.platform, scene.auraGraphics]);
-    for (const child of [...scene.children.list]) if (!keep.has(child)) child.destroy();
-    scene.auraGraphics.clear();
+    for (const child of [...scene.children.list]) if (child !== scene.platform) child.destroy();
+    scene.sound.removeAll();
     fighters = [];
   }
 
@@ -288,21 +266,49 @@ export function createShowcaseStage(host) {
   function idleArtBounds(texture) {
     if (artBounds.has(texture.key)) return artBounds.get(texture.key);
     const name = texture.has("idle00") ? "idle00" : texture.getFrameNames().find(name => /^idle/i.test(name)) || texture.getFrameNames()[0];
+    const frame = texture.get(name);
     const image = texture.getSourceImage();
     let pixels = null;
     try {
       const canvas = document.createElement("canvas");
-      canvas.width = image.width; canvas.height = image.height;
+      canvas.width = frame.cutWidth; canvas.height = frame.cutHeight;
       const context = canvas.getContext("2d", { willReadFrequently: true });
-      context.drawImage(image, 0, 0);
-      pixels = context.getImageData(0, 0, image.width, image.height).data;
+      context.drawImage(image, -frame.cutX, -frame.cutY);
+      pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
     } catch (_) {}
-    const bounds = showcaseOpaqueBounds(texture.get(name), pixels, image.width);
+    const bounds = showcaseOpaqueBounds({ cutX: 0, cutY: 0, cutWidth: frame.cutWidth, cutHeight: frame.cutHeight,
+      x: frame.x, y: frame.y, rotated: frame.rotated }, pixels, frame.cutWidth);
     artBounds.set(texture.key, bounds);
     return bounds;
   }
 
   // ---- camera ----------------------------------------------------------------
+
+  // Frame the combatants inside the actual preview panel. Keep the world and
+  // platform fixed as the fighters close in, get knocked back, or rise to cast.
+  function frameFight(delta) {
+    const camera = scene.cameras.main;
+    let left = Infinity, right = -Infinity, top = -110;
+    for (const { sprite, hud } of fighters) {
+      const margin = Math.max(WORLD_HUD_WIDTH, hud.playerName.width, sprite.body.width) / 2 + 16;
+      left = Math.min(left, sprite.x - margin);
+      right = Math.max(right, sprite.x + margin);
+      const head = Number.isFinite(sprite._bbHudTopOffset)
+        ? sprite.y + sprite._bbHudTopOffset : bodyBounds(sprite).top;
+      top = Math.min(top, head - 55);
+    }
+    const floor = 0.76;
+    const targetZoom = Math.min(camera.width / Math.max(SHOWCASE_WORLD_HEIGHT, right - left),
+      camera.height / SHOWCASE_WORLD_HEIGHT, camera.height * (floor - 0.22) / -top);
+    // Pull back immediately to keep everyone visible. Ease the tighter shot.
+    const blend = Number.isFinite(delta) ? 1 - Math.exp(-delta / 240) : 1;
+    const zoom = Math.min(targetZoom, camera.zoom + (targetZoom - camera.zoom) * blend);
+    const halfWidth = camera.width / (2 * zoom);
+    const middle = (left + right) / 2;
+    const previous = view.centerX ?? middle;
+    view.centerX = Phaser.Math.Clamp(previous + (middle - previous) * blend, right - halfWidth, left + halfWidth);
+    camera.setZoom(zoom).centerOn(view.centerX, (0.5 - floor) * camera.height / zoom);
+  }
 
   function layout() {
     const width = host.clientWidth;
@@ -318,29 +324,21 @@ export function createShowcaseStage(host) {
     }
     const hero = fighters[0];
     if (!hero) return;
-    // The same world frame gives every character and HUD the same screen
-    // size. Only a narrow viewport/long name can require a wider camera.
-    const tag = Math.max(HUD_BAR_WIDTH, ...fighters.map(fighter => fighter.hud?.label.width || 0));
-    const span = Math.max(...fighters.map(f => f.homeX)) - Math.min(...fighters.map(f => f.homeX)) + tag + 24;
-    const zoom = Math.min(deviceHeight / SHOWCASE_WORLD_HEIGHT, deviceWidth * 0.94 / span);
-    const camera = scene.cameras.main;
-    camera.setZoom(zoom);
-    // The platform surface sits at 88% of the stage height.
-    camera.centerOn(0, (deviceHeight * 0.5 - deviceHeight * 0.88) / zoom);
-    const viewWidth = deviceWidth / zoom;
-    const platformScale = Math.min(viewWidth * 0.9, 560) / stageLayout.platform.width;
-    scene.platform.setScale(platformScale).setPosition(0, -stageLayout.platform.surfaceY * platformScale);
-    view = {
-      halfWidth: viewWidth / 2,
-      // Runs and dashes stop where the name tag still fits on screen.
-      runLimit: Math.max(0, Math.min(viewWidth / 2 - tag / 2 - 8, stageLayout.platform.width * platformScale * 0.4)),
-      hop: JUMP.height,
-    };
-    const resolution = Math.max(1, Math.ceil(zoom));
-    for (const fighter of fighters) {
-      fighter.hud?.label.setResolution(resolution);
-      fighter.hud?.healthText.setResolution(resolution);
+    if (current?.mode === "fight") {
+      const platformScale = ARENA_WIDTH / stageLayout.platform.width;
+      scene.platform.setScale(platformScale).setPosition(0, -stageLayout.platform.surfaceY * platformScale);
+      view = { runLimit: ARENA_WIDTH * 0.4 };
+      frameFight();
+      return;
     }
+    const tag = Math.max(WORLD_HUD_WIDTH, hero.hud.playerName.width);
+    const zoom = Math.min(deviceHeight / hero.cameraHeight, deviceWidth * 0.94 / (tag + 24));
+    scene.cameras.main.setZoom(zoom).centerOn(0, -0.38 * deviceHeight / zoom);
+    const viewWidth = deviceWidth / zoom;
+    const platformWidth = Math.min(viewWidth * 0.9, ARENA_WIDTH);
+    const scale = platformWidth / stageLayout.platform.width;
+    scene.platform.setScale(scale).setPosition(0, -stageLayout.platform.surfaceY * scale);
+    view = { runLimit: Math.max(0, Math.min(viewWidth / 2 - tag / 2 - 8, platformWidth * 0.4)) };
   }
 
   // ---- actions ---------------------------------------------------------------
@@ -356,8 +354,9 @@ export function createShowcaseStage(host) {
     return { id, alive, wait, tween };
   }
 
-  function play(fighter, logical) {
-    playSpriteAnimation({ scene, sprite: fighter.sprite, character: fighter.character, logical });
+  function play(fighter, logical, dashDirection) {
+    return playCharacterAnimation({ scene, sprite: fighter.sprite, character: fighter.character,
+      skinId: fighter.skinId, logical, resolveAnimKey, dashDirection });
   }
 
   function idlePose(fighter) {
@@ -368,10 +367,16 @@ export function createShowcaseStage(host) {
     return playerAnchor(fighter.sprite, "feet");
   }
 
-  function movementStep(fighter, direction) {
+  function movementStep(fighter, velocityX) {
+    const speed = Math.abs(velocityX);
+    if (speed <= MOVEMENT_VFX_CONFIG.runDustMinSpeed) return;
+    const direction = Math.sign(velocityX);
+    const speedRatio = Math.min(1, speed / MOVEMENT_VFX_CONFIG.runSpeedReference);
     const point = feet(fighter);
-    const speedRatio = fighter.movementSpeedRatio ?? RUN_SPEED / movementPhysics.maxSpeed;
-    safely(() => spawnRunDust(scene, point.x - direction * 10, point.y - 2, { direction, intensity: speedRatio }));
+    if (scene.time.now >= (fighter.nextDustAt || 0)) {
+      fighter.nextDustAt = scene.time.now + runDustInterval(speedRatio);
+      safely(() => spawnRunDust(scene, point.x - direction * 10, point.y - 2, { direction, intensity: speedRatio }));
+    }
     if (scene.time.now < fighter.nextStepAt) return;
     fighter.nextStepAt = scene.time.now + 300 / Math.max(0.15, speedRatio);
     fighter.stepCursor = (fighter.stepCursor + 1) % TERRAIN_AUDIO.steps.length;
@@ -386,19 +391,15 @@ export function createShowcaseStage(host) {
     const distance = Math.abs(x - sprite.x);
     if (distance < 1) return;
     face(fighter, x > sprite.x ? 1 : -1);
-    play(fighter, "running");
-    sprite.anims.timeScale = RUN_ANIMATION_RATE;
     const direction = x > sprite.x ? 1 : -1;
-    const dust = scene.time.addEvent({
-      delay: 140, loop: true,
-      callback: () => movementStep(fighter, direction),
-    });
-    movementStep(fighter, direction);
+    sprite._bbAnimationVelocity = { x: direction * RUN_SPEED, y: 0 };
+    play(fighter, "running");
+    movementStep(fighter, direction * RUN_SPEED);
     try {
-      await d.tween({ targets: sprite, x, duration: (distance / RUN_SPEED) * 1000 });
+      await d.tween({ targets: sprite, x, duration: (distance / RUN_SPEED) * 1000,
+        onUpdate: () => movementStep(fighter, direction * RUN_SPEED) });
     } finally {
-      dust.remove();
-      sprite.anims.timeScale = 1;
+      sprite._bbAnimationVelocity = { x: 0, y: 0 };
     }
   }
 
@@ -409,17 +410,20 @@ export function createShowcaseStage(host) {
     const start = feet(fighter);
     safely(() => spawnJumpTakeoff(scene, start.x, start.y, { bodyWidth: sprite.body.width }));
     safely(() => playPlayerSound(scene, sprite, "sfx-jump", { volume: 0.5 }));
+    resetAirborneJumpAnimation(sprite);
+    sprite._bbAnimationVelocity = { x: 0, y: -JUMP.launch };
     play(fighter, "jumping");
     const progress = { elapsed: 0 };
-    let falling = false;
     await d.tween({
       targets: progress, elapsed: JUMP.durationMs, duration: JUMP.durationMs, ease: "Linear",
       onUpdate: () => {
         const sample = JUMP.sample(progress.elapsed);
         sprite.y = fighter.standY - sample.height;
-        if (!falling && sample.falling) { falling = true; play(fighter, "falling"); }
+        sprite._bbAnimationVelocity.y = sample.velocity;
+        play(fighter, sample.falling ? "falling" : "jumping");
       },
     });
+    sprite._bbAnimationVelocity = { x: 0, y: 0 };
     sprite.y = fighter.standY;
     const land = feet(fighter);
     safely(() => spawnLandingImpact(scene, land.x, land.y, { impactVelocity: JUMP.sample(JUMP.durationMs).velocity, bodyWidth: sprite.body.width }));
@@ -432,7 +436,7 @@ export function createShowcaseStage(host) {
     d.alive();
     const { sprite } = fighter;
     face(fighter, direction);
-    play(fighter, directionalDashAnimation(fighter.character, { x: direction, y: 0 }));
+    play(fighter, "dashing", { x: direction, y: 0 });
     safely(() => spawnDashEffect(scene, sprite, direction, 0));
     safely(() => playDashSound(scene, true, sprite));
     const reach = movementPhysics.dashHorizontalSpeed * movementPhysics.dashDurationMs / 1000;
@@ -441,17 +445,17 @@ export function createShowcaseStage(host) {
     play(fighter, "idle");
   }
 
-  // Placed like the match's markers (RemotePlayer / localSocketEvents): just
-  // above the body, layered under the bars so they stay readable.
   function showHealthChange(fighter, delta) {
     const { sprite } = fighter;
-    const top = bodyBounds(sprite)?.top ?? sprite.y;
-    spawnHealthMarker(scene, sprite.x, top - (fighter.self ? 16 : 18), delta, fighter.self
-      ? { depth: 18, team: "ally", isSelf: true }
-      : { depth: 11, team: "enemy" });
+    const headY = hudTopY(sprite, fighter.frame, fighter.presentation.body);
+    spawnHealthMarker(scene, sprite.x, fighter.hud.markerY(headY), delta, {
+      team: fighter.team === "team1" ? "ally" : "enemy", isSelf: fighter.self,
+    });
   }
 
   function showDefeat(fighter) {
+    cancelFighterCombat(fighter.sprite);
+    for (const part of fighter.hud.barsAndLabels) part.setVisible(false);
     play(fighter, "dying");
     safely(() => spawnDeathBurst(scene, fighter.sprite));
     safely(() => playPlayerSound(scene, fighter.sprite, "sfx-death", { volume: 0.45 }));
@@ -465,6 +469,7 @@ export function createShowcaseStage(host) {
     if (state) { state.health = state.maxHealth; state.isAlive = true; state.effects = {}; state.activeEffects = {}; }
     fighter.charge = 0;
     fighter.defeated = false;
+    for (const part of fighter.hud.barsAndLabels) part.setVisible(true);
     face(fighter, fighter.facesX ?? 1);
     clearAction(fighter.sprite);
     play(fighter, "idle");
@@ -479,6 +484,24 @@ export function createShowcaseStage(host) {
     const step = async action => { d.alive(); await action(); };
     await step(async () => { idlePose(hero); await d.wait(1300); });
     await step(async () => {
+      hero.demonstratingCombat = true;
+      combat.attack(hero);
+      await d.wait(1100);
+      idlePose(hero);
+      await d.wait(500);
+    });
+    await step(async () => {
+      combat.special(hero);
+      // A channel owns the pose. A lingering buff can accompany the run and dash.
+      await d.wait(1200);
+      while (hero.abilityMotion || activeAction(hero.sprite) ||
+        isMovementSuppressed(combat.session.players.get(hero.id), combat.session.now)) await d.wait(200);
+      await d.wait(600);
+      idlePose(hero);
+      hero.demonstratingCombat = false;
+      await d.wait(400);
+    });
+    await step(async () => {
       await runTo(d, hero, view.runLimit);
       await runTo(d, hero, -view.runLimit);
       await runTo(d, hero, 0);
@@ -489,8 +512,10 @@ export function createShowcaseStage(host) {
     await step(async () => { await hop(d, hero); await d.wait(500); });
     await step(async () => {
       safely(() => playPlayerSound(scene, hero.sprite, "sfx-duck-transition", { volume: 0.5 }));
+      hero.sprite._ducking = true;
       play(hero, "ducking");
       await d.wait(1000);
+      hero.sprite._ducking = false;
       play(hero, "idle");
       await d.wait(300);
     });
@@ -501,24 +526,6 @@ export function createShowcaseStage(host) {
       face(hero, 1);
       play(hero, "idle");
       await d.wait(300);
-    });
-    await step(async () => {
-      combat.attack(hero);
-      await d.wait(1100);
-      idlePose(hero);
-      await d.wait(500);
-    });
-    await step(async () => {
-      combat.special(hero);
-      // Let the actual ability finish, including the full Inferno / Rage.
-      await d.wait(1200);
-      // Channels and aim phases (Inferno, Seraph) hold the fighter until they end.
-      while (Object.values(hero.status || {}).some(ms => ms > 0) ||
-        isMovementSuppressed(combat.session.players.get(hero.id), combat.session.now)) await d.wait(200);
-      await d.wait(600);
-      hero.sprite.y = hero.standY;
-      idlePose(hero);
-      await d.wait(400);
     });
     // Not every atlas has a defeat animation (Gloop's has none).
     const canFall = !!resolveSpriteAnimationKey({ scene, sprite: hero.sprite, character: hero.character, logical: "dying", fallback: "dying" })
@@ -537,12 +544,14 @@ export function createShowcaseStage(host) {
   function startRoutine(mode, onCycleComplete) {
     const d = director(++runId);
     const [hero] = fighters;
+    const request = current;
     const guard = promise => promise.catch(error => { if (error !== CANCELLED) console.warn("[showcase] routine failed", error); });
     combat = createShowcaseFight({ scene, fighters, halfWidth: Math.max(200, view.runLimit + 30),
       face, play, movementStep, showHealthChange, showDefeat, autoplay: mode === 'fight', initialCharge: current?.carriedCharge,
-      onRoundEnd: carriedCharge => { if (current) stage.show({ ...current, carriedCharge }); },
+      onRoundEnd: carriedCharge => {
+        if (current === request) guard(stage.show({ ...request, carriedCharge }));
+      },
     });
-    cancelHooks.add(combat.dispose);
     if (mode === "animations") guard(animationsRoutine(d, hero).then(() => {
       d.alive();
       onCycleComplete();
@@ -554,25 +563,48 @@ export function createShowcaseStage(host) {
   function nextRender() {
     return new Promise(resolve => {
       let frames = 0;
-      const onRender = () => { if (++frames >= 2) { game.events.off("postrender", onRender); resolve(); } };
+      const onRender = () => { if (++frames >= 2) finishRender(); };
+      finishRender = () => {
+        game.events.off("postrender", onRender);
+        finishRender = null;
+        resolve();
+      };
       game.events.on("postrender", onRender);
     });
   }
 
-  async function prepare({ character, skinId, mode, level = 1 }) {
-    // The loader advances on scene updates, so the loop runs while loading.
-    game.loop.wake();
-    await sceneStarted;
-    const roster = showcaseRoster({ character, skinId, level, mode }).map(entry => ({ char_class: entry.character, selected_skin_id: entry.skinId }));
-    for (const entry of roster) {
-      for (const [key, url] of Object.entries(getShowcaseKit(entry.char_class).sounds || {})) {
-        if (!scene.cache.audio.exists(key)) scene.load.audio(key, url);
+  function restWhenIdle() {
+    if (scene && !current && !loading && !destroyed) game.loop.sleep();
+  }
+
+  // Phaser has one loader per scene. Wait for its current batch even if two
+  // views need the same atlas and its files are already in flight.
+  function prepare({ character, skinId, mode, level = 1 }) {
+    const roster = showcaseRoster({ character, skinId, level, mode });
+    loading++;
+    const batch = loadQueue.then(async () => {
+      await sceneStarted;
+      if (destroyed) return;
+      game.loop.wake();
+      const missing = roster.filter(f => !readyVariants.has(getTextureKey(f.character, f.skinId)))
+        .map(f => ({ char_class: f.character, selected_skin_id: f.skinId }));
+      if (!missing.length) return;
+      for (const entry of missing) {
+        for (const [key, url] of Object.entries(getShowcaseKit(entry.char_class).sounds || {})) {
+          if (!scene.cache.audio.exists(key)) scene.load.audio(key, url);
+        }
       }
-    }
-    await loadRoster(roster);
-    for (const entry of roster) setupFor(scene, entry.char_class);
-    setupVariantAnimationsForRoster(scene, roster);
-    return roster;
+      await loadRoster(missing);
+      if (destroyed) return;
+      for (const entry of missing) {
+        if (!readyVariants.has(entry.char_class)) setupFor(scene, entry.char_class);
+        readyVariants.add(entry.char_class);
+      }
+      setupVariantAnimationsForRoster(scene, missing);
+      for (const entry of missing) readyVariants.add(getTextureKey(entry.char_class, entry.selected_skin_id));
+    }).finally(() => { loading--; restWhenIdle(); });
+    loadQueue = batch.catch(() => {});
+    return batch;
   }
 
   const stage = {
@@ -580,8 +612,8 @@ export function createShowcaseStage(host) {
     prepare,
     // Builds a view (`animations` or `fight`); true once its first frame is drawn.
     async show({ character, skinId, level = 1, mode, name = "You", onCycleComplete = () => {}, carriedCharge = {} }) {
-      game.loop.wake();
-      await sceneStarted;
+      if (destroyed) return false;
+      finishRender?.();
       const request = { character, skinId, level, mode, name, onCycleComplete, carriedCharge };
       current = request;
       runId++;
@@ -592,9 +624,9 @@ export function createShowcaseStage(host) {
       const roster = showcaseRoster({ character, skinId, level, mode, name });
       fighters = roster.map(entry => {
         const fighter = createFighter(entry);
-        stand(fighter, entry.x);
         fighter.facesX = entry.team === 'team1' ? 1 : -1;
         face(fighter, fighter.facesX);
+        stand(fighter, entry.x);
         return fighter;
       });
       scene._localPlayerAudioSprite = fighters[0].sprite;
@@ -604,17 +636,32 @@ export function createShowcaseStage(host) {
       return current === request;
     },
     hide() {
+      if (destroyed) return;
+      finishRender?.();
       runId++;
       current = null;
       if (scene) clearStage();
-      game.sound?.stopAll?.();
-      game.loop.sleep();
+      restWhenIdle();
     },
     destroy() {
+      destroyed = true;
+      current = null;
+      sceneReady();
+      finishLoad?.();
+      finishRender?.();
       runId++;
-      if (scene) clearStage();
+      if (scene) {
+        clearStage();
+        scene.sys.shutdown();
+      }
       resizeObserver.disconnect();
-      game.destroy(true);
+      delete host.showcaseGame;
+      const context = rendererContextOf(game);
+      return new Promise(resolve => {
+        game.events.once(Phaser.Core.Events.DESTROY, resolve);
+        game.destroy(true);
+        if (game.isRunning) game.loop.wake();
+      }).then(() => releaseRendererContext(context));
     },
   };
   return stage;

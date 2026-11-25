@@ -25,7 +25,7 @@ export function bindLocalSocketEvents({
   getPlayer,
   getCurrentCharacter,
   getOpponentPlayersRef,
-  spawnHealthMarker,
+  showHealthChange,
   updateHealthBar,
   stats,
   stopWallSlideAudio,
@@ -60,12 +60,7 @@ export function bindLocalSocketEvents({
     const delta = stats.currentHealth - prev;
 
     if (scene && player && delta !== 0) {
-      const markerY = player.body
-        ? player.body.y - 16
-        : player.y - player.height / 2;
-      spawnHealthMarker(scene, player.x, markerY, delta, {
-        depth: 18, team: "ally", isSelf: true,
-      });
+      showHealthChange(delta);
     }
 
     if (scene && scene.sound && !stats.dead) {

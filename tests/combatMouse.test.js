@@ -33,7 +33,7 @@ function setup({ canCapture, canPrepare, getPreferences, onLockedAimMove } = {})
   const base = { baseX: 10, baseY: 20 };
   const scene = { game: { canvas }, add: { graphics: () => graphic }, events: { on() {}, off() {} }, cameras: { main: { zoom: 1.8 } } };
   const controller = createCombatMouseController({ scene, canPlay: () => allowed, canCapture, canPrepare, getPreferences, getBase: () => base, onLockedAimMove,
-    onRelease: () => releases++, depth: 10, config: { ...COMBAT_MOUSE_CONFIG, mouseSensitivity: 0.36 } });
+    onRelease: () => releases++, depth: 10, config: { ...COMBAT_MOUSE_CONFIG, dragStartDistance: 10, dragReleaseDistance: 6, mouseSensitivity: 0.36 } });
   const capture = () => { assert.equal(controller.beginInput(), false); doc.pointerLockElement = canvas; doc.emit('pointerlockchange'); };
   return { controller, scene, doc, win, canvas, base, capture, block: () => { allowed = false; }, releases: () => releases };
 }
@@ -180,7 +180,7 @@ test('reticle and camera seek use direction without scaling from drag distance',
   move(h, 1000, 0);
   assert.equal(h.controller.getStrength(), 1);
   assert.equal(h.scene._combatAimLook.x, COMBAT_MOUSE_CONFIG.lookAhead);
-  move(h, -1030, 0);
+  move(h, -h.controller.config.fullDragDistance / h.controller.config.mouseSensitivity, 0);
   assert.equal(h.controller.isAiming(), false);
   assert.equal(h.scene._combatAimLook.x, 0);
   h.controller.destroy();
@@ -243,7 +243,8 @@ test('minimum-range throws rotate in every direction and retain heading only at 
     lastX = x; lastY = y;
   }
   move(h, -50, 0);
-  assert.equal(h.controller.getCenterCue().held, true);
+  assert.equal(h.controller.isCancelled(), true);
+  assert.equal(h.controller.shouldShowReticle(), false);
   assert.equal(h.controller.getDirection().x, 1);
   move(h, -50, 0);
   assert.equal(h.controller.getDirection().x, -1);
@@ -377,5 +378,90 @@ test('sensitivity multiplier changes drag response without changing camera reach
   preferences.sensitivity=3;
   h.doc.emit('mousemove',{target:h.canvas,movementX:100,movementY:0});assert.equal(controller.isAiming(),true);
   controller.update();assert.equal(h.scene._combatAimLook.x,COMBAT_MOUSE_CONFIG.lookAhead);
+  controller.destroy();
+});
+
+test('real pointer releases cancel centered attacks and supers, preserve taps, and allow re-aiming', () => {
+  const { EventEmitter } = require('node:events');
+  for (const character of ['ninja', 'gloop']) {
+    for (const button of [0, 2]) {
+      const h = setup();
+      h.controller.destroy();
+      h.scene.input = new EventEmitter();
+      h.scene.sys = { isActive: () => true };
+      const fired = [];
+      let visible = false;
+      const { createLocalPointerAttack } = loadClientModule(
+        require.resolve('../src/client/game/players/localPointerAttack.js'), {}, {
+          require: specifier => {
+            if (specifier.endsWith('/preferences')) return { getSettings: () => ({ sensitivity: 1, autoHideCursor: true }) };
+            if (specifier.endsWith('/attackAim')) return require('../src/client/game/characters/shared/attackAim.js');
+            if (specifier.endsWith('/combatMouse')) return exportsObject;
+            if (specifier.endsWith('/attackAimReticle')) return { createAttackAimReticleController: () => ({
+              update() { visible = true; }, hide() { visible = false; }, destroy() {},
+            }) };
+            throw new Error(specifier);
+          },
+        });
+      const pointer = createLocalPointerAttack(h.scene, character, {},
+        { dead: false, superCharge: 100, maxSuperCharge: 100 }, {
+          getMobileControls: () => null, isUiCapturingInput: () => false,
+          isControlLocked: () => false, resetMovementInputState() {},
+          fireBasicAttack: (_, context) => fired.push(context),
+          fireSpecialAttack: context => fired.push(context),
+        });
+      pointer.bind({ x: 100, y: 200, flipX: false });
+      pointer.mouse.beginInput();
+      h.doc.pointerLockElement = h.canvas;
+      h.doc.emit('pointerlockchange');
+      const press = () => h.scene.input.emit('pointerdown', { id: 1, button });
+      const lift = (releasedButton = button) => h.scene.input.emit('pointerup', { id: 1, button: releasedButton });
+      const drag = amount => {
+        h.doc.emit('mousemove', { target: h.canvas, movementX: amount / pointer.mouse.config.mouseSensitivity, movementY: 0 });
+        pointer.update();
+      };
+      press(); lift();
+      assert.equal(fired.length, 1, 'a fresh click still fires');
+      press(); drag(pointer.mouse.config.dragStartDistance * 2);
+      assert.equal(visible, true);
+      drag(-pointer.mouse.config.dragStartDistance * 2);
+      assert.equal(visible, false, 'centered aim hides the guide');
+      lift();
+      assert.equal(fired.length, 1, `${character} button ${button} cancels`);
+      press(); drag(pointer.mouse.config.dragStartDistance * 2);
+      drag(-pointer.mouse.config.dragStartDistance * 2);
+      drag(-pointer.mouse.config.dragStartDistance * 2);
+      lift(button === 0 ? 2 : 0);
+      assert.equal(fired.length, 1, 'the other mouse button cannot release this attack');
+      lift();
+      assert.equal(fired.length, 2, 'dragging back out re-arms the attack');
+      assert.equal(fired[1].direction, -1);
+      pointer.destroy();
+    }
+  }
+});
+
+test('production cancel radius tolerates an off-center return and holds through small corrections', () => {
+  const h = setup(); h.controller.destroy();
+  const controller = createCombatMouseController({ scene: h.scene, canPlay: () => true, onRelease() {} });
+  controller.beginInput(); h.doc.pointerLockElement = h.canvas; h.doc.emit('pointerlockchange');
+  controller.beginDrag();
+  let last = 0;
+  const at = x => {
+    h.doc.emit('mousemove', { target: h.canvas, movementX: (x - last) / controller.config.mouseSensitivity, movementY: 0 });
+    last = x;
+  };
+  at(controller.config.dragStartDistance * 2);
+  assert.equal(controller.isAiming(), true);
+  at(controller.config.dragReleaseDistance * 0.9);
+  assert.equal(controller.isCancelled(), true);
+  assert.equal(controller.getCenterCue().cancelled, true);
+  at((controller.config.dragStartDistance + controller.config.dragReleaseDistance) / 2);
+  assert.equal(controller.isCancelled(), true, 'small outward corrections remain canceled');
+  assert.equal(controller.getCenterCue().radius, controller.config.dragStartDistance);
+  at(controller.config.dragStartDistance * 1.1);
+  assert.equal(controller.isAiming(), true);
+  controller.endDrag();
+  assert.equal(controller.getCenterCue(), null);
   controller.destroy();
 });

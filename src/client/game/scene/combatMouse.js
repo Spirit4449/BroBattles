@@ -1,9 +1,9 @@
 // Relative displacement from each press; camera and player movement never move this origin.
 export const COMBAT_MOUSE_CONFIG = Object.freeze({
-  dragStartDistance: 10,
-  dragReleaseDistance: 6,
+  dragStartDistance: 24,
+  dragReleaseDistance: 16,
   fullDragDistance: 120,
-  mouseSensitivity: 0.24,
+  mouseSensitivity: 0.192,
   throwCenterDistance: 28,
   // Camera aim pullback is disabled for now; restore to 72 to re-enable.
   lookAhead: 0,
@@ -25,9 +25,11 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
   const getDistanceRatio = () => aiming && !centerHeld ? Math.min(1, Math.max(0,
     (Math.hypot(dragX, dragY) - (variableDistance ? config.throwCenterDistance : config.dragStartDistance)) /
     (config.fullDragDistance - (variableDistance ? config.throwCenterDistance : config.dragStartDistance)))) : 0;
-  const getCenterCue = () => variableDistance && aiming ? {
-    proximity: centerHeld ? 1 : Math.max(0, 1 - Math.max(0, Math.hypot(dragX, dragY) - config.throwCenterDistance) / 30),
-    held: centerHeld,
+  // Expose the actual virtual cursor, including while cancellation is held.
+  const getCenterCue = () => dragging && !defaultAim ? {
+    x: dragX, y: dragY,
+    radius: aiming ? config.dragReleaseDistance : config.dragStartDistance,
+    cancelled: !aiming,
   } : null;
   const endDrag = () => {
     dragging = false;
@@ -99,24 +101,18 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
     dragX += dx;
     dragY += dy;
     let distance = Math.hypot(dragX, dragY);
-    // Discard outward overshoot for throws so the first inward movement
-    // immediately shortens the attack, even after pushing against the limit.
-    if (variableDistance && distance > config.fullDragDistance) {
+    // Discard overshoot so returning to center and reversing direction stay
+    // responsive even after a long outward drag.
+    if (distance > config.fullDragDistance) {
       const scale = config.fullDragDistance / distance;
       dragX *= scale;
       dragY *= scale;
       distance = config.fullDragDistance;
     }
     if (defaultAim && distance < config.dragStartDistance) return;
-    // Minimum range clamps power, not heading. Only the tiny directionless
-    // center retains the last angle; orbiting inside minimum range stays free.
-    if (variableDistance && aiming) {
-      centerHeld = distance < config.dragReleaseDistance;
-      if (!centerHeld) direction = { x: dragX / distance, y: dragY / distance };
-      return;
-    }
     defaultAim = false;
     aiming = distance >= (aiming ? config.dragReleaseDistance : config.dragStartDistance);
+    centerHeld = !aiming;
     if (aiming) direction = { x: dragX / distance, y: dragY / distance };
   });
   listen(win, 'blur', release);
@@ -151,6 +147,7 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
     getDistanceRatio,
     getCenterCue,
     isDefaultAim: () => defaultAim,
+    isCancelled: () => active && dragging && !defaultAim && !aiming,
     shouldShowReticle: () => active && dragging && aiming,
     beginDrag(facing = 1, isVariableDistance = false) {
       endDrag();

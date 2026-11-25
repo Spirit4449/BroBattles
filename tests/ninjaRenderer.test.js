@@ -208,7 +208,7 @@ test('two remote clients converge despite asymmetric launch delay and duplicate 
 
 test('the Ninja super plays its aimed clip once through the barrage; other skins keep looping theirs',()=>{
   const load=(plays,locks)=>{const api={};loadClientModule(require.resolve('../src/client/game/characters/ninja/swarmPresentation'), {exports:api,performance:{now:()=>0},
-    require:name=>name.includes('playerAudio')?playerAudio:name==='./swarmFx'?{beginSwarm:()=>null,swarmThrowSound(){}}:name.includes('aimPose')?require('../src/client/game/characters/shared/aimPose'):name.endsWith('animation-settings.json')?require('../public/assets/ninja/animation-settings.json'):{resolveSpriteAnimationKey:()=> 'ninja-special',markOneShotAnimation:(...args)=>locks.push(args)}});return api;};
+    require:name=>name.includes('playerAudio')?playerAudio:name==='./swarmFx'?{beginSwarm:()=>null,swarmThrowSound(){}}:name==='./sovereignAnimations'?require('../src/client/game/characters/ninja/sovereignAnimations'):name.includes('aimPose')?require('../src/client/game/characters/shared/aimPose'):name.endsWith('animation-settings.json')?require('../public/assets/ninja/animation-settings.json'):{resolveSpriteAnimationKey:({sprite})=> `${sprite.texture.key}-special`,markOneShotAnimation:(...args)=>locks.push(args)}});return api;};
   const anims=new Set(['ninja-special','ninja-special-up','ninja-special-low']);
   const scene={anims:{exists:key=>anims.has(key),get:()=>({msPerFrame:40,frames:Array.from({length:16},()=>({duration:0}))})}};
   let plays=[],locks=[];const api=load(plays,locks);
@@ -222,6 +222,15 @@ test('the Ninja super plays its aimed clip once through the barrage; other skins
   const skin={active:true,texture:{key:'ninja-arena-sovereign'},anims:{play:(...args)=>plays.push(args)}};
   skinned.presentSwarmRelease(scene,skin,36,true,{x:0,y:0,angle:0});
   assert.equal(plays[0][0].repeat,-1);assert.equal(plays[0][1],true);assert.equal(locks[0][1],'special');
+
+  plays=[];locks=[];const sovereign=load(plays,locks);
+  const royal={...skin,texture:{key:'ninja__ninja-arena-sovereign',has:frame=>frame==='throwHigh00'}};
+  const clip=`${royal.texture.key}-special-up`;
+  anims.add(clip);
+  sovereign.presentSwarmRelease(scene,royal,36,true,{x:0,y:0,angle:-0.6});
+  sovereign.presentSwarmRelease(scene,royal,36,true,{x:0,y:0,angle:-0.6});
+  assert.deepEqual(plays,[[clip,false]]);
+  assert.equal(locks.length,1);
 });
 
 test('owner shuriken keep their predicted pace when the later server launch confirms them',()=>{

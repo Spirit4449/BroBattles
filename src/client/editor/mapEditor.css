@@ -525,3 +525,14 @@ dialog textarea { width: 100%; height: 44vh; font: 12px/1.5 ui-monospace, monosp
   min-width: 160px;
   max-height: calc(100dvh - 16px);
 }
+
+/* Keep boundary help available even after the first-use hint is dismissed. */
+.boundary-legend { position: relative; font-size: 12px; }
+.boundary-legend summary { cursor: pointer; padding: 8px; }
+.boundary-legend > div { position: absolute; top: 100%; right: 0; width: 280px; max-width: 60vw; max-height: 55vh; overflow: auto; padding: 8px 14px; border: 2px solid var(--bb-ink); background: #0b1629; box-shadow: 0 3px var(--bb-ink); }
+.boundary-legend p { margin: 8px 0 12px; line-height: 1.5; }
+.line-world { color: #91adc0; }
+.line-camera { color: #ffd166; }
+.line-collision { color: #66bbff; }
+.line-center { color: #baf36b; }
+.camera-preview .boundary-legend { display: none; }

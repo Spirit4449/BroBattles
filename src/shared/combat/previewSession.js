@@ -3,6 +3,7 @@ const { SOCKET_EVENTS } = require("../net/socketEvents.js");
 // accounts, rewards, or timers: callers advance a clock and consume events.
 const characters = require('../characters');
 const stats = require('../characters/characterStats');
+const { applyImpulse } = require('../physics/knockback');
 const { characterBody } = require('../physics/characterBody');
 const { FIXED_DT_MS } = require('../gameConstants');
 const characterCombat = require('./runtime/characterCombatRegistry');
@@ -85,8 +86,7 @@ class PreviewSession {
   }
   applyPowerupToPlayer(player, type, now, params) { applyPowerupToPlayer(this, player, type, now, params); }
   applyKnockback(player, impulse) {
-    player.vx = Number(impulse.amountX) || 0; player.vy = Number(impulse.amountY) || 0;
-    player._previewImpulseUntil = this.now + 250; player.grounded = false;
+    applyImpulse(player, impulse, this.now);
     this.broadcast(SOCKET_EVENTS.PLAYER_KNOCKBACK, { username: player.name, ...impulse });
   }
   broadcastSnapshot() {}

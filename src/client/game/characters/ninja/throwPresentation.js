@@ -9,6 +9,7 @@ const { key: NAME } = characterDefinitions.ninja;
 
 const settings = require('../../../../../public/assets/ninja/animation-settings.json');
 const { aimElevation, nearestAimPose } = require('../shared/aimPose');
+const { hasSovereignAnimations, sovereignThrowSettings } = require('./sovereignAnimations');
 
 // The baked pose whose wrist points closest to `angle`.
 function throwPose(angle, config = settings.throw) {
@@ -22,12 +23,12 @@ function beginThrow(sprite, angle, now = performance.now(), config = settings.th
   if (!sprite) return null;
   delete sprite._ninjaThrow;
   const pose = throwPose(angle, config);
-  // Every player carries its texture key, the default skin's being 'ninja'
-  // itself; only other skins keep their own single throw.
   const texture = sprite._bbSkinTextureKey || sprite.texture?.key;
-  if (!pose || (texture && texture !== NAME)) return null;
-  sprite._ninjaThrow = { startedAt: now, releaseMs: config.releaseMs, blendMs: config.blendMs,
-    startScale: config.startScale, hand: pose.hand };
+  const sovereign = hasSovereignAnimations(sprite.texture);
+  if (!pose || (texture && texture !== NAME && !sovereign)) return null;
+  const timing = sovereign ? sovereignThrowSettings : config;
+  sprite._ninjaThrow = { startedAt: now, releaseMs: timing.releaseMs, blendMs: timing.blendMs,
+    startScale: timing.startScale, hand: sovereign ? timing.hands[pose.key || 'level'] : pose.hand };
   return pose.key;
 }
 

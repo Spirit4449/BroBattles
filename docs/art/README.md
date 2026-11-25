@@ -94,7 +94,7 @@ and inspect the alpha edges and loop after importing.
 ### Other fighter assets
 
 - **Thorg:** current shared sweep phases are defined in `src/shared/characters/thorg.json`. `thorgAttackFrames.json` supplies the attack track. The atlas includes baked weapon/sweep artwork. Thorg has only his default appearance; separate weapon sprites and the old skin orbit are removed. Held pose imports use `thorg_duck.png` and `thorg_slide.png` with source alpha preserved. Straight-down stomp uses duck presentation; old falling-only dash notes are superseded.
-- **Arena Sovereign Ninja:** padded 72px logical atlas frames, explicit duck/falling overrides, crown projectile and upright crown-spin assets are supplied through skin assets. Preserve animation names and inspect both predicted and remote flight after repacking.
+- **Arena Sovereign Ninja:** run `node scripts/art/sovereign-pixel/sheet.cjs --install` to rebuild the 72px atlas and playback settings. The character's original poses are transcribed as editable palette grids in `poses.txt`. The shared pixel rig animates intermediate poses, the forward roll, and the directional throws and dashes. The crown projectile and upright crown-spin art are maintained independently.
 - **Ozzy / Draven:** friendly and enemy `*-bb` atlases have matching JSON. Ozzy's fireball is drawn in code (`src/client/game/characters/ozzy/fireballArt.js`, blue and red palettes) with procedural pixel trails in `fireballParticles.js`; Draven uses `explosion-bb` and `special-bb` pairs. Team affiliation is viewer-relative and retained on released attacks. The shared team presentation contract is `src/shared/projectilePresentation.js`.
 
 Chat reactions use six hand-authored SVG icons on a shared 16×16 pixel grid in

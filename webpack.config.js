@@ -23,6 +23,7 @@ module.exports = (_env = {}, argv = {}) => {
     // Preserve the URL used by cached restriction pages.
     banned: { import: "./src/client/pages/banned.js", filename: "scripts/banned.js" },
     site: "./src/client/site/index.js",
+    aboutLobbyPreview: "./src/client/site/aboutLobbyPreview.js",
     status: [
       "./src/client/styles/ui-system.css",
       "./src/client/styles/ui-components.css",
@@ -109,6 +110,7 @@ module.exports = (_env = {}, argv = {}) => {
     }),
     new CopyWebpackPlugin({
       patterns: [
+        { from: "public/index.html", to: "about-lobby-preview.html", transform: require("./scripts/build/aboutLobbyPreview.cjs") },
         {from:path.resolve(__dirname,"node_modules/phaser/dist/phaser-arcade-physics.min.js"),to:"bundles/phaser-arcade-physics.min.js"},
         {
           from: path.resolve(__dirname, "public"),

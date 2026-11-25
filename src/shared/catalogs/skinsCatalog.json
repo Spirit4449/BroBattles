@@ -42,20 +42,6 @@
               "url": "/assets/ninja/skins/ninja-arena-sovereign/crown-spin.webp",
               "frameWidth": 237,
               "frameHeight": 237
-            },
-            "animationOverrides": {
-              "falling": {
-                "frames": [
-                  "falling00",
-                  "falling01",
-                  "falling02",
-                  "falling03",
-                  "falling02",
-                  "falling01"
-                ],
-                "frameRate": 8,
-                "repeat": -1
-              }
             }
           }
         }
@@ -130,7 +116,7 @@
         },
         {
           "id": "ozzy-pocket-ace",
-          "name": "Pocket Ace Ozzy",
+          "name": "8-ball Ozzy",
           "character": "ozzy",
           "available": true,
           "assetUrl": "/assets/ozzy/skins/ozzy-pocket-ace/body.webp",

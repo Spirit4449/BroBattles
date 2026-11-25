@@ -5,6 +5,7 @@ import { predictNinja } from './network';
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
 import { animations } from "./anim";
 import { legacyAnimations } from "./legacyAnim";
+import { hasSovereignAnimations, registerSovereignAnimations } from "./sovereignAnimations";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { createRuntimeId } from "../shared/runtimeId";
@@ -60,6 +61,10 @@ class Ninja extends CharacterEntityBase {
 
   // Unconverted skins retain their original frame counts and cadence.
   static setupSkinAnimations(scene, textureKey, texture) {
+    if (hasSovereignAnimations(texture)) {
+      registerSovereignAnimations(scene, texture);
+      return true;
+    }
     if (texture.has("attack00")) return false;
     legacyAnimations(scene, textureKey);
     return true;

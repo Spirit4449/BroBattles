@@ -1,3 +1,4 @@
+import { loadGameFonts } from "../../game/scene/loadGameFonts";
 import { getPageScope } from "../../lib/globals.cjs";
 // Switchable views in the expanded character panel.
 //   body        the static portrait (always available, shown first)
@@ -16,8 +17,7 @@ const VIEWS = [
   { id: "fight", label: "Fight" },
 ];
 let phaserPromise = null;
-let stagePromise = null;
-let host = null;
+let retiringStage = Promise.resolve();
 let session = null;
 
 export function hasCharacterShowcase(character) {
@@ -37,6 +37,7 @@ export function mountCharacterShowcase(frame, { character, skinId, level = 1, na
   if (!frame || !hasCharacterShowcase(character)) return;
   const current = {
     frame, character, skinId, level, name,
+    host: null, stage: null, stagePromise: null,
     view: "body",
     userChose: false,
     request: 0,
@@ -44,13 +45,16 @@ export function mountCharacterShowcase(frame, { character, skinId, level = 1, na
     buttons: new Map(),
   };
   session = current;
+  current.unsubscribe = getPageScope()?.onDispose(() => endSession(current));
   decorateFrame(current, "body");
 
   const opened = performance.now();
   // Load the animations view behind the portrait, then fade in no sooner than
   // the delay; a slow load simply fades in when it is done.
-  getStage()
-    .then(stage => stage.prepare({ character, skinId, mode: "animations" }))
+  getStage(current)
+    .then(stage => {
+      if (stage && session === current && !current.userChose) return stage.prepare({ character, skinId: current.skinId, mode: "animations" });
+    })
     .then(() => {
       if (session !== current || current.userChose) return;
       const remaining = AUTO_PLAY_DELAY_MS - (performance.now() - opened);
@@ -59,8 +63,8 @@ export function mountCharacterShowcase(frame, { character, skinId, level = 1, na
       }, Math.max(0, remaining));
     })
     .catch(error => {
-      console.warn("[showcase] unavailable", error);
-      if (session === current) current.frame.querySelector(".character-showcase-switcher")?.remove();
+      if (session === current) console.warn("[showcase] unavailable", error);
+      // Keep manual selection available after a transient load failure.
     });
 }
 
@@ -69,15 +73,16 @@ function decorateFrame(current, shownView) {
   current.buttons.clear();
   frame.dataset.showcaseView = shownView;
   frame.appendChild(buildSwitcher(current));
-  if (host) frame.prepend(host);
+  if (current.host) frame.prepend(current.host);
 }
 
 function adoptFrame(current, frame, { skinId, level, name }) {
   const changed = current.skinId !== skinId || current.level !== level || current.name !== name;
+  const shownView = current.frame.dataset.showcaseView;
   current.frame = frame;
   current.level = level;
   current.name = name;
-  decorateFrame(current, current.view === "body" || !host ? "body" : current.view);
+  decorateFrame(current, shownView);
   if (changed) {
     current.skinId = skinId;
     if (current.view !== "body") void setView(current, current.view, { force: true });
@@ -107,12 +112,15 @@ export function hideCharacterShowcase() {
   endSession();
 }
 
-function endSession() {
-  if (!session) return;
-  clearTimeout(session.timer);
-  session.request++;
+function endSession(current = session) {
+  if (!current || current !== session) return retiringStage;
+  clearTimeout(current.timer);
+  current.request++;
+  current.unsubscribe?.();
   session = null;
-  stagePromise?.then(stage => stage.hide()).catch(() => {});
+  if (current.stage) retiringStage = Promise.resolve(current.stage.destroy());
+  current.host?.remove();
+  return retiringStage;
 }
 
 function buildSwitcher(current) {
@@ -151,21 +159,26 @@ async function setView(current, view, { force = false } = {}) {
     current.frame.dataset.showcaseView = "body";
     current.frame.classList.remove("is-showcase-loading");
     await delay(FADE_MS);
-    if (current.request === request) (await getStage()).hide();
+    if (current.request !== request) return;
+    if (current.request === request) {
+      current.stage?.hide();
+      current.host?.classList.remove("is-swapping");
+    }
     return;
   }
 
   // View changes dip only the canvas. Skin refreshes restart in place.
-  if (wasLive && host && !force) {
-    host.classList.add("is-swapping");
+  if (wasLive && current.host && !force) {
+    current.host.classList.add("is-swapping");
     await delay(FADE_MS);
     if (current.request !== request) return;
   }
   current.frame.classList.add("is-showcase-loading");
+  let stage;
   try {
-    const stage = await getStage();
+    stage = await getStage(current);
     if (current.request !== request) return;
-    if (host.parentNode !== current.frame) current.frame.prepend(host);
+    if (current.host.parentNode !== current.frame) current.frame.prepend(current.host);
     const shown = await stage.show({
       character: current.character, skinId: current.skinId, level: current.level, name: current.name, mode: view,
       onCycleComplete: () => { if (current.request === request) void setView(current, "fight"); },
@@ -175,6 +188,7 @@ async function setView(current, view, { force = false } = {}) {
   } catch (error) {
     console.warn("[showcase] view failed", error);
     if (current.request === request) {
+      stage?.hide();
       current.view = "body";
       current.frame.dataset.showcaseView = "body";
       for (const [id, button] of current.buttons) button.setAttribute("aria-pressed", String(id === "body"));
@@ -182,7 +196,7 @@ async function setView(current, view, { force = false } = {}) {
   } finally {
     if (current.request === request) {
       current.frame.classList.remove("is-showcase-loading");
-      host?.classList.remove("is-swapping");
+      current.host?.classList.remove("is-swapping");
     }
   }
 }
@@ -203,27 +217,25 @@ function loadPhaser() {
   return phaserPromise;
 }
 
-function getStage() {
-  stagePromise ||= (async () => {
-    await loadPhaser();
+function getStage(current) {
+  current.stagePromise ||= (async () => {
+    await Promise.all([loadPhaser(), retiringStage, document.fonts && loadGameFonts(document.fonts)]);
+    if (session !== current) return null;
     // Character code reads the Phaser global, so import it only afterwards.
     const { createShowcaseStage } = await import(/* webpackChunkName: "character-showcase" */ "./showcaseStage.js");
-    host = document.createElement("div");
+    if (session !== current) return null;
+    const host = document.createElement("div");
     host.className = "character-showcase";
     host.setAttribute("aria-hidden", "true");
-    if (session) session.frame.prepend(host);
-    const stage = createShowcaseStage(host);
-    // Leaving the lobby frees the WebGL context for the match.
-    getPageScope()?.onDispose(() => {
-      stage.destroy();
-      host?.remove();
-      host = null;
-      stagePromise = null;
-    });
-    return stage;
+    current.frame.prepend(host);
+    current.host = host;
+    current.stage = createShowcaseStage(host);
+    return current.stage;
   })().catch(error => {
-    stagePromise = null;
+    current.host?.remove();
+    current.host = null;
+    current.stagePromise = null;
     throw error;
   });
-  return stagePromise;
+  return current.stagePromise;
 }

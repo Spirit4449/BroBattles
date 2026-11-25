@@ -78,6 +78,16 @@
       <button id="camera-preview" title="Look through the match camera: real parallax, fog and zoom range (C)" aria-pressed="false">Game camera</button>
       <div class="snap-label">Snap <select id="grid" aria-label="Snap grid"><option value="8">8 px</option><option value="16" selected>16 px</option><option value="32">32 px</option><option value="64">64 px</option><option value="0">Off</option></select></div>
       <span class="tool-divider"></span>
+      <details class="boundary-legend">
+        <summary>Map lines</summary>
+        <div>
+          <p><strong class="line-world">Blue-gray · Physics world</strong><br>The world boundary used by physics.</p>
+          <p><strong class="line-camera">Yellow · Camera bounds</strong><br>Limits for the moving game camera, not the current screen view.</p>
+          <p><strong class="line-collision">Blue · Collision hitboxes</strong><br>Platform and wall collision shapes. Align these with playable surfaces.</p>
+          <p><strong class="line-center">Green · World center</strong><br>Alignment guide only.</p>
+          <p>Art can extend past these lines or stop inside them. Use Game camera and Playtest to check scenery coverage. Hover a line to identify it.</p>
+        </div>
+      </details>
       <button id="shortcuts" class="icon-button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
     </div>
     <div id="canvas-hint" hidden><span>Shift-click to multi-select · Drag empty space to box-select · Space + drag or right-drag to pan · Scroll to zoom</span><button id="hint-close" type="button" aria-label="Dismiss hint">×</button></div>

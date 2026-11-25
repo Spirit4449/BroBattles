@@ -359,10 +359,11 @@ function spawnOzzyFireballProjectile(
     // server age (an enemy's led so it reaches this player when the server
     // does) instead of from when the packet arrived. An enemy's ball that
     // reaches this player's drawn body waits there for the server's burst.
+    const clock = scene.combatPresentation?.clock || serverClock;
     const ageState = {};
     const hasLaunch = !predictHits && Number.isFinite(Number(payload?.launchMono));
     const enemy = hasLaunch && isEnemyShooter(shooter);
-    const aged = hasLaunch && releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) !== null;
+    const aged = hasLaunch && releasedFlightAge(clock, ageState, payload, performance.now(), enemy) !== null;
     let victimFrom = enemy ? fireballDamageCenter({ x: launchX, y: launchY }, angle, 0) : null, victimFromAge = 0;
     let victimHold = null, victimReleased = false;
 
@@ -377,7 +378,7 @@ function spawnOzzyFireballProjectile(
         const progress = Number(tween?.targets?.[0]?.t) || 0;
         // Real time since release while the clock cannot place the ball.
         let flown = (aged ? travelDuration + 3000 : travelDuration) * progress;
-        const age = aged ? releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) : null;
+        const age = aged ? releasedFlightAge(clock, ageState, payload, performance.now(), enemy) : null;
         if (age !== null) flown = Math.min(travelDuration, age);
         const done = aged ? flown >= travelDuration : progress >= 1;
         if (victimHold) {
@@ -417,7 +418,7 @@ function spawnOzzyFireballProjectile(
           const victimTo = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
           // Tested like the server will: against this player's body as drawn
           // when the fully led ball was here (victimLagMs).
-          const targetLead = serverClock.enemyLeadMs?.(payload.viewRewindMs) || 0;
+          const targetLead = clock.enemyLeadMs?.(payload.viewRewindMs) || 0;
           const touch = localBodyContact(victimFrom, victimTo, FIREBALL_COLLISION_RADIUS, { lagMs: victimLagMs(targetLead, ageState.shown || 0),
             spanMs: flown - victimFromAge });
           victimFrom = victimTo; victimFromAge = flown;

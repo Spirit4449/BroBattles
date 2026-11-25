@@ -116,8 +116,11 @@ export function spawnGloopSlimeBud(scene, ownerSprite, payload = {}) {
   if (!start || !Number.isFinite(start.x) || !Number.isFinite(start.y)) return null;
   const direction = Number(payload.direction) === -1 ? -1 : 1;
   const angle = Number.isFinite(payload.angle) ? payload.angle : direction < 0 ? Math.PI : 0;
+  // Resolve the offset in the caster's pose at the time of the throw. The
+  // rendered sprite can be a frame behind, and the bud follows it as it moves.
+  const origin = payload.origin ?? ownerSprite;
   const bud = createSlimeBud(scene, ownerSprite, {
-    offsetX: start.x - ownerSprite.x, offsetY: start.y - ownerSprite.y, angle,
+    offsetX: start.x - origin.x, offsetY: start.y - origin.y, angle,
     radius: slimeRadius(SLIMEBALL.collisionRadius, Number(SLIMEBALL.visualScale) || 1.5),
     durationMs: Math.max(60, Number(payload.startup) || Number(SLIMEBALL.castDelayMs) || 120),
   });
@@ -154,7 +157,7 @@ export function spawnGloopSlimeballVisual(
   // The room's static colliders: from the match bootstrap, or from an older
   // server's release packet; failing both, the scene's map objects.
   const roomRects = Array.isArray(payload.mapCollisionRects) && payload.mapCollisionRects.length
-    ? payload.mapCollisionRects : roomTerrain();
+    ? payload.mapCollisionRects : scene.combatPresentation?.colliders ?? roomTerrain();
   const mapCollisionRects = getMapCollisionRects(scene, roomRects);
   const serverTerrain = Array.isArray(roomRects) && roomRects.length > 0;
   const worldBounds = resolveWorldBounds(scene);
@@ -265,17 +268,18 @@ export function spawnGloopSlimeballVisual(
   // its server age (an enemy's led, so it reaches this player when the server
   // does) instead of flying from when the packet arrived. An enemy's ball that
   // reaches this player's drawn body waits there for the server's splat.
+  const clock = scene.combatPresentation?.clock || serverClock;
   const ageState = {};
   const hasLaunch = !predictHits && Number.isFinite(Number(payload.launchMono));
   const enemy = hasLaunch && isEnemyShooter(ownerSprite?.username);
-  const aged = hasLaunch && releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) !== null;
+  const aged = hasLaunch && releasedFlightAge(clock, ageState, payload, performance.now(), enemy) !== null;
   let fed = 0, victimTouch = false, victimHold = null, victimReleased = false;
   // Tested like the server will: against this player's body as drawn when
   // the fully led ball was here (victimLagMs).
   // A sub-step at drawn age a was tested against the frame (age this frame - a)
   // before that one.
   let flightAgeNow = null, segmentAge = 0;
-  const victimLag = () => victimLagMs(serverClock.enemyLeadMs?.(payload.viewRewindMs) || 0, ageState.shown || 0) +
+  const victimLag = () => victimLagMs(clock.enemyLeadMs?.(payload.viewRewindMs) || 0, ageState.shown || 0) +
     (Number.isFinite(flightAgeNow) ? Math.max(0, flightAgeNow - segmentAge) : 0);
   const onVictimSegment = enemy ? (_from, s) => {
     if (!victimReleased && localBodyContact(s, s, s.collisionRadius, { lagMs: victimLag() })) victimTouch = true;
@@ -304,7 +308,7 @@ export function spawnGloopSlimeballVisual(
         const body = victimHold.body;
         if (body?.active) { state.x = body.x + victimHold.offset.x; state.y = body.y + victimHold.offset.y; }
         if (enemyShotTraced()) traceEnemyShot(payload.id, ownerSprite?.username, NAME, state.x, state.y, state.collisionRadius, ageState.shown || 0, payload.viewRewindMs, 1,
-          aged ? releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy) : null);
+          aged ? releasedFlightAge(clock, ageState, payload, performance.now(), enemy) : null);
         if (performance.now() - victimHold.at <= victimHold.windowMs) return;
         // No splat: withdrawn like an unconfirmed prediction.
         victimHold = null; victimReleased = true; ended = true;
@@ -314,7 +318,7 @@ export function spawnGloopSlimeballVisual(
       }
       let ms = delta, flightAge = null;
       if (aged) {
-        const age = flightAge = flightAgeNow = releasedFlightAge(serverClock, ageState, payload, performance.now(), enemy);
+        const age = flightAge = flightAgeNow = releasedFlightAge(clock, ageState, payload, performance.now(), enemy);
         // Catch up at most three frames' worth at once (after a hold).
         ms = age === null ? delta : Math.max(0, Math.min(age - fed, Math.max(delta, 1) * 3, 1000));
       }

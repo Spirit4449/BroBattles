@@ -1,2 +1,2 @@
-// Optional art framing. Combat comes from the shared match runtime.
-export default { visual: { bodyTop: 0.5, maxWidth: 110 } };
+// Frame the full idle silhouette, including the staff plume.
+export default { visual: { height: 84 } };

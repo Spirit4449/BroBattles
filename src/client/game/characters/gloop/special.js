@@ -92,6 +92,7 @@ function createHand(scene, x, y, angle, scale, variant = "open") {
 // A single update loop owns the arm, hand deformation and bounded liquid debris.
 // The wrist follows the rendered caster; projectile travel stays on the server ray.
 function createHookVisual(scene, owner, angle, start, id) {
+  const clock = scene.combatPresentation?.clock || serverClock;
   const hand = createHand(scene, start.x, start.y, angle, Number(HOOK.visualScale) || 0.28);
   const tether = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER - 1);
   const fx = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER - 0.5);
@@ -203,7 +204,7 @@ function createHookVisual(scene, owner, angle, start, id) {
     visual.victimFrom = center;
     // Tested like the server will: against this player's body as drawn when
     // the fully led hook was here (victimLagMs).
-    const targetLead = serverClock.enemyLeadMs?.(visual.launch?.viewRewindMs) || 0;
+    const targetLead = clock.enemyLeadMs?.(visual.launch?.viewRewindMs) || 0;
     const hit = localBodyContact(from, center, HOOK.collisionRadius, { lagMs: visual.launch ? victimLagMs(targetLead, visual.ageState?.shown || 0) : 0 });
     if (enemyShotTraced()) traceEnemyShot(visual.id, owner.username, NAME, center.x, center.y, HOOK.collisionRadius, visual.ageState?.shown || 0, visual.launch?.viewRewindMs, 0, visual.flightAge ?? null);
     const sprite = hit?.target?.sprite, origin = hit?.origin || sprite;
@@ -222,7 +223,7 @@ function createHookVisual(scene, owner, angle, start, id) {
     if (visual.phase === "out") {
       // An echoed hook is drawn by server age (an enemy's led, so it reaches
       // this player when the server does) rather than from packet arrival.
-      const age = visual.flightAge = visual.launch ? releasedFlightAge(serverClock, visual.ageState, visual.launch, performance.now(), visual.enemy) : null;
+      const age = visual.flightAge = visual.launch ? releasedFlightAge(clock, visual.ageState, visual.launch, performance.now(), visual.enemy) : null;
       const t = Math.min(1, (age ?? visual.elapsed) / visual.outMs);
       const from = { x: hand.x, y: hand.y };
       hand.setPosition(start.x + Math.cos(angle) * visual.range * t,
@@ -251,7 +252,7 @@ function createHookVisual(scene, owner, angle, start, id) {
       if (latch.sprite?.active) hand.setPosition(latch.sprite.x + latch.offset.x, latch.sprite.y + latch.offset.y);
       if (latch.victim) {
         if (enemyShotTraced()) traceEnemyShot(visual.id, owner.username, NAME, hand.x, hand.y, HOOK.collisionRadius, visual.ageState?.shown || 0, visual.launch?.viewRewindMs, 1,
-          visual.launch ? releasedFlightAge(serverClock, visual.ageState, visual.launch, performance.now(), visual.enemy) : null);
+          visual.launch ? releasedFlightAge(clock, visual.ageState, visual.launch, performance.now(), visual.enemy) : null);
         // No catch for this player in time: the server's hook missed; let go,
         // as an unconfirmed prediction does.
         if (visual.elapsed > latch.windowMs) {

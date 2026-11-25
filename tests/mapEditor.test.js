@@ -622,3 +622,18 @@ test('the lobby replaces its map list without changing the shipped catalog', () 
   assert.equal(mapsCatalog.maps[0], shipped);
   assert.notEqual(shipped.label, published.label);
 });
+
+test('boundary hover identifies overlapping outlines and uses screen-pixel tolerance', () => {
+  const { boundaryHints } = require('../src/client/editor/boundaryGuides');
+  const arena = { world: { x: 0, y: 0, width: 100, height: 80 }, camera: { x: -20, y: -10, width: 140, height: 90 } };
+  const colliders = [{ id: 'wall', left: 0, top: 0, right: 10, bottom: 80 }];
+  const shared = boundaryHints({ x: 0, y: 80 }, arena, colliders, 1);
+  assert.equal(shared.length, 3);
+  assert.match(shared[0], /Physics world/);
+  assert.match(shared[1], /Camera bounds/);
+  assert.match(shared[2], /wall/);
+  assert.deepEqual(boundaryHints({ x: 25, y: 30 }, arena, colliders, 1), []);
+  assert.equal(boundaryHints({ x: -5, y: 30 }, arena, [], 1).length, 1);
+  assert.equal(boundaryHints({ x: -5, y: 30 }, arena, [], 2).length, 0);
+  assert.match(boundaryHints({ x: 50, y: 30 }, arena, [], 1)[0], /World center/);
+});

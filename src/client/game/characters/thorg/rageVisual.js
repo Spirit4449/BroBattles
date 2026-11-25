@@ -23,7 +23,7 @@ export function setThorgRageVisual(scene, body, enabled) {
     const pose = getThorgVisualPose(body);
     // Keep the HUD above the enlarged helmet, independent of raised weapons.
     const top = normalTop * pose.scale;
-    body._bbHudTopOffset = pose.y - body.y + top - 4;
+    body._bbHudTopOffset = pose.y - body.y + top;
   };
   updateHud();
   const visual = scene.add.sprite(body.x, body.y, body.texture.key, body.frame.name);

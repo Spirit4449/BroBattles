@@ -17,19 +17,37 @@ describe("Health and invisibility", () => {
     const OpPlayer = load('../src/client/game/players/RemotePlayer.js').default;
 
     test('teammate and opponent name/bar anchors follow moving fighters every frame', () => {
-      function player() {
+      const { createClientModuleGraph } = require('./helpers/clientModule');
+      const graph = createClientModuleGraph({ globals: { Phaser: { BlendModes: { ADD: 1 } } }, imports: {
+        '../../site/preferences': { bindCanvasName() {} },
+      } });
+      const { createPlayerWorldHud } = graph.load('src/client/game/scene/playerWorldHud.js');
+      const scene = { time: { now: 100 }, tweens: { add() {} } };
+      function displayObject() {
+        const object = { scene, active: true, visible: true, rects: [],
+          setPosition(x, y) { this.x = x; this.y = y; return this; },
+          clear() { this.rects = []; return this; },
+          fillStyle(color) { this.color = color; return this; },
+          fillRect(x, y, width, height) { this.rects.push({ x, y, width, height, color: this.color }); },
+        };
+        for (const name of ['setOrigin', 'setAlpha', 'setScale', 'setRotation', 'setVisible', 'setDepth',
+          'setDisplaySize', 'setTint', 'setBlendMode', 'setStyle', 'setShadow', 'setText']) object[name] = () => object;
+        return object;
+      }
+      scene.add = { text: displayObject, image: displayObject, graphics: displayObject };
+      function player(role) {
         const wrapper = Object.create(OpPlayer.prototype);
         wrapper.opponent = { x: 100, body: { y: 20 } };
-        wrapper._hudAnchorX = 500;
-        wrapper._hudAnchorY = -300;
-        wrapper.opPlayerName = { setPosition(x, y) { this.x = x; this.y = y; } };
-        wrapper.updateHealthBar = function () {
-          this.barAnchor = { x: this._hudAnchorX, y: this._hudAnchorY };
-          this.draws = (this.draws || 0) + 1;
-        };
+        wrapper._worldHud = createPlayerWorldHud(scene, { username: role, role });
+        wrapper.opHealthText = wrapper._worldHud.healthText;
+        wrapper.opHealthBar = wrapper._worldHud.healthBar;
+        wrapper.opCurrentHealth = wrapper.opMaxHealth = 800;
+        wrapper.opSuperCharge = wrapper.opMaxSuperCharge = 1;
         return wrapper;
       }
-      const enemy = player(), ally = player();
+      const enemy = player('enemy'), ally = player('ally');
+      const self = player('self');
+      let initialGap;
       for (let frame = 0; frame < 120; frame++) {
         for (const wrapper of [enemy, ally]) {
           wrapper.opponent.x = 100 + Math.min(frame, 100) * 0.2;
@@ -37,15 +55,26 @@ describe("Health and invisibility", () => {
         }
         updateHealthBars({ opponentPlayers: { enemy }, teamPlayers: { ally }, syncPositions: true });
         for (const wrapper of [enemy, ally]) {
-          // Like the local player's bar: on the sprite this frame, no trailing.
-          assert.equal(wrapper.barAnchor.x, wrapper.opponent.x);
-          assert.equal(wrapper.barAnchor.y, wrapper.opponent.body.y);
-          assert.equal(wrapper.opPlayerName.x, wrapper.barAnchor.x);
-          assert.equal(wrapper.opPlayerName.y, wrapper.barAnchor.y - 42);
+          const hud = wrapper._worldHud;
+          const fill = hud.healthBar.rects.find(r => r.color === (wrapper === ally ? 0x99ab2c : 0xb24035));
+          assert.ok(hud.healthText.y >= fill.y && hud.healthText.y < fill.y + fill.height, 'HP inside the fill');
+          assert.equal(hud.playerName.x, Math.round(wrapper.opponent.x));
+          assert.equal(hud.healthText.x, hud.playerName.x);
+          assert.equal(fill.x + fill.width / 2, hud.healthText.x);
+          const nameGap = wrapper.opponent.body.y - hud.playerName.y;
+          initialGap ??= nameGap;
+          assert.equal(nameGap, initialGap, 'name follows the fighter on this frame');
+          assert.equal(hud.ammoBar, null);
         }
+        self.opponent = ally.opponent;
+        self._worldHud.draw({ sprite: self.opponent, headY: ally.hudTopY(), health: 50, maxHealth: 80,
+          charge: 1, maxCharge: 1, ammo: { capacity: 3, charges: 3 }, visible: true });
+        const hud = self._worldHud;
+        assert.ok(hud.ammoBar.rects.length);
+        assert.ok(hud.healthText.y < ally._worldHud.healthText.y, 'ammo fits above the super meter');
+        assert.equal(hud.superBarBack.rects.at(-1).y, ally._worldHud.superBarBack.rects.at(-1).y,
+          'both panels clear the head by the same distance');
       }
-      assert.equal(enemy.draws, 120);
-      assert.equal(ally.draws, 120);
     });
 
   });

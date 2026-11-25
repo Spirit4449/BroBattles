@@ -667,12 +667,14 @@ export function spawnDamageImpact(scene, sprite, opts = {}) {
   if (!scene?.add || !sprite?.active) return;
 
   const body = sprite.body;
-  const cx = Number(body?.center?.x) || sprite.x;
-  const cy = Number(body?.center?.y) || sprite.y;
-  const top = Number(body?.top) || cy - (sprite.height || 80) * 0.5;
-  const bottom = Number(body?.bottom) || cy + (sprite.height || 80) * 0.5;
-  const left = Number(body?.left) || cx - (sprite.width || 60) * 0.5;
-  const right = Number(body?.right) || cx + (sprite.width || 60) * 0.5;
+  const cx = body?.center?.x ?? sprite.x;
+  const cy = body?.center?.y ?? sprite.y;
+  const halfHeight = (sprite.displayHeight || 80) * 0.5;
+  const halfWidth = (sprite.displayWidth || 60) * 0.5;
+  const top = body?.top ?? cy - halfHeight;
+  const bottom = body?.bottom ?? cy + halfHeight;
+  const left = body?.left ?? cx - halfWidth;
+  const right = body?.right ?? cx + halfWidth;
   const color = opts.color || 0xff4d6d;
   const glowColor = opts.glowColor || 0xff9aa2;
   const depth =

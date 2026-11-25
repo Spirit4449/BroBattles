@@ -111,3 +111,55 @@ describe("Quick attack direction", () => {
     }
   });
 });
+
+test('cancel indicator tracks input, stays visible without an attack guide, and cleans up', () => {
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { createAttackAimReticleController } = createClientModuleGraph().load(
+    require.resolve('../src/client/game/scene/attackAimReticle.js'));
+  const draws = [];
+  const graphic = { visible: false, destroyed: false,
+    clear() { draws.length = 0; },
+    setVisible(value) { this.visible = value; },
+    setDepth() {}, setPosition(x, y) { this.position = [x, y]; },
+    setScale(value) { this.scale = value; },
+    fillStyle() {}, lineStyle() {},
+    fillCircle(...args) { draws.push(['fillCircle', ...args]); },
+    strokeCircle(...args) { draws.push(['strokeCircle', ...args]); },
+    lineBetween(...args) { draws.push(['lineBetween', ...args]); },
+    destroy() { this.destroyed = true; },
+  };
+  const controller = createAttackAimReticleController({
+    cameras: { main: { zoom: 2 } }, add: { graphics: () => graphic },
+  });
+  const cue = { baseX: 100, baseY: 200, x: 18, y: 8, radius: 16, cancelled: false };
+  controller.updateCancelCue(cue);
+  assert.equal(graphic.visible, true);
+  assert.equal(graphic.scale, 0.5);
+  assert.deepEqual(graphic.position, [100, 200]);
+  assert.ok(draws.at(-1)[1] > cue.radius, 'the dot remains outside the ring while aiming');
+  controller.hide();
+  assert.equal(graphic.visible, false);
+  controller.updateCancelCue({ ...cue, x: 4, y: 0, cancelled: true });
+  assert.equal(graphic.visible, true, 'cancellation is visible even with no shot renderer');
+  assert.ok(draws.some(draw => draw[0] === 'lineBetween' && draw[1] === -5 && draw[2] === -5), 'X indicates cancellation without text');
+  const { resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim.js');
+  for (const character of ['gloop', 'sparrow', 'ninja']) {
+    const aim = resolveAttackAimContext({ character, family: 'basic',
+      player: { x: 100, y: 200, displayWidth: 128, displayHeight: 128 },
+      pointerWorldX: 400, pointerWorldY: 230, quick: false });
+    controller.updateCancelCue({ ...cue, aim });
+    const start = aim.kind === 'throw' ? aim.throwPreview.points[0] : { x: aim.anchorX, y: aim.anchorY };
+    const offset = aim.kind === 'throw' ? Number(aim.config.reticlePathOffsetY) || 0 : 0;
+    assert.deepEqual(graphic.position, [start.x, start.y + offset], `${character} cue joins the visible guide`);
+    const aimingRadius = draws.find(draw => draw[0] === 'strokeCircle')[3];
+    controller.updateCancelCue({ ...cue, aim, radius: cue.radius * 1.5, cancelled: true });
+    assert.deepEqual(graphic.position, [start.x, start.y + offset], 'cancellation retains the guide anchor');
+    const cancelledRadius = draws.find(draw => draw[0] === 'strokeCircle')[3];
+    assert.ok(cancelledRadius > aimingRadius && cancelledRadius / aimingRadius < 1.15,
+      'the visual ring grows only slightly even when the input radius expands');
+  }
+  controller.updateCancelCue(null);
+  assert.equal(graphic.visible, false);
+  controller.destroy();
+  assert.equal(graphic.destroyed, true);
+});

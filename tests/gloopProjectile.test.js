@@ -155,10 +155,14 @@ test('authoritative release publishes the same launch used for damage, its serve
     io:createFakeIo({ onEmit: (_room, _event, data) => emitted.push(data) }),scheduleAction:fn=>{release=fn;}};
   const target={x:450,y:300};
   handleCharacterAction(room,owner,{type:'gloop-slimeball',id:'release-test',target},0);
+  const windup = emitted.at(-1);
+  const expected = slimeLaunch(owner, target, cfg);
+  assert.deepEqual(windup.action.start, expected.start, 'the windup grows at the committed muzzle');
+  assert.equal(windup.action.angle, expected.angle);
+  assert.equal(windup.action.direction, expected.direction);
   owner.x=125; // Movement during windup must not re-solve the committed trajectory.
   release();
   const packet=emitted.at(-1).action, runtime=room.activeAttacks[0];
-  const expected=slimeLaunch({x:100,y:200,width:150,height:150},target,cfg);
   expected.start.x += 25;
   assert.ok(Math.abs(packet.start.x-expected.start.x)<1e-9&&Math.abs(packet.start.y-expected.start.y)<1e-9,JSON.stringify(packet.start));
   assert.equal(runtime.x,packet.start.x);assert.equal(runtime.y,packet.start.y);

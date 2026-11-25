@@ -3,7 +3,8 @@ import { SOCKET_EVENTS } from "../../../shared/net/socketEvents.js";
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
 import { basicAim, requestBasic } from "../../../shared/combat/combat";
 import { isMovementSuppressed } from "../../../shared/combat/runtime/abilityRuntimeManager";
-import { remoteAnimationLockUntil } from "../../game/characters/shared/animationState";
+import { remoteActionPresentation } from "../../game/characters/shared/remoteActionPresentation";
+import { clearAction, presentRemoteAction, remoteAnimationLockUntil } from "../../game/characters/shared/animationState";
 import { PreviewSession } from '../../../shared/combat/previewSession';
 import { snapshotActive } from '../../../shared/combat/runtime/effects/effectManager';
 import { CombatClock } from '../../../shared/characters/sparrowReplication';
@@ -12,10 +13,12 @@ import { handleRemoteAttack, getCharacterSocketEvents, getCharacterEffectTickSou
   applyCharacterPowerupFx, drawCharacterPowerupAura, playCharacterSound } from '../../game/characters';
 import { performSpecial } from '../../game/characters/special';
 import { createPowerupRenderer } from '../../game/powerups/powerupRenderer';
+import { spawnKnockbackTrail } from '../../game/scene/knockbackTrail';
 import { spawnShockwaveHitSmoke } from '../../game/powerups/shockwaveHit';
 import { POWERUP_COLORS, createPowerupTickSounds } from '../../game/powerups/powerupConfig';
 import { playPlayerSound } from '../../game/audio/playerAudio';
-import { playHitFeedback } from '../../game/characters/shared/hitFeedback';
+import { hitstopForDelivery, playHitFeedback } from '../../game/characters/shared/hitFeedback';
+import { stepShowcaseGravity } from "./showcaseMotion";
 import { createShowcaseDirector, seededRandom } from './showcaseDirector';
 
 // Presentation consumes match events. No damage, collision, ammo, status or
@@ -31,13 +34,14 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
   const clock = new CombatClock();
   // Local simulation has no transport latency. Render at its exact clock,
   // including pauses, instead of estimating an offset from wall time.
+  clock.projectileLead = false;
   clock.now = () => session?.simulationMono || 0;
   const options = { clock, ensureEpoch: epoch => { if (clock.epoch !== epoch) clock.reset(epoch); } };
-  const networks = createCharacterNetworkAdapters({ ...options, arrowLength: 28 });
+  const networks = createCharacterNetworkAdapters(options);
   const characterEvents = new Map(getCharacterSocketEvents());
   const tickSounds = createPowerupTickSounds(getCharacterEffectTickSounds());
   let session, elapsed = 0, endedAt = null, presentationUntil = 0, disposed = false;
-  const powerups = createPowerupRenderer({ scene, Phaser: window.Phaser, colors: POWERUP_COLORS, auraDepth: 31, fxDepth: 32,
+  const powerups = createPowerupRenderer({ scene, Phaser: window.Phaser, colors: POWERUP_COLORS,
     getUsername: () => '', getGameData: () => ({}), getLocalPlayer: () => null,
     playerLookup: createPlayerLookup({ getOpponentPlayers: () => wrappers }),
     getLatestPowerups: () => [], getLatestDeathDrops: () => [], getMapObjects: () => [], getDead: () => false,
@@ -58,7 +62,11 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
         return;
       }
       fighter.sprite.anims.timeScale = 1;
-      handleRemoteAttack(scene, fighter.character, packet.action, { opponent: fighter.sprite });
+      const wrapper = wrappers[fighter.id];
+      const action = remoteActionPresentation({ ...packet.action, origin: packet.origin ?? packet.action.origin,
+        flip: packet.flip ?? packet.action.flip }, fighter.sprite);
+      presentRemoteAction({ scene, wrapper, character: fighter.character, actionType: action.type },
+        () => handleRemoteAttack(scene, fighter.character, action, wrapper, context));
     } else if (type === SOCKET_EVENTS.PLAYER_SPECIAL) {
       presentationUntil = scene.time.now + 3500;
       const fighter = byId.get(packet.username);
@@ -70,10 +78,12 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
       const delta = packet.health - fighter.health;
       fighter.health = packet.health;
       if (delta) showHealthChange(fighter, delta);
-      if (delta < 0) playHitFeedback(scene, fighter.sprite, { hitstopMs: packet.cause === 'combat' ? 45 : 15 });
+      if (delta < 0) playHitFeedback(scene, fighter.sprite, { hitstopMs: packet.cause === 'combat' ? hitstopForDelivery(packet.delivery) : 0, duckBlocked: packet.duckBlocked === true });
     } else if (type === 'player:death') {
       const fighter = byId.get(packet.username);
       fighter.health = 0; fighter.defeated = true; showDefeat(fighter);
+    } else if (type === SOCKET_EVENTS.PLAYER_KNOCKBACK) {
+      if (packet.amountX || packet.amountY) spawnKnockbackTrail(scene, byId.get(packet.username)?.sprite);
     } else if (type === SOCKET_EVENTS.SHOCKWAVE_HIT) {
       spawnShockwaveHitSmoke(scene, byId.get(packet.username)?.sprite, packet);
     } else if (type === SOCKET_EVENTS.POWERUP_TICK) {
@@ -89,8 +99,8 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
   // Projectile renderers must use the same arena as the combat host.
   const world = session.geometry.world;
   scene.physics.world.setBounds(world.x, world.y, world.width, world.height);
-  // Stage art is fitted independently of match sprite sizes. Contacts must
-  // follow the bodies actually displayed, including their grounded origins.
+  // Place combat contacts at the grounded body. Attack reach retains the
+  // authoritative dimensions even when a skin uses a larger source frame.
   for (const fighter of fighters) {
     const p = session.players.get(fighter.id), body = fighter.sprite.body;
     p.y = p.groundY = fighter.standY;
@@ -98,24 +108,31 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
     p._bodyHalfHeight = body.height / 2;
     p._bodyCenterOffsetX = body.center.x - fighter.sprite.x;
     p._bodyCenterOffsetY = body.center.y - fighter.sprite.y;
-    p._lastWidth = fighter.sprite.displayWidth;
-    p._lastHeight = fighter.sprite.displayHeight;
   }
+  scene.combatPresentation = { clock, colliders: session.geometry.colliders };
   scene.showcaseSession = session;
   const bootstrap = session.bootstrap();
   for (const network of networks) { network.configure(bootstrap[network.bootstrapKey]); network.attach(scene, context); }
   const direct = createShowcaseDirector(session, { halfWidth: halfWidth - 30 });
+  function driveDemo() {
+    for (const fighter of fighters) {
+      const p = session.players.get(fighter.id);
+      if (isMovementSuppressed(p, session.now)) {
+        fighter.abilityMotion = true;
+      } else if (fighter.abilityMotion) {
+        stepShowcaseGravity(p, session.FIXED_DT_MS / 1000);
+      } else {
+        p.x = fighter.sprite.x;
+        p.y = fighter.sprite.y;
+        p.flip = fighter.sprite.flipX;
+      }
+    }
+  }
   function update(time, delta) {
     // Pause rather than fast-forward fights after a suspended/background tab.
     elapsed += Math.min(delta, 100);
     while (elapsed >= session.FIXED_DT_MS) {
-      session.step(autoplay ? direct : () => {
-        for (const f of fighters) {
-          const p = session.players.get(f.id);
-          if (!isMovementSuppressed(p, session.now)) { p.x = f.sprite.x; p.y = p.groundY + f.sprite.y - f.standY; }
-          p.flip = f.sprite.flipX;
-        }
-      });
+      session.step(autoplay ? direct : driveDemo);
       elapsed -= session.FIXED_DT_MS;
     }
     for (const fighter of fighters) {
@@ -123,25 +140,45 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
       fighter.charge = p.superCharge / p.maxSuperCharge;
       fighter.ammo = p.ammoState;
       fighter.status = snapshotActive(p, session.now);
-      if (autoplay || isMovementSuppressed(p, session.now)) sprite.setPosition(p.x, fighter.standY + p.y - p.groundY);
-      sprite._bbAnimationVelocity = { x: p.vx, y: p.vy };
-      fighter.movementSpeedRatio = Math.min(1, Math.abs(p.vx) / movementPhysics.maxSpeed);
+      // Phaser leaves a completed one-shot on its last frame. A finished cast
+      // can yield to locomotion while its buff and aura are still active.
+      if (p.isAlive && sprite.anims.isPlaying === false && !sprite.anims.isPaused &&
+          sprite.anims.currentAnim?.key.endsWith('-special') && !isMovementSuppressed(p, session.now)) {
+        clearAction(sprite);
+        play(fighter, p.grounded ? 'idle' : 'falling');
+      }
+      if (autoplay || fighter.abilityMotion) {
+        sprite.setPosition(p.x, p.y);
+        sprite.body.updateFromGameObject();
+        sprite._bbAnimationVelocity = { x: p.vx, y: p.vy };
+      }
+      if (fighter.abilityMotion && !isMovementSuppressed(p, session.now)) {
+        play(fighter, p.grounded ? 'idle' : 'falling');
+        if (p.grounded) fighter.abilityMotion = false;
+      }
+      // Buffs can last several seconds after a cast finishes. During a demo
+      // keep requesting idle so the action layer hands the sprite back when ready.
+      if (!autoplay && fighter.demonstratingCombat && !fighter.abilityMotion && !isMovementSuppressed(p, session.now)) {
+        play(fighter, 'idle');
+      }
       if (!p.isAlive || !autoplay) continue;
-      const pushed = session.now < (p._previewImpulseUntil || 0);
+      const pushed = session.now < (p._knockbackUntil || 0);
       const moving = !pushed && Math.abs(p.vx) > 10;
       const aiming = session.now < (p._botActionUntil || 0) || performance.now() < remoteAnimationLockUntil(sprite);
-      face(fighter, moving && !aiming ? Math.sign(p.vx) : p.flip ? -1 : 1);
-      // playSpriteAnimation respects an active action's lock.
+      if (!sprite._lockFlip) face(fighter, moving && !aiming ? Math.sign(p.vx) : p.flip ? -1 : 1);
+      // The attack owns its pose and speed until its presentation lock expires.
       if (performance.now() >= remoteAnimationLockUntil(sprite)) {
         // A hovering pose a super reports (Sparrow's Seraph aim) wins over airborne.
         const held = /^seraph-/.test(String(p.animation || '')) && isMovementSuppressed(p, session.now) ? p.animation : null;
-        play(fighter, held || (!p.grounded ? (p.vy < 0 ? 'jumping' : 'falling') : moving ? 'running' : 'idle'));
+        const key = play(fighter, held || (!p.grounded ? (p.vy < 0 ? 'jumping' : 'falling') : moving ? 'running' : 'idle'));
         // Legacy run atlases have no bbMotion metadata. Match their stride
         // to simulation speed too, without slowing attacks or airborne poses.
-        sprite.anims.timeScale = moving && p.grounded ? Math.max(0.15, fighter.movementSpeedRatio) : 1;
+        if (!scene.anims.get(key)?.bbMotion) {
+          sprite.anims.timeScale = moving && p.grounded ? Math.max(0.15, Math.min(1, Math.abs(p.vx) / movementPhysics.maxSpeed)) : 1;
+        }
       }
       if (moving && p.grounded && time >= (fighter.nextDustAt || 0)) {
-        fighter.nextDustAt = time + 140 / Math.max(0.15, fighter.movementSpeedRatio); movementStep(fighter, Math.sign(p.vx));
+        fighter.nextDustAt = time + 140 / Math.max(0.15, Math.min(1, Math.abs(p.vx) / movementPhysics.maxSpeed)); movementStep(fighter, Math.sign(p.vx));
       }
     }
     for (const network of networks) network.observe({ snapshotEpoch: session.snapshotEpoch, sentMono: performance.now(), tMono: session.simulationMono });
@@ -163,6 +200,7 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
     for (const network of networks) network.reset();
     session.dispose();
     powerups.destroy();
+    delete scene.combatPresentation;
     delete scene.showcaseSession;
   }
   return { session, dispose,

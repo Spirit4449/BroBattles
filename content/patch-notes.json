@@ -1,0 +1,93 @@
+[
+  {
+    "month": "2026-11",
+    "entries": [
+      {
+        "day": "20",
+        "title": "Bro Ball kicks off",
+        "text": "Two teams of two take the pitch at Rumble Stadium.",
+        "image": "/assets/map-banners/soccer.webp",
+        "details": [
+          "Bump the ball to deflect it, time an attack to kick it, or aim and release to place your shot. A dash into the ball turns it into a Super Kick.",
+          "Score five goals to win. If the clock runs out with the score tied, the next goal decides the match."
+        ]
+      },
+      {
+        "day": "15",
+        "title": "Tighter online combat",
+        "text": "Shots and moving opponents line up more closely during online matches.",
+        "details": [
+          "Online battles now send position updates 60 times a second, so there is less time between the positions you see.",
+          "Enemy projectiles ease forward to catch up with the action. Hit checks also look back a shorter distance in time when resolving an attack."
+        ]
+      },
+      {
+        "day": "12",
+        "title": "Meet Ozzy and Sparrow",
+        "text": "Two familiar fighters took new names on the roster.",
+        "details": [
+          "Look for Ozzy when picking the staff-wielding Wizard, and Sparrow for the bow-wielding Huntress.",
+          "The same update revised how fighters slide along walls and added a new countdown before the action starts."
+        ]
+      }
+    ]
+  },
+  {
+    "month": "2026-10",
+    "entries": [
+      {
+        "day": "09",
+        "title": "Mobile controls and battle feedback",
+        "text": "Touch controls, respawns, and friend activity got an update.",
+        "details": [
+          "Respawning now comes with visual effects and a sound cue to mark your return to the fight.",
+          "The friends panel gained last-seen information alongside new privacy settings."
+        ]
+      },
+      {
+        "day": "06",
+        "title": "More player cards",
+        "text": "New animated frames arrived for player cards.",
+        "details": [
+          "Arena Crown frames your card in gold and blue gems. Slime Circuit uses green circuitry, and Shuriken Strike pairs crossed swords with a silver throwing star.",
+          "Equip a frame to change how your fighter appears on your player card."
+        ],
+        "image": "/assets/site/patch-notes/player-cards.webp"
+      },
+      {
+        "day": "05",
+        "title": "Candy Land on the move",
+        "text": "Moving platforms changed how fighters cross Candy Land.",
+        "details": [
+          "Time your jump as a platform approaches, then ride it across the gap. The arena scenery gained layers of candy peaks, clouds, and frosted platforms.",
+          "The battle view expanded to fill the window, giving the arena more room on screen."
+        ],
+        "image": "/assets/site/patch-notes/candy-land.webp"
+      }
+    ]
+  },
+  {
+    "month": "2026-09",
+    "entries": [
+      {
+        "day": "17",
+        "title": "Skins for Ninja and Gloop",
+        "text": "Ninja and Gloop gained new looks in the skin selector.",
+        "details": [
+          "Arena Sovereign gives Ninja a jeweled crown and a red cape. Gloop’s Crystal skin replaces its slime silhouette with a cluster of blue and violet crystals.",
+          "Open the fighter’s skin selector to preview a look and equip one you own."
+        ],
+        "image": "/assets/site/patch-notes/skins.webp"
+      },
+      {
+        "day": "04",
+        "title": "Bots join the battle",
+        "text": "Bots joined matches and could fill slots in a party.",
+        "details": [
+          "Party controls let players manage bots, and bots gained team support so they could fight alongside human teammates.",
+          "A battle log arrived alongside bots so players could revisit their recent matches."
+        ]
+      }
+    ]
+  }
+]

@@ -101,3 +101,24 @@ test('tapping attack auto-aims, dragging aims, and an uncharged super only gives
   empty.lift(8);
   assert.deepEqual(empty.fired, ['not-ready']);
 });
+
+test('attack and super cancel after returning to center, then allow fresh taps and re-aiming', () => {
+  for (const kind of ['basic', 'special']) {
+    const h = setup();
+    h.press(h.els[kind], 1, 700, 300);
+    h.drag(1, 640, 300);
+    h.drag(1, 700, 300);
+    h.lift(1);
+    assert.equal(h.fired.length, 0);
+    h.press(h.els[kind], 2, 700, 300);
+    h.lift(2);
+    assert.equal(h.fired.pop().quick, true);
+    h.press(h.els[kind], 3, 700, 300);
+    h.drag(3, 640, 300);
+    h.drag(3, 700, 300);
+    h.drag(3, 760, 300);
+    h.lift(3);
+    assert.equal(h.fired.pop().aimed, true);
+    h.controller.destroy();
+  }
+});

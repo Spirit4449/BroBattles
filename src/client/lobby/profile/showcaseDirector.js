@@ -4,6 +4,7 @@ import { requestBasic, requestSpecial, basicRange } from '../../../shared/combat
 import { botProfile } from '../../../shared/combat/characterProfiles';
 import { getModifiers } from '../../../shared/combat/runtime/effects/effectManager';
 import { isMovementSuppressed } from '../../../shared/combat/runtime/abilityRuntimeManager';
+import { stepShowcaseGravity } from "./showcaseMotion";
 import physics from '../../../shared/physics/movementPhysics.json';
 
 export function seededRandom(seed = 7) {
@@ -78,7 +79,7 @@ export function createShowcaseDirector(session, { halfWidth = 240, random = seed
         }
       }
       if (locked) { p.vx = p.vy = 0; continue; }
-      if (now >= (p._previewImpulseUntil || 0)) {
+      if (now >= (p._knockbackUntil || 0)) {
         const desiredVx = target ? brain.move * physics.maxSpeed * modifiers.speedMult : 0;
         const accel = physics.accel * dt;
         p.vx += Math.max(-accel, Math.min(accel, desiredVx - p.vx));
@@ -86,11 +87,7 @@ export function createShowcaseDirector(session, { halfWidth = 240, random = seed
       const nextX = p.x + p.vx * dt;
       p.x = Math.max(brain.minX, Math.min(brain.maxX, nextX));
       if (p.x !== nextX) p.vx = 0;
-      if (p.y < p.groundY || p.vy < 0) {
-        p.vy += physics.gravity * (p.vy > 0 ? physics.fallGravityFactor : 1) * dt;
-        p.y += p.vy * dt;
-      }
-      if (p.y >= p.groundY) { p.y = p.groundY; p.vy = 0; p.grounded = true; }
+      stepShowcaseGravity(p, dt);
     }
   };
 }

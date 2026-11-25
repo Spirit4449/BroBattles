@@ -18,6 +18,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const sharp = require('../../../spritesheet-generator/node_modules/sharp');
 const { SIZE, GROUND, FEET_X: FEET_COLUMN, HEIGHT } = require('./palette.cjs');
+const { packNinjaAtlas } = require('./pack-atlas.cjs');
 const { CLIPS, RELEASE_FRAME, toPixels } = require('./frames.cjs');
 const JOINTS = { ground: GROUND, feetX: FEET_COLUMN + 0.5 };
 const IDLE = CLIPS[0].frames;
@@ -492,7 +493,8 @@ async function main() {
   await jumpAnimation('jump-enlarged.gif', 3);
   console.log(`wrote ${path.relative(ROOT, OUT)}`);
   if (process.argv.includes('--install')) {
-    for (const file of ['spritesheet.webp', 'animations.json', 'animation-settings.json']) fs.copyFileSync(path.join(CANDIDATE, file), path.join(GAME_ASSETS, file));
+    await packNinjaAtlas(CANDIDATE, GAME_ASSETS);
+    fs.copyFileSync(path.join(CANDIDATE, 'animation-settings.json'), path.join(GAME_ASSETS, 'animation-settings.json'));
     const character = JSON.parse(fs.readFileSync(CHARACTER_JSON, 'utf8'));
     character.presentation = { ...character.presentation, ...PRESENTATION }; character.rig = RIG;
     fs.writeFileSync(CHARACTER_JSON, `${JSON.stringify(character, null, 2)}\n`);

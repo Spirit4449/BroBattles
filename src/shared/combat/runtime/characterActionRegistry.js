@@ -99,6 +99,9 @@ function scheduleWindupRelease(
     playerData,
     {
       ...actionData,
+      // Bot and showcase commands can supply just a target. Show the charging
+      // slime at the same muzzle and launch angle the release will use.
+      ...(slimeCast && { start: slimeCast.start, angle: slimeCast.angle, direction: slimeCast.direction }),
       type: String(flow.broadcastType || actionData?.type || "").toLowerCase(),
       startup: startupMs,
     },

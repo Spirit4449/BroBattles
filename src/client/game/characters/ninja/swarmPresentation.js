@@ -1,6 +1,7 @@
 import { characterDefinitions } from "../../../../shared/characters/index.js";
 import { markOneShotAnimation, resolveSpriteAnimationKey } from '../shared/animationState';
 import { aimVariant } from '../shared/aimPose';
+import { hasSovereignAnimations } from './sovereignAnimations';
 import settings from '../../../../../public/assets/ninja/animation-settings.json';
 import { beginSwarm, swarmThrowSound, swarmSpark, swarmGlint, swarmImpact, swarmShardEnded, createSwarmAura } from './swarmFx';
 
@@ -35,7 +36,7 @@ export function presentSwarmRelease(scene, player, releaseMs, remote = false, re
       // Skins without a super clip throw once per release.
       player.anims.play({key, duration:Math.max(1, releaseMs), repeat:0}, false);
       markOneShotAnimation(player, 'throw', releaseMs, {remote});
-    } else if (texture && texture !== NAME) {
+    } else if (texture && texture !== NAME && !hasSovereignAnimations(player.texture)) {
       // Other skins' own super rows loop for as long as the barrage lasts.
       player.anims.play({key, frameRate:30, repeat:-1}, true);
       markOneShotAnimation(player, 'special', releaseMs, {remote});

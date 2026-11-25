@@ -44,6 +44,8 @@ The World tab shows the mode's arena (read-only) and edits powerup rules and cat
 
 The Scenery tab edits the backdrop (see [Scenery](#scenery-parallax-and-atmosphere)): layers in back-to-front order, the cloud switch and the atmosphere settings. Clouds are canvas objects: add one from the add menu, then drag it, duplicate it or set its type, direction and speed in the inspector.
 
+The canvas toolbar’s **Map lines** legend identifies the blue-gray physics world, yellow camera bounds, blue collision hitboxes and green world-center guide. Hover an outline for its meaning (overlapping outlines report each match). Camera bounds limit the moving camera; they are not the current viewport. Align collision faces with playable surfaces, rather than forcing decorative art edges onto world or camera bounds. Scenery can extend beyond or stop inside these guides; use Game camera and Playtest to check its coverage.
+
 ### Artwork and animations
 
 The Assets tab is a library of reusable platform artwork. **New platform artwork** registers an image and places a platform. Still images require only an image URL; dimensions are read automatically. Animated platforms use either an image with equal-sized frames or an image plus a JSON frame file. Animated artwork additionally exposes frame dimensions, frame numbers/names, and playback speed. Atlas frames must currently be untrimmed, unrotated, and equal-sized.

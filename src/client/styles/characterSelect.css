@@ -2266,10 +2266,8 @@
   grid-area: 1 / 1;
   position: absolute;
   inset: 0;
-  z-index: 1;
-  background:
-    linear-gradient(180deg, rgba(6, 10, 20, 0.12), rgba(6, 10, 20, 0.38)),
-    url("/assets/showcase/backdrop.webp") center 40% / cover no-repeat;
+  z-index: 3;
+  background: url("/assets/showcase/backdrop.webp") center 40% / cover no-repeat;
   image-rendering: pixelated;
   opacity: 0;
   transition: opacity 420ms ease;
@@ -2296,13 +2294,10 @@
   opacity: 1;
 }
 
-.character-details-preview-frame[data-showcase-view="animations"] .character-details-lock-overlay,
-.character-details-preview-frame[data-showcase-view="fight"] .character-details-lock-overlay,
-.character-details-preview-frame[data-showcase-view="animations"] .character-details-preview-image,
-.character-details-preview-frame[data-showcase-view="animations"] .character-details-preview-glow,
-.character-details-preview-frame[data-showcase-view="fight"] .character-details-preview-image,
-.character-details-preview-frame[data-showcase-view="fight"] .character-details-preview-glow {
-  opacity: 0;
+.character-details-preview-frame:is([data-showcase-view="animations"], [data-showcase-view="fight"])
+  :is(.character-details-preview-level-badge, .character-details-lock-overlay,
+      .character-details-preview-image, .character-details-preview-glow) {
+  visibility: hidden;
 }
 
 .character-showcase-switcher {

@@ -68,6 +68,24 @@ test('shockwave smoke follows the moving body, turns with its flight, and expire
   }
 });
 
+test('resetting a preview releases the cloud renderer before the next round', () => {
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { EventEmitter } = require('node:events');
+  const { getCloudSystem } = createClientModuleGraph({ globals: { ImageData: class {} } })
+    .load('src/client/game/scene/clouds/cloudLayer.js');
+  const scene = { add: { image() {} }, textures: { createCanvas() {} }, events: new EventEmitter() };
+  for (let round = 0; round < 3; round++) {
+    const clouds = getCloudSystem(scene);
+    clouds.sim.add({ x: 20, y: 15, radius: 8 });
+    scene.events.emit('presentation:reset');
+    assert.equal(clouds.destroyed, true);
+    assert.equal(clouds.sim.size, 0);
+    assert.equal(scene.events.listenerCount('update'), 0);
+    assert.equal(scene.events.listenerCount('shutdown'), 0);
+    assert.equal(scene.events.listenerCount('destroy'), 0);
+  }
+});
+
 describe('cloud simulation', () => {
   test('a cloud puffs out, breaks into smaller drifting pieces, then dissipates completely', () => {
     const sim = createCloudSim({ random: seeded() });

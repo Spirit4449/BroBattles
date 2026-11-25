@@ -12,6 +12,8 @@ import { commit } from "./mapSession";
 import { renderBrowser, select, renderInspector } from "./inspector";
 import { hideHint } from "./studioState";
 
+import { boundaryHints } from "./boundaryGuides";
+
 function mapPoint(row, data = map()) {
   if (row.kind !== "spawn" && !(row.kind === "powerup" && row.value.anchorId))
     return { x: row.value.x, y: row.value.y };
@@ -141,6 +143,7 @@ class StudioScene extends Phaser.Scene {
     this.input.on("pointermove", (p) => this.pointerMove(p));
     this.input.on("pointerup", () => this.pointerUp());
     this.input.on("gameout", () => {
+      this.game.canvas.title = "";
       this.hoverId = null;
     });
     // Wheel zooms toward the cursor. Trackpads send many small deltas (pinch arrives with ctrlKey).
@@ -352,6 +355,7 @@ class StudioScene extends Phaser.Scene {
     if (this.game.canvas.style.cursor !== cursor) this.game.canvas.style.cursor = cursor;
   }
   updateHover(pointer) {
+    this.game.canvas.title = "";
     if (editor.preview || editor.cameraPreview || $("dialog").open) {
       this.hoverId = null;
       return;
@@ -366,6 +370,7 @@ class StudioScene extends Phaser.Scene {
       this.hoverId = null;
       return this.setCursor(handle.kind === "travel" ? "grab" : RESIZE_CURSORS[handle.handle]);
     }
+    this.game.canvas.title = boundaryHints(pt, mapArena(map()), this.geometry.colliders, this.cameras.main.zoom).join("\n\n");
     const hit = this.rowAt(pt);
     this.hoverId = hit?.id || null;
     this.setCursor(hit ? "move" : "default");

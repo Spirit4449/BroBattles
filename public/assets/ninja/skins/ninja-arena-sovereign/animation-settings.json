@@ -1,0 +1,377 @@
+{
+  "animations": {
+    "idle": {
+      "frames": [
+        "idle00",
+        "idle01",
+        "idle02",
+        "idle03",
+        "idle04",
+        "idle05",
+        "idle06",
+        "idle07",
+        "idle08",
+        "idle09",
+        "idle10",
+        "idle11",
+        "idle12",
+        "idle13",
+        "idle14"
+      ],
+      "frameRate": 9.375,
+      "repeat": -1
+    },
+    "running": {
+      "frames": [
+        "running00",
+        "running01",
+        "running02",
+        "running03",
+        "running04",
+        "running05",
+        "running06",
+        "running07",
+        "running08",
+        "running09",
+        "running10",
+        "running11",
+        "running12",
+        "running13",
+        "running14",
+        "running15",
+        "running16",
+        "running17",
+        "running18",
+        "running19",
+        "running20",
+        "running21",
+        "running22",
+        "running23"
+      ],
+      "frameRate": 60,
+      "repeat": -1
+    },
+    "jumping": {
+      "frames": [
+        "jumping00",
+        "jumping01",
+        "jumping02",
+        "jumping03",
+        "jumping04",
+        "jumping05",
+        "jumping06",
+        "jumping07",
+        "jumping08",
+        "jumping09",
+        "jumping10",
+        "jumping11",
+        "jumping12",
+        "jumping13",
+        "jumping14"
+      ],
+      "frameRate": 33.333333333333336,
+      "repeat": 0
+    },
+    "falling": {
+      "frames": [
+        "falling00",
+        "falling01",
+        "falling02",
+        "falling03",
+        "falling04",
+        "falling05",
+        "falling06",
+        "falling07",
+        "falling08",
+        "falling09",
+        "falling10",
+        "falling11"
+      ],
+      "frameRate": 13.333333333333334,
+      "repeat": -1
+    },
+    "landing": {
+      "frames": [
+        "landing00",
+        "landing01",
+        "landing02",
+        "landing03",
+        "landing04"
+      ],
+      "frameRate": 33.333333333333336,
+      "repeat": 0
+    },
+    "sliding": {
+      "frames": [
+        "wall00"
+      ],
+      "frameRate": 6.666666666666667,
+      "repeat": -1
+    },
+    "ducking": {
+      "frames": [
+        "duck00"
+      ],
+      "frameRate": 6.666666666666667,
+      "repeat": -1
+    },
+    "dying": {
+      "frames": [
+        "dying00",
+        "dying01",
+        "dying02",
+        "dying03",
+        "dying04"
+      ],
+      "frameRate": 10,
+      "repeat": 0
+    },
+    "dashing": {
+      "frames": [
+        "dash00",
+        "dash01",
+        "dash02",
+        "dash03"
+      ],
+      "frameRate": 25,
+      "repeat": 0
+    },
+    "dashright": {
+      "frames": [
+        "dashRight00",
+        "dashRight01",
+        "dashRight02",
+        "dashRight03"
+      ],
+      "frameRate": 25,
+      "repeat": 0
+    },
+    "dashdiagonal": {
+      "frames": [
+        "dashDiagonal00",
+        "dashDiagonal01",
+        "dashDiagonal02",
+        "dashDiagonal03"
+      ],
+      "frameRate": 25,
+      "repeat": 0
+    },
+    "dashup": {
+      "frames": [
+        "dashUp00",
+        "dashUp01",
+        "dashUp02",
+        "dashUp03"
+      ],
+      "frameRate": 25,
+      "repeat": 0
+    },
+    "dashdowndiagonal": {
+      "frames": [
+        "dashDownDiagonal00",
+        "dashDownDiagonal01",
+        "dashDownDiagonal02",
+        "dashDownDiagonal03"
+      ],
+      "frameRate": 25,
+      "repeat": 0
+    },
+    "dashdown": {
+      "frames": [
+        "dashDown00",
+        "dashDown01",
+        "dashDown02",
+        "dashDown03"
+      ],
+      "frameRate": 25,
+      "repeat": 0
+    },
+    "throw-high": {
+      "frames": [
+        "throwHigh00",
+        "throwHigh01",
+        "throwHigh02",
+        "throwHigh03"
+      ],
+      "frameRate": 14.925373134328359,
+      "repeat": 0
+    },
+    "special-high": {
+      "frames": [
+        "specialHigh00",
+        "specialHigh01",
+        "specialHigh02",
+        "specialHigh03",
+        "specialHigh04",
+        "specialHigh05",
+        "specialHigh06",
+        "specialHigh07",
+        "specialHigh08",
+        "specialHigh09",
+        "specialHigh10",
+        "specialHigh11",
+        "specialHigh12",
+        "specialHigh13",
+        "specialHigh14",
+        "specialHigh15"
+      ],
+      "frameRate": 22.22222222222222,
+      "repeat": 0
+    },
+    "throw-up": {
+      "frames": [
+        "throwUp00",
+        "throwUp01",
+        "throwUp02",
+        "throwUp03"
+      ],
+      "frameRate": 14.925373134328359,
+      "repeat": 0
+    },
+    "special-up": {
+      "frames": [
+        "specialUp00",
+        "specialUp01",
+        "specialUp02",
+        "specialUp03",
+        "specialUp04",
+        "specialUp05",
+        "specialUp06",
+        "specialUp07",
+        "specialUp08",
+        "specialUp09",
+        "specialUp10",
+        "specialUp11",
+        "specialUp12",
+        "specialUp13",
+        "specialUp14",
+        "specialUp15"
+      ],
+      "frameRate": 22.22222222222222,
+      "repeat": 0
+    },
+    "throw": {
+      "frames": [
+        "throw00",
+        "throw01",
+        "throw02",
+        "throw03"
+      ],
+      "frameRate": 14.925373134328359,
+      "repeat": 0
+    },
+    "special": {
+      "frames": [
+        "special00",
+        "special01",
+        "special02",
+        "special03",
+        "special04",
+        "special05",
+        "special06",
+        "special07",
+        "special08",
+        "special09",
+        "special10",
+        "special11",
+        "special12",
+        "special13",
+        "special14",
+        "special15"
+      ],
+      "frameRate": 22.22222222222222,
+      "repeat": 0
+    },
+    "throw-down": {
+      "frames": [
+        "throwDown00",
+        "throwDown01",
+        "throwDown02",
+        "throwDown03"
+      ],
+      "frameRate": 14.925373134328359,
+      "repeat": 0
+    },
+    "special-down": {
+      "frames": [
+        "specialDown00",
+        "specialDown01",
+        "specialDown02",
+        "specialDown03",
+        "specialDown04",
+        "specialDown05",
+        "specialDown06",
+        "specialDown07",
+        "specialDown08",
+        "specialDown09",
+        "specialDown10",
+        "specialDown11",
+        "specialDown12",
+        "specialDown13",
+        "specialDown14",
+        "specialDown15"
+      ],
+      "frameRate": 22.22222222222222,
+      "repeat": 0
+    },
+    "throw-low": {
+      "frames": [
+        "throwLow00",
+        "throwLow01",
+        "throwLow02",
+        "throwLow03"
+      ],
+      "frameRate": 14.925373134328359,
+      "repeat": 0
+    },
+    "special-low": {
+      "frames": [
+        "specialLow00",
+        "specialLow01",
+        "specialLow02",
+        "specialLow03",
+        "specialLow04",
+        "specialLow05",
+        "specialLow06",
+        "specialLow07",
+        "specialLow08",
+        "specialLow09",
+        "specialLow10",
+        "specialLow11",
+        "specialLow12",
+        "specialLow13",
+        "specialLow14",
+        "specialLow15"
+      ],
+      "frameRate": 22.22222222222222,
+      "repeat": 0
+    }
+  },
+  "throw": {
+    "releaseMs": 67,
+    "blendMs": 90,
+    "startScale": 0.5,
+    "hands": {
+      "high": [
+        8.79,
+        -10.96
+      ],
+      "up": [
+        16.91,
+        -7.98
+      ],
+      "level": [
+        22.68,
+        -0.81
+      ],
+      "down": [
+        23.86,
+        7.75
+      ],
+      "low": [
+        21.11,
+        15.05
+      ]
+    }
+  }
+}
